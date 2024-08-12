@@ -7,9 +7,22 @@ A Domain Specific Language for describing software architecture, with support fo
 ArchDSL allows you to describe software systems using a simple, readable syntax focused on:
 - System boundaries and bounded contexts
 - Components, services, and aggregates
-- Relationships between contexts
-- Service interactions and flows
+- Domain-driven design concepts
 
-## Status
+## Grammar
 
-🚧 **Under Development** - Initial setup phase
+The DSL is built using ANTLR4 and supports:
+- System definitions
+- Bounded context declarations  
+- Aggregate, component, and service definitions
+
+## Example
+
+```archdsl
+system OrderSystem {
+   bounded context Orders {
+       aggregate Order
+       component OrderProcessor
+       service OrderService
+   }
+}
