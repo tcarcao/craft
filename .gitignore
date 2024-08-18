@@ -27,3 +27,7 @@ Thumbs.db
 # Build artifacts
 /build/
 /dist/
+
+# ANTLR generated files
+/pkg/parser/
+tools/antlr-*.jar
