@@ -16,13 +16,19 @@ The DSL is built using ANTLR4 and supports:
 - Bounded context declarations  
 - Aggregate, component, and service definitions
 
-## Example
+## Building
 
-```archdsl
-system OrderSystem {
-   bounded context Orders {
-       aggregate Order
-       component OrderProcessor
-       service OrderService
-   }
-}
+### Prerequisites
+- Go 1.22+
+- Java (for ANTLR code generation)
+
+### Build Steps
+```bash
+# Generate ANTLR parser code
+make generate
+
+# Build the project
+make build
+
+# Run tests
+make test
