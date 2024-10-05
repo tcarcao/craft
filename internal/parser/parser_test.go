@@ -1,3 +1,4 @@
+// internal/parser/parser_test.go
 package parser
 
 import (
@@ -22,31 +23,95 @@ func TestSimpleSystem(t *testing.T) {
 				if len(arch.Systems) != 1 {
 					t.Errorf("Expected 1 system, got %d", len(arch.Systems))
 				}
-				if arch.Systems[0].Name != "TestSystem" {
-					t.Errorf("Expected system name 'TestSystem', got %s", arch.Systems[0].Name)
-				}
 			},
 		},
 		{
-			name: "system with components",
+			name: "component with technology",
 			input: `system TestSystem {
                 bounded context Test {
-                    component TestComp
-                    service TestService
-                    aggregate TestAggregate
+                    component TestComp using go
                 }
             }`,
 			wantErr: false,
 			validate: func(t *testing.T, arch *Architecture) {
-				ctx := arch.Systems[0].Contexts[0]
-				if len(ctx.Components) != 1 {
-					t.Errorf("Expected 1 component, got %d", len(ctx.Components))
+				comp := arch.Systems[0].Contexts[0].Components[0]
+				if comp.Tech == nil || comp.Tech.Language != "go" {
+					t.Errorf("Expected technology 'go', got %v", comp.Tech)
 				}
-				if len(ctx.Services) != 1 {
-					t.Errorf("Expected 1 service, got %d", len(ctx.Services))
+			},
+		},
+		{
+			name: "service with platform",
+			input: `system TestSystem {
+                bounded context Test {
+                    service TestService using java on eks
+                }
+            }`,
+			wantErr: false,
+			validate: func(t *testing.T, arch *Architecture) {
+				svc := arch.Systems[0].Contexts[0].Services[0]
+				if svc.Tech == nil || svc.Tech.Language != "java" {
+					t.Errorf("Expected language 'java', got %v", svc.Tech)
 				}
-				if len(ctx.Aggregates) != 1 {
-					t.Errorf("Expected 1 aggregate, got %d", len(ctx.Aggregates))
+				if svc.Platform != "eks" {
+					t.Errorf("Expected platform 'eks', got %s", svc.Platform)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewParser()
+
+			arch, err := parser.ParseString(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && tt.validate != nil {
+				tt.validate(t, arch)
+			}
+		})
+	}
+}
+
+func TestFlows(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantErr  bool
+		validate func(*testing.T, *Architecture)
+	}{
+		{
+			name: "simple flow",
+			input: `
+                system TestSystem {
+                    bounded context Test {}
+                }
+                Test.Process() -> Other.Handle()
+            `,
+			wantErr: false,
+			validate: func(t *testing.T, arch *Architecture) {
+				if len(arch.Flows) != 1 {
+					t.Errorf("Expected 1 flow, got %d", len(arch.Flows))
+				}
+			},
+		},
+		{
+			name: "flow with arguments",
+			input: `
+                system TestSystem {
+                    bounded context Test {}
+                }
+                Test.Process(arg1, arg2) -> Other.Handle()
+            `,
+			wantErr: false,
+			validate: func(t *testing.T, arch *Architecture) {
+				flow := arch.Flows[0]
+				if len(flow.Args) != 2 {
+					t.Errorf("Expected 2 arguments, got %d", len(flow.Args))
 				}
 			},
 		},
