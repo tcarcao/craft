@@ -1,4 +1,4 @@
-.PHONY: clean generate build test help
+.PHONY: clean generate build test help examples
 
 # Variables
 ANTLR_VERSION = 4.13.1
@@ -13,6 +13,7 @@ help:
 	@echo "  clean     - Clean generated files"
 	@echo "  test      - Run tests"
 	@echo "  build     - Build the project"
+	@echo "  examples  - Process example files"
 
 # Download ANTLR jar if not present
 $(ANTLR_JAR):
@@ -30,6 +31,7 @@ clean:
 	@echo "Cleaning generated files..."
 	@rm -rf $(OUTPUT_DIR)
 	@rm -rf build/
+	@rm -rf output/
 
 test:
 	@echo "Running tests..."
@@ -38,3 +40,12 @@ test:
 build: generate
 	@echo "Building project..."
 	@go build -o build/archdsl ./cmd/archdsl
+
+examples: build
+	@echo "Processing example files..."
+	@mkdir -p output/simple output/ecommerce output/platform
+	@./build/archdsl -input examples/simple.dsl -output output/simple
+	@./build/archdsl -input examples/e-commerce.dsl -output output/ecommerce
+	@./build/archdsl -input examples/e-comerce-complex.dsl -output output/ecommerce-complex
+	@./build/archdsl -input examples/microservices-platform.dsl -output output/platform
+	@echo "Example diagrams generated in output/ directory"
