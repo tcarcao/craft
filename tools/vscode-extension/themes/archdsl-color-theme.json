@@ -1,0 +1,121 @@
+{
+    "name": "Architecture DSL Theme",
+    "colors": {
+        "editor.background": "#FFFFFF",
+        "editor.foreground": "#000000"
+    },
+    "tokenColors": [
+        {
+            "scope": "comment.line.double-slash.archdsl",
+            "settings": {
+                "foreground": "#608B4E",
+                "fontStyle": ""
+            }
+        },
+        {
+            "scope": "comment.block.archdsl",
+            "settings": {
+                "foreground": "#608B4E",
+                "fontStyle": "italic"
+            }
+        },
+        {
+            "scope": "keyword.control.structure.archdsl",
+            "settings": {
+                "foreground": "#0000FF",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "keyword.control.domain.archdsl",
+            "settings": {
+                "foreground": "#9C27B0",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "keyword.control.relation.archdsl",
+            "settings": {
+                "foreground": "#00796B",
+                "fontStyle": ""
+            }
+        },
+        {
+            "scope": "keyword.other.ddd.archdsl",
+            "settings": {
+                "foreground": "#D32F2F",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "support.type.tech.archdsl",
+            "settings": {
+                "foreground": "#1976D2",
+                "fontStyle": ""
+            }
+        },
+        {
+            "scope": "support.type.platform.archdsl",
+            "settings": {
+                "foreground": "#F57C00",
+                "fontStyle": ""
+            }
+        },
+        {
+            "scope": "entity.name.type.archdsl",
+            "settings": {
+                "foreground": "#2E7D32",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "entity.name.function.archdsl",
+            "settings": {
+                "foreground": "#000000",
+                "fontStyle": ""
+            }
+        },
+        {
+            "scope": "entity.name.class.service.archdsl",
+            "settings": {
+                "foreground": "#2E7D32",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "entity.name.function.method.archdsl",
+            "settings": {
+                "foreground": "#1976D2",
+                "fontStyle": ""
+            }
+        },
+        {
+            "scope": "variable.parameter.archdsl",
+            "settings": {
+                "foreground": "#9C27B0",
+                "fontStyle": "italic"
+            }
+        },
+        {
+            "scope": "keyword.operator.arrow.archdsl",
+            "settings": {
+                "foreground": "#D32F2F",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "entity.name.class.target.archdsl",
+            "settings": {
+                "foreground": "#2E7D32",
+                "fontStyle": "bold"
+            }
+        },
+        {
+            "scope": "entity.name.function.target.archdsl",
+            "settings": {
+                "foreground": "#1976D2",
+                "fontStyle": ""
+            }
+        }
+    ]
+}
