@@ -9,13 +9,22 @@ import (
 	"github.com/tcarcao/archdsl/internal/processor"
 )
 
+// Version will be set at build time
+var Version = "dev"
+
 func main() {
 	var (
 		inputFile = flag.String("input", "", "Input DSL file")
 		outputDir = flag.String("output", "output", "Output directory for generated diagrams")
 		help      = flag.Bool("help", false, "Show help message")
+		version   = flag.Bool("version", false, "Show version information")
 	)
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("ArchDSL version %s\n", Version)
+		return
+	}
 
 	if *help {
 		printUsage()
@@ -41,19 +50,21 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `ArchDSL - Architecture DSL Processor
+	fmt.Fprintf(os.Stderr, `ArchDSL - Architecture DSL Processor v%s
 
 Usage:
   archdsl -input <file.dsl> [-output <dir>]
 
 Options:
-  -input   Input DSL file (required)
-  -output  Output directory (default: output)
-  -help    Show this help message
+  -input    Input DSL file (required)
+  -output   Output directory (default: output)
+  -version  Show version information
+  -help     Show this help message
 
 Examples:
   archdsl -input examples/e-commerce.dsl
   archdsl -input system.dsl -output diagrams/
+  archdsl -version
 
-`)
+`, Version)
 }
