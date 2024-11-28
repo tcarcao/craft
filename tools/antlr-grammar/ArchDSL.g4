@@ -27,5 +27,5 @@ TECH: 'go'|'java'|'python'|'nodejs'|'php' ;
 PLATFORM: 'eks'|'lambda'|'sqs'|'sns'|'dynamodb'|'redis' ;
 IDENT: [a-zA-Z][a-zA-Z0-9_]* ;
 WS: [ \t\r\n]+ -> skip ;
-LINE_COMMENT  : '//' ~[\r\n]* -> skip ;
-BLOCK_COMMENT : '/*' .*? '*/' -> skip ;
+LINE_COMMENT  : '//' ~[\r\n]* -> skip ;          // Ignore single-line comments
+BLOCK_COMMENT : '/*' .*? '*/' -> skip ;          // Ignore multi-line comments

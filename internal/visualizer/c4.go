@@ -2,10 +2,9 @@ package visualizer
 
 import (
 	"fmt"
+	"github.com/tcarcao/archdsl/internal/parser"
 	"log"
 	"strings"
-
-	"github.com/tcarcao/archdsl/internal/parser"
 )
 
 func (v *Visualizer) GenerateC4(arch *parser.Architecture) ([]byte, error) {

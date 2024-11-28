@@ -2,9 +2,8 @@ package visualizer
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/tcarcao/archdsl/internal/parser"
+	"strings"
 )
 
 // GenerateSequence creates a PlantUML sequence diagram

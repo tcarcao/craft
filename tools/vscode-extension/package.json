@@ -64,8 +64,35 @@
             }
         ],
         "commands": [
+            {
+                "command": "archdsl.previewC4",
+                "title": "ArchDSL: Preview C4 Diagram",
+                "category": "ArchDSL"
+            },
+            {
+                "command": "archdsl.previewContext",
+                "title": "ArchDSL: Preview Context Map",
+                "category": "ArchDSL"
+            },
+            {
+                "command": "archdsl.previewSequence",
+                "title": "ArchDSL: Preview Sequence Diagram",
+                "category": "ArchDSL"
+            }
         ],
         "keybindings": [
+            {
+                "command": "archdsl.previewC4",
+                "key": "ctrl+shift+c"
+            },
+            {
+                "command": "archdsl.previewContext",
+                "key": "ctrl+shift+m"
+            },
+            {
+                "command": "archdsl.previewSequence",
+                "key": "ctrl+shift+s"
+            }
         ]
     }
 }

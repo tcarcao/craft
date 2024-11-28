@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Architecture DSL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.js"></script>
+    <style>
+        #container {
+            display: flex;
+            width: 100%;
+            height: calc(100vh - 100px);
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+            position: relative; /* Add this */
+            overflow: hidden;  /* Add this */
+        }
+
+        #left-panel {
+            width: 50%;
+            min-width: 400px;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            height: 100%; /* Add this */
+        }
+
+        #right-panel {
+            flex: 1;
+            min-width: 400px;
+            max-width: calc(100% - 408px); /* Add this: 400px + 8px divider */
+            padding: 20px;
+            overflow-y: auto;
+            height: 100%; /* Add this */
+        }
+
+        #divider {
+            width: 8px;
+            background: #e5e7eb;
+            cursor: col-resize;
+            flex: none;  /* Change from flex-shrink */
+            user-select: none;
+            position: relative;
+            z-index: 10;
+        }
+
+        #divider:hover {
+            background: #93c5fd;
+        }
+
+        #divider.dragging {
+            background: #60a5fa;
+        }
+
+        #editor {
+            height: calc(100vh - 280px);
+            min-height: 200px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+
+        .diagram-container {
+            margin-bottom: 2rem;
+            background: white;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .diagram-container:last-child {
+            margin-bottom: 0;
+        }
+
+        .diagram-container img {
+            max-width: 100%;
+            width: auto;  /* Add this */
+            height: auto;
+            display: block;
+        }
+
+        /* Add these new styles for the diagram wrapper */
+        .diagram-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+
+        .diagram-wrapper img {
+            max-width: none;  /* Allow image to maintain its natural size */
+        }
+
+        /* Add smooth transitions */
+        #left-panel {
+            transition: width 0.1s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+<div class="p-4">
+    <h1 class="text-3xl font-bold mb-4">Architecture DSL</h1>
+
+    {{if .Error}}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+        {{.Error}}
+    </div>
+    {{end}}
+
+    <div id="container">
+        <div id="left-panel">
+            <form method="POST" id="dslForm">
+                <div id="editor"></div>
+                <input type="hidden" name="dsl" id="dslInput">
+
+                <div class="mt-4 space-x-4">
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" name="c4" {{if .WantC4}}checked{{end}}>
+                        <span class="ml-2">C4 Diagram</span>
+                    </label>
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" name="context" {{if .WantContext}}checked{{end}}>
+                        <span class="ml-2">Context Map</span>
+                    </label>
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" name="sequence" {{if .WantSequence}}checked{{end}}>
+                        <span class="ml-2">Sequence Diagram</span>
+                    </label>
+                </div>
+
+                <button type="submit" class="mt-4 w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Generate Diagrams
+                </button>
+            </form>
+        </div>
+
+        <div id="divider"></div>
+
+        <div id="right-panel">
+            {{if .C4}}
+            <div class="mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">C4 Diagram</h2>
+                    <div>
+                        <a href="/diagram/c4" target="_blank" class="text-blue-500 hover:text-blue-700">View</a>
+                        <a href="/download/c4" class="ml-4 text-blue-500 hover:text-blue-700">Download</a>
+                    </div>
+                </div>
+                <div class="diagram-wrapper">
+                    <img src="data:image/png;base64,{{.C4}}" alt="C4 Diagram">
+                </div>
+            </div>
+            {{end}}
+
+            {{if .Context}}
+            <div class="mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Context Map</h2>
+                    <div>
+                        <a href="/diagram/context" target="_blank" class="text-blue-500 hover:text-blue-700">View</a>
+                        <a href="/download/context" class="ml-4 text-blue-500 hover:text-blue-700">Download</a>
+                    </div>
+                </div>
+                <div class="diagram-wrapper">
+                    <img src="data:image/png;base64,{{.Context}}" alt="Context Map">
+                </div>
+            </div>
+            {{end}}
+
+            {{if .Sequence}}
+            <div class="mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Sequence Diagram</h2>
+                    <div>
+                        <a href="/diagram/sequence" target="_blank" class="text-blue-500 hover:text-blue-700">View</a>
+                        <a href="/download/sequence" class="ml-4 text-blue-500 hover:text-blue-700">Download</a>
+                    </div>
+                </div>
+                <div class="diagram-wrapper">
+                    <img src="data:image/png;base64,{{.Sequence}}" alt="Sequence Diagram">
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+</div>
+
+<!-- Add this before the closing </body> tag -->
+<script>
+    // Drag functionality
+    const divider = document.getElementById('divider');
+    const leftPanel = document.getElementById('left-panel');
+    const container = document.getElementById('container');
+
+    let isResizing = false;
+    let startX, startWidth;
+
+    divider.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startX = e.pageX;
+        startWidth = leftPanel.offsetWidth;
+
+        divider.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+
+        document.addEventListener('mousemove', resize);
+        document.addEventListener('mouseup', stopResize);
+
+        document.body.style.userSelect = 'none';
+    });
+
+    function resize(e) {
+        if (!isResizing) return;
+
+        const containerWidth = container.offsetWidth;
+        const minWidth = 400;
+        const maxWidth = containerWidth - minWidth;
+
+        let newWidth = startWidth + (e.pageX - startX);
+        newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+
+        leftPanel.style.width = `${newWidth}px`;
+
+        if (typeof editor !== 'undefined') {
+            editor.layout();
+        }
+    }
+
+    function stopResize() {
+        isResizing = false;
+        divider.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        document.removeEventListener('mousemove', resize);
+        document.removeEventListener('mouseup', stopResize);
+
+        if (typeof editor !== 'undefined') {
+            editor.layout();
+        }
+    }
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (typeof editor !== 'undefined') {
+            editor.layout();
+        }
+
+        const containerWidth = container.offsetWidth;
+        const minWidth = 400;
+        const maxWidth = containerWidth - minWidth;
+        const currentWidth = leftPanel.offsetWidth;
+
+        if (currentWidth > maxWidth) {
+            leftPanel.style.width = `${maxWidth}px`;
+        }
+    });
+
+    // Monaco Editor setup
+    let editor;
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+
+    require(['vs/editor/editor.main'], function() {
+        // Register language
+        monaco.languages.register({ id: 'archdsl' });
+
+        // Define syntax highlighting rules
+        monaco.languages.setMonarchTokensProvider('archdsl', {
+            defaultToken: '',
+            tokenPostfix: '.archdsl',
+
+            keywords: [
+                'system', 'bounded', 'context', 'aggregate', 'component',
+                'service', 'event', 'using', 'on', 'to', 'as'
+            ],
+            dddPatterns: [
+                'upstream', 'downstream', 'acl', 'ohs', 'conformist'
+            ],
+            technologies: [
+                'go', 'java', 'python', 'nodejs', 'php'
+            ],
+            platforms: [
+                'eks', 'lambda', 'sqs', 'sns', 'dynamodb', 'redis'
+            ],
+
+            tokenizer: {
+                root: [
+                    // Comments
+                    [/\/\/.*$/, 'comment'],
+                    [/\/\*/, 'comment.block', '@comment'],
+
+                    // Service interactions
+                    [/[A-Za-z][A-Za-z0-9]*(?=\.)/, 'service.name'],      // Service name
+                    [/\.([A-Za-z][A-Za-z0-9]*)(?=\()/, 'method.name'],   // Method name
+                    [/\(([^)]*)\)/, 'parameters'],                        // Parameters
+                    [/->/, 'arrow'],                                      // Arrow operator
+
+                    // Structural keywords
+                    [/\b(system|bounded|context)\b/, 'keyword.structure'],
+
+                    // Domain elements
+                    [/\b(aggregate|component|service|event)\b/, 'keyword.domain'],
+
+                    // Relationship keywords
+                    [/\b(using|on|to|as)\b/, 'keyword.relation'],
+
+                    // DDD patterns
+                    [/\b(upstream|downstream|acl|ohs|conformist)\b/, 'keyword.pattern'],
+
+                    // Technologies
+                    [/\b(go|java|python|nodejs|php)\b/, 'keyword.tech'],
+
+                    // Platforms
+                    [/\b(eks|lambda|sqs|sns|dynamodb|redis)\b/, 'keyword.platform'],
+
+                    // Names and identifiers
+                    [/[A-Z][a-zA-Z0-9]*/, 'type.identifier'],
+                    [/[a-z][a-zA-Z0-9]*/, 'identifier'],
+                ],
+
+                comment: [
+                    [/[^/*]+/, 'comment.block'],
+                    [/\*\//, 'comment.block', '@pop'],
+                    [/[/*]/, 'comment.block']
+                ]
+            }
+        });
+
+        // Define theme
+        monaco.editor.defineTheme('archDslTheme', {
+            base: 'vs',
+            inherit: true,
+            rules: [
+                // Comments
+                { token: 'comment', foreground: '608b4e' },
+                { token: 'comment.block', foreground: '608b4e', fontStyle: 'italic' },
+
+                // Main structural elements
+                { token: 'keyword.structure', foreground: '0000ff', fontStyle: 'bold' },
+
+                // Domain elements
+                { token: 'keyword.domain', foreground: '9c27b0', fontStyle: 'bold' },
+
+                // Relationship keywords
+                { token: 'keyword.relation', foreground: '00796b' },
+
+                // DDD patterns
+                { token: 'keyword.pattern', foreground: 'd32f2f', fontStyle: 'bold' },
+
+                // Technologies
+                { token: 'keyword.tech', foreground: '1976d2' },
+
+                // Platforms
+                { token: 'keyword.platform', foreground: 'f57c00' },
+
+                // Service interactions
+                { token: 'service.name', foreground: '2E7D32', fontStyle: 'bold' },
+                { token: 'method.name', foreground: '1976D2' },
+                { token: 'parameters', foreground: '9C27B0', fontStyle: 'italic' },
+                { token: 'arrow', foreground: 'D32F2F', fontStyle: 'bold' },
+
+                // Identifiers
+                { token: 'type.identifier', foreground: '2e7d32', fontStyle: 'bold' },
+                { token: 'identifier', foreground: '000000' }
+            ],
+            colors: {
+                'editor.background': '#ffffff',
+                'editor.foreground': '#000000',
+                'editor.lineHighlightBackground': '#f5f5f5',
+                'editorCursor.foreground': '#000000',
+                'editor.selectionBackground': '#add6ff',
+                'editorLineNumber.foreground': '#6e7681',
+                'editorLineNumber.activeForeground': '#0066bf'
+            }
+        });
+
+        // Create editor
+        editor = monaco.editor.create(document.getElementById('editor'), {
+            value: {{.Input}},
+        language: 'archdsl',
+            theme: 'archDslTheme',
+            automaticLayout: true,
+            formatOnType: true,
+            formatOnPaste: true,
+            minimap: { enabled: true },
+        scrollBeyondLastLine: false,
+            renderWhitespace: 'selection',
+            fontFamily: '"Fira Code", "Cascadia Code", Consolas, "Courier New", monospace',
+            fontSize: 14,
+            lineHeight: 21,
+            padding: { top: 10 },
+        lineNumbers: 'on',
+            glyphMargin: true,
+            folding: true,
+            tabSize: 4,
+            rulers: [80],
+            guides: {
+            bracketPairs: true,
+                indentation: true
+        }
+    });
+
+        // Update hidden input before form submission
+        document.getElementById('dslForm').onsubmit = function() {
+            document.getElementById('dslInput').value = editor.getValue();
+        };
+    });
+</script>
+</body>
+</html>

@@ -3,6 +3,9 @@ system OrderSystem {
        aggregate Order
        component OrderProcessor
        service OrderService
+       event OrderCreated
+
+       upstream to Payments as ohs
    }
 }
 
@@ -11,5 +14,10 @@ system PaymentSystem {
        aggregate Payment
        component PaymentProcessor
        service PaymentService
+       event PaymentProcessed
    }
 }
+
+Orders.ProcessOrder(Customer) -> Payments.CreatePayment()
+Payments.PublishEvent("PaymentProcessed")
+Orders.ConsumeEvent("PaymentProcessed")

@@ -5,66 +5,71 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/tcarcao/archdsl/internal/processor"
 )
 
-// Version will be set at build time
-var Version = "dev"
-
 func main() {
-	var (
-		inputFile = flag.String("input", "", "Input DSL file")
-		outputDir = flag.String("output", "output", "Output directory for generated diagrams")
-		help      = flag.Bool("help", false, "Show help message")
-		version   = flag.Bool("version", false, "Show version information")
-	)
+	inputFile := flag.String("input", "", "Input DSL file path")
+	outputDir := flag.String("output", "", "Output directory for generated diagrams")
+
 	flag.Parse()
 
-	if *version {
-		fmt.Printf("ArchDSL version %s\n", Version)
-		return
-	}
-
-	if *help {
-		printUsage()
-		return
-	}
-
-	if *inputFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: input file is required\n")
-		printUsage()
+	if *inputFile == "" || *outputDir == "" {
+		fmt.Println("Usage: archdsl -input <dsl-file> -output <output-dir>")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	processor, err := processor.New()
+	proc, err := processor.New()
 	if err != nil {
 		log.Fatalf("Failed to create processor: %v", err)
 	}
 
-	if err := processor.ProcessFile(*inputFile, *outputDir); err != nil {
+	if err := proc.ProcessFile(*inputFile, *outputDir); err != nil {
 		log.Fatalf("Failed to process file: %v", err)
 	}
 
-	fmt.Printf("Successfully generated diagrams in %s/\n", *outputDir)
+	if err := generateDiagrams(*outputDir); err != nil {
+		log.Fatalf("Failed to generate diagrams: %v", err)
+	}
+
+	fmt.Println("Successfully generated architecture diagrams in:", *outputDir)
 }
 
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `ArchDSL - Architecture DSL Processor v%s
+func generateDiagrams(outputDir string) error {
+	plantumlFiles, err := filepath.Glob(filepath.Join(outputDir, "*.puml"))
+	if err != nil {
+		return fmt.Errorf("failed to find PlantUML files: %v", err)
+	}
 
-Usage:
-  archdsl -input <file.dsl> [-output <dir>]
+	for _, file := range plantumlFiles {
+		if err := runCommand("plantuml", file); err != nil {
+			return fmt.Errorf("failed to generate PNG from %s: %v", file, err)
+		}
+	}
 
-Options:
-  -input    Input DSL file (required)
-  -output   Output directory (default: output)
-  -version  Show version information
-  -help     Show this help message
+	dotFiles, err := filepath.Glob(filepath.Join(outputDir, "*.dot"))
+	if err != nil {
+		return fmt.Errorf("failed to find Graphviz files: %v", err)
+	}
 
-Examples:
-  archdsl -input examples/e-commerce.dsl
-  archdsl -input system.dsl -output diagrams/
-  archdsl -version
+	for _, file := range dotFiles {
+		outFile := file[:len(file)-4] + ".png"
+		if err := runCommand("dot", "-Tpng", "-o", outFile, file); err != nil {
+			return fmt.Errorf("failed to generate PNG from %s: %v", file, err)
+		}
+	}
 
-`, Version)
+	return nil
+}
+
+func runCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("command failed: %v\nOutput: %s", err, output)
+	}
+	return nil
 }

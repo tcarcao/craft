@@ -1,0 +1,51 @@
+
+!include <awslib/AWSRaw.puml>
+!include <awslib/Analytics/all.puml>
+!include <awslib/ApplicationIntegration/all.puml>
+!include <awslib/Compute/all.puml>
+!include <awslib/Containers/all.puml>
+!include <awslib/Database/all.puml>
+!include <awslib/NetworkingContentDelivery/all.puml>
+!include <awslib/SecurityIdentityCompliance/all.puml>
+!include <awslib/Storage/all.puml>
+!include <C4/C4_Component.puml>
+!include <C4/C4_Container.puml>
+!include <C4/C4_Context.puml>
+
+!define DEVICONS https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/devicons
+!define DEVICONS3 https://raw.githubusercontent.com/rabelenda/cicon-plantuml-sprites/v1.0/sprites
+
+!include <tupadr3/font-awesome-5/user>
+!include <tupadr3/font-awesome-5/app_store_ios>
+
+!include DEVICONS/android.puml
+!include DEVICONS/database.puml
+!include <tupadr3/devicons2/php>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/react_original>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/nodejs>
+!include DEVICONS3/solr.puml
+!include DEVICONS3/memcached.puml
+!include <tupadr3/devicons2/nodejs_wordmark>
+!include <tupadr3/devicons2/python>
+!include <tupadr3/devicons2/apple_original>
+!include DEVICONS3/kafka.puml
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/mysql>
+'TODO could be replaced with <tupadr3/devicons2/lua> once plantuml upgrades to 2023+
+!include <logos/lua>
+'TODO could be replaced with <tupadr3/devicons2/firebase> once plantuml upgrades to 2023+
+!include <logos/firebase>
+'TODO could be replaced with <tupadr3/devicons2/graphql> once plantuml upgrades to 2023+
+!include <logos/graphql>
+
+skinparam linetype polyline
+
+AddElementTag("out_of_scope", $borderColor="#AAAABB", $bgColor="#AAAABB", $fontColor="#FFFFFF")
+AddElementTag("comment", $borderColor="#ff8888", $bgColor="#eeeeee", $fontColor="#111111")
+AddElementTag("invisible", $borderColor="transparent", $bgColor="transparent", $fontColor="transparent")
+AddRelTag("infra subscription", $textColor="#a1a1a1", $lineColor="#a1a1a1")
+AddRelTag("obsolete", $textColor="red", $lineColor="red")
+AddRelTag("to_deprecate", $textColor="Orange", $lineColor="Orange")
+AddRelTag("invisible", $textColor="transparent", $lineColor="transparent", $lineStyle = DashedLine())
