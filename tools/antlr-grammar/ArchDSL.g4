@@ -1,31 +1,47 @@
-// ArchDSL.g4
 grammar ArchDSL;
 
-architecture: system* flow* ;
+// Parser Rules - Basic structure for use cases
+dsl: use_case* ;
 
-system: 'system' IDENT '{' context* '}' ;
+use_case: 'use_case' string '{' NEWLINE* scenario* '}' NEWLINE*;
 
-context: 'bounded' 'context' IDENT '{'
-    (aggregate | component | service | event | relation)*
-    '}' ;
+scenario: trigger action_block;
 
-aggregate: 'aggregate' IDENT ;
-component: 'component' IDENT tech? ;
-service: 'service' IDENT tech? platform? ;
-event: 'event' IDENT ;
-relation: ('upstream'|'downstream') 'to' IDENT 'as' pattern ;
+trigger: 'when' external_trigger NEWLINE+;
 
-tech: 'using' TECH ;
-platform: 'on' PLATFORM ;
-pattern: 'acl'|'ohs'|'conformist' ;
+external_trigger: actor verb phrase?;
 
-flow: IDENT '.' IDENT '(' args? ')' ('->' target)? ;
-target: IDENT '.' IDENT '(' ')' ;
-args: IDENT (',' IDENT)* ;
+action_block: action*;
 
-TECH: 'go'|'java'|'python'|'nodejs'|'php' ;
-PLATFORM: 'eks'|'lambda'|'sqs'|'sns'|'dynamodb'|'redis' ;
-IDENT: [a-zA-Z][a-zA-Z0-9_]* ;
-WS: [ \t\r\n]+ -> skip ;
-LINE_COMMENT  : '//' ~[\r\n]* -> skip ;          // Ignore single-line comments
-BLOCK_COMMENT : '/*' .*? '*/' -> skip ;          // Ignore multi-line comments
+action: internal_action NEWLINE+;
+
+internal_action: domain verb connector? phrase;
+
+phrase: word+;
+
+connector: CONNECTOR;
+
+word: IDENTIFIER | CONNECTOR;
+
+actor: IDENTIFIER;
+
+domain: IDENTIFIER;
+
+verb: IDENTIFIER;
+
+string: STRING;
+
+// Lexer Rules
+CONNECTOR: 'a' | 'an' | 'the' | 'as' | 'to' | 'from' | 'in' | 'on' | 'at' | 'for' | 'with' | 'by';
+
+IDENTIFIER: [a-zA-Z_][a-zA-Z0-9_-]*;
+
+STRING: '"' (~["\r\n])* '"';
+
+NEWLINE: '\r'? '\n';
+
+// Whitespace
+WS: [ \t]+ -> skip;
+
+// Comments
+COMMENT: '//' ~[\r\n]* -> skip;
