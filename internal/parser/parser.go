@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/tcarcao/archdsl/pkg/parser"
@@ -27,27 +26,29 @@ func NewParser() *Parser {
 	}
 }
 
-func (p *Parser) ParseString(input string) (*Architecture, error) {
-	inputStream := antlr.NewInputStream(input)
-
+func (p *Parser) ParseString(dslContent string) (*DSLModel, error) {
+	inputStream := antlr.NewInputStream(dslContent)
 	lexer := parser.NewArchDSLLexer(inputStream)
 	lexer.RemoveErrorListeners()
 	lexer.AddErrorListener(p.errorListener)
 
-	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	tokenStream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	dslParser := parser.NewArchDSLParser(tokenStream)
 
-	parser := parser.NewArchDSLParser(stream)
-	parser.RemoveErrorListeners()
-	parser.AddErrorListener(p.errorListener)
+	dslParser.RemoveErrorListeners()
+	dslParser.AddErrorListener(p.errorListener)
 
-	tree := parser.Architecture()
-
-	if len(p.errorListener.Errors) > 0 {
-		return nil, fmt.Errorf("parse errors: %s", strings.Join(p.errorListener.Errors, "; "))
+	tree := dslParser.Dsl()
+	if tree == nil {
+		return nil, fmt.Errorf("failed to parse DSL")
 	}
 
-	listener := newArchitectureListener()
-	antlr.ParseTreeWalkerDefault.Walk(listener, tree)
+	if len(p.errorListener.Errors) > 0 {
+		return nil, fmt.Errorf("parse errors: %v", p.errorListener.Errors)
+	}
 
-	return listener.getArchitecture(), nil
+	builder := NewDSLModelBuilder()
+	builder.VisitDsl(tree.(*parser.DslContext))
+
+	return builder.GetModel(), nil
 }
