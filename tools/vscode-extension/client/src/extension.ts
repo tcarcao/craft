@@ -1,6 +1,6 @@
 // client/src/extension.ts
 import * as path from 'path';
-import { workspace, ExtensionContext } from 'vscode';
+import { workspace, ExtensionContext, window } from 'vscode';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -8,11 +8,21 @@ import {
     TransportKind
 } from 'vscode-languageclient/node';
 import { registerPreviewCommands, cleanUpPreviewCommands } from './commands';
+import { DomainsViewProvider } from './providers/domainsViewProvider';
+import { DomainsViewService } from './services/domainsViewService';
+import { DomainsViewHtmlGenerator } from './ui/domainsViewHtmlGenerator';
+import { DslExtractService } from './services/dslExtractService';
 
+let domainTreeProvider: DomainsViewProvider;
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-    // Setup server
+    startLanguageServer(context);
+    registerDomainView(context, client);
+    registerPreviewCommands(context);
+}
+
+function startLanguageServer(context: ExtensionContext) {
     const serverModule = context.asAbsolutePath(
 		path.join('server', 'out', 'server.js')
 	);
@@ -41,10 +51,30 @@ export function activate(context: ExtensionContext) {
         clientOptions
     );
 
-    // Register commands
-    registerPreviewCommands(context, client);
-
     client.start();
+}
+
+function registerDomainView(context: ExtensionContext, client: LanguageClient) {
+    // Initialize services
+    const extractService = new DslExtractService(client);
+    const domainService = new DomainsViewService();
+    const htmlGenerator = new DomainsViewHtmlGenerator();
+    
+    // Register the Domain Tree view provider
+    domainTreeProvider = new DomainsViewProvider(
+        client,
+        context.extensionUri,
+        extractService,
+        domainService,
+        htmlGenerator
+    );
+    
+    context.subscriptions.push(
+        window.registerWebviewViewProvider(
+            DomainsViewProvider.viewType, 
+            domainTreeProvider
+        ),
+    );
 }
 
 export function deactivate(): Thenable<void> | undefined {

@@ -1,0 +1,109 @@
+import { BlockRange } from '../../../shared/lib/types/domain-extraction';
+
+export interface DSLDiscoveryOptions {
+    currentFile?: string;
+    includeDataStores?: boolean;
+    includeScenarios?: boolean;
+}
+
+export interface DSLDiscoveryResult {
+    domains: Domain[];
+}
+
+const defaultDomain = 'Unknown';
+
+export const DomainC = {
+    DefaultDomain: defaultDomain,
+    EmptyDomain: emptyDomain(),
+    GenerateDomainId: generateDomainId,
+    GenerateSubDomainId: generateSubDomainId,
+    GenerateUseCaseId: generateUseCaseId,
+}
+
+export interface Domain {
+    id: string;
+    name: string;
+    description: string;
+    expanded: boolean;
+    selected: boolean;
+    partiallySelected: boolean;
+    inCurrentFile: boolean;
+    subDomains: SubDomain[];
+    selectedUseCases: number;
+    totalUseCases: number;
+    selectedSubDomains: number;
+}
+
+function emptyDomain() {
+    const emptyDomain: Domain = {
+        id: generateDomainId(defaultDomain),
+        name: defaultDomain,
+        description: '',
+        expanded: false,
+        selected: false,
+        partiallySelected: false,
+        inCurrentFile: false,
+        subDomains: [],
+        selectedUseCases: 0,
+        totalUseCases: 0,
+        selectedSubDomains: 0
+    }
+    return emptyDomain;
+}
+
+function generateDomainId(domainName: string): string {
+    return `domain-${domainName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+}
+
+export interface SubDomain {
+    id: string;
+    name: string;
+    description: string;
+    expanded: boolean;
+    showReferences: boolean;
+    selected: boolean;
+    partiallySelected: boolean;
+    useCases: UseCase[];
+    referencedIn: UseCaseReference[];
+    selectedUseCases: number;
+    totalUseCases: number;
+}
+
+function generateSubDomainId(domainName: string, subDomainName: string): string {
+    const cleanSubDomainName = subDomainName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `${generateDomainId(domainName)}-subdomain-${cleanSubDomainName}`;
+}
+
+export interface UseCaseReference {
+    useCaseId: string;
+    useCaseName: string;
+    domainName: string;
+    blockRange: BlockRange;
+    role: 'entry-point' | 'involved';
+}
+
+export interface UseCase {
+    id: string;
+    name: string;
+    description: string;
+    selected: boolean;
+    fileName: string;
+    blockRange: BlockRange;
+    scenarios: string[];
+    entryPointSubDomain: string;
+    involvedSubDomains: string[];
+}
+
+function generateUseCaseId(domainName: string, subDomainName: string, useCaseName: string): string {
+    const cleanUseCaseName = useCaseName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `${generateSubDomainId(domainName, subDomainName)}-uc-${cleanUseCaseName}`;
+}
+
+export interface DomainTreeState {
+    domains: Map<string, Domain>;
+    expandedNodes: Set<string>;
+    selectedNodes: Set<string>;
+    viewMode: 'current' | 'workspace';
+    currentFile?: string;
+    isLoading: boolean;
+}

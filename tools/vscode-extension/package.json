@@ -93,6 +93,25 @@
                 "command": "archdsl.previewSequence",
                 "key": "ctrl+shift+s"
             }
-        ]
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "dslDomainContainer",
+                    "title": "DSL Domains",
+                    "icon": "$(symbol-namespace)"
+                }
+            ]
+        },
+        "views": {
+            "dslDomainContainer": [
+                {
+                    "id": "dslDomainView",
+                    "name": "Domain Manager",
+                    "type": "webview",
+                    "icon": "$(symbol-namespace)"
+                }
+            ]
+        }
     }
 }

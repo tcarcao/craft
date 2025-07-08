@@ -21,6 +21,8 @@ export class DiagnosticProvider {
 
         const diagnostics: Diagnostic[] = [];
 
+        console.log(result.errors);
+
         if (!result.success) {
             result.errors.forEach(error => {
                 const match = error.match(/Line (\d+):(\d+) (.*)/);

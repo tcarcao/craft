@@ -1,15 +1,15 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const axios = require('axios');
-import { window, TextDocument, WebviewPanel } from 'vscode';
+import { window, WebviewPanel } from 'vscode';
 
-export async function updatePreview(previewPanel: WebviewPanel | undefined, document: TextDocument, documentType: string) {
+export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string) {
     if (!previewPanel) {
         return;
     }
 
     try {
         const { data } = await axios.post(`http://localhost:8080/preview/${documentType.toLowerCase()}`, {
-            DSL: document.getText()
+            DSL: text
         }, {
             headers: {
                 'Content-Type': 'application/json'

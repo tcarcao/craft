@@ -1,17 +1,12 @@
-import { Token } from 'antlr4';
-import { ErrorListener, RecognitionException, Recognizer } from 'antlr4';
+import { BaseErrorListener, RecognitionException, Recognizer, Token, ATNSimulator } from "antlr4ng";
 
-export class CustomErrorListener implements ErrorListener<Token> {
+
+export class CustomErrorListener extends BaseErrorListener {
     errors: string[] = [];
 
-    syntaxError(
-        recognizer: Recognizer<Token>,
-        offendingSymbol: Token | null,
-        line: number,
-        column: number,
-        msg: string,
-        e: RecognitionException | undefined
-    ): void {
+    public override syntaxError<S extends Token, T extends ATNSimulator>(_recognizer: Recognizer<T>,
+        _offendingSymbol: S | null, line: number, column: number, msg: string,
+        _e: RecognitionException | null): void {
         this.errors.push(`Line ${line}:${column} ${msg}`);
     }
 }

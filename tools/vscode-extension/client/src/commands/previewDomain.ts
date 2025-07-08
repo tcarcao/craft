@@ -1,12 +1,12 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
 import { updatePreview } from './previewCommon';
 
-const viewType = 'c4Preview';
-const panelTitle = 'C4 Preview';
+const viewType = 'domainPreview';
+const panelTitle = 'Domain Preview';
 
 let previewPanel: WebviewPanel | undefined;
 
-export async function handlePreviewC4() {
+export async function handlePreviewDomain() {
     const activeEditor = window.activeTextEditor;
     if (!activeEditor) {
         window.showErrorMessage('No active editor');
@@ -16,10 +16,10 @@ export async function handlePreviewC4() {
     createAndShowPreviewPanel();
 
     // Update content
-    updatePreview(previewPanel, activeEditor.document.getText(), "C4");
+    updatePreview(previewPanel, activeEditor.document.getText(), "Domain");
 }
 
-export async function handlePreviewSelectedC4() {
+export async function handlePreviewDomainsFromSelection() {
     const activeEditor = window.activeTextEditor;
     if (!activeEditor) {
         window.showErrorMessage('No active editor');
@@ -35,7 +35,7 @@ export async function handlePreviewSelectedC4() {
 
     // Update content
     const selectedText = activeEditor.document.getText(activeEditor.selection);
-    updatePreview(previewPanel, selectedText, "C4");
+    updatePreview(previewPanel, selectedText, "Domain");
 }
 
 function createAndShowPreviewPanel() {
@@ -60,7 +60,7 @@ function createAndShowPreviewPanel() {
     previewPanel.reveal(ViewColumn.Beside);
 }
 
-export function cleanUpPreviewC4() {
+export function cleanUpPreviewDomain() {
     if (previewPanel) {
         previewPanel.dispose();
     }

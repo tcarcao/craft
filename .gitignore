@@ -31,3 +31,4 @@ Thumbs.db
 # ANTLR generated files
 /pkg/parser/
 tools/antlr-*.jar
+tools/vscode-extension/server/src/parser/generated

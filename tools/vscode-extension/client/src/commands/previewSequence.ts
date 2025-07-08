@@ -4,7 +4,7 @@ import { updatePreview } from './previewCommon';
 
 let previewPanel: WebviewPanel | undefined;
 
-export async function handlePreviewSequence(_client: LanguageClient) {
+export async function handlePreviewSequence() {
     const activeEditor = window.activeTextEditor;
         if (!activeEditor) {
             window.showErrorMessage('No active editor');
@@ -33,7 +33,7 @@ export async function handlePreviewSequence(_client: LanguageClient) {
         previewPanel.reveal(ViewColumn.Beside);
 
         // Update content
-        updatePreview(previewPanel, activeEditor.document, "Sequence");
+        updatePreview(previewPanel, activeEditor.document.getText(), "Sequence");
 }
 
 export function cleanUpPreviewSequence() {
