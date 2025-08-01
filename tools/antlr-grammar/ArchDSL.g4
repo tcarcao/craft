@@ -1,7 +1,30 @@
 grammar ArchDSL;
 
 // Parser Rules
-dsl: (use_case NEWLINE*)* ;
+dsl: services? (use_case NEWLINE*)* ;
+
+services: 'services' '{' NEWLINE* service_definition_list? '}' NEWLINE*;
+
+service_definition_list: service_definition (',' NEWLINE* service_definition)* ','? NEWLINE*;
+
+service_definition: service_name ':' '{' NEWLINE* service_properties NEWLINE* '}' NEWLINE*;
+
+service_name: IDENTIFIER | STRING;
+
+service_properties: service_property (NEWLINE+ service_property)* NEWLINE*;
+
+service_property: DOMAINS ':' domain_list
+                | DATA_STORES ':' datastore_list
+                | LANGUAGE ':' IDENTIFIER
+                ;
+
+domain_list: domain_or_datastore (',' domain_or_datastore)* ','?;
+
+datastore_list: domain_or_datastore (',' domain_or_datastore)* ','?;
+
+domain_or_datastore: IDENTIFIER;
+
+datastore: domain_or_datastore;
 
 use_case: 'use_case' string '{' NEWLINE* scenario* '}';
 
@@ -40,6 +63,11 @@ verb: IDENTIFIER;
 quoted_event: STRING;
 
 string: STRING;
+
+// Lexer Rules (specific tokens that could conflict with IDENTIFIER)
+DOMAINS: 'domains';
+DATA_STORES: 'data-stores';
+LANGUAGE: 'language';
 
 CONNECTOR: 'a' | 'an' | 'the' | 'as' | 'to' | 'from' | 'in' | 'on' | 'at' | 'for' | 'with' | 'by';
 
