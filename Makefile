@@ -4,7 +4,7 @@ IMAGE_NAME=archdsl
 IMAGE_TAG=latest
 DOCKERFILE_PATH=build/package/Dockerfile
 ANTLR_IMAGE_NAME=antlr/antlr4
-ANTLR_IMAGE_TAG=latest
+ANTLR_IMAGE_TAG=4.13.2
 ANTLR_GRAMMAR_PATH=tools/antlr-grammar
 ANTLR_GRAMMAR_FILENAME=ArchDSL.g4
 GOLANG_GRAMMAR_PATH=pkg/parser/
@@ -12,32 +12,32 @@ JAVASCRIPT_GRAMMAR_PATH=tools/vscode-extension/server/src/parser/generated
 
 docker-build:
 	@echo "Building Docker image..."
-	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) -f $(DOCKERFILE_PATH) .
+	podman build -t $(IMAGE_NAME):$(IMAGE_TAG) -f $(DOCKERFILE_PATH) .
 
 docker-run:
 	@echo "Running Docker container..."
-	docker run --rm -it -p 8080:8080 $(IMAGE_NAME):$(IMAGE_TAG)
+	podman run --rm -it -p 8080:8080 $(IMAGE_NAME):$(IMAGE_TAG)
 
 docker-clean:
 	@echo "Removing Docker image..."
-	docker rmi $(IMAGE_NAME):$(IMAGE_TAG)
+	podman rmi $(IMAGE_NAME):$(IMAGE_TAG)
 
 docker-build-antlr-image:
-	@if [ -z "$$(docker images -q $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG))" ]; then \
+	@if [ -z "$$(podman images -q $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG))" ]; then \
 		echo "Building ANTLR Docker image..."; \
 		git clone https://github.com/antlr/antlr4.git; \
-		cd antlr4/docker && docker build -t $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) --platform linux/amd64 .; \
-		rm -rf antlr4; \
+		cd antlr4/docker && podman build -t $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) --platform linux/amd64 .; \
+		cd ../../ && rm -rf antlr4; \
 	else \
 		echo "ANTLR Docker image already exists."; \
 	fi
 
 docker-clean-antlr-image:
-	docker rmi $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG)
+	podman rmi $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG)
 
 generate-grammar: docker-build-antlr-image
-	docker run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(GOLANG_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=Go -o /output $(ANTLR_GRAMMAR_FILENAME)
-	docker run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(JAVASCRIPT_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=JavaScript -o /output $(ANTLR_GRAMMAR_FILENAME)
+	podman run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(GOLANG_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=Go -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
+# 	docker run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(JAVASCRIPT_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=TypeScript -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
 
 test:
 	go test ./...

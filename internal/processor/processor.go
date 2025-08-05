@@ -43,7 +43,7 @@ func (p *Processor) ProcessFile(inputPath, outputDir string) error {
 	return nil
 }
 
-func (p *Processor) generateDiagrams(arch *parser.Architecture, outputDir string) error {
+func (p *Processor) generateDiagrams(arch *parser.DSLModel, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}

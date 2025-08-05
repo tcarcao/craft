@@ -1,6 +1,6 @@
 package parser
 
-// DSL Model Types for Diagram Generation (Updated for Use Case Grammar)
+// DSL Model Types for Diagram Generation (Updated for Simplified Grammar)
 
 // DSLModel represents the entire parsed DSL document
 type DSLModel struct {
@@ -8,7 +8,7 @@ type DSLModel struct {
 	UseCases []UseCase `json:"useCases"`
 }
 
-// Service represents a service definition with its domains (placeholder for August)
+// Service represents a service definition with its domains, and other properties
 type Service struct {
 	Name       string   `json:"name"`
 	Domains    []string `json:"domains,omitempty"`
