@@ -197,6 +197,41 @@ type PreviewResponse struct {
 	Data    string `json:"data,omitempty"` // base64 encoded diagram
 }
 
+func (s *Server) handlePreviewDomain() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+			return
+		}
+
+		// Parse DSL
+		p := parser.NewParser()
+
+		model, err := p.ParseString(req.DSL)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+			return
+		}
+
+		// Generate Model diagram
+		diagram, err := s.viz.GenerateDomainDiagram(model)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+			return
+		}
+
+		// Encode and respond
+		response := PreviewResponse{
+			Success: true,
+			Data:    base64.StdEncoding.EncodeToString(diagram),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
 func (s *Server) handlePreviewC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req PreviewRequest
@@ -297,6 +332,7 @@ func (s *Server) handlePreviewSequence() http.HandlerFunc {
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
+	log.Printf("[%d] %s", code, message)
 	response := PreviewResponse{
 		Success: false,
 		Error:   message,
@@ -320,6 +356,7 @@ func main() {
 	r.HandleFunc("/diagram/{type}", server.handleViewDiagram()).Methods("GET")
 	r.HandleFunc("/download/{type}", server.handleDownloadDiagram()).Methods("GET")
 
+	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
 	r.HandleFunc("/preview/context", server.handlePreviewContext()).Methods("POST")
 	r.HandleFunc("/preview/sequence", server.handlePreviewSequence()).Methods("POST")

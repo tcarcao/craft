@@ -11,11 +11,19 @@ export interface UseCaseInfo {
     scenarios: string[];
     blockRange: BlockRange;
 }
+export interface ServiceDefinition {
+    name: string;
+    domains: string[];
+    parentDomain?: string;
+    dataStores?: string[];
+    language?: string;
+    blockRange: BlockRange;
+}
 
-// Individual file result with metadata
 export interface FileResult {
     domains: string[];
     useCases: UseCaseInfo[];
+    serviceDefinitions: ServiceDefinition[];
     uri: string;
     fileName: string;
 }
@@ -25,6 +33,7 @@ export interface ExtractionResult {
     // Combined data from all files
     domains: string[];
     useCases: UseCaseInfo[];
+    serviceDefinitions: ServiceDefinition[];
     
     // Individual file results
     fileResults: FileResult[];
@@ -37,4 +46,5 @@ export interface ExtractionResult {
 export const ServerCommands = {
   EXTRACT_DOMAINS_FROM_CURRENT: 'archdsl.extractDomains',
   EXTRACT_DOMAINS_FROM_WORKSPACE: 'archdsl.extractAllDomainsFromWorkspace',
+  EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES: 'archdsl.extractDslFromBlockRanges'
 } as const;

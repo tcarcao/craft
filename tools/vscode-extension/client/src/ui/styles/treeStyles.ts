@@ -599,6 +599,184 @@ body {
     background: ${COLORS.description};
 }
 
+/* Services View Styles */
+.controls-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.group-by-toggle,
+.view-mode-toggle {
+    display: flex;
+    background: ${COLORS.input};
+    border-radius: ${DIMENSIONS.borderRadius};
+    overflow: hidden;
+    border: 1px solid ${COLORS.inputBorder};
+}
+
+.control-btn {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    color: ${COLORS.foreground};
+    transition: background-color 0.1s;
+}
+
+.control-btn.active {
+    background: ${COLORS.primary};
+    color: var(--vscode-button-foreground);
+}
+
+.control-btn:hover:not(.active) {
+    background: ${COLORS.hover};
+}
+
+.generate-btn {
+    background: ${COLORS.primary};
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.1s;
+}
+
+.generate-btn:hover {
+    background: ${COLORS.primaryHover};
+    transform: translateY(-1px);
+}
+
+.services-container {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+
+.service-group {
+    margin-bottom: 8px;
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: ${DIMENSIONS.borderRadius};
+    background: var(--vscode-list-activeSelectionBackground);
+    transition: background-color 0.1s ease;
+    font-weight: 500;
+}
+
+.group-header:hover {
+    background: ${COLORS.hover};
+}
+
+.service-node {
+    margin-bottom: 4px;
+}
+
+.service-content {
+    display: flex;
+    align-items: flex-start;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-radius: ${DIMENSIONS.borderRadius};
+    transition: background-color 0.1s ease;
+}
+
+.service-content:hover {
+    background-color: ${COLORS.hover};
+}
+
+.service-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.service-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.service-name {
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.service-meta {
+    font-size: 10px;
+    color: ${COLORS.description};
+    margin-bottom: 2px;
+}
+
+.service-description {
+    font-size: 10px;
+    color: ${COLORS.description};
+    margin-bottom: 4px;
+    font-style: italic;
+}
+
+.service-dependencies {
+    font-size: 9px;
+    color: ${COLORS.blue};
+    margin-bottom: 4px;
+}
+
+.service-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.tag {
+    background: ${COLORS.secondary};
+    color: var(--vscode-button-secondaryForeground);
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 8px;
+    font-weight: 500;
+    transition: transform 0.1s;
+}
+
+.tag:hover {
+    transform: scale(1.05);
+}
+
+.type-icon {
+    font-size: 14px;
+}
+
+.type-icon.small {
+    font-size: 12px;
+}
+
+.group-children {
+    margin-left: 16px;
+    border-left: 2px solid ${COLORS.border};
+    padding-left: 8px;
+    margin-top: 4px;
+}
+
+.service-count-badge {
+    background: ${COLORS.badge};
+    color: ${COLORS.badgeFg};
+    border-radius: 8px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.selection-count {
+    font-weight: 500;
+}
+
 /* Responsive Design */
 @media (max-width: 300px) {
     .header-row {

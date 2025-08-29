@@ -1,9 +1,9 @@
 // client/src/commands/index.ts
 import { commands, ExtensionContext } from 'vscode';
-import { handlePreviewC4, handlePreviewSelectedC4, cleanUpPreviewC4 } from './previewC4';
+import { handlePreviewC4, handlePreviewSelectedC4, handlePreviewPartialC4, cleanUpPreviewC4 } from './previewC4';
 import { handlePreviewContext } from './previewContext';
 import { handlePreviewSequence } from './previewSequence';
-import { handlePreviewDomain, handlePreviewDomainsFromSelection, cleanUpPreviewDomain } from './previewDomain';
+import { handlePreviewDomain, handlePreviewDomainsFromSelection, handlePreviewPartialDomains, cleanUpPreviewDomain } from './previewDomain';
 
 export function registerPreviewCommands(context: ExtensionContext) {
     context.subscriptions.push(
@@ -25,6 +25,17 @@ export function registerPreviewCommands(context: ExtensionContext) {
         commands.registerCommand('archdsl.previewDomainsFromSelection', () =>
             handlePreviewDomainsFromSelection()
         ),
+        commands.registerCommand('archdsl.previewPartialDSL', (partialDSL, diagramType) => {
+            switch(diagramType) {
+                case "C4":
+                    handlePreviewPartialC4(partialDSL);
+                    break;
+                case "Domain":
+                default:
+                    handlePreviewPartialDomains(partialDSL);
+                    break;
+            }
+        })
     );
 }
 

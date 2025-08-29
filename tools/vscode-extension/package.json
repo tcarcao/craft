@@ -8,29 +8,28 @@
         "vscode": "^1.60.0"
     },
     "dependencies": {
-        "antlr4": "4.13.2",
         "axios": "^1.0.0",
         "vscode-languageclient": "^9.0.1",
         "vscode-languageserver": "^9.0.1",
         "vscode-languageserver-textdocument": "^1.0.12"
     },
     "scripts": {
-		"vscode:prepublish": "pnpm run compile",
-		"compile": "tsc -b",
-		"watch": "tsc -b -w",
-		"lint": "eslint",
-		"postinstall": "cd client && pnpm install && cd ../server && pnpm install && cd .."
-	},
-	"devDependencies": {
-		"@eslint/js": "^9.13.0",
-		"@stylistic/eslint-plugin": "^2.9.0",
-		"@types/mocha": "^10.0.6",
-		"@types/node": "^20",
-		"eslint": "^9.13.0",
-		"mocha": "^10.3.0",
-		"typescript": "^5.6.2",
-		"typescript-eslint": "^8.11.0"
-	},
+        "vscode:prepublish": "pnpm run compile",
+        "compile": "tsc -b",
+        "watch": "tsc -b -w",
+        "lint": "eslint",
+        "postinstall": "cd client && pnpm install && cd ../server && pnpm install && cd .."
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.13.0",
+        "@stylistic/eslint-plugin": "^2.9.0",
+        "@types/mocha": "^10.0.6",
+        "@types/node": "^20",
+        "eslint": "^9.13.0",
+        "mocha": "^10.3.0",
+        "typescript": "^5.6.2",
+        "typescript-eslint": "^8.11.0"
+    },
     "categories": [
         "Programming Languages",
         "Themes"
@@ -70,6 +69,11 @@
                 "category": "ArchDSL"
             },
             {
+                "command": "archdsl.previewSelectedC4",
+                "title": "ArchDSL: Preview Selected C4 Diagram",
+                "category": "ArchDSL"
+            },
+            {
                 "command": "archdsl.previewContext",
                 "title": "ArchDSL: Preview Context Map",
                 "category": "ArchDSL"
@@ -77,6 +81,16 @@
             {
                 "command": "archdsl.previewSequence",
                 "title": "ArchDSL: Preview Sequence Diagram",
+                "category": "ArchDSL"
+            },
+            {
+                "command": "archdsl.previewDomain",
+                "title": "ArchDSL: Preview Domain Diagram",
+                "category": "ArchDSL"
+            },
+            {
+                "command": "archdsl.previewDomainsFromSelection",
+                "title": "ArchDSL: Preview Domain Diagram from selection",
                 "category": "ArchDSL"
             }
         ],
@@ -92,6 +106,10 @@
             {
                 "command": "archdsl.previewSequence",
                 "key": "ctrl+shift+s"
+            },
+            {
+                "command": "archdsl.previewDomain",
+                "key": "ctrl+shift+d"
             }
         ],
         "viewsContainers": {
@@ -108,6 +126,12 @@
                 {
                     "id": "dslDomainView",
                     "name": "Domain Manager",
+                    "type": "webview",
+                    "icon": "$(symbol-namespace)"
+                },
+                {
+                    "id": "dslServicesView",
+                    "name": "Services",
                     "type": "webview",
                     "icon": "$(symbol-namespace)"
                 }

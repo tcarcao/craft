@@ -11,9 +11,13 @@ import { registerPreviewCommands, cleanUpPreviewCommands } from './commands';
 import { DomainsViewProvider } from './providers/domainsViewProvider';
 import { DomainsViewService } from './services/domainsViewService';
 import { DomainsViewHtmlGenerator } from './ui/domainsViewHtmlGenerator';
+import { ServicesViewProvider } from './providers/servicesViewProvider';
 import { DslExtractService } from './services/dslExtractService';
+import { ServicesViewService } from './services/servicesViewService';
+import { ServicesViewHtmlGenerator } from './ui/servicesViewHtmlGenerator';
 
 let domainTreeProvider: DomainsViewProvider;
+let serviceTreeProvider: ServicesViewProvider;
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
@@ -59,6 +63,8 @@ function registerDomainView(context: ExtensionContext, client: LanguageClient) {
     const extractService = new DslExtractService(client);
     const domainService = new DomainsViewService();
     const htmlGenerator = new DomainsViewHtmlGenerator();
+    const serviceTreeService = new ServicesViewService();
+    const servicesViewHtmlGenerator = new ServicesViewHtmlGenerator();
     
     // Register the Domain Tree view provider
     domainTreeProvider = new DomainsViewProvider(
@@ -68,11 +74,23 @@ function registerDomainView(context: ExtensionContext, client: LanguageClient) {
         domainService,
         htmlGenerator
     );
+
+    serviceTreeProvider = new ServicesViewProvider(
+        client,
+        context.extensionUri,
+        extractService,
+        serviceTreeService,
+        servicesViewHtmlGenerator
+    );
     
     context.subscriptions.push(
         window.registerWebviewViewProvider(
             DomainsViewProvider.viewType, 
             domainTreeProvider
+        ),
+        window.registerWebviewViewProvider(
+            ServicesViewProvider.viewType, 
+            serviceTreeProvider
         ),
     );
 }

@@ -6,8 +6,9 @@ import {
     FileResult,
     ExtractionResult,
     ServerCommands,
+    ServiceDefinition
 } from '../../../shared/lib/types/domain-extraction';
-import { Domain, DomainC, DSLDiscoveryOptions, DSLDiscoveryResult, SubDomain, UseCase, UseCaseReference } from '../types/domain';
+import { Domain, DomainC, DSLDiscoveryOptions, DSLDiscoveryResult, Service, ServiceGroup, SubDomain, UseCase, UseCaseReference } from '../types/domain';
 
 export class DslExtractService {
     constructor(private readonly languageClient: LanguageClient) { }
@@ -34,7 +35,8 @@ export class DslExtractService {
 
             // Convert the results to Domain structure
             const domains = this.convertToDomainStructure(workspaceResult, currentFileResult);
-            return { domains };
+            const serviceGroups = this.convertToServiceGroups(workspaceResult, currentFileResult, domains);
+            return { domains, serviceGroups };
 
         } catch (error) {
             console.error('Error discovering domains:', error);
@@ -220,5 +222,52 @@ export class DslExtractService {
         }
 
         return description;
+    }
+
+    convertToServiceGroups(
+workspaceResult: ExtractionResult, currentFileResult: ExtractionResult | null, domains: Domain[],
+    ): ServiceGroup[] {
+
+        const serviceDefinitions = workspaceResult.serviceDefinitions;
+        const currentFileUriSet = currentFileResult ? new Set(currentFileResult.serviceDefinitions.map(s => s.name) || []) : new Set();
+
+        // Group services by parentDomain
+        const groupedServices = serviceDefinitions.reduce((groups, service) => {
+            const parentDomain = service.parentDomain || DomainC.DefaultDomain;
+            const groupName = parentDomain;
+            const domain = domains.find(d => d.name === parentDomain) || DomainC.EmptyDomain;
+            const subDomains = domain.subDomains.filter(sd => service.domains.some(otherSd => otherSd === sd.name));
+
+            if (!groups[groupName]) {
+                groups[groupName] = [];
+            }
+
+            const serviceAsService: Service = {
+                id: DomainC.GenerateServiceId(groupName, service.domains[0] || "", service.name),
+                name: service.name,
+                domain: domain,
+                subDomains: subDomains,
+                // dataStores: service.dataStores,
+                // language: service.language,
+                dependencies: [],
+                blockRange: service.blockRange,
+                selected: false,
+                partiallySelected: false,
+                expanded: false
+            };
+
+            groups[groupName].push(serviceAsService);
+            return groups;
+        }, {} as Record<string, Service[]>);
+
+        // Convert grouped services to ServiceGroup array
+        return Object.entries(groupedServices).map(([groupName, services]) => ({
+            name: groupName,
+            services: services,
+            expanded: false,
+            selected: false,
+            partiallySelected: false,
+            inCurrentFile: services.map(s => s.name).some(name => currentFileUriSet.has(name))
+        }));
     }
 }

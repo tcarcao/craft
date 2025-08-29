@@ -3,6 +3,8 @@ import { CharStream, CommonTokenStream } from "antlr4ng";
 import { ArchDSLLexer } from "./generated/ArchDSLLexer";
 import { ArchDSLParser } from "./generated/ArchDSLParser";
 import { CustomErrorListener } from './ErrorListener';
+import { BlockRange } from '../../../shared/lib/types/domain-extraction';
+import { extractMinimalSubtree } from './DSLExtractor';
 
 export class Parser {
     parse(input: string) {
@@ -34,6 +36,32 @@ export class Parser {
                 errors: [e.message || 'Unknown parser error'],
                 tree: null
             };
+        }
+    }
+
+    extractSelectedDSL(
+        originalText: string,
+        selectedRanges: BlockRange[]
+    ): string {
+        try {
+            const [lexer, parser] = this.initializeParser(originalText);
+
+            // Remove default error listeners
+            parser.removeErrorListeners();
+            lexer.removeErrorListeners();
+
+            // Add custom error listener
+            const errorListener = new CustomErrorListener();
+            parser.addErrorListener(errorListener);
+            lexer.addErrorListener(errorListener);
+
+            const ast = parser.dsl();
+
+            return extractMinimalSubtree(ast, selectedRanges, originalText);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (e: any) {
+            console.error('Parser error:', e);
+            return '';
         }
     }
 

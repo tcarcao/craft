@@ -16,20 +16,138 @@ import {
 	DomainContext,
 	StringContext
 } from './generated/ArchDSLParser';
-import { UseCaseInfo } from '../../../shared/lib/types/domain-extraction';
+import { ServiceDefinition, UseCaseInfo } from '../../../shared/lib/types/domain-extraction';
 
 
 export class DomainVisitor extends ArchDSLVisitor<void> {
 	public domains = new Set<string>();
 	public useCases: UseCaseInfo[] = [];
+	public serviceDefinitions: ServiceDefinition[] = [];
 	
 	// Current use case being processed
 	private currentUseCase: UseCaseInfo | null = null;
 	private currentUseCaseDomains = new Set<string>();
+	
+	// Current lists being collected
+	private currentDomainOrDatastoreList: string[] = [];
+	private isInDomainList = false;
 
 	// Visit the root DSL context
 	visitDsl = (ctx: DslContext): void => {
 		this.visitChildren(ctx);
+	};
+
+	// Visit services section
+	visitServices = (ctx: ServicesContext): void => {
+		this.visitChildren(ctx);
+	};
+
+	// Visit individual service definition
+	visitService_definition = (ctx: Service_definitionContext): void => {
+		
+		const serviceDefinition: ServiceDefinition = {
+			name: 'Unknown Service',
+			domains: [],
+			dataStores: [],
+			language: undefined,
+			parentDomain: undefined,
+			blockRange: {
+				startLine: ctx.start?.line || 0,
+				endLine: ctx.stop?.line || 0,
+				fileUri: 'unknown'
+			}
+		};
+		this.serviceDefinitions.push(serviceDefinition);
+
+		// Visit children to collect service data
+		this.visitChildren(ctx);
+	};
+
+	// Visit service name
+	visitService_name = (ctx: Service_nameContext): void => {
+		const nameText = ctx.getText();
+		
+		// The name is either an IDENTIFIER or STRING
+		if (nameText.startsWith('"') && nameText.endsWith('"')) {
+			// Remove quotes for STRING
+			const serviceName = nameText.slice(1, -1);
+			if (this.serviceDefinitions.length > 0) {
+				this.serviceDefinitions[this.serviceDefinitions.length - 1].name = serviceName;
+			}
+		} else {
+			// IDENTIFIER
+			if (this.serviceDefinitions.length > 0) {
+				this.serviceDefinitions[this.serviceDefinitions.length - 1].name = nameText;
+			}
+		}
+	};
+
+	// Visit service property (domains, data-stores, language)
+	visitService_property = (ctx: Service_propertyContext): void => {
+		const propertyText = ctx.getText();
+		
+		if (propertyText.startsWith('domains:')) {
+			this.isInDomainList = true;
+			this.currentDomainOrDatastoreList = [];
+			// Visit children to collect domains from domain_list
+			this.visitChildren(ctx);
+			this.isInDomainList = false;
+		} else if (propertyText.startsWith('data-stores:')) {
+			this.isInDomainList = false; // This is data-stores, not domains
+			this.currentDomainOrDatastoreList = [];
+			// Visit children to collect data stores from datastore_list
+			this.visitChildren(ctx);
+		} else if (propertyText.startsWith('language:')) {
+			const parts = propertyText.split(':');
+			if (parts.length > 1 && this.serviceDefinitions.length > 0) {
+				this.serviceDefinitions[this.serviceDefinitions.length - 1].language = parts[1].trim();
+			}
+		}
+		
+		// TODO: Handle parent_domain when you extend the grammar
+		// else if (propertyText.startsWith('parent_domain:')) {
+		//     const parts = propertyText.split(':');
+		//     if (parts.length > 1 && this.serviceDefinitions.length > 0) {
+		//         this.serviceDefinitions[this.serviceDefinitions.length - 1].parentDomain = parts[1].trim();
+		//     }
+		// }
+	};
+
+	// Visit domain list - THIS IS WHERE WE ADD DOMAINS
+	visitDomain_list = (ctx: Domain_listContext): void => {
+		
+		// Clear the current list before collecting
+		this.currentDomainOrDatastoreList = [];
+		
+		// Visit children to collect domain_or_datastore items
+		this.visitChildren(ctx);
+		
+		// Now we know this is a domain list, so add all items as domains
+		this.currentDomainOrDatastoreList.forEach(domainName => {
+			this.domains.add(domainName);
+			
+			// Add to current service definition domains
+			if (this.serviceDefinitions.length > 0 && this.isInDomainList) {
+				this.serviceDefinitions[this.serviceDefinitions.length - 1].domains.push(domainName);
+			}
+		});
+	};
+
+	// Visit individual domain or datastore - COLLECT ITEMS BUT DON'T ADD AS DOMAINS YET
+	visitDomain_or_datastore = (ctx: Domain_or_datastoreContext): void => {
+		const itemName = ctx.getText().trim();
+		if (itemName) {
+			
+			// Just collect the item - don't add as domain yet
+			this.currentDomainOrDatastoreList.push(itemName);
+			
+			// If this is in data-stores context, add to dataStores
+			if (this.serviceDefinitions.length > 0 && !this.isInDomainList) {
+				const currentService = this.serviceDefinitions[this.serviceDefinitions.length - 1];
+				if (!currentService.dataStores) {currentService.dataStores = [];}
+				currentService.dataStores.push(itemName);
+			}
+		}
 	};
 
 	// Visit domain context (used in actions) - THIS IS ALSO WHERE DOMAINS ARE CLEARLY DEFINED

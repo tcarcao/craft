@@ -19,7 +19,10 @@ import {
   UseCaseInfo,
   ExtractionResult,
   ServerCommands,
+  ServiceDefinition,
+  BlockRange
 } from '../../shared/lib/types/domain-extraction';
+import { Parser } from './parser/ArchDSLParser';
 
 // Create connection and documents manager
 const connection = createConnection(ProposedFeatures.all);
@@ -27,6 +30,7 @@ const documents = new TextDocuments<TextDocument>(TextDocument);
 let diagnosticProvider: DiagnosticProvider;
 let domainExtractor: DomainExtractor;
 const workspaceParser = new WorkspaceParser(documents);
+const parser = new Parser();
 
 
 connection.onInitialize((params: InitializeParams) => {
@@ -44,6 +48,7 @@ connection.onInitialize((params: InitializeParams) => {
         commands: [
           ServerCommands.EXTRACT_DOMAINS_FROM_CURRENT,
           ServerCommands.EXTRACT_DOMAINS_FROM_WORKSPACE,
+          ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES,
         ]
       }
       // Enable other capabilities as needed
@@ -59,6 +64,8 @@ connection.onExecuteCommand((params: ExecuteCommandParams) => {
       return handleExtractDomains(params.arguments);
     case ServerCommands.EXTRACT_DOMAINS_FROM_WORKSPACE:
       return handleExtractAllDomainsFromWorkspace(params.arguments, workspaceParser);
+    case ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES:
+      return handleExtractPartialDslFromBlockRanges(params.arguments, workspaceParser);
     default:
       return { error: 'Unknown command' };
   }
@@ -71,6 +78,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       domains: [],
       useCases: [],
       fileResults: [],
+      serviceDefinitions: [],
       error: 'No document URI provided'
     };
   }
@@ -83,6 +91,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       domains: [],
       useCases: [],
       fileResults: [],
+      serviceDefinitions: [],
       error: 'Document not found'
     };
   }
@@ -96,6 +105,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       domains: [],
       useCases: [],
       fileResults: [],
+      serviceDefinitions: [],
       error: error.message
     };
   }
@@ -146,6 +156,7 @@ async function handleExtractAllDomainsFromWorkspace(_args: any[] | undefined, wo
       domains: [],
       useCases: [],
       fileResults: [],
+      serviceDefinitions: [],
       error: error.message
     };
   }
@@ -154,6 +165,7 @@ async function handleExtractAllDomainsFromWorkspace(_args: any[] | undefined, wo
 function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult, 'fileResults'> {
   const allDomains = new Set<string>();
   const allUseCases: UseCaseInfo[] = [];
+  const allServiceDefinitions: ServiceDefinition[] = [];
 
   results.forEach(result => {
     if (result.domains) {
@@ -163,12 +175,56 @@ function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult,
     if (result.useCases) {
       result.useCases.forEach(useCase => allUseCases.push(useCase));
     }
+
+    if (result.serviceDefinitions) {
+      result.serviceDefinitions.forEach(sd => allServiceDefinitions.push(sd));
+    }
   });
 
   return {
     domains: Array.from(allDomains).sort(),
     useCases: allUseCases,
+    serviceDefinitions: allServiceDefinitions,
   };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+async function handleExtractPartialDslFromBlockRanges(args: any[] | undefined, workspaceParser: WorkspaceParser): Promise<string> {
+  if (!args || args.length === 0) {
+    return '';
+  }
+
+  const ranges: BlockRange[] = args[0];
+  const combinedParts: string[] = [];
+  
+  // Group ranges by file to minimize file reads
+  const rangesByFile = ranges.reduce((acc, range) => {
+    if (!acc[range.fileUri]) {
+      acc[range.fileUri] = [];
+    }
+    acc[range.fileUri].push(range);
+    return acc;
+  }, {} as Record<string, BlockRange[]>);
+
+
+  await workspaceParser.processAllDocuments(
+      (content, info) => {
+        const fileRanges = rangesByFile[info.uri] || [];
+        
+        // Sort ranges by line number for this file
+        fileRanges.sort((a, b) => a.startLine - b.startLine);
+
+        const extractedDSL: string = parser.extractSelectedDSL(content, fileRanges);
+        combinedParts.push(extractedDSL);
+      },
+      {
+        include: ['**/*.dsl'],
+        exclude: ['**/node_modules/**'],
+        concurrency: 5
+      }
+  );
+  
+  return combinedParts.join('\n\n');
 }
 
 // Validate document on changes

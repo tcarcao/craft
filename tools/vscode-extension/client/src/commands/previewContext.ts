@@ -1,5 +1,4 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { LanguageClient } from 'vscode-languageclient/node';
 import { updatePreview } from './previewCommon';
 
 let previewPanel: WebviewPanel | undefined;

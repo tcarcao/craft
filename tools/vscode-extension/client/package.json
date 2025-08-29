@@ -12,7 +12,9 @@
 		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
+		"@types/node": "^20",
 		"@types/vscode": "^1.75.1",
+		"@types/mocha": "^10.0.6",
 		"@vscode/test-electron": "^2.3.9"
 	}
 }

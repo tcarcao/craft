@@ -1,3 +1,5 @@
+// src/providers/domainTreeViewProvider.ts
+
 import { Uri, WebviewViewProvider, WebviewView, WebviewViewResolveContext, CancellationToken, TextDocument, window, workspace, commands } from 'vscode';
 import { DomainsViewService } from '../services/domainsViewService';
 import { DomainsViewHtmlGenerator } from '../ui/domainsViewHtmlGenerator';

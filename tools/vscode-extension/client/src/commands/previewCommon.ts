@@ -4,6 +4,7 @@ import { window, WebviewPanel } from 'vscode';
 
 export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string) {
     if (!previewPanel) {
+        console.log('not there');
         return;
     }
 

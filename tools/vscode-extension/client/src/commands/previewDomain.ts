@@ -38,6 +38,11 @@ export async function handlePreviewDomainsFromSelection() {
     updatePreview(previewPanel, selectedText, "Domain");
 }
 
+export async function handlePreviewPartialDomains(text: string) {
+    createAndShowPreviewPanel();
+    updatePreview(previewPanel, text, "Domain");
+}
+
 function createAndShowPreviewPanel() {
     if (!previewPanel) {
         previewPanel = window.createWebviewPanel(

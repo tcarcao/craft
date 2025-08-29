@@ -8,6 +8,7 @@ export interface DSLDiscoveryOptions {
 
 export interface DSLDiscoveryResult {
     domains: Domain[];
+    serviceGroups: ServiceGroup[];
 }
 
 const defaultDomain = 'Unknown';
@@ -18,6 +19,7 @@ export const DomainC = {
     GenerateDomainId: generateDomainId,
     GenerateSubDomainId: generateSubDomainId,
     GenerateUseCaseId: generateUseCaseId,
+    GenerateServiceId: generateServiceId,
 }
 
 export interface Domain {
@@ -104,6 +106,43 @@ export interface DomainTreeState {
     expandedNodes: Set<string>;
     selectedNodes: Set<string>;
     viewMode: 'current' | 'workspace';
+    currentFile?: string;
+    isLoading: boolean;
+}
+
+export interface Service {
+    id: string;
+    name: string;
+    description?: string;
+    domain: Domain;
+    subDomains: SubDomain[];
+    dependencies: string[];
+    tags?: string[];
+    selected: boolean;
+    partiallySelected: boolean;
+    expanded: boolean;
+    blockRange: BlockRange;
+}
+
+function generateServiceId(domainName: string, subDomainName: string, serviceName: string): string {
+    const cleanServiceName = serviceName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `${generateSubDomainId(domainName, subDomainName)}-s-${cleanServiceName}`;
+}
+
+export interface ServiceGroup {
+    name: string;
+    services: Service[];
+    expanded: boolean;
+    selected: boolean;
+    partiallySelected: boolean;
+    inCurrentFile: boolean;
+}
+
+export interface ServiceTreeState {
+    serviceGroups: Map<string, ServiceGroup>;
+    viewMode: 'current' | 'workspace';
+    expandedNodes: Set<string>;
+    selectedNodes: Set<string>;
     currentFile?: string;
     isLoading: boolean;
 }

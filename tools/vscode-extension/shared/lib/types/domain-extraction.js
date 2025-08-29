@@ -5,4 +5,5 @@ exports.ServerCommands = void 0;
 exports.ServerCommands = {
     EXTRACT_DOMAINS_FROM_CURRENT: 'archdsl.extractDomains',
     EXTRACT_DOMAINS_FROM_WORKSPACE: 'archdsl.extractAllDomainsFromWorkspace',
+    EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES: 'archdsl.extractDslFromBlockRanges'
 };

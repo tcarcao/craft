@@ -38,6 +38,11 @@ export async function handlePreviewSelectedC4() {
     updatePreview(previewPanel, selectedText, "C4");
 }
 
+export async function handlePreviewPartialC4(text: string) {
+    createAndShowPreviewPanel();
+    updatePreview(previewPanel, text, "C4");
+}
+
 function createAndShowPreviewPanel() {
     if (!previewPanel) {
         previewPanel = window.createWebviewPanel(
