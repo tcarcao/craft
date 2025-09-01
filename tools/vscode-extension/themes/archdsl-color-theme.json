@@ -1,121 +1,198 @@
 {
-    "name": "Architecture DSL Theme",
-    "colors": {
-        "editor.background": "#FFFFFF",
-        "editor.foreground": "#000000"
+  "name": "Domain DSL Light",
+  "type": "light",
+  "colors": {
+    "editor.background": "#ffffff",
+    "editor.foreground": "#000000",
+    "editor.lineHighlightBackground": "#f5f5f5",
+    "editor.selectionBackground": "#add6ff"
+  },
+  "tokenColors": [
+    {
+      "name": "Comment",
+      "scope": [
+        "comment.line.double-slash.domain-dsl",
+        "comment.block.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#008000",
+        "fontStyle": "italic"
+      }
     },
-    "tokenColors": [
-        {
-            "scope": "comment.line.double-slash.archdsl",
-            "settings": {
-                "foreground": "#608B4E",
-                "fontStyle": ""
-            }
-        },
-        {
-            "scope": "comment.block.archdsl",
-            "settings": {
-                "foreground": "#608B4E",
-                "fontStyle": "italic"
-            }
-        },
-        {
-            "scope": "keyword.control.structure.archdsl",
-            "settings": {
-                "foreground": "#0000FF",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "keyword.control.domain.archdsl",
-            "settings": {
-                "foreground": "#9C27B0",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "keyword.control.relation.archdsl",
-            "settings": {
-                "foreground": "#00796B",
-                "fontStyle": ""
-            }
-        },
-        {
-            "scope": "keyword.other.ddd.archdsl",
-            "settings": {
-                "foreground": "#D32F2F",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "support.type.tech.archdsl",
-            "settings": {
-                "foreground": "#1976D2",
-                "fontStyle": ""
-            }
-        },
-        {
-            "scope": "support.type.platform.archdsl",
-            "settings": {
-                "foreground": "#F57C00",
-                "fontStyle": ""
-            }
-        },
-        {
-            "scope": "entity.name.type.archdsl",
-            "settings": {
-                "foreground": "#2E7D32",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "entity.name.function.archdsl",
-            "settings": {
-                "foreground": "#000000",
-                "fontStyle": ""
-            }
-        },
-        {
-            "scope": "entity.name.class.service.archdsl",
-            "settings": {
-                "foreground": "#2E7D32",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "entity.name.function.method.archdsl",
-            "settings": {
-                "foreground": "#1976D2",
-                "fontStyle": ""
-            }
-        },
-        {
-            "scope": "variable.parameter.archdsl",
-            "settings": {
-                "foreground": "#9C27B0",
-                "fontStyle": "italic"
-            }
-        },
-        {
-            "scope": "keyword.operator.arrow.archdsl",
-            "settings": {
-                "foreground": "#D32F2F",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "entity.name.class.target.archdsl",
-            "settings": {
-                "foreground": "#2E7D32",
-                "fontStyle": "bold"
-            }
-        },
-        {
-            "scope": "entity.name.function.target.archdsl",
-            "settings": {
-                "foreground": "#1976D2",
-                "fontStyle": ""
-            }
-        }
-    ]
+    {
+      "name": "Keywords (use_case, when)",
+      "scope": "keyword.control.flow.domain-dsl",
+      "settings": {
+        "foreground": "#800080",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Services Keyword",
+      "scope": "keyword.control.services.domain-dsl",
+      "settings": {
+        "foreground": "#800080",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Use Case Name",
+      "scope": "string.quoted.double.usecase.domain-dsl",
+      "settings": {
+        "foreground": "#0070C1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Service Name",
+      "scope": "entity.name.type.service.domain-dsl",
+      "settings": {
+        "foreground": "#0070C1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Property Keywords (domains, data-stores)",
+      "scope": [
+        "keyword.other.property.domains.domain-dsl",
+        "keyword.other.property.datastores.domain-dsl",
+        "keyword.other.property.language.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#d73a49",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Event Strings",
+      "scope": "string.quoted.double.event.domain-dsl",
+      "settings": {
+        "foreground": "#001080",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Domain Names (all types)",
+      "scope": [
+        "entity.name.type.domain.domain-dsl",
+        "entity.name.type.domain.source.domain-dsl",
+        "entity.name.type.domain.target.domain-dsl",
+        "entity.name.type.domain.list.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#267f99",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Datastore Names",
+      "scope": "entity.name.type.datastore.domain-dsl",
+      "settings": {
+        "foreground": "#6f42c1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Language",
+      "scope": "entity.name.type.language.domain-dsl",
+      "settings": {
+        "foreground": "#6f42c1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Actor Names",
+      "scope": "entity.name.class.actor.domain-dsl",
+      "settings": {
+        "foreground": "#b8860b",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Regular Verbs",
+      "scope": "entity.name.function.verb.domain-dsl",
+      "settings": {
+        "foreground": "#795e26",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Special Verb: asks (request)",
+      "scope": "keyword.other.asks.domain-dsl",
+      "settings": {
+        "foreground": "#e36209",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Special Verb: notifies (async)",
+      "scope": "keyword.other.notifies.domain-dsl",
+      "settings": {
+        "foreground": "#22863a",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Special Verb: listens (event listener)",
+      "scope": "keyword.other.listens.domain-dsl",
+      "settings": {
+        "foreground": "#6f42c1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Connectors (a, an, the, to, from, etc.)",
+      "scope": "keyword.other.connector.domain-dsl",
+      "settings": {
+        "foreground": "#6a737d"
+      }
+    },
+    {
+      "name": "Phrases (action descriptions)",
+      "scope": "string.unquoted.phrase.domain-dsl",
+      "settings": {
+        "foreground": "#a31515",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Remainder (after actor verb)",
+      "scope": "string.unquoted.remainder.domain-dsl",
+      "settings": {
+        "foreground": "#a31515"
+      }
+    },
+    {
+      "name": "Regular Strings",
+      "scope": "string.quoted.double.domain-dsl",
+      "settings": {
+        "foreground": "#a31515"
+      }
+    },
+    {
+      "name": "Punctuation - Braces",
+      "scope": [
+        "punctuation.section.braces.begin.domain-dsl",
+        "punctuation.section.braces.end.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#b8860b",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Punctuation - Colons",
+      "scope": "punctuation.separator.colon.domain-dsl",
+      "settings": {
+        "foreground": "#6a737d"
+      }
+    },
+    {
+      "name": "Punctuation - Commas",
+      "scope": "punctuation.separator.comma.domain-dsl",
+      "settings": {
+        "foreground": "#6a737d"
+      }
+    }
+  ]
 }

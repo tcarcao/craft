@@ -1,95 +1,453 @@
 {
-    "scopeName": "source.archdsl",
-    "patterns": [
-        { "include": "#comments" },
-        { "include": "#structural-keywords" },
-        { "include": "#domain-keywords" },
-        { "include": "#relationship-keywords" },
-        { "include": "#ddd-patterns" },
-        { "include": "#technologies" },
-        { "include": "#platforms" },
-        { "include": "#service-interactions" },
-        { "include": "#identifiers" }
-    ],
-    "repository": {
-        "comments": {
-            "patterns": [
-                {
-                    "name": "comment.line.double-slash.archdsl",
-                    "match": "//.*$"
-                },
-                {
-                    "name": "comment.block.archdsl",
-                    "begin": "/\\*",
-                    "end": "\\*/",
-                    "captures": {
-                        "0": { "name": "punctuation.definition.comment.archdsl" }
-                    }
-                }
-            ]
-        },
-        "structural-keywords": {
-            "patterns": [{
-                "name": "keyword.control.structure.archdsl",
-                "match": "\\b(system|bounded|context)\\b"
-            }]
-        },
-        "domain-keywords": {
-            "patterns": [{
-                "name": "keyword.control.domain.archdsl",
-                "match": "\\b(aggregate|component|service|event)\\b"
-            }]
-        },
-        "relationship-keywords": {
-            "patterns": [{
-                "name": "keyword.control.relation.archdsl",
-                "match": "\\b(using|on|to|as)\\b"
-            }]
-        },
-        "ddd-patterns": {
-            "patterns": [{
-                "name": "keyword.other.ddd.archdsl",
-                "match": "\\b(upstream|downstream|acl|ohs|conformist)\\b"
-            }]
-        },
-        "technologies": {
-            "patterns": [{
-                "name": "support.type.tech.archdsl",
-                "match": "\\b(go|java|python|nodejs|php)\\b"
-            }]
-        },
-        "platforms": {
-            "patterns": [{
-                "name": "support.type.platform.archdsl",
-                "match": "\\b(eks|lambda|sqs|sns|dynamodb|redis)\\b"
-            }]
-        },
-        "identifiers": {
-            "patterns": [
-                {
-                    "name": "entity.name.type.archdsl",
-                    "match": "\\b[A-Z][a-zA-Z0-9]*\\b"
-                },
-                {
-                    "name": "entity.name.function.archdsl",
-                    "match": "\\b[a-z][a-zA-Z0-9]*\\b"
-                }
-            ]
-        },
-        "service-interactions": {
-            "patterns": [
-                {
-                    "match": "([A-Za-z][A-Za-z0-9]*)\\.(\\w+)\\s*\\(([^)]*)\\)\\s*(->)?\\s*([A-Za-z][A-Za-z0-9]*)?\\.?(\\w+)?",
-                    "captures": {
-                        "1": { "name": "entity.name.class.service.archdsl" },  
-                        "2": { "name": "entity.name.function.method.archdsl" },
-                        "3": { "name": "variable.parameter.archdsl" },         
-                        "4": { "name": "keyword.operator.arrow.archdsl" },     
-                        "5": { "name": "entity.name.class.target.archdsl" },   
-                        "6": { "name": "entity.name.function.target.archdsl" } 
-                    }
-                }
-            ]
-        }
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Domain DSL",
+  "scopeName": "source.archdsl",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#services"
+    },
+    {
+      "include": "#use_case"
+    },
+    {
+      "include": "#when_external_trigger"
+    },
+    {
+      "include": "#when_quoted_event"
+    },
+    {
+      "include": "#when_domain_listens"
+    },
+    {
+      "include": "#sync_action"
+    },
+    {
+      "include": "#async_action"
+    },
+    {
+      "include": "#internal_action"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#braces"
+    },
+    {
+      "include": "#colons"
+    },
+    {
+      "include": "#commas"
     }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.domain-dsl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.domain-dsl",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "services": {
+      "name": "meta.services.domain-dsl",
+      "begin": "^\\s*(services)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.services.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#service_definition"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "service_definition": {
+      "name": "meta.service-definition.domain-dsl",
+      "begin": "^\\s*([a-zA-Z_][a-zA-Z0-9_-]*|\"[^\"]*\")\\s*(:)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.type.service.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.separator.colon.domain-dsl"
+        },
+        "3": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#service_properties"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "service_properties": {
+      "patterns": [
+        {
+          "include": "#domains_property"
+        },
+        {
+          "include": "#datastores_property"
+        },
+        {
+          "include": "#language_property"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "domains_property": {
+      "name": "meta.domains-property.domain-dsl",
+      "begin": "\\b(domains)\\s*(:)",
+      "end": "(?=\\}|^\\s*[a-zA-Z])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.property.domains.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.separator.colon.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "name": "entity.name.type.domain.list.domain-dsl",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        },
+        {
+          "name": "punctuation.separator.comma.domain-dsl",
+          "match": ","
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "datastores_property": {
+      "name": "meta.datastores-property.domain-dsl",
+      "begin": "\\b(data-stores)\\s*(:)",
+      "end": "(?=\\}|^\\s*[a-zA-Z])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.property.datastores.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.separator.colon.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "name": "entity.name.type.datastore.domain-dsl",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b"
+        },
+        {
+          "name": "punctuation.separator.comma.domain-dsl",
+          "match": ","
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "language_property": {
+      "name": "meta.language-property.domain-dsl",
+      "begin": "\\b(language)\\s*(:)",
+      "end": "(?=\\}|^\\s*[a-zA-Z])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.property.language.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "name": "entity.name.type.language.domain-dsl",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "domain_list": {
+      "patterns": [
+        {
+          "name": "entity.name.type.domain.list.domain-dsl",
+          "match": "[A-Z][a-zA-Z0-9_]*"
+        },
+        {
+          "name": "punctuation.separator.comma.domain-dsl",
+          "match": ","
+        }
+      ]
+    },
+    "datastore_list": {
+      "patterns": [
+        {
+          "name": "entity.name.type.datastore.domain-dsl",
+          "match": "[a-zA-Z_][a-zA-Z0-9_-]*"
+        },
+        {
+          "name": "punctuation.separator.comma.domain-dsl",
+          "match": ","
+        }
+      ]
+    },
+    "use_case": {
+      "name": "meta.use-case.domain-dsl",
+      "begin": "^\\s*(use_case)\\s+(\"[^\"]*\")\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.flow.domain-dsl"
+        },
+        "2": {
+          "name": "string.quoted.double.usecase.domain-dsl"
+        },
+        "3": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#when_external_trigger"
+        },
+        {
+          "include": "#when_quoted_event"
+        },
+        {
+          "include": "#when_domain_listens"
+        },
+        {
+          "include": "#sync_action"
+        },
+        {
+          "include": "#async_action"
+        },
+        {
+          "include": "#internal_action"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "when_external_trigger": {
+      "match": "^\\s*(when)\\s+([A-Z][a-zA-Z0-9_]*)\\s+([a-z][a-zA-Z0-9_]+)\\s+(.*)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.flow.domain-dsl"
+        },
+        "2": {
+          "name": "entity.name.class.actor.domain-dsl"
+        },
+        "3": {
+          "name": "entity.name.function.verb.domain-dsl"
+        },
+        "4": {
+          "name": "string.unquoted.remainder.domain-dsl"
+        }
+      }
+    },
+    "when_quoted_event": {
+      "match": "^\\s*(when)\\s+(\"[^\"]*\")",
+      "captures": {
+        "1": {
+          "name": "keyword.control.flow.domain-dsl"
+        },
+        "2": {
+          "name": "string.quoted.double.event.domain-dsl"
+        }
+      }
+    },
+    "when_domain_listens": {
+      "match": "^\\s*(when)\\s+([A-Z][a-zA-Z0-9_]*)\\s+(listens)\\s+(\"[^\"]*\")",
+      "captures": {
+        "1": {
+          "name": "keyword.control.flow.domain-dsl"
+        },
+        "2": {
+          "name": "entity.name.type.domain.domain-dsl"
+        },
+        "3": {
+          "name": "keyword.other.listens.domain-dsl"
+        },
+        "4": {
+          "name": "string.quoted.double.event.domain-dsl"
+        }
+      }
+    },
+    "sync_action": {
+      "patterns": [
+        {
+          "name": "meta.sync.with-connector.domain-dsl",
+          "match": "^\\s*([A-Z][a-zA-Z0-9_]*)\\s+(asks)\\s+([A-Z][a-zA-Z0-9_]*)\\s+(a|an|the|as|to|from|in|on|at|for|with|by)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.domain.source.domain-dsl"
+            },
+            "2": {
+              "name": "keyword.other.asks.domain-dsl"
+            },
+            "3": {
+              "name": "entity.name.type.domain.target.domain-dsl"
+            },
+            "4": {
+              "name": "keyword.other.connector.domain-dsl"
+            },
+            "5": {
+              "name": "string.unquoted.phrase.domain-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.sync.no-connector.domain-dsl",
+          "match": "^\\s*([A-Z][a-zA-Z0-9_]*)\\s+(asks)\\s+([A-Z][a-zA-Z0-9_]*)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.domain.source.domain-dsl"
+            },
+            "2": {
+              "name": "keyword.other.asks.domain-dsl"
+            },
+            "3": {
+              "name": "entity.name.type.domain.target.domain-dsl"
+            },
+            "4": {
+              "name": "string.unquoted.phrase.domain-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "async_action": {
+      "match": "^\\s*([A-Z][a-zA-Z0-9_]*)\\s+(notifies)\\s+(\"[^\"]*\")",
+      "captures": {
+        "1": {
+          "name": "entity.name.type.domain.domain-dsl"
+        },
+        "2": {
+          "name": "keyword.other.notifies.domain-dsl"
+        },
+        "3": {
+          "name": "string.quoted.double.event.domain-dsl"
+        }
+      }
+    },
+    "internal_action": {
+      "patterns": [
+        {
+          "name": "meta.internal.with-connector.domain-dsl",
+          "match": "^\\s*([A-Z][a-zA-Z0-9_]*)\\s+([a-z][a-zA-Z0-9_]+)\\s+(a|an|the|as|to|from|in|on|at|for|with|by)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.domain.domain-dsl"
+            },
+            "2": {
+              "name": "entity.name.function.verb.domain-dsl"
+            },
+            "3": {
+              "name": "keyword.other.connector.domain-dsl"
+            },
+            "4": {
+              "name": "string.unquoted.phrase.domain-dsl"
+            }
+          }
+        },
+        {
+          "name": "meta.internal.no-connector.domain-dsl",
+          "match": "^\\s*([A-Z][a-zA-Z0-9_]*)\\s+([a-z][a-zA-Z0-9_]+)\\s+(.*)$",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.domain.domain-dsl"
+            },
+            "2": {
+              "name": "entity.name.function.verb.domain-dsl"
+            },
+            "3": {
+              "name": "string.unquoted.phrase.domain-dsl"
+            }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.domain-dsl",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.domain-dsl",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "braces": {
+      "patterns": [
+        {
+          "name": "punctuation.section.braces.begin.domain-dsl",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.braces.end.domain-dsl",
+          "match": "\\}"
+        }
+      ]
+    },
+    "colons": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.colon.domain-dsl",
+          "match": ":"
+        }
+      ]
+    },
+    "commas": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.domain-dsl",
+          "match": ","
+        }
+      ]
+    }
+  }
 }
