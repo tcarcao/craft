@@ -23,6 +23,3 @@ vendor/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# Generated files
-pkg/parser/

@@ -1,52 +1,166 @@
 # ArchDSL
 
+A domain-specific language for modeling business use cases and domain interactions, with powerful visualization capabilities for domain-driven design and C4 architecture diagrams.
+
+## 🚧 v2.0 Development Status
+
+ArchDSL is currently under active development, representing a complete transformation from architecture description to business use case modeling.
+
+## What is ArchDSL?
+ArchDSL is a complete reimagining of architecture description language, shifting from static architecture documentation to dynamic use case modeling. It enables teams to:
+
+- Model business use cases as the primary unit of system design
+- Capture domain interactions through scenario-based descriptions
+- Generate visual diagrams including domain flows, C4 diagrams, and sequence diagrams
+- Align with Domain-Driven Design principles and practices
+- Support event-driven architectures with async/sync action modeling
+
 A domain-specific language for modeling use cases, domains, and services with automatic diagram generation.
 
+## Example
 
-## v2 Development (In Progress)
-We are transitioning ArchDSL from static architecture description to dynamic use case modeling. This will enable:
-- Business-driven domain modeling
-- Event-driven architecture support
-- Better alignment with Domain-Driven Design
-- Support for complex business scenario modeling
+```
+services {
+    UserService: {
+        domains: Authentication, Profile
+        data-stores: user_db
+        language: golang
+    }
+}
 
-See `docs/v2-research.md` for detailed research and direction.
+use_case "User Registration" {
+    when Business_User creates Account
+        Authentication validates email format
+        Authentication asks Database to check email uniqueness
+        Profile creates user profile
+        Authentication notifies "User Registered"
 
-Current v1 documentation remains below...
+    when Profile listens "User Registered"
+        Profile asks Database to store profile data
+        Profile asks Notifier to send welcome email
+}
+```
 
-## Overview
+## Language Syntax
+### Services Definition
+Services group related domains into deployable units and specify their technology stack:
 
-ArchDSL allows you to describe software systems using a simple, readable syntax focused on:
-- System boundaries and bounded contexts
-- Components, services, and aggregates
-- Domain-driven design concepts
-- Service interactions and flows
+```
+services {
+  ServiceName: {
+    domains: Domain1, Domain2, Domain3
+    data-stores: database_name, cache_name
+    language: golang
+  },
+  "Service with Spaces": {
+    domains: AnotherDomain
+    data-stores: another_db
+    language: python
+  }
+}
+```
 
-## Features
+### Use Cases
+Use cases capture business scenarios through triggers and domain actions:
 
-- **ANTLR-based grammar** for precise parsing
-- **Technology annotations** (go, java, python, nodejs, php)
-- **Platform specifications** (eks, lambda, sqs, sns, dynamodb, redis)
-- **DDD patterns** (upstream/downstream relationships with ACL, OHS, Conformist patterns)
-- **Service flows** with argument passing
-- **Diagram generation** (coming soon)
+```
+use_case "Use Case Name" {
+  when trigger_condition
+    domain_action_1
+    domain_action_2
+    
+  when another_trigger  
+    more_actions
+}
+```
+### Trigger Types
+#### External Triggers - Initiated by actors:
+```
+when user submits registration
+when admin approves request  
+when customer places order
+```
+#### Event Triggers - Initiated by domain events:
+```
+when "Order Placed"
+when "User Verified"
+```
+#### Domain Listener Triggers - Domains responding to events:
+```
+when PaymentService listens "Order Created"
+when Notification listens "User Registered"
+```
+#### Scheduled Triggers - CRON or time-based:
+```
+when CRON processes daily reports
+when CRON identifies expired sessions
+```
 
-## Grammar
+### Action Types
+#### Synchronous Actions - Direct domain-to-domain calls:
+```
+Authentication asks Database to verify credentials
+PaymentService asks BankAPI to process payment
+Inventory asks Warehouse to check availability
+```
 
-The DSL supports:
-- System and bounded context definitions
-- Aggregate, component, and service declarations
-- Technology and platform annotations
-- Relationship patterns between contexts
-- Service interaction flows
+#### Asynchronous Actions - Event publishing:
+```
+OrderService notifies "Order Placed"
+Authentication notifies "User Logged In"  
+PaymentService notifies "Payment Processed"
+```
+
+#### Internal Actions - Domain internal operations:
+```
+Profile creates user record
+Inventory updates stock levels
+Notification sends welcome email
+```
+
+## VS Code Extension
+Install the ArchDSL extension for VS Code to get:
+
+- **Syntax highlighting** and auto-completion
+- **Hierarchical domain view** with real-time discovery
+- **Services tree view** for C4 modeling
+- **Live diagram preview** as you type
+- **Domain reference tracking** across files
+- **Use case selection and filtering**
+
+### Extension Features
+**Domain Explorer:**
+
+- Hierarchical view of domains and use cases
+- Real-time extraction from DSL files
+- Cross-file domain reference tracking
+- Current file vs. workspace modes
+- Smart domain grouping and organization
+
+**Services Explorer:**
+
+- Service-centric view for C4 modeling
+- Service-to-domain relationship mapping
+- Technology and data store tracking
+- Preview generation for selected services
+
+**Live Preview:**
+
+- Real-time diagram generation
+- Multiple diagram type support
+- Selected use case preview
+- Error highlighting and validation
+
+## Examples
+See the [./examples](examples) directory for some DSL examples:
+
+- Banking System - Financial services with fraud detection
+- User Management - Simple authentication and profile management
 
 ## Building
 
 ### Prerequisites
 - Go 1.22+
-- Java (for ANTLR code generation)
-- PlantUML (for diagram generation)
-- Graphviz (for context maps)
 
 ### Build Steps
 ```bash
