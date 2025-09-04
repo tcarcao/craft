@@ -14,7 +14,8 @@
 		"vscode-uri": "^3.1.0"
 	},
 	"scripts": {
-		"generate": "antlr-ng -Dlanguage=TypeScript ../../antlr-grammar/ArchDSL.g4 -v true -o src/parser/generated --exact-output-dir"
+		"generate": "antlr-ng -Dlanguage=TypeScript ../../antlr-grammar/ArchDSL.g4 -v true -o src/parser/generated --exact-output-dir",
+		"postinstall": "pnpm run generate"
 	},
 	"devDependencies": {
 		"antlr-ng": "^1.0.10"
