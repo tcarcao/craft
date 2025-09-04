@@ -177,3 +177,12 @@ make docker-run
 # Run tests
 make test
 ```
+
+## Previous Versions
+
+`[v1]` - Architecture Description DSL
+
+- Component and relationship modeling
+- Basic C4 diagram generation
+- Simple VS Code extension
+- **Status:** Deprecated
