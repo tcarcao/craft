@@ -1,19 +1,69 @@
 package parser
 
-// DSL Model Types for Diagram Generation (Updated for Simplified Grammar)
-
 // DSLModel represents the entire parsed DSL document
 type DSLModel struct {
-	Services []Service `json:"services,omitempty"`
-	UseCases []UseCase `json:"useCases"`
+	Architectures []Architecture `json:"architectures,omitempty"`
+	Exposures     []Exposure     `json:"exposures,omitempty"`
+	Services      []Service      `json:"services,omitempty"`
+	UseCases      []UseCase      `json:"useCases"`
 }
 
-// Service represents a service definition with its domains, and other properties
+// Architecture represents an architecture definition
+type Architecture struct {
+	Name         string      `json:"name,omitempty"` // Optional name
+	Presentation []Component `json:"presentation"`
+	Gateway      []Component `json:"gateway"`
+}
+
+// Component represents a component in an architecture
+type Component struct {
+	Name      string              `json:"name"`
+	Type      ComponentType       `json:"type"`
+	Modifiers []ComponentModifier `json:"modifiers,omitempty"`
+	Chain     []Component         `json:"chain,omitempty"` // For component flows
+}
+
+// ComponentType defines the type of component
+type ComponentType string
+
+const (
+	ComponentTypeSimple ComponentType = "simple" // Single component
+	ComponentTypeFlow   ComponentType = "flow"   // Component chain (A > B > C)
+)
+
+// ComponentModifier represents a component modifier like [ssl, cache:aggressive]
+type ComponentModifier struct {
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"` // Empty for flags like [ssl], populated for key:value like [cache:aggressive]
+}
+
+// Exposure represents an exposure definition
+type Exposure struct {
+	Name    string   `json:"name"`
+	To      []string `json:"to,omitempty"`      // Targets
+	Of      []string `json:"of,omitempty"`      // Domains
+	Through []string `json:"through,omitempty"` // Gateways
+}
+
+// Service represents a service definition with enhanced deployment support
 type Service struct {
-	Name       string   `json:"name"`
-	Domains    []string `json:"domains,omitempty"`
-	DataStores []string `json:"dataStores,omitempty"`
-	Language   string   `json:"language"`
+	Name       string             `json:"name"`
+	Domains    []string           `json:"domains,omitempty"`
+	DataStores []string           `json:"dataStores,omitempty"`
+	Language   string             `json:"language,omitempty"`
+	Deployment DeploymentStrategy `json:"deployment,omitempty"`
+}
+
+// DeploymentStrategy represents deployment configuration
+type DeploymentStrategy struct {
+	Type  string           `json:"type,omitempty"`  // canary, blue_green, rolling
+	Rules []DeploymentRule `json:"rules,omitempty"` // Deployment rules with percentages
+}
+
+// DeploymentRule represents a single deployment rule
+type DeploymentRule struct {
+	Percentage string `json:"percentage"` // e.g., "10%"
+	Target     string `json:"target"`     // e.g., "staging"
 }
 
 // UseCase represents a single use case with its scenarios
@@ -62,7 +112,7 @@ type Action struct {
 	Description  string     `json:"description"`            // Full human readable action
 }
 
-// ActionType defines the different types of actions (simplified)
+// ActionType defines the different types of actions
 type ActionType string
 
 const (

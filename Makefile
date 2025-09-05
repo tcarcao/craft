@@ -8,7 +8,7 @@ ANTLR_IMAGE_TAG=4.13.2
 ANTLR_GRAMMAR_PATH=tools/antlr-grammar
 ANTLR_GRAMMAR_FILENAME=ArchDSL.g4
 GOLANG_GRAMMAR_PATH=pkg/parser/
-JAVASCRIPT_GRAMMAR_PATH=tools/vscode-extension/server/src/parser/generated
+VSCODE_EXTENSION=tools/vscode-extension/server
 
 docker-build:
 	@echo "Building Docker image..."
@@ -38,7 +38,7 @@ docker-clean-antlr-image:
 generate-grammar: docker-build-antlr-image
 	mkdir -p $(shell pwd)/$(ANTLR_GRAMMAR_PATH)
 	podman run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(GOLANG_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=Go -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
-# 	docker run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(JAVASCRIPT_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=TypeScript -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
+	cd $(shell pwd)/$(VSCODE_EXTENSION) && pnpm run generate
 
 test:
 	go test ./...

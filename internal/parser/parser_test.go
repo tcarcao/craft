@@ -1082,3 +1082,1271 @@ func TestDSLWithoutServices(t *testing.T) {
 		t.Errorf("Expected 1 use case, got %d", len(model.UseCases))
 	}
 }
+
+// Test Architecture Definitions
+func TestParser_BasicArchitectureDefinition(t *testing.T) {
+	dsl := `arch {
+		presentation:
+			Frontend
+		gateway:
+			APIGateway
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Validate architecture structure
+	if len(model.Architectures) != 1 {
+		t.Errorf("Expected 1 architecture, got %d", len(model.Architectures))
+	}
+
+	arch := model.Architectures[0]
+	if arch.Name != "" {
+		t.Errorf("Expected empty name for unnamed arch, got '%s'", arch.Name)
+	}
+
+	// Validate presentation section
+	if len(arch.Presentation) != 1 {
+		t.Errorf("Expected 1 presentation component, got %d", len(arch.Presentation))
+	}
+
+	if arch.Presentation[0].Name != "Frontend" {
+		t.Errorf("Expected presentation component 'Frontend', got '%s'", arch.Presentation[0].Name)
+	}
+
+	// Validate gateway section
+	if len(arch.Gateway) != 1 {
+		t.Errorf("Expected 1 gateway component, got %d", len(arch.Gateway))
+	}
+
+	if arch.Gateway[0].Name != "APIGateway" {
+		t.Errorf("Expected gateway component 'APIGateway', got '%s'", arch.Gateway[0].Name)
+	}
+}
+
+func TestParser_NamedArchitectureDefinition(t *testing.T) {
+	dsl := `arch MicroservicesArch {
+		presentation:
+			WebApp
+			MobileApp
+		gateway:
+			LoadBalancer
+			ReverseProxy
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	arch := model.Architectures[0]
+	if arch.Name != "MicroservicesArch" {
+		t.Errorf("Expected architecture name 'MicroservicesArch', got '%s'", arch.Name)
+	}
+
+	if len(arch.Presentation) != 2 {
+		t.Errorf("Expected 2 presentation components, got %d", len(arch.Presentation))
+	}
+
+	expectedPresentation := []string{"WebApp", "MobileApp"}
+	for i, component := range arch.Presentation {
+		if component.Name != expectedPresentation[i] {
+			t.Errorf("Expected presentation component '%s', got '%s'", expectedPresentation[i], component.Name)
+		}
+	}
+
+	if len(arch.Gateway) != 2 {
+		t.Errorf("Expected 2 gateway components, got %d", len(arch.Gateway))
+	}
+
+	expectedGateway := []string{"LoadBalancer", "ReverseProxy"}
+	for i, component := range arch.Gateway {
+		if component.Name != expectedGateway[i] {
+			t.Errorf("Expected gateway component '%s', got '%s'", expectedGateway[i], component.Name)
+		}
+	}
+}
+
+func TestParser_ComponentFlow(t *testing.T) {
+	dsl := `arch FlowArch {
+		presentation:
+			WebClient > APIGateway > ServiceMesh
+		gateway:
+			LoadBalancer > AuthService > BusinessLogic
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	arch := model.Architectures[0]
+
+	// Validate presentation flow
+	if len(arch.Presentation) != 1 {
+		t.Errorf("Expected 1 presentation flow, got %d", len(arch.Presentation))
+	}
+
+	presentationFlow := arch.Presentation[0]
+	if presentationFlow.Type != ComponentTypeFlow {
+		t.Errorf("Expected component type Flow, got %s", presentationFlow.Type)
+	}
+
+	expectedPresentationChain := []string{"WebClient", "APIGateway", "ServiceMesh"}
+	if len(presentationFlow.Chain) != len(expectedPresentationChain) {
+		t.Errorf("Expected %d components in presentation chain, got %d", len(expectedPresentationChain), len(presentationFlow.Chain))
+	}
+
+	for i, component := range presentationFlow.Chain {
+		if component.Name != expectedPresentationChain[i] {
+			t.Errorf("Expected chain component '%s', got '%s'", expectedPresentationChain[i], component.Name)
+		}
+	}
+
+	// Validate gateway flow
+	if len(arch.Gateway) != 1 {
+		t.Errorf("Expected 1 gateway flow, got %d", len(arch.Gateway))
+	}
+
+	gatewayFlow := arch.Gateway[0]
+	expectedGatewayChain := []string{"LoadBalancer", "AuthService", "BusinessLogic"}
+	if len(gatewayFlow.Chain) != len(expectedGatewayChain) {
+		t.Errorf("Expected %d components in gateway chain, got %d", len(expectedGatewayChain), len(gatewayFlow.Chain))
+	}
+
+	for i, component := range gatewayFlow.Chain {
+		if component.Name != expectedGatewayChain[i] {
+			t.Errorf("Expected chain component '%s', got '%s'", expectedGatewayChain[i], component.Name)
+		}
+	}
+}
+
+func TestParser_ComponentModifiers(t *testing.T) {
+	dsl := `arch ModifiedArch {
+		presentation:
+			WebApp[ssl, cache]
+			MobileApp[auth:oauth, timeout:30s]
+		gateway:
+			APIGateway[rate_limit:1000, protocol:https]
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	arch := model.Architectures[0]
+
+	// Validate WebApp modifiers
+	webApp := arch.Presentation[0]
+	if webApp.Name != "WebApp" {
+		t.Errorf("Expected component name 'WebApp', got '%s'", webApp.Name)
+	}
+
+	if len(webApp.Modifiers) != 2 {
+		t.Errorf("Expected 2 modifiers for WebApp, got %d", len(webApp.Modifiers))
+	}
+
+	expectedWebAppModifiers := []ComponentModifier{
+		{Key: "ssl", Value: ""},
+		{Key: "cache", Value: ""},
+	}
+
+	for i, modifier := range webApp.Modifiers {
+		if modifier.Key != expectedWebAppModifiers[i].Key {
+			t.Errorf("Expected modifier key '%s', got '%s'", expectedWebAppModifiers[i].Key, modifier.Key)
+		}
+		if modifier.Value != expectedWebAppModifiers[i].Value {
+			t.Errorf("Expected modifier value '%s', got '%s'", expectedWebAppModifiers[i].Value, modifier.Value)
+		}
+	}
+
+	// Validate MobileApp modifiers with values
+	mobileApp := arch.Presentation[1]
+	if mobileApp.Name != "MobileApp" {
+		t.Errorf("Expected component name 'MobileApp', got '%s'", mobileApp.Name)
+	}
+
+	if len(mobileApp.Modifiers) != 2 {
+		t.Errorf("Expected 2 modifiers for MobileApp, got %d", len(mobileApp.Modifiers))
+	}
+
+	expectedMobileModifiers := []ComponentModifier{
+		{Key: "auth", Value: "oauth"},
+		{Key: "timeout", Value: "30s"},
+	}
+
+	for i, modifier := range mobileApp.Modifiers {
+		if modifier.Key != expectedMobileModifiers[i].Key {
+			t.Errorf("Expected modifier key '%s', got '%s'", expectedMobileModifiers[i].Key, modifier.Key)
+		}
+		if modifier.Value != expectedMobileModifiers[i].Value {
+			t.Errorf("Expected modifier value '%s', got '%s'", expectedMobileModifiers[i].Value, modifier.Value)
+		}
+	}
+}
+
+func TestParser_ComponentFlowWithModifiers(t *testing.T) {
+	dsl := `arch ComplexFlowArch {
+		presentation:
+			WebClient[ssl] > APIGateway[auth:jwt] > ServiceMesh[tracing]
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	arch := model.Architectures[0]
+	flow := arch.Presentation[0]
+
+	if flow.Type != ComponentTypeFlow {
+		t.Errorf("Expected component type Flow, got %s", flow.Type)
+	}
+
+	if len(flow.Chain) != 3 {
+		t.Errorf("Expected 3 components in chain, got %d", len(flow.Chain))
+	}
+
+	// Validate WebClient with ssl modifier
+	webClient := flow.Chain[0]
+	if webClient.Name != "WebClient" {
+		t.Errorf("Expected component name 'WebClient', got '%s'", webClient.Name)
+	}
+
+	if len(webClient.Modifiers) != 1 {
+		t.Errorf("Expected 1 modifier for WebClient, got %d", len(webClient.Modifiers))
+	}
+
+	if webClient.Modifiers[0].Key != "ssl" {
+		t.Errorf("Expected modifier key 'ssl', got '%s'", webClient.Modifiers[0].Key)
+	}
+
+	// Validate APIGateway with auth:jwt modifier
+	apiGateway := flow.Chain[1]
+	if apiGateway.Name != "APIGateway" {
+		t.Errorf("Expected component name 'APIGateway', got '%s'", apiGateway.Name)
+	}
+
+	if len(apiGateway.Modifiers) != 1 {
+		t.Errorf("Expected 1 modifier for APIGateway, got %d", len(apiGateway.Modifiers))
+	}
+
+	if apiGateway.Modifiers[0].Key != "auth" || apiGateway.Modifiers[0].Value != "jwt" {
+		t.Errorf("Expected modifier auth:jwt, got %s:%s", apiGateway.Modifiers[0].Key, apiGateway.Modifiers[0].Value)
+	}
+}
+
+// Test Exposure Definitions
+func TestParser_BasicExposureDefinition(t *testing.T) {
+	dsl := `exposure PublicAPI {
+		to: external_clients, mobile_apps
+		of: UserService, OrderService
+		through: APIGateway, LoadBalancer
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(model.Exposures) != 1 {
+		t.Errorf("Expected 1 exposure, got %d", len(model.Exposures))
+	}
+
+	exposure := model.Exposures[0]
+	if exposure.Name != "PublicAPI" {
+		t.Errorf("Expected exposure name 'PublicAPI', got '%s'", exposure.Name)
+	}
+
+	// Validate 'to' targets
+	expectedTargets := []string{"external_clients", "mobile_apps"}
+	if len(exposure.To) != len(expectedTargets) {
+		t.Errorf("Expected %d targets, got %d", len(expectedTargets), len(exposure.To))
+	}
+
+	for i, target := range exposure.To {
+		if target != expectedTargets[i] {
+			t.Errorf("Expected target '%s', got '%s'", expectedTargets[i], target)
+		}
+	}
+
+	// Validate 'of' domains
+	expectedDomains := []string{"UserService", "OrderService"}
+	if len(exposure.Of) != len(expectedDomains) {
+		t.Errorf("Expected %d domains, got %d", len(expectedDomains), len(exposure.Of))
+	}
+
+	for i, domain := range exposure.Of {
+		if domain != expectedDomains[i] {
+			t.Errorf("Expected domain '%s', got '%s'", expectedDomains[i], domain)
+		}
+	}
+
+	// Validate 'through' gateways
+	expectedGateways := []string{"APIGateway", "LoadBalancer"}
+	if len(exposure.Through) != len(expectedGateways) {
+		t.Errorf("Expected %d gateways, got %d", len(expectedGateways), len(exposure.Through))
+	}
+
+	for i, gateway := range exposure.Through {
+		if gateway != expectedGateways[i] {
+			t.Errorf("Expected gateway '%s', got '%s'", expectedGateways[i], gateway)
+		}
+	}
+}
+
+func TestParser_PartialExposureDefinition(t *testing.T) {
+	dsl := `exposure InternalAPI {
+		to: internal_services
+		of: PaymentService
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	exposure := model.Exposures[0]
+	if exposure.Name != "InternalAPI" {
+		t.Errorf("Expected exposure name 'InternalAPI', got '%s'", exposure.Name)
+	}
+
+	if len(exposure.To) != 1 || exposure.To[0] != "internal_services" {
+		t.Errorf("Expected 'to' target 'internal_services', got %v", exposure.To)
+	}
+
+	if len(exposure.Of) != 1 || exposure.Of[0] != "PaymentService" {
+		t.Errorf("Expected 'of' domain 'PaymentService', got %v", exposure.Of)
+	}
+
+	if len(exposure.Through) != 0 {
+		t.Errorf("Expected no 'through' gateways, got %v", exposure.Through)
+	}
+}
+
+// Test Enhanced Services with Deployment
+func TestParser_ServiceWithCanaryDeployment(t *testing.T) {
+	dsl := `services {
+		PaymentService: {
+			domains: Payment, Billing
+			data-stores: payment_db, audit_log
+			language: golang
+			deployment: canary(10% -> staging, 90% -> production)
+		}
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(model.Services) != 1 {
+		t.Errorf("Expected 1 service, got %d", len(model.Services))
+	}
+
+	service := model.Services[0]
+	if service.Name != "PaymentService" {
+		t.Errorf("Expected service name 'PaymentService', got '%s'", service.Name)
+	}
+
+	// Validate deployment strategy
+	if service.Deployment.Type != "canary" {
+		t.Errorf("Expected deployment type 'canary', got '%s'", service.Deployment.Type)
+	}
+
+	if len(service.Deployment.Rules) != 2 {
+		t.Errorf("Expected 2 deployment rules, got %d", len(service.Deployment.Rules))
+	}
+
+	// Validate first deployment rule (10% -> staging)
+	rule1 := service.Deployment.Rules[0]
+	if rule1.Percentage != "10%" {
+		t.Errorf("Expected percentage '10%%', got '%s'", rule1.Percentage)
+	}
+
+	if rule1.Target != "staging" {
+		t.Errorf("Expected target 'staging', got '%s'", rule1.Target)
+	}
+
+	// Validate second deployment rule (90% -> production)
+	rule2 := service.Deployment.Rules[1]
+	if rule2.Percentage != "90%" {
+		t.Errorf("Expected percentage '90%%', got '%s'", rule2.Percentage)
+	}
+
+	if rule2.Target != "production" {
+		t.Errorf("Expected target 'production', got '%s'", rule2.Target)
+	}
+}
+
+func TestParser_ServiceWithBlueGreenDeployment(t *testing.T) {
+	dsl := `services {
+		OrderService: {
+			domains: Order, Inventory
+			deployment: blue_green
+		}
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	service := model.Services[0]
+	if service.Deployment.Type != "blue_green" {
+		t.Errorf("Expected deployment type 'blue_green', got '%s'", service.Deployment.Type)
+	}
+
+	if len(service.Deployment.Rules) != 0 {
+		t.Errorf("Expected no deployment rules for simple blue_green, got %d", len(service.Deployment.Rules))
+	}
+}
+
+func TestParser_ServiceWithRollingDeployment(t *testing.T) {
+	dsl := `services {
+		UserService: {
+			domains: User, Profile
+			deployment: rolling(25% -> batch1, 25% -> batch2, 25% -> batch3, 25% -> batch4)
+		}
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	service := model.Services[0]
+	if service.Deployment.Type != "rolling" {
+		t.Errorf("Expected deployment type 'rolling', got '%s'", service.Deployment.Type)
+	}
+
+	if len(service.Deployment.Rules) != 4 {
+		t.Errorf("Expected 4 deployment rules, got %d", len(service.Deployment.Rules))
+	}
+
+	expectedTargets := []string{"batch1", "batch2", "batch3", "batch4"}
+	for i, rule := range service.Deployment.Rules {
+		if rule.Percentage != "25%" {
+			t.Errorf("Expected percentage '25%%' for rule %d, got '%s'", i, rule.Percentage)
+		}
+
+		if rule.Target != expectedTargets[i] {
+			t.Errorf("Expected target '%s' for rule %d, got '%s'", expectedTargets[i], i, rule.Target)
+		}
+	}
+}
+
+// Test Mixed DSL Content
+func TestParser_ComplexMixedDSL(t *testing.T) {
+	dsl := `arch MainArch {
+		presentation:
+			WebApp[ssl, cache] > APIGateway[auth:jwt]
+		gateway:
+			LoadBalancer > ServiceMesh
+	}
+
+	exposure PublicAPI {
+		to: external_clients
+		of: UserService, OrderService
+		through: APIGateway
+	}
+
+	services {
+		UserService: {
+			domains: User, Profile
+			data-stores: user_db
+			language: golang
+			deployment: canary(20% -> staging, 80% -> production)
+		},
+		OrderService: {
+			domains: Order, Payment
+			data-stores: order_db, payment_db
+			language: java
+			deployment: blue_green
+		}
+	}
+
+	use_case "User Registration" {
+		when user creates account
+			UserService marks the user as verified
+			NotificationService notifies "User Registered"
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Validate all sections are present
+	if len(model.Architectures) != 1 {
+		t.Errorf("Expected 1 architecture, got %d", len(model.Architectures))
+	}
+
+	if len(model.Exposures) != 1 {
+		t.Errorf("Expected 1 exposure, got %d", len(model.Exposures))
+	}
+
+	if len(model.Services) != 2 {
+		t.Errorf("Expected 2 services, got %d", len(model.Services))
+	}
+
+	if len(model.UseCases) != 1 {
+		t.Errorf("Expected 1 use case, got %d", len(model.UseCases))
+	}
+
+	// Quick validation of each section
+	arch := model.Architectures[0]
+	if arch.Name != "MainArch" {
+		t.Errorf("Expected architecture name 'MainArch', got '%s'", arch.Name)
+	}
+
+	exposure := model.Exposures[0]
+	if exposure.Name != "PublicAPI" {
+		t.Errorf("Expected exposure name 'PublicAPI', got '%s'", exposure.Name)
+	}
+
+	// Validate services have deployment strategies
+	userService := findServiceByName(model.Services, "UserService")
+	if userService == nil {
+		t.Fatal("UserService not found")
+	}
+
+	if userService.Deployment.Type != "canary" {
+		t.Errorf("Expected UserService deployment type 'canary', got '%s'", userService.Deployment.Type)
+	}
+
+	orderService := findServiceByName(model.Services, "OrderService")
+	if orderService == nil {
+		t.Fatal("OrderService not found")
+	}
+
+	if orderService.Deployment.Type != "blue_green" {
+		t.Errorf("Expected OrderService deployment type 'blue_green', got '%s'", orderService.Deployment.Type)
+	}
+
+	useCase := model.UseCases[0]
+	if useCase.Name != "User Registration" {
+		t.Errorf("Expected use case name 'User Registration', got '%s'", useCase.Name)
+	}
+}
+
+// Test Error Cases for New Grammar
+func TestParser_InvalidArchitecture(t *testing.T) {
+	testCases := []struct {
+		name string
+		dsl  string
+	}{
+		{
+			name: "Missing architecture sections",
+			dsl: `arch EmptyArch {
+			}`,
+		},
+		{
+			name: "Invalid component flow syntax",
+			dsl: `arch BadFlow {
+				presentation:
+					WebApp > > APIGateway
+			}`,
+		},
+		{
+			name: "Malformed component modifiers",
+			dsl: `arch BadModifiers {
+				presentation:
+					WebApp[ssl cache]
+			}`,
+		},
+		{
+			name: "Invalid deployment strategy",
+			dsl: `services {
+				TestService: {
+					domains: Test
+					deployment: invalid_strategy
+				}
+			}`,
+		},
+		{
+			name: "Malformed deployment config",
+			dsl: `services {
+				TestService: {
+					domains: Test
+					deployment: canary(invalid config)
+				}
+			}`,
+		},
+		{
+			name: "Invalid percentage in deployment",
+			dsl: `services {
+				TestService: {
+					domains: Test
+					deployment: canary(invalid% -> target)
+				}
+			}`,
+		},
+	}
+
+	parser := NewParser()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			model, err := parser.ParseString(tc.dsl)
+
+			if err == nil {
+				t.Errorf("Expected parse error for '%s', got nil", tc.name)
+			}
+
+			if model != nil {
+				t.Errorf("Expected nil model for '%s', got non-nil model", tc.name)
+			}
+
+			t.Logf("Successfully caught error for '%s': %v", tc.name, err)
+		})
+	}
+}
+
+// Helper function to find service by name
+func findServiceByName(services []Service, name string) *Service {
+	for _, service := range services {
+		if service.Name == name {
+			return &service
+		}
+	}
+	return nil
+}
+
+// Test Enhanced Connector Words
+func TestParser_EnhancedConnectorWords(t *testing.T) {
+	dsl := `use_case "Enhanced Connectors Test" {
+		when user updates profile
+			validation asks database to verify data
+			profile marks the user as verified
+			notification sends an email to user
+			audit logs with detailed information
+			cache stores from database
+			security checks in the system
+			monitor records on the dashboard
+			backup saves at regular intervals
+			analytics tracks for reporting
+			logger writes by timestamp
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	scenario := model.UseCases[0].Scenarios[0]
+	actions := scenario.Actions
+
+	if len(actions) != 10 {
+		t.Errorf("Expected 10 actions, got %d", len(actions))
+		return
+	}
+
+	expectedConnectors := []string{"to", "the", "an", "with", "from", "in", "on", "at", "for", "by"}
+	expectedTypes := []ActionType{
+		ActionTypeSync,     // asks ... to
+		ActionTypeInternal, // marks the
+		ActionTypeInternal, // sends an
+		ActionTypeInternal, // logs with
+		ActionTypeInternal, // stores from
+		ActionTypeInternal, // checks in
+		ActionTypeInternal, // records on
+		ActionTypeInternal, // saves at
+		ActionTypeInternal, // tracks for
+		ActionTypeInternal, // writes by
+	}
+
+	for i, action := range actions {
+		if action.Type != expectedTypes[i] {
+			t.Errorf("Action %d: Expected type %s, got %s", i, expectedTypes[i], action.Type)
+		}
+
+		// Skip sync action connector check as it has different structure
+		if action.Type == ActionTypeSync {
+			continue
+		}
+
+		if action.Connector != expectedConnectors[i] {
+			t.Errorf("Action %d: Expected connector '%s', got '%s'", i, expectedConnectors[i], action.Connector)
+		}
+	}
+}
+
+// Test Mixed Architecture and Use Case
+func TestParser_ArchitectureWithUseCases(t *testing.T) {
+	dsl := `arch WebArch {
+		presentation:
+			ReactApp[spa] > CDN[cache:aggressive]
+		gateway:
+			NginxProxy > APIGateway[rate_limit:1000]
+	}
+
+	use_case "User Authentication" {
+		when user logs in
+			AuthService validates credentials
+			SessionService creates session
+			NotificationService notifies "User Logged In"
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Validate both architecture and use case are parsed
+	if len(model.Architectures) != 1 {
+		t.Errorf("Expected 1 architecture, got %d", len(model.Architectures))
+	}
+
+	if len(model.UseCases) != 1 {
+		t.Errorf("Expected 1 use case, got %d", len(model.UseCases))
+	}
+
+	// Validate architecture details
+	arch := model.Architectures[0]
+	if arch.Name != "WebArch" {
+		t.Errorf("Expected architecture name 'WebArch', got '%s'", arch.Name)
+	}
+
+	// Validate use case is properly parsed
+	useCase := model.UseCases[0]
+	if useCase.Name != "User Authentication" {
+		t.Errorf("Expected use case name 'User Authentication', got '%s'", useCase.Name)
+	}
+
+	if len(useCase.Scenarios) != 1 {
+		t.Errorf("Expected 1 scenario, got %d", len(useCase.Scenarios))
+	}
+
+	scenario := useCase.Scenarios[0]
+	if len(scenario.Actions) != 3 {
+		t.Errorf("Expected 3 actions, got %d", len(scenario.Actions))
+	}
+}
+
+// Benchmark new features
+func BenchmarkParser_ArchitectureDefinition(b *testing.B) {
+	dsl := `arch BenchmarkArch {
+		presentation:
+			WebApp[ssl,cache] > APIGateway[auth:jwt] > ServiceMesh[tracing]
+		gateway:
+			LoadBalancer[algorithm:round_robin] > ReverseProxy[timeout:30s]
+	}`
+
+	parser := NewParser()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := parser.ParseString(dsl)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkParser_ExposureDefinition(b *testing.B) {
+	dsl := `exposure BenchmarkAPI {
+		to: external_clients, mobile_apps, third_party_services
+		of: UserService, OrderService, PaymentService, NotificationService
+		through: APIGateway, LoadBalancer, CDN, AuthProxy
+	}`
+
+	parser := NewParser()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := parser.ParseString(dsl)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkParser_ServiceWithDeployment(b *testing.B) {
+	dsl := `services {
+		BenchmarkService: {
+			domains: Domain1, Domain2, Domain3
+			data-stores: db1, db2, cache1, cache2
+			language: golang
+			deployment: canary(5% -> canary, 20% -> staging, 75% -> production)
+		}
+	}`
+
+	parser := NewParser()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := parser.ParseString(dsl)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkParser_ComplexMixedDSL(b *testing.B) {
+	dsl := `arch ComplexArch {
+		presentation:
+			WebApp[ssl,cache] > APIGateway[auth:jwt] > ServiceMesh[tracing]
+		gateway:
+			LoadBalancer > ReverseProxy
+	}
+
+	exposure ComplexAPI {
+		to: external_clients, mobile_apps
+		of: UserService, OrderService
+		through: APIGateway, LoadBalancer
+	}
+
+	services {
+		UserService: {
+			domains: User, Profile, Authentication
+			data-stores: user_db, profile_cache
+			language: golang
+			deployment: canary(10% -> staging, 90% -> production)
+		}
+	}
+
+	use_case "Complex Operation" {
+		when user performs action
+			UserService validates request
+			OrderService processes order
+			PaymentService charges payment
+			NotificationService notifies "Operation Completed"
+	}`
+
+	parser := NewParser()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := parser.ParseString(dsl)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Test edge cases and complex scenarios
+func TestParser_MultipleArchitectures(t *testing.T) {
+	dsl := `arch WebArch {
+		presentation:
+			WebApp
+		gateway:
+			APIGateway
+	}
+
+	arch MobileArch {
+		presentation:
+			MobileApp[native]
+		gateway:
+			MobileGateway[protocol:grpc]
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(model.Architectures) != 2 {
+		t.Errorf("Expected 2 architectures, got %d", len(model.Architectures))
+	}
+
+	archNames := []string{"WebArch", "MobileArch"}
+	for i, arch := range model.Architectures {
+		if arch.Name != archNames[i] {
+			t.Errorf("Expected architecture name '%s', got '%s'", archNames[i], arch.Name)
+		}
+	}
+}
+
+func TestParser_MultipleExposures(t *testing.T) {
+	dsl := `exposure PublicAPI {
+		to: external_clients
+		of: UserService
+		through: APIGateway
+	}
+
+	exposure InternalAPI {
+		to: internal_services
+		of: PaymentService, OrderService
+	}
+
+	exposure PartnerAPI {
+		to: trusted_partners
+		of: DataService
+		through: PartnerGateway
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(model.Exposures) != 3 {
+		t.Errorf("Expected 3 exposures, got %d", len(model.Exposures))
+	}
+
+	expectedNames := []string{"PublicAPI", "InternalAPI", "PartnerAPI"}
+	for i, exposure := range model.Exposures {
+		if exposure.Name != expectedNames[i] {
+			t.Errorf("Expected exposure name '%s', got '%s'", expectedNames[i], exposure.Name)
+		}
+	}
+
+	// Validate specific exposure properties
+	internalAPI := model.Exposures[1]
+	if len(internalAPI.Of) != 2 {
+		t.Errorf("Expected 2 domains for InternalAPI, got %d", len(internalAPI.Of))
+	}
+
+	if len(internalAPI.Through) != 0 {
+		t.Errorf("Expected no gateways for InternalAPI, got %d", len(internalAPI.Through))
+	}
+}
+
+func TestParser_ComplexComponentChains(t *testing.T) {
+	dsl := `arch ComplexChainArch {
+		presentation:
+			WebClient[ssl:tls1.3] > CDN[cache:aggressive,geo:distributed] > LoadBalancer[algorithm:weighted] > APIGateway[auth:oauth2,rate_limit:5000] > ServiceMesh[tracing:jaeger,metrics:prometheus]
+		gateway:
+			EdgeProxy[ddos_protection] > AuthService[provider:auth0] > RateLimiter[burst:100] > Router[strategy:path_based]
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	arch := model.Architectures[0]
+
+	// Validate presentation chain
+	presentationFlow := arch.Presentation[0]
+	if len(presentationFlow.Chain) != 5 {
+		t.Errorf("Expected 5 components in presentation chain, got %d", len(presentationFlow.Chain))
+	}
+
+	expectedPresentationComponents := []struct {
+		name      string
+		modifiers int
+	}{
+		{"WebClient", 1},
+		{"CDN", 2},
+		{"LoadBalancer", 1},
+		{"APIGateway", 2},
+		{"ServiceMesh", 2},
+	}
+
+	for i, expected := range expectedPresentationComponents {
+		component := presentationFlow.Chain[i]
+		if component.Name != expected.name {
+			t.Errorf("Expected component name '%s', got '%s'", expected.name, component.Name)
+		}
+
+		if len(component.Modifiers) != expected.modifiers {
+			t.Errorf("Expected %d modifiers for %s, got %d", expected.modifiers, expected.name, len(component.Modifiers))
+		}
+	}
+
+	// Validate gateway chain
+	gatewayFlow := arch.Gateway[0]
+	if len(gatewayFlow.Chain) != 4 {
+		t.Errorf("Expected 4 components in gateway chain, got %d", len(gatewayFlow.Chain))
+	}
+}
+
+func TestParser_DeploymentEdgeCases(t *testing.T) {
+	dsl := `services {
+		Service1: {
+			domains: Domain1
+			deployment: canary(100% -> production)
+		},
+		Service2: {
+			domains: Domain2
+			deployment: rolling(50% -> half1, 50% -> half2)
+		},
+		Service3: {
+			domains: Domain3
+			deployment: blue_green
+		}
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(model.Services) != 3 {
+		t.Errorf("Expected 3 services, got %d", len(model.Services))
+	}
+
+	// Test single rule canary
+	service1 := findServiceByName(model.Services, "Service1")
+	if service1.Deployment.Type != "canary" {
+		t.Errorf("Expected canary deployment for Service1, got %s", service1.Deployment.Type)
+	}
+
+	if len(service1.Deployment.Rules) != 1 {
+		t.Errorf("Expected 1 deployment rule for Service1, got %d", len(service1.Deployment.Rules))
+	}
+
+	if service1.Deployment.Rules[0].Percentage != "100%" {
+		t.Errorf("Expected 100%% for Service1, got %s", service1.Deployment.Rules[0].Percentage)
+	}
+
+	// Test rolling with two targets
+	service2 := findServiceByName(model.Services, "Service2")
+	if service2.Deployment.Type != "rolling" {
+		t.Errorf("Expected rolling deployment for Service2, got %s", service2.Deployment.Type)
+	}
+
+	if len(service2.Deployment.Rules) != 2 {
+		t.Errorf("Expected 2 deployment rules for Service2, got %d", len(service2.Deployment.Rules))
+	}
+
+	// Test blue_green without config
+	service3 := findServiceByName(model.Services, "Service3")
+	if service3.Deployment.Type != "blue_green" {
+		t.Errorf("Expected blue_green deployment for Service3, got %s", service3.Deployment.Type)
+	}
+
+	if len(service3.Deployment.Rules) != 0 {
+		t.Errorf("Expected no deployment rules for Service3, got %d", len(service3.Deployment.Rules))
+	}
+}
+
+func TestParser_ConnectorWordsInPhrases(t *testing.T) {
+	dsl := `use_case "Connector Words Test" {
+		when user submits form
+			validation checks the data for accuracy
+			database stores the record in the table
+			notification sends an email to the user with confirmation
+			audit logs the action by the user at current time
+			cache updates from the database on successful validation
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	scenario := model.UseCases[0].Scenarios[0]
+	actions := scenario.Actions
+
+	if len(actions) != 5 {
+		t.Errorf("Expected 5 actions, got %d", len(actions))
+		return
+	}
+
+	expectedPhrases := []string{
+		"data for accuracy",
+		"record in the table",
+		"email to the user with confirmation",
+		"action by the user at current time",
+		"the database on successful validation",
+	}
+
+	for i, action := range actions {
+		if action.Phrase != expectedPhrases[i] {
+			t.Errorf("Action %d: Expected phrase '%s', got '%s'", i, expectedPhrases[i], action.Phrase)
+		}
+	}
+}
+
+func TestParser_SyncActionVariations(t *testing.T) {
+	dsl := `use_case "Sync Action Variations" {
+		when user initiates process
+			ServiceA asks ServiceB to process request
+			ServiceC asks ServiceD validate data
+			ServiceE asks ServiceF store information safely
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	scenario := model.UseCases[0].Scenarios[0]
+	actions := scenario.Actions
+
+	if len(actions) != 3 {
+		t.Errorf("Expected 3 actions, got %d", len(actions))
+		return
+	}
+
+	// All should be sync actions
+	for i, action := range actions {
+		if action.Type != ActionTypeSync {
+			t.Errorf("Action %d: Expected sync action, got %s", i, action.Type)
+		}
+	}
+
+	// First action: with "to" connector
+	if actions[0].Connector != "to" {
+		t.Errorf("Action 0: Expected connector 'to', got '%s'", actions[0].Connector)
+	}
+
+	if actions[0].Phrase != "process request" {
+		t.Errorf("Action 0: Expected phrase 'process request', got '%s'", actions[0].Phrase)
+	}
+
+	// Second action: no connector (direct phrase)
+	if actions[1].Connector != "" {
+		t.Errorf("Action 1: Expected no connector, got '%s'", actions[1].Connector)
+	}
+
+	if actions[1].Phrase != "validate data" {
+		t.Errorf("Action 1: Expected phrase 'validate data', got '%s'", actions[1].Phrase)
+	}
+
+	// Third action: connector word within phrase
+	if actions[2].Phrase != "store information safely" {
+		t.Errorf("Action 2: Expected phrase 'store information safely', got '%s'", actions[2].Phrase)
+	}
+}
+
+func TestParser_EmptyDSLSections(t *testing.T) {
+	testCases := []struct {
+		name string
+		dsl  string
+	}{
+		{
+			name: "Empty services only",
+			dsl:  `services {}`,
+		},
+		{
+			name: "Multiple empty sections",
+			dsl: `services {}
+			
+			arch EmptyArch {
+				presentation:
+					WebApp
+				gateway:
+					Gateway
+			}`,
+		},
+		{
+			name: "Empty DSL",
+			dsl:  ``,
+		},
+	}
+
+	parser := NewParser()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			model, err := parser.ParseString(tc.dsl)
+
+			if err != nil {
+				t.Fatalf("Expected no error for '%s', got: %v", tc.name, err)
+			}
+
+			if model == nil {
+				t.Errorf("Expected model for '%s', got nil", tc.name)
+			}
+		})
+	}
+}
+
+func TestParser_OrderIndependence(t *testing.T) {
+	// Test that DSL sections can appear in any order
+	dsl := `use_case "First Use Case" {
+		when user logs in
+			AuthService validates credentials
+	}
+
+	services {
+		AuthService: {
+			domains: Auth, User
+			deployment: blue_green
+		}
+	}
+
+	arch MyArch {
+		presentation:
+			WebApp
+		gateway:
+			Gateway
+	}
+
+	exposure PublicAPI {
+		to: clients
+		of: AuthService
+	}
+
+	use_case "Second Use Case" {
+		when user logs out
+			AuthService invalidates session
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Validate all sections are present regardless of order
+	if len(model.UseCases) != 2 {
+		t.Errorf("Expected 2 use cases, got %d", len(model.UseCases))
+	}
+
+	if len(model.Services) != 1 {
+		t.Errorf("Expected 1 service, got %d", len(model.Services))
+	}
+
+	if len(model.Architectures) != 1 {
+		t.Errorf("Expected 1 architecture, got %d", len(model.Architectures))
+	}
+
+	if len(model.Exposures) != 1 {
+		t.Errorf("Expected 1 exposure, got %d", len(model.Exposures))
+	}
+
+	// Validate specific content
+	expectedUseCaseNames := []string{"First Use Case", "Second Use Case"}
+	for i, useCase := range model.UseCases {
+		if useCase.Name != expectedUseCaseNames[i] {
+			t.Errorf("Expected use case name '%s', got '%s'", expectedUseCaseNames[i], useCase.Name)
+		}
+	}
+}
