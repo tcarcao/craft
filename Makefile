@@ -36,6 +36,7 @@ docker-clean-antlr-image:
 	podman rmi $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG)
 
 generate-grammar: docker-build-antlr-image
+	mkdir -p $(shell pwd)/$(ANTLR_GRAMMAR_PATH)
 	podman run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(GOLANG_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=Go -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
 # 	docker run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(JAVASCRIPT_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=TypeScript -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
 
