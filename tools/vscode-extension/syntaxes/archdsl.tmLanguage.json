@@ -7,7 +7,13 @@
       "include": "#comments"
     },
     {
+      "include": "#arch"
+    },
+    {
       "include": "#services"
+    },
+    {
+      "include": "#exposure"
     },
     {
       "include": "#use_case"
@@ -20,6 +26,9 @@
     },
     {
       "include": "#when_domain_listens"
+    },
+    {
+      "include": "#when_cron_trigger"
     },
     {
       "include": "#sync_action"
@@ -41,6 +50,12 @@
     },
     {
       "include": "#commas"
+    },
+    {
+      "include": "#percentages"
+    },
+    {
+      "include": "#operators"
     }
   ],
   "repository": {
@@ -124,6 +139,9 @@
           "include": "#language_property"
         },
         {
+          "include": "#deployment_property"
+        },
+        {
           "include": "#comments"
         }
       ]
@@ -192,6 +210,44 @@
       "patterns": [
         {
           "name": "entity.name.type.language.domain-dsl",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "deployment_property": {
+      "name": "meta.deployment-property.domain-dsl",
+      "begin": "\\b(deployment)\\s*(:)",
+      "end": "(?=\\}|^\\s*[a-zA-Z])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.property.deployment.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.separator.colon.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "name": "keyword.other.deployment-type.domain-dsl",
+          "match": "\\b(canary|blue_green|rolling)\\b"
+        },
+        {
+          "name": "constant.numeric.percentage.domain-dsl",
+          "match": "[0-9]+%"
+        },
+        {
+          "name": "punctuation.section.parentheses.domain-dsl",
+          "match": "[()]"
+        },
+        {
+          "name": "keyword.operator.arrow.domain-dsl",
+          "match": "->"
+        },
+        {
+          "name": "entity.name.type.deployment-target.domain-dsl",
           "match": "\\b[a-zA-Z_][a-zA-Z0-9_-]*\\b"
         },
         {
@@ -446,6 +502,263 @@
         {
           "name": "punctuation.separator.comma.domain-dsl",
           "match": ","
+        }
+      ]
+    },
+    "arch": {
+      "name": "meta.arch.domain-dsl",
+      "begin": "^\\s*(arch)\\s*([a-zA-Z_][a-zA-Z0-9_]*)?\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.arch.domain-dsl"
+        },
+        "2": {
+          "name": "entity.name.type.arch.domain-dsl"
+        },
+        "3": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#arch_sections"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "arch_sections": {
+      "patterns": [
+        {
+          "name": "meta.presentation-section.domain-dsl",
+          "begin": "\\b(presentation)\\s*(:)",
+          "end": "(?=\\}|^\\s*(gateway|presentation))",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.section.presentation.domain-dsl"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.domain-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#arch_components"
+            }
+          ]
+        },
+        {
+          "name": "meta.gateway-section.domain-dsl",
+          "begin": "\\b(gateway)\\s*(:)",
+          "end": "(?=\\}|^\\s*(gateway|presentation))",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.section.gateway.domain-dsl"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.domain-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#arch_components"
+            }
+          ]
+        }
+      ]
+    },
+    "arch_components": {
+      "patterns": [
+        {
+          "name": "entity.name.type.component.domain-dsl",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b(?=\\s*(?:\\[|>|$))"
+        },
+        {
+          "name": "keyword.operator.component-flow.domain-dsl",
+          "match": ">"
+        },
+        {
+          "name": "meta.component-modifiers.domain-dsl",
+          "begin": "\\[",
+          "end": "\\]",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.brackets.begin.domain-dsl"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.brackets.end.domain-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "name": "meta.modifier-key-value.domain-dsl",
+              "match": "([a-zA-Z_][a-zA-Z0-9_]*)\\s*(:)\\s*([a-zA-Z0-9_.-]+|\\d+[a-zA-Z]*|true|false)",
+              "captures": {
+                "1": {
+                  "name": "entity.name.attribute.modifier-key.domain-dsl"
+                },
+                "2": {
+                  "name": "punctuation.separator.colon.domain-dsl"
+                },
+                "3": {
+                  "name": "constant.other.modifier-value.domain-dsl"
+                }
+              }
+            },
+            {
+              "name": "entity.name.attribute.modifier-flag.domain-dsl",
+              "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b(?!:)"
+            },
+            {
+              "name": "punctuation.separator.comma.domain-dsl",
+              "match": ","
+            }
+          ]
+        }
+      ]
+    },
+    "exposure": {
+      "name": "meta.exposure.domain-dsl",
+      "begin": "^\\s*(exposure)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.exposure.domain-dsl"
+        },
+        "2": {
+          "name": "entity.name.type.exposure.domain-dsl"
+        },
+        "3": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#exposure_properties"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "exposure_properties": {
+      "patterns": [
+        {
+          "name": "meta.exposure-to.domain-dsl",
+          "begin": "\\b(to)\\s*(:)",
+          "end": "(?=\\}|^\\s*[a-zA-Z])",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.property.to.domain-dsl"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.domain-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.type.target.domain-dsl",
+              "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+            },
+            {
+              "name": "punctuation.separator.comma.domain-dsl",
+              "match": ","
+            }
+          ]
+        },
+        {
+          "name": "meta.exposure-of.domain-dsl",
+          "begin": "\\b(of)\\s*(:)",
+          "end": "(?=\\}|^\\s*[a-zA-Z])",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.property.of.domain-dsl"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.domain-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.type.domain.domain-dsl",
+              "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+            },
+            {
+              "name": "punctuation.separator.comma.domain-dsl",
+              "match": ","
+            }
+          ]
+        },
+        {
+          "name": "meta.exposure-through.domain-dsl",
+          "begin": "\\b(through)\\s*(:)",
+          "end": "(?=\\}|^\\s*[a-zA-Z])",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.other.property.through.domain-dsl"
+            },
+            "2": {
+              "name": "punctuation.separator.colon.domain-dsl"
+            }
+          },
+          "patterns": [
+            {
+              "name": "entity.name.type.gateway.domain-dsl",
+              "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+            },
+            {
+              "name": "punctuation.separator.comma.domain-dsl",
+              "match": ","
+            }
+          ]
+        }
+      ]
+    },
+    "when_cron_trigger": {
+      "match": "^\\s*(when)\\s+(CRON)\\s+(.*)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.flow.domain-dsl"
+        },
+        "2": {
+          "name": "keyword.other.cron.domain-dsl"
+        },
+        "3": {
+          "name": "string.unquoted.cron-description.domain-dsl"
+        }
+      }
+    },
+    "percentages": {
+      "patterns": [
+        {
+          "name": "constant.numeric.percentage.domain-dsl",
+          "match": "[0-9]+%"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.domain-dsl",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.component-flow.domain-dsl",
+          "match": ">"
         }
       ]
     }

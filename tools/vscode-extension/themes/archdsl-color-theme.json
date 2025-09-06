@@ -28,8 +28,12 @@
       }
     },
     {
-      "name": "Services Keyword",
-      "scope": "keyword.control.services.domain-dsl",
+      "name": "Block Keywords (services, arch, exposure)",
+      "scope": [
+        "keyword.control.services.domain-dsl",
+        "keyword.control.arch.domain-dsl",
+        "keyword.control.exposure.domain-dsl"
+      ],
       "settings": {
         "foreground": "#800080",
         "fontStyle": "bold"
@@ -56,7 +60,11 @@
       "scope": [
         "keyword.other.property.domains.domain-dsl",
         "keyword.other.property.datastores.domain-dsl",
-        "keyword.other.property.language.domain-dsl"
+        "keyword.other.property.language.domain-dsl",
+        "keyword.other.property.deployment.domain-dsl",
+        "keyword.other.property.to.domain-dsl",
+        "keyword.other.property.of.domain-dsl",
+        "keyword.other.property.through.domain-dsl"
       ],
       "settings": {
         "foreground": "#d73a49",
@@ -133,8 +141,11 @@
       }
     },
     {
-      "name": "Special Verb: listens (event listener)",
-      "scope": "keyword.other.listens.domain-dsl",
+      "name": "Special Keywords (listens, CRON)",
+      "scope": [
+        "keyword.other.listens.domain-dsl",
+        "keyword.other.cron.domain-dsl"
+      ],
       "settings": {
         "foreground": "#6f42c1",
         "fontStyle": "bold"
@@ -192,6 +203,114 @@
       "scope": "punctuation.separator.comma.domain-dsl",
       "settings": {
         "foreground": "#6a737d"
+      }
+    },
+    {
+      "name": "Architecture Components",
+      "scope": [
+        "entity.name.type.component.domain-dsl",
+        "entity.name.type.arch.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#0451a5",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Architecture Sections",
+      "scope": [
+        "keyword.other.section.presentation.domain-dsl",
+        "keyword.other.section.gateway.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#d73a49",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Component Modifier Keys",
+      "scope": [
+        "entity.name.attribute.modifier-key.domain-dsl",
+        "entity.name.attribute.modifier-flag.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#0451a5",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Component Modifier Values",
+      "scope": "constant.other.modifier-value.domain-dsl",
+      "settings": {
+        "foreground": "#22863a",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Exposure Elements",
+      "scope": [
+        "entity.name.type.exposure.domain-dsl",
+        "entity.name.type.target.domain-dsl",
+        "entity.name.type.gateway.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#e36209",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Deployment Configuration",
+      "scope": [
+        "keyword.other.deployment-type.domain-dsl",
+        "entity.name.type.deployment-target.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#b8860b",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Percentages",
+      "scope": "constant.numeric.percentage.domain-dsl",
+      "settings": {
+        "foreground": "#09885a",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Operators and Flow",
+      "scope": [
+        "keyword.operator.arrow.domain-dsl",
+        "keyword.operator.component-flow.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#d73a49",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Brackets",
+      "scope": [
+        "punctuation.section.brackets.begin.domain-dsl",
+        "punctuation.section.brackets.end.domain-dsl"
+      ],
+      "settings": {
+        "foreground": "#6f42c1"
+      }
+    },
+    {
+      "name": "Parentheses",
+      "scope": "punctuation.section.parentheses.domain-dsl",
+      "settings": {
+        "foreground": "#795e26"
+      }
+    },
+    {
+      "name": "CRON Description",
+      "scope": "string.unquoted.cron-description.domain-dsl",
+      "settings": {
+        "foreground": "#a31515",
+        "fontStyle": "italic"
       }
     }
   ]
