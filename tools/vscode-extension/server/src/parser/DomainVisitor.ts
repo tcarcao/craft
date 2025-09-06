@@ -6,7 +6,8 @@ import {
 	Service_definitionContext, 
 	Use_caseContext,
 	Domain_listContext,
-	Domain_or_datastoreContext,
+	Domain_refContext,
+	DatastoreContext,
 	Service_nameContext,
 	// Service_propertiesContext,
 	Service_propertyContext,
@@ -29,7 +30,8 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 	private currentUseCaseDomains = new Set<string>();
 	
 	// Current lists being collected
-	private currentDomainOrDatastoreList: string[] = [];
+	private currentDomainRefList: string[] = [];
+	private currentDatastoreList: string[] = [];
 	private isInDomainList = false;
 
 	// Visit the root DSL context
@@ -88,13 +90,13 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 		
 		if (propertyText.startsWith('domains:')) {
 			this.isInDomainList = true;
-			this.currentDomainOrDatastoreList = [];
+			this.currentDomainRefList = [];
 			// Visit children to collect domains from domain_list
 			this.visitChildren(ctx);
 			this.isInDomainList = false;
 		} else if (propertyText.startsWith('data-stores:')) {
 			this.isInDomainList = false; // This is data-stores, not domains
-			this.currentDomainOrDatastoreList = [];
+			this.currentDatastoreList = [];
 			// Visit children to collect data stores from datastore_list
 			this.visitChildren(ctx);
 		} else if (propertyText.startsWith('language:')) {
@@ -117,13 +119,13 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 	visitDomain_list = (ctx: Domain_listContext): void => {
 		
 		// Clear the current list before collecting
-		this.currentDomainOrDatastoreList = [];
+		this.currentDomainRefList = [];
 		
 		// Visit children to collect domain_or_datastore items
 		this.visitChildren(ctx);
 		
 		// Now we know this is a domain list, so add all items as domains
-		this.currentDomainOrDatastoreList.forEach(domainName => {
+		this.currentDomainRefList.forEach(domainName => {
 			this.domains.add(domainName);
 			
 			// Add to current service definition domains
@@ -133,13 +135,30 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 		});
 	};
 
-	// Visit individual domain or datastore - COLLECT ITEMS BUT DON'T ADD AS DOMAINS YET
-	visitDomain_or_datastore = (ctx: Domain_or_datastoreContext): void => {
+	// Visit individual domain - COLLECT ITEMS BUT DON'T ADD AS DOMAINS YET
+	visitDomain_ref = (ctx: Domain_refContext): void => {
 		const itemName = ctx.getText().trim();
 		if (itemName) {
 			
 			// Just collect the item - don't add as domain yet
-			this.currentDomainOrDatastoreList.push(itemName);
+			this.currentDomainRefList.push(itemName);
+			
+			// If this is in data-stores context, add to dataStores
+			if (this.serviceDefinitions.length > 0 && !this.isInDomainList) {
+				const currentService = this.serviceDefinitions[this.serviceDefinitions.length - 1];
+				if (!currentService.dataStores) {currentService.dataStores = [];}
+				currentService.dataStores.push(itemName);
+			}
+		}
+	};
+
+	// Visit individual datastore - COLLECT ITEMS BUT DON'T ADD YET
+	visitDatastore = (ctx: DatastoreContext): void => {
+		const itemName = ctx.getText().trim();
+		if (itemName) {
+			
+			// Just collect the item - don't add as domain yet
+			this.currentDatastoreList.push(itemName);
 			
 			// If this is in data-stores context, add to dataStores
 			if (this.serviceDefinitions.length > 0 && !this.isInDomainList) {

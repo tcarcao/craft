@@ -1,8 +1,25 @@
+arch {
+    presentation: 
+        WebApp[framework:react, ssl]
+        MobileApp
+        
+    gateway:
+        LoadBalancer[ssl:true] > APIGateway[type:nginx]
+}
+
+exposure default {
+    to: Business_User
+    through: APIGateway
+}
+
 services {
     UserService: {
         domains: Authentication, Profile
         data-stores: user_db
         language: golang
+    },
+    CommsService: {
+        domains: Notifier
     }
 }
 
