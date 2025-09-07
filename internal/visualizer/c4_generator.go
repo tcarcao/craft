@@ -86,16 +86,22 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			if g.isUserInteraction(scenario.Trigger) {
-				involvedDomains := g.extractDomainsFromActions(scenario.Actions)
-
-				for _, domain := range involvedDomains {
-					service := g.findServiceForDomain(domain)
-					if service != "" {
-						if g.userInteractionMap[domain] == nil {
-							g.userInteractionMap[domain] = make([]string, 0)
-						}
-						if !g.containsString(g.userInteractionMap[domain], service) {
-							g.userInteractionMap[domain] = append(g.userInteractionMap[domain], service)
+				// For boundaries mode: only the FIRST domain in the action chain should be externally accessible
+				// For transparent mode: all domains are grouped in service so it doesn't matter
+				if g.mode == C4ModeBoundaries {
+					g.analyzeDirectlyAccessibleDomains(scenario)
+				} else {
+					// Original logic for transparent mode
+					involvedDomains := g.extractDomainsFromActions(scenario.Actions)
+					for _, domain := range involvedDomains {
+						service := g.findServiceForDomain(domain)
+						if service != "" {
+							if g.userInteractionMap[domain] == nil {
+								g.userInteractionMap[domain] = make([]string, 0)
+							}
+							if !g.containsString(g.userInteractionMap[domain], service) {
+								g.userInteractionMap[domain] = append(g.userInteractionMap[domain], service)
+							}
 						}
 					}
 				}
@@ -366,6 +372,28 @@ func (g *C4DiagramGenerator) findServiceForDomain(domain string) string {
 		}
 	}
 	return ""
+}
+
+// analyzeDirectlyAccessibleDomains identifies domains that should be directly accessible via gateway
+func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario parser.Scenario) {
+	// Find the first domain that is actually triggered by user action
+	// This is typically the first action in the scenario
+	for _, action := range scenario.Actions {
+		if action.Domain != "" {
+			// Only the first domain encountered should be externally accessible
+			service := g.findServiceForDomain(action.Domain)
+			if service != "" {
+				if g.userInteractionMap[action.Domain] == nil {
+					g.userInteractionMap[action.Domain] = make([]string, 0)
+				}
+				if !g.containsString(g.userInteractionMap[action.Domain], service) {
+					g.userInteractionMap[action.Domain] = append(g.userInteractionMap[action.Domain], service)
+				}
+			}
+			// Only process the first domain, break after that
+			break
+		}
+	}
 }
 
 // Main generation functions

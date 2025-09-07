@@ -55,24 +55,39 @@ func (g *C4DiagramGenerator) createGatewayToServiceRelations() {
 		return
 	}
 
-	// Analyze what each service actually handles from use cases
-	serviceCapabilities := g.analyzeServiceCapabilities()
-
 	for _, gwContainer := range g.gatewaySystem.Containers {
-		for _, serviceName := range g.getServicesWithUserInteractions() {
-			capability := serviceCapabilities[serviceName]
-			serviceContainers := g.getServiceContainers(serviceName)
-
-			for _, serviceContainer := range serviceContainers {
-				if !g.isDatabaseContainer(g.containers[serviceContainer]) {
+		if g.mode == C4ModeBoundaries {
+			// In boundaries mode, connect only to directly accessible domains
+			for domain := range g.userInteractionMap {
+				if domainContainer, exists := g.containers[domain]; exists && !g.isDatabaseContainer(domainContainer) {
 					relation := C4Relation{
 						From:        gwContainer,
-						To:          serviceContainer,
-						Description: fmt.Sprintf("Routes %s requests", capability),
+						To:          domain,
+						Description: fmt.Sprintf("Routes %s requests", domain),
 						Technology:  "HTTP/gRPC",
 						Type:        "uses",
 					}
 					g.relations = append(g.relations, relation)
+				}
+			}
+		} else {
+			// In transparent mode, use original logic (connect to all service containers)
+			serviceCapabilities := g.analyzeServiceCapabilities()
+			for _, serviceName := range g.getServicesWithUserInteractions() {
+				capability := serviceCapabilities[serviceName]
+				serviceContainers := g.getServiceContainers(serviceName)
+
+				for _, serviceContainer := range serviceContainers {
+					if !g.isDatabaseContainer(g.containers[serviceContainer]) {
+						relation := C4Relation{
+							From:        gwContainer,
+							To:          serviceContainer,
+							Description: fmt.Sprintf("Routes %s requests", capability),
+							Technology:  "HTTP/gRPC",
+							Type:        "uses",
+						}
+						g.relations = append(g.relations, relation)
+					}
 				}
 			}
 		}
@@ -194,6 +209,20 @@ func (g *C4DiagramGenerator) handleSyncAction(action parser.Action) {
 
 // createDatabaseRelationships creates relationships from services to databases
 func (g *C4DiagramGenerator) createDatabaseRelationships() {
+	if g.mode == C4ModeBoundaries {
+		// In boundaries mode, we rely on specific database relationships created 
+		// during service relationship analysis (createDatabaseRelationship calls)
+		// These provide meaningful descriptions rather than generic "Database Protocol"
+		// So we skip creating additional generic relationships here
+		return
+	} else {
+		// In transparent mode, connect all service containers to databases
+		g.createServiceLevelDatabaseRelationships()
+	}
+}
+
+// createServiceLevelDatabaseRelationships creates connections for transparent mode
+func (g *C4DiagramGenerator) createServiceLevelDatabaseRelationships() {
 	for _, service := range g.model.Services {
 		serviceContainers := g.getServiceContainers(service.Name)
 		dbContainers := g.getDatabaseContainers(service.Name)
@@ -214,6 +243,7 @@ func (g *C4DiagramGenerator) createDatabaseRelationships() {
 		}
 	}
 }
+
 
 // createDatabaseRelationship creates a specific database relationship
 func (g *C4DiagramGenerator) createDatabaseRelationship(domain, phrase string) {
@@ -240,13 +270,14 @@ func (g *C4DiagramGenerator) createDatabaseRelationship(domain, phrase string) {
 	}
 }
 
-// createEventRelationships creates relationships to event queue
+// createEventRelationships creates relationships to/from event queue
 func (g *C4DiagramGenerator) createEventRelationships() {
 	eventQueue := "Event_Queue"
 	if g.containers[eventQueue] == nil {
 		return
 	}
 
+	// 1. Create relationships from domains that publish events TO the event queue
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
@@ -259,6 +290,29 @@ func (g *C4DiagramGenerator) createEventRelationships() {
 							Description: action.Event,
 							Technology:  "Event Publishing",
 							Type:        "triggers",
+						}
+						g.relations = append(g.relations, relation)
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Create relationships FROM the event queue to domains that listen to events
+	for _, useCase := range g.model.UseCases {
+		for _, scenario := range useCase.Scenarios {
+			if scenario.Trigger.Type == parser.TriggerTypeDomainListen {
+				// Extract the listening domain from the trigger
+				listeningDomain := scenario.Trigger.Domain
+				if listeningDomain != "" {
+					toContainer := g.findDomainContainer(listeningDomain)
+					if toContainer != "" {
+						relation := C4Relation{
+							From:        eventQueue,
+							To:          toContainer,
+							Description: scenario.Trigger.Event,
+							Technology:  "Event Delivery",
+							Type:        "delivers",
 						}
 						g.relations = append(g.relations, relation)
 					}
