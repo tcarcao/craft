@@ -116,6 +116,15 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 case 'selectNone':
                     this.handleSelectNone();
                     break;
+                case 'toggleServiceFocus':
+                    this.handleToggleServiceFocus(data.serviceGroupId, data.serviceId);
+                    break;
+                case 'focusAll':
+                    this.handleFocusAll();
+                    break;
+                case 'focusNone':
+                    this.handleFocusNone();
+                    break;
                 case 'preview':
                     this.handlePreview();
                     break;
@@ -181,6 +190,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
                         const existingService = existingServiceGroup.services.find(s => s.id === service.id);
                         if (existingService) {
                             service.selected = existingService.selected;
+                            service.focused = existingService.focused;
                         }
                     });
                     this._serviceTreeService.updateServiceGroupSelection(serviceGroup);
@@ -316,7 +326,46 @@ export class ServicesViewProvider implements WebviewViewProvider {
             arguments: [blockRanges]
         });
         console.log(partialDsl);
-        commands.executeCommand('archdsl.previewPartialDSL', partialDsl, "C4");
+        
+        // Get focus information
+        const focusedServices = this.getFocusedServices();
+        const focusInfo = {
+            focusedServiceNames: focusedServices.map(s => s.name),
+            hasFocusedServices: focusedServices.length > 0
+        };
+        
+        commands.executeCommand('archdsl.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
+    }
+
+    private handleToggleServiceFocus(serviceGroupId: string, serviceId: string) {
+        const serviceGroup = this._state.serviceGroups.get(serviceGroupId);
+        if (serviceGroup) {
+            const service = serviceGroup.services.find(s => s.id === serviceId);
+            if (service) {
+                service.focused = !service.focused;
+                this.updateWebview();
+            }
+        }
+    }
+
+    private handleFocusAll() {
+        const serviceGroups = Array.from(this._state.serviceGroups.values());
+        serviceGroups.forEach(serviceGroup => {
+            serviceGroup.services.forEach(service => {
+                service.focused = true;
+            });
+        });
+        this.updateWebview();
+    }
+
+    private handleFocusNone() {
+        const serviceGroups = Array.from(this._state.serviceGroups.values());
+        serviceGroups.forEach(serviceGroup => {
+            serviceGroup.services.forEach(service => {
+                service.focused = false;
+            });
+        });
+        this.updateWebview();
     }
 
     private async handleRefresh() {
@@ -400,5 +449,11 @@ export class ServicesViewProvider implements WebviewViewProvider {
             .filter(subDomain => subDomain.selected || subDomain.partiallySelected)
             .flatMap(subDomain => subDomain.useCases)
             .filter(useCase => useCase.selected);
+    }
+
+    private getFocusedServices(): Service[] {
+        return Array.from(this._state.serviceGroups.values())
+            .flatMap(serviceGroup => serviceGroup.services)
+            .filter(service => service.focused);
     }
 }

@@ -120,6 +120,7 @@ export interface Service {
     tags?: string[];
     selected: boolean;
     partiallySelected: boolean;
+    focused: boolean; // New property for C4 focus mode
     expanded: boolean;
     blockRange: BlockRange;
 }

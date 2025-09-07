@@ -2,16 +2,23 @@
 const axios = require('axios');
 import { window, WebviewPanel } from 'vscode';
 
-export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string) {
+export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string, focusInfo?: any) {
     if (!previewPanel) {
         console.log('not there');
         return;
     }
 
     try {
-        const { data } = await axios.post(`http://localhost:8080/preview/${documentType.toLowerCase()}`, {
+        const requestBody: any = {
             DSL: text
-        }, {
+        };
+        
+        // Add focus information if provided
+        if (focusInfo) {
+            requestBody.focusInfo = focusInfo;
+        }
+        
+        const { data } = await axios.post(`http://localhost:8080/preview/${documentType.toLowerCase()}`, requestBody, {
             headers: {
                 'Content-Type': 'application/json'
             }

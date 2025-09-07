@@ -216,9 +216,16 @@ export class ServicesViewHtmlGenerator {
 					<div class="node-info">
 						<div class="node-header">
 							<span class="node-name">${service.name}</span>
-							<span class="use-case-badge ${!isSelectable ? 'empty' : ''}"
-								  title="${!isSelectable ? 'No sub domains' : `${selectedCount} of ${service.subDomains.length} use cases selected`}">
-								  ${!isSelectable ? '0' : `${selectedCount}/${service.subDomains.length}`}</span>
+							<div class="node-actions">
+								<button class="focus-btn ${service.focused ? 'focused' : 'unfocused'}" 
+										onclick="event.stopPropagation(); toggleServiceFocus('${group.name}', '${service.id}')"
+										title="${service.focused ? 'Remove focus (treat as external)' : 'Add focus (include in diagram)'}">
+									${service.focused ? '◉' : '◎'}
+								</button>
+								<span class="use-case-badge ${!isSelectable ? 'empty' : ''}"
+									  title="${!isSelectable ? 'No sub domains' : `${selectedCount} of ${service.subDomains.length} use cases selected`}">
+									  ${!isSelectable ? '0' : `${selectedCount}/${service.subDomains.length}`}</span>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -316,9 +323,16 @@ export class ServicesViewHtmlGenerator {
 	private generateQuickActions(): string {
 		return `
 			<div class="quick-actions">
-				<button class="action-btn" onclick="selectAll()">Select All</button>
-				<button class="action-btn" onclick="selectNone()">Select None</button>
-				<button class="action-btn" onclick="selectByType('api')">APIs Only</button>
+				<div class="action-group">
+					<label>Selection:</label>
+					<button class="action-btn" onclick="selectAll()">Select All</button>
+					<button class="action-btn" onclick="selectNone()">Select None</button>
+				</div>
+				<div class="action-group">
+					<label>Focus (C4):</label>
+					<button class="action-btn" onclick="focusAll()" title="Focus all services (show as internal)">◉ Focus All</button>
+					<button class="action-btn" onclick="focusNone()" title="Unfocus all services (show as external)">◎ Unfocus All</button>
+				</div>
 			</div>
 		`;
 	}
@@ -387,6 +401,18 @@ export class ServicesViewHtmlGenerator {
 			
 			function selectByType(type) {
 				vscode.postMessage({ type: 'selectByType', serviceType: type });
+			}
+			
+			function focusAll() {
+				vscode.postMessage({ type: 'focusAll' });
+			}
+			
+			function focusNone() {
+				vscode.postMessage({ type: 'focusNone' });
+			}
+			
+			function toggleServiceFocus(serviceGroupId, serviceId) {
+				vscode.postMessage({ type: 'toggleServiceFocus', serviceGroupId, serviceId });
 			}
 			
 			function preview() {

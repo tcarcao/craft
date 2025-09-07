@@ -188,7 +188,13 @@ func (s *Server) respondWithError(w http.ResponseWriter, err error, input string
 }
 
 type PreviewRequest struct {
-	DSL string `json:"dsl"`
+	DSL       string     `json:"dsl"`
+	FocusInfo *FocusInfo `json:"focusInfo,omitempty"`
+}
+
+type FocusInfo struct {
+	FocusedServiceNames []string `json:"focusedServiceNames"`
+	HasFocusedServices  bool     `json:"hasFocusedServices"`
 }
 
 type PreviewResponse struct {
@@ -249,8 +255,16 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 			return
 		}
 
-		// Generate C4 diagram
-		diagram, err := s.viz.GenerateC4(arch)
+		fmt.Println(req.FocusInfo)
+
+		// Generate C4 diagram with focus information
+		var diagram []byte
+		if req.FocusInfo != nil && req.FocusInfo.HasFocusedServices {
+			diagram, err = s.viz.GenerateC4WithFocus(arch, req.FocusInfo.FocusedServiceNames)
+		} else {
+			diagram, err = s.viz.GenerateC4(arch)
+		}
+
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
 			return

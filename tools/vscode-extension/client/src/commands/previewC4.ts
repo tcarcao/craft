@@ -38,9 +38,9 @@ export async function handlePreviewSelectedC4() {
     updatePreview(previewPanel, selectedText, "C4");
 }
 
-export async function handlePreviewPartialC4(text: string) {
+export async function handlePreviewPartialC4(text: string, focusInfo?: any) {
     createAndShowPreviewPanel();
-    updatePreview(previewPanel, text, "C4");
+    updatePreview(previewPanel, text, "C4", focusInfo);
 }
 
 function createAndShowPreviewPanel() {

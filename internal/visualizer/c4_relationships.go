@@ -685,22 +685,30 @@ func (g *C4DiagramGenerator) buildSystemBoundary(sb *strings.Builder, systemName
 		return
 	}
 
-	sb.WriteString(fmt.Sprintf("System_Boundary(%s_boundary, \"%s\") {\n",
-		g.sanitizeIdentifier(systemName), systemName))
+	// Use different boundary types for external vs internal systems
+	var boundaryType string
+	if isExternal {
+		boundaryType = "Enterprise_Boundary"  // External systems get enterprise boundary
+	} else {
+		boundaryType = "System_Boundary"      // Internal systems get system boundary
+	}
+
+	sb.WriteString(fmt.Sprintf("%s(%s_boundary, \"%s\") {\n",
+		boundaryType, g.sanitizeIdentifier(systemName), systemName))
 
 	if g.mode == C4ModeBoundaries && g.isServiceSystem(systemName) {
 		// For service systems in boundaries mode, group domains
-		g.buildDomainBoundaries(sb, systemName)
+		g.buildDomainBoundaries(sb, systemName, isExternal)
 	} else {
 		// Standard container listing
-		g.buildStandardContainers(sb, systemName)
+		g.buildStandardContainers(sb, systemName, isExternal)
 	}
 
 	sb.WriteString("}\n\n")
 }
 
 // buildDomainBoundaries creates Container_Boundary for each domain in boundaries mode
-func (g *C4DiagramGenerator) buildDomainBoundaries(sb *strings.Builder, serviceName string) {
+func (g *C4DiagramGenerator) buildDomainBoundaries(sb *strings.Builder, serviceName string, isExternal bool) {
 	service := g.findService(serviceName)
 	if service == nil {
 		return
@@ -735,8 +743,15 @@ func (g *C4DiagramGenerator) buildDomainBoundaries(sb *strings.Builder, serviceN
 		for _, containerName := range containers {
 			container := g.containers[containerName]
 			icon := g.getContainerIcon(containerName, serviceName)
-			sb.WriteString(fmt.Sprintf("        Container(%s, \"%s\", \"%s\", \"%s\"%s)\n",
-				g.sanitizeIdentifier(containerName), containerName,
+			
+			// Use external container type if system is external
+			containerType := "Container"
+			if isExternal {
+				containerType = "Container_Ext"
+			}
+			
+			sb.WriteString(fmt.Sprintf("        %s(%s, \"%s\", \"%s\", \"%s\"%s)\n",
+				containerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description, icon))
 		}
 
@@ -749,15 +764,22 @@ func (g *C4DiagramGenerator) buildDomainBoundaries(sb *strings.Builder, serviceN
 		for _, containerName := range dbContainers {
 			container := g.containers[containerName]
 			icon := g.getDatabaseIcon(container.Technology)
-			sb.WriteString(fmt.Sprintf("    ContainerDb(%s, \"%s\", \"%s\", \"%s\"%s)\n",
-				g.sanitizeIdentifier(containerName), containerName,
+			
+			// Use external database container type if system is external
+			dbContainerType := "ContainerDb"
+			if isExternal {
+				dbContainerType = "ContainerDb_Ext"
+			}
+			
+			sb.WriteString(fmt.Sprintf("    %s(%s, \"%s\", \"%s\", \"%s\"%s)\n",
+				dbContainerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description, icon))
 		}
 	}
 }
 
 // buildStandardContainers builds containers without domain boundaries
-func (g *C4DiagramGenerator) buildStandardContainers(sb *strings.Builder, systemName string) {
+func (g *C4DiagramGenerator) buildStandardContainers(sb *strings.Builder, systemName string, isExternal bool) {
 	system := g.systems[systemName]
 
 	for _, containerName := range system.Containers {
@@ -768,17 +790,29 @@ func (g *C4DiagramGenerator) buildStandardContainers(sb *strings.Builder, system
 
 		if g.isDatabaseContainer(container) {
 			icon := g.getDatabaseIcon(container.Technology)
-			sb.WriteString(fmt.Sprintf("    ContainerDb(%s, \"%s\", \"%s\", \"%s\"%s)\n",
-				g.sanitizeIdentifier(containerName), containerName,
+			dbContainerType := "ContainerDb"
+			if isExternal {
+				dbContainerType = "ContainerDb_Ext"
+			}
+			sb.WriteString(fmt.Sprintf("    %s(%s, \"%s\", \"%s\", \"%s\"%s)\n",
+				dbContainerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description, icon))
 		} else if containerName == "Event_Queue" {
-			sb.WriteString(fmt.Sprintf("    ContainerQueue(%s, \"%s\", \"%s\", \"%s\", $sprite=\"list\")\n",
-				g.sanitizeIdentifier(containerName), containerName,
+			queueContainerType := "ContainerQueue"
+			if isExternal {
+				queueContainerType = "ContainerQueue_Ext"
+			}
+			sb.WriteString(fmt.Sprintf("    %s(%s, \"%s\", \"%s\", \"%s\", $sprite=\"list\")\n",
+				queueContainerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description))
 		} else {
 			icon := g.getContainerIcon(containerName, systemName)
-			sb.WriteString(fmt.Sprintf("    Container(%s, \"%s\", \"%s\", \"%s\"%s)\n",
-				g.sanitizeIdentifier(containerName), containerName,
+			containerType := "Container"
+			if isExternal {
+				containerType = "Container_Ext"
+			}
+			sb.WriteString(fmt.Sprintf("    %s(%s, \"%s\", \"%s\", \"%s\"%s)\n",
+				containerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description, icon))
 		}
 	}

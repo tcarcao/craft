@@ -35,6 +35,17 @@ export function registerPreviewCommands(context: ExtensionContext) {
                     handlePreviewPartialDomains(partialDSL);
                     break;
             }
+        }),
+        commands.registerCommand('archdsl.previewPartialDSLWithFocus', (partialDSL, diagramType, focusInfo) => {
+            switch(diagramType) {
+                case "C4":
+                    handlePreviewPartialC4(partialDSL, focusInfo);
+                    break;
+                case "Domain":
+                default:
+                    handlePreviewPartialDomains(partialDSL);
+                    break;
+            }
         })
     );
 }

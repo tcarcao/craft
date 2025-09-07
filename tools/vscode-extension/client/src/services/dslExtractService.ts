@@ -253,6 +253,7 @@ workspaceResult: ExtractionResult, currentFileResult: ExtractionResult | null, d
                 blockRange: service.blockRange,
                 selected: false,
                 partiallySelected: false,
+                focused: true, // Default to focused (show as internal in C4)
                 expanded: false
             };
 

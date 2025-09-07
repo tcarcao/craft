@@ -2,6 +2,7 @@ package visualizer
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/tcarcao/archdsl/internal/parser"
@@ -27,6 +28,8 @@ type C4DiagramGenerator struct {
 	userInteractionMap map[string][]string
 	presentationSystem *C4System
 	gatewaySystem      *C4System
+	focusedServices    map[string]bool // Services to show as internal
+	hasFocus           bool           // Whether focus mode is enabled
 }
 
 // NewC4DiagramGenerator creates a new redesigned generator
@@ -39,6 +42,28 @@ func NewC4DiagramGenerator(mode C4GenerationMode) *C4DiagramGenerator {
 		actors:             make(map[string]bool),
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
+		focusedServices:    make(map[string]bool),
+		hasFocus:           false,
+	}
+}
+
+// NewC4DiagramGeneratorWithFocus creates a generator with service focus
+func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames []string) *C4DiagramGenerator {
+	focusedServices := make(map[string]bool)
+	for _, serviceName := range focusedServiceNames {
+		focusedServices[serviceName] = true
+	}
+	
+	return &C4DiagramGenerator{
+		mode:               mode,
+		systems:            make(map[string]*C4System),
+		containers:         make(map[string]*C4Container),
+		relations:          make([]C4Relation, 0),
+		actors:             make(map[string]bool),
+		systemRelations:    make([]C4Relation, 0),
+		userInteractionMap: make(map[string][]string),
+		focusedServices:    focusedServices,
+		hasFocus:           len(focusedServiceNames) > 0,
 	}
 }
 
@@ -106,8 +131,25 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 					}
 				}
 
+				// Only add actors that interact with focused services (or all if no focus)
 				if scenario.Trigger.Actor != "" && !strings.HasPrefix(strings.ToUpper(scenario.Trigger.Actor), "CRON") {
-					g.actors[scenario.Trigger.Actor] = true
+					shouldAddActor := !g.hasFocus // No focus - add all actors
+					
+					if g.hasFocus {
+						// Focus mode - only add if actor interacts with focused services
+						involvedDomains := g.extractDomainsFromActions(scenario.Actions)
+						for _, domain := range involvedDomains {
+							service := g.findServiceForDomain(domain)
+							if service != "" && g.focusedServices[service] {
+								shouldAddActor = true
+								break
+							}
+						}
+					}
+					
+					if shouldAddActor {
+						g.actors[scenario.Trigger.Actor] = true
+					}
 				}
 			}
 		}
@@ -117,11 +159,14 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 // createServiceSystems creates separate systems for each service
 func (g *C4DiagramGenerator) createServiceSystems() {
 	for _, service := range g.model.Services {
+		// In focus mode, mark non-focused services as external
+		isExternal := g.hasFocus && !g.focusedServices[service.Name]
+		
 		system := &C4System{
 			Name:        service.Name,
 			Description: fmt.Sprintf("%s Service - Handles business logic", service.Name),
 			Containers:  make([]string, 0),
-			IsExternal:  false,
+			IsExternal:  isExternal,
 		}
 
 		if g.mode == C4ModeBoundaries {
@@ -193,14 +238,36 @@ func (g *C4DiagramGenerator) createDatabaseContainers(service parser.Service, sy
 
 // createInfrastructureSystems creates presentation, gateway, and event systems
 func (g *C4DiagramGenerator) createInfrastructureSystems() {
-	// Only create if there are user interactions and architecture components exist
-	if len(g.userInteractionMap) > 0 && g.hasArchitectureComponents() {
+	// In focus mode, only create infrastructure if focused services have interactions
+	shouldCreateInfrastructure := g.shouldCreateInfrastructure()
+	
+	if shouldCreateInfrastructure && g.hasArchitectureComponents() {
 		g.createPresentationSystem()
 		g.createGatewaySystem()
 	}
 
 	// Create event system if needed
 	g.createEventSystemIfNeeded()
+}
+
+// shouldCreateInfrastructure determines if infrastructure should be created based on focus
+func (g *C4DiagramGenerator) shouldCreateInfrastructure() bool {
+	if !g.hasFocus {
+		// No focus mode - use original logic
+		return len(g.userInteractionMap) > 0
+	}
+	
+	// Focus mode - only create if focused services have user interactions
+	for _, services := range g.userInteractionMap {
+		for _, serviceName := range services {
+			if g.focusedServices[serviceName] {
+				// At least one focused service has user interactions
+				return true
+			}
+		}
+	}
+	
+	return false
 }
 
 // createPresentationSystem creates the presentation system
@@ -265,25 +332,52 @@ func (g *C4DiagramGenerator) createGatewaySystem() {
 
 // createEventSystemIfNeeded creates event system with queue container
 func (g *C4DiagramGenerator) createEventSystemIfNeeded() {
-	// Check if any async actions exist
-	hasAsyncActions := false
+	// Check if any async actions exist in focused services (or all if no focus)
+	hasRelevantAsyncActions := false
+	
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
 				if action.Type == parser.ActionTypeAsync {
-					hasAsyncActions = true
-					break
+					if !g.hasFocus {
+						// No focus mode - include all async actions
+						hasRelevantAsyncActions = true
+						break
+					}
+					
+					// Focus mode - only include if action involves focused services
+					actionService := g.findServiceForDomain(action.Domain)
+					if actionService != "" && g.focusedServices[actionService] {
+						hasRelevantAsyncActions = true
+						break
+					}
+					
+					// Also check target domain
+					if action.TargetDomain != "" {
+						targetService := g.findServiceForDomain(action.TargetDomain)
+						if targetService != "" && g.focusedServices[targetService] {
+							hasRelevantAsyncActions = true
+							break
+						}
+					}
 				}
 			}
+			if hasRelevantAsyncActions {
+				break
+			}
+		}
+		if hasRelevantAsyncActions {
+			break
 		}
 	}
 
-	if hasAsyncActions {
+	if hasRelevantAsyncActions {
+		// Event system is internal if we have relevant async actions (used by focused services)
 		eventSystem := &C4System{
 			Name:        "Event_System",
 			Description: "Event Processing Infrastructure",
 			Containers:  make([]string, 0),
-			IsExternal:  true,
+			IsExternal:  false,
 		}
 
 		// Create queue container
@@ -355,20 +449,13 @@ func (g *C4DiagramGenerator) extractDomainsFromActions(actions []parser.Action) 
 }
 
 func (g *C4DiagramGenerator) containsString(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }
 
 func (g *C4DiagramGenerator) findServiceForDomain(domain string) string {
 	for _, service := range g.model.Services {
-		for _, serviceDomain := range service.Domains {
-			if serviceDomain == domain {
-				return service.Name
-			}
+		if slices.Contains(service.Domains, domain) {
+			return service.Name
 		}
 	}
 	return ""
@@ -404,6 +491,11 @@ func GenerateC4ContextDiagram(model *parser.DSLModel, mode C4GenerationMode) str
 
 func GenerateC4ContainerDiagram(model *parser.DSLModel, mode C4GenerationMode) string {
 	generator := NewC4DiagramGenerator(mode)
+	return generator.GenerateC4Diagram(model, C4Containers)
+}
+
+func GenerateC4ContainerDiagramWithFocus(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string) string {
+	generator := NewC4DiagramGeneratorWithFocus(mode, focusedServiceNames)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 

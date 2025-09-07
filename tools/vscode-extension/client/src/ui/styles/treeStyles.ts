@@ -552,11 +552,26 @@ body {
 /* Quick Actions */
 .quick-actions {
     display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 8px;
     margin-top: 16px;
     padding-top: 12px;
     border-top: 1px solid ${COLORS.border};
+}
+
+.action-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.action-group label {
+    font-size: 10px;
+    color: ${COLORS.description};
+    font-weight: 600;
+    min-width: 60px;
+    text-transform: uppercase;
 }
 
 .action-btn {
@@ -579,6 +594,47 @@ body {
 
 .action-btn:active {
     transform: translateY(0);
+}
+
+/* Focus Button */
+.focus-btn {
+    background: transparent;
+    border: 1px solid ${COLORS.border};
+    color: ${COLORS.foreground};
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 12px;
+    padding: 2px 4px;
+    margin-right: 4px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+}
+
+.focus-btn.focused {
+    background: ${COLORS.blue};
+    border-color: ${COLORS.blue};
+    color: white;
+}
+
+.focus-btn.unfocused {
+    background: transparent;
+    border-color: ${COLORS.description};
+    color: ${COLORS.description};
+}
+
+.focus-btn:hover {
+    transform: scale(1.1);
+    opacity: 0.8;
+}
+
+.node-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 /* Custom Scrollbar */

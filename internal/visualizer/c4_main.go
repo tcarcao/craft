@@ -12,3 +12,10 @@ func (v *Visualizer) GenerateC4(arch *parser.DSLModel) ([]byte, error) {
 	fmt.Println(diagram)
 	return generatePlantUML(diagram)
 }
+
+func (v *Visualizer) GenerateC4WithFocus(arch *parser.DSLModel, focusedServiceNames []string) ([]byte, error) {
+	diagram := GenerateC4ContainerDiagramWithFocus(arch, C4ModeBoundaries, focusedServiceNames)
+
+	fmt.Println(diagram)
+	return generatePlantUML(diagram)
+}
