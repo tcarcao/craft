@@ -65,6 +65,7 @@ export interface SubDomain {
     showReferences: boolean;
     selected: boolean;
     partiallySelected: boolean;
+    focused: boolean; // New property for C4 focus mode
     inCurrentFile: boolean;
     useCases: UseCase[];
     referencedIn: UseCaseReference[];
@@ -144,6 +145,7 @@ export interface ServiceGroup {
 export interface ServiceTreeState {
     serviceGroups: Map<string, ServiceGroup>;
     viewMode: 'current' | 'workspace';
+    boundariesMode: 'transparent' | 'boundaries';
     expandedNodes: Set<string>;
     selectedNodes: Set<string>;
     currentFile?: string;

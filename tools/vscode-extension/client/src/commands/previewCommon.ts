@@ -16,6 +16,11 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
         // Add focus information if provided
         if (focusInfo) {
             requestBody.focusInfo = focusInfo;
+            
+            // Add boundaries mode if provided
+            if (focusInfo.boundariesMode) {
+                requestBody.boundariesMode = focusInfo.boundariesMode;
+            }
         }
         
         const { data } = await axios.post(`http://localhost:8080/preview/${documentType.toLowerCase()}`, requestBody, {

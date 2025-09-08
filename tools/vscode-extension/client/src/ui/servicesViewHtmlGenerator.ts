@@ -29,7 +29,8 @@ export class ServicesViewHtmlGenerator {
 		groups: ServiceGroup[],
 		viewMode: 'current' | 'workspace',
 		selectedCount: { serviceGroups: number, services: number },
-		totalCount: { serviceGroups: number, services: number }
+		totalCount: { serviceGroups: number, services: number },
+		boundariesMode: 'transparent' | 'boundaries' = 'boundaries'
 	): string {
 		// Don't filter here - the provider already filtered for current mode
 		// For workspace mode, we'll show all groups but style non-current-file items in grey
@@ -45,7 +46,7 @@ export class ServicesViewHtmlGenerator {
 			<style>${domainTreeStyles}</style>
 		</head>
 		<body>
-			${this.generateHeader(viewMode, selectedCount, totalCount)}
+			${this.generateHeader(viewMode, selectedCount, totalCount, boundariesMode)}
 			${this.generateTreeContent(visibleServiceGroups, viewMode)}
 			${this.generateQuickActions()}
 			${this.generateScript()}
@@ -56,7 +57,8 @@ export class ServicesViewHtmlGenerator {
 	private generateHeader(
 		viewMode: 'current' | 'workspace',
 		selectedCount: { serviceGroups: number, services: number },
-		totalCount: { serviceGroups: number, services: number }
+		totalCount: { serviceGroups: number, services: number },
+		boundariesMode: 'transparent' | 'boundaries' = 'boundaries'
 	): string {
 		return `
 			<div class="header">
@@ -73,6 +75,15 @@ export class ServicesViewHtmlGenerator {
 					<button class="mode-btn ${viewMode === 'workspace' ? 'active' : ''}" 
 							onclick="setViewMode('workspace')"
 							title="Show services from entire workspace">Workspace</button>
+				</div>
+				
+				<div class="view-mode-toggle">
+					<button class="mode-btn ${boundariesMode === 'transparent' ? 'active' : ''}" 
+							onclick="setBoundariesMode('transparent')"
+							title="Show service-to-service connections (transparent boundaries)">Transparent</button>
+					<button class="mode-btn ${boundariesMode === 'boundaries' ? 'active' : ''}" 
+							onclick="setBoundariesMode('boundaries')"
+							title="Show domain-to-domain connections (domain boundaries)">Boundaries</button>
 				</div>
 				
 				<div class="selection-info">
@@ -289,6 +300,11 @@ export class ServicesViewHtmlGenerator {
 					<div class="node-info">
 						<div class="node-header">
 							<span class="node-name">${subDomain.name}</span>
+							<button class="focus-btn ${subDomain.focused ? 'focused' : 'unfocused'}"
+									onclick="event.stopPropagation(); toggleSubDomainFocus('${groupId}', '${serviceId}', '${subDomain.id}')"
+									title="${subDomain.focused ? 'Click to unfocus (show as external in C4)' : 'Click to focus (show as internal in C4)'}">
+								${subDomain.focused ? '🎯' : '⚪'}
+							</button>
 							<span class="use-case-badge "
 								  title="${isEmpty ? 'No use cases' : `${selectedCount} of ${subDomain.useCases.length} use cases selected`}">
 								  ${isEmpty ? `${subDomain.selected ? '1/1' : '0/1' }` : `${selectedCount}/${subDomain.useCases.length}`}</span>
@@ -395,6 +411,10 @@ export class ServicesViewHtmlGenerator {
 				vscode.postMessage({ type: 'setViewMode', mode });
 			}
 			
+			function setBoundariesMode(mode) {
+				vscode.postMessage({ type: 'setBoundariesMode', mode });
+			}
+			
 			function setGroupBy(groupBy) {
 				vscode.postMessage({ type: 'setGroupBy', groupBy });
 			}
@@ -421,6 +441,10 @@ export class ServicesViewHtmlGenerator {
 			
 			function toggleServiceFocus(serviceGroupId, serviceId) {
 				vscode.postMessage({ type: 'toggleServiceFocus', serviceGroupId, serviceId });
+			}
+
+			function toggleSubDomainFocus(serviceGroupId, serviceId, subDomainId) {
+				vscode.postMessage({ type: 'toggleSubDomainFocus', serviceGroupId, serviceId, subDomainId });
 			}
 			
 			function preview() {

@@ -81,7 +81,7 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 		}
 
 		if generateC4 {
-			diagram, err := s.viz.GenerateC4(arch)
+			diagram, err := s.viz.GenerateC4(arch, "boundaries")
 			if err != nil {
 				log.Printf("Error generating C4 diagram: %v", err)
 			} else {
@@ -188,13 +188,16 @@ func (s *Server) respondWithError(w http.ResponseWriter, err error, input string
 }
 
 type PreviewRequest struct {
-	DSL       string     `json:"dsl"`
-	FocusInfo *FocusInfo `json:"focusInfo,omitempty"`
+	DSL            string     `json:"dsl"`
+	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
+	BoundariesMode string     `json:"boundariesMode,omitempty"`
 }
 
 type FocusInfo struct {
-	FocusedServiceNames []string `json:"focusedServiceNames"`
-	HasFocusedServices  bool     `json:"hasFocusedServices"`
+	FocusedServiceNames    []string `json:"focusedServiceNames"`
+	FocusedSubDomainNames  []string `json:"focusedSubDomainNames"`
+	HasFocusedServices     bool     `json:"hasFocusedServices"`
+	HasFocusedSubDomains   bool     `json:"hasFocusedSubDomains"`
 }
 
 type PreviewResponse struct {
@@ -257,12 +260,18 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 
 		fmt.Println(req.FocusInfo)
 
-		// Generate C4 diagram with focus information
+		// Parse boundaries mode, default to "boundaries" if not provided or invalid
+		boundariesMode := visualizer.C4ModeBoundaries
+		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
+			boundariesMode = visualizer.C4ModeTransparent
+		}
+
+		// Generate C4 diagram with focus information and boundaries mode
 		var diagram []byte
-		if req.FocusInfo != nil && req.FocusInfo.HasFocusedServices {
-			diagram, err = s.viz.GenerateC4WithFocus(arch, req.FocusInfo.FocusedServiceNames)
+		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
+			diagram, err = s.viz.GenerateC4WithFocusAndSubDomains(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode)
 		} else {
-			diagram, err = s.viz.GenerateC4(arch)
+			diagram, err = s.viz.GenerateC4(arch, boundariesMode)
 		}
 
 		if err != nil {

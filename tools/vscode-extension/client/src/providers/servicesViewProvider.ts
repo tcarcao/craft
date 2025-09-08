@@ -2,7 +2,7 @@ import { Uri, WebviewViewProvider, WebviewView, WebviewViewResolveContext, Cance
 import { ServicesViewService } from '../services/servicesViewService';
 import { DslExtractService } from '../services/dslExtractService';
 import { ServicesViewHtmlGenerator } from '../ui/servicesViewHtmlGenerator';
-import { ServiceTreeState, ServiceGroup, Service, UseCase } from '../types/domain';
+import { ServiceTreeState, ServiceGroup, Service, UseCase, SubDomain } from '../types/domain';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ServerCommands } from '../../../shared/lib/types/domain-extraction';
 
@@ -13,6 +13,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
     private _state: ServiceTreeState = {
         serviceGroups: new Map(),
         viewMode: 'current',
+        boundariesMode: 'boundaries',
         expandedNodes: new Set(),
         selectedNodes: new Set(),
         currentFile: undefined,
@@ -110,6 +111,9 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 case 'setViewMode':
                     this.handleSetViewMode(data.mode);
                     break;
+                case 'setBoundariesMode':
+                    this.handleSetBoundariesMode(data.mode);
+                    break;
                 case 'selectAll':
                     this.handleSelectAll();
                     break;
@@ -124,6 +128,9 @@ export class ServicesViewProvider implements WebviewViewProvider {
                     break;
                 case 'focusNone':
                     this.handleFocusNone();
+                    break;
+                case 'toggleSubDomainFocus':
+                    this.handleToggleSubDomainFocus(data.serviceGroupId, data.serviceId, data.subDomainId);
                     break;
                 case 'preview':
                     this.handlePreview();
@@ -192,7 +199,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
                             service.focused = existingService.focused;
                         }
                     });
-                    this._serviceTreeService.updateServiceGroupSelection(serviceGroup);
+                    this._serviceTreeService.updateServiceGroupSelectionForCurrentFile(serviceGroup, this._state.viewMode === 'current');
                 }
 
                 this._state.serviceGroups.set(serviceGroup.name, serviceGroup);
@@ -218,7 +225,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
     private handleToggleServiceGroup(groupId: string) {
         const serviceGroup = this._state.serviceGroups.get(groupId);
         if (serviceGroup) {
-            this._serviceTreeService.toggleServiceGroupSelection(serviceGroup);
+            this._serviceTreeService.toggleServiceGroupSelection(serviceGroup, this._state.viewMode === 'current');
             this.updateWebview();
         }
     }
@@ -226,7 +233,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
     private handleToggleService(serviceGroupId: string, serviceId: string) {
         const serviceGroup = this._state.serviceGroups.get(serviceGroupId);
         if (serviceGroup) {
-            this._serviceTreeService.toggleServiceSelection(serviceGroup, serviceId);
+            this._serviceTreeService.toggleServiceSelection(serviceGroup, serviceId, this._state.viewMode === 'current');
             this.updateWebview();
         }
     }
@@ -237,7 +244,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
             const service = serviceGroup.services.find(s => s.id === serviceId);
 
             if (service) {
-                this._serviceTreeService.toggleSubDomainSelection(serviceGroup, service, subDomainId);
+                this._serviceTreeService.toggleSubDomainSelection(serviceGroup, service, subDomainId, this._state.viewMode === 'current');
                 this.updateWebview();
             }
         }
@@ -252,7 +259,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 const subDomain = service.subDomains.find(sd => sd.id === subDomainId);
 
                 if (subDomain) {
-                    this._serviceTreeService.toggleUseCaseSelection(serviceGroup, subDomain, useCaseId);
+                    this._serviceTreeService.toggleUseCaseSelection(serviceGroup, subDomain, useCaseId, this._state.viewMode === 'current');
                     this.updateWebview();
                 }
             }
@@ -295,6 +302,11 @@ export class ServicesViewProvider implements WebviewViewProvider {
         this.updateWebview();
     }
 
+    private handleSetBoundariesMode(mode: 'transparent' | 'boundaries') {
+        this._state.boundariesMode = mode;
+        this.updateWebview();
+    }
+
     // private handleSetGroupBy(groupBy: 'type' | 'domain') {
     //     this._groupBy = groupBy;
     //     this.updateServiceGroups();
@@ -328,9 +340,13 @@ export class ServicesViewProvider implements WebviewViewProvider {
         
         // Get focus information
         const focusedServices = this.getFocusedServices();
+        const focusedSubDomains = this.getFocusedSubDomains();
         const focusInfo = {
             focusedServiceNames: focusedServices.map(s => s.name),
-            hasFocusedServices: focusedServices.length > 0
+            focusedSubDomainNames: focusedSubDomains.map(sd => sd.name),
+            hasFocusedServices: focusedServices.length > 0,
+            hasFocusedSubDomains: focusedSubDomains.length > 0,
+            boundariesMode: this._state.boundariesMode
         };
         
         commands.executeCommand('archdsl.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
@@ -352,6 +368,10 @@ export class ServicesViewProvider implements WebviewViewProvider {
         serviceGroups.forEach(serviceGroup => {
             serviceGroup.services.forEach(service => {
                 service.focused = true;
+                // Also focus all subdomains
+                service.subDomains.forEach(subDomain => {
+                    subDomain.focused = true;
+                });
             });
         });
         this.updateWebview();
@@ -362,9 +382,27 @@ export class ServicesViewProvider implements WebviewViewProvider {
         serviceGroups.forEach(serviceGroup => {
             serviceGroup.services.forEach(service => {
                 service.focused = false;
+                // Also unfocus all subdomains
+                service.subDomains.forEach(subDomain => {
+                    subDomain.focused = false;
+                });
             });
         });
         this.updateWebview();
+    }
+
+    private handleToggleSubDomainFocus(serviceGroupId: string, serviceId: string, subDomainId: string) {
+        const serviceGroup = this._state.serviceGroups.get(serviceGroupId);
+        if (serviceGroup) {
+            const service = serviceGroup.services.find(s => s.id === serviceId);
+            if (service) {
+                const subDomain = service.subDomains.find(sd => sd.id === subDomainId);
+                if (subDomain) {
+                    subDomain.focused = !subDomain.focused;
+                    this.updateWebview();
+                }
+            }
+        }
     }
 
     private async handleRefresh() {
@@ -401,7 +439,8 @@ export class ServicesViewProvider implements WebviewViewProvider {
             filteredDomains,
             this._state.viewMode,
             selectedCount,
-            totalCount
+            totalCount,
+            this._state.boundariesMode
         );
     }
 
@@ -475,5 +514,12 @@ export class ServicesViewProvider implements WebviewViewProvider {
         return Array.from(this._state.serviceGroups.values())
             .flatMap(serviceGroup => serviceGroup.services)
             .filter(service => service.focused);
+    }
+
+    private getFocusedSubDomains(): SubDomain[] {
+        return Array.from(this._state.serviceGroups.values())
+            .flatMap(serviceGroup => serviceGroup.services)
+            .flatMap(service => service.subDomains)
+            .filter(subDomain => subDomain.focused);
     }
 }

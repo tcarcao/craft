@@ -96,6 +96,7 @@ export class DslExtractService {
                     showReferences: false,
                     selected: false,
                     partiallySelected: false,
+                    focused: true, // Default to focused (show as internal in C4)
                     inCurrentFile: currentFileUriSet.has(subDomainName),
                     useCases: [],
                     selectedUseCases: 0,
