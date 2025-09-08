@@ -29,9 +29,9 @@ export class DomainsViewHtmlGenerator {
         selectedCount: { domains: number, subDomains: number, useCases: number },
         totalCount: { domains: number, subDomains: number, useCases: number }
     ): string {
-        const visibleDomains = viewMode === 'current'
-            ? domains.filter(d => d.inCurrentFile)
-            : domains;
+        // Don't filter here - the provider already filtered for current mode
+        // For workspace mode, we'll show all domains but style non-current-file items in grey
+        const visibleDomains = domains;
 
         return `<!DOCTYPE html>
         <html lang="en">
@@ -43,7 +43,7 @@ export class DomainsViewHtmlGenerator {
         </head>
         <body>
             ${this.generateHeader(viewMode, selectedCount, totalCount)}
-            ${this.generateTreeContent(visibleDomains)}
+            ${this.generateTreeContent(visibleDomains, viewMode)}
             ${this.generateQuickActions()}
             ${this.generateScript()}
         </body>
@@ -93,32 +93,36 @@ export class DomainsViewHtmlGenerator {
         </div>`;
     }
 
-    private generateTreeContent(domains: Domain[]): string {
+    private generateTreeContent(domains: Domain[], viewMode: 'current' | 'workspace' = 'workspace'): string {
         if (domains.length === 0) {
             return `<div class="tree-container">
                 <div class="no-domains">No domains found</div>
             </div>`;
         }
 
-        const treeItems = domains.map(domain => this.generateDomainNode(domain)).join('');
+        const treeItems = domains.map(domain => this.generateDomainNode(domain, viewMode)).join('');
 
         return `<div class="tree-container">${treeItems}</div>`;
     }
 
-    private generateDomainNode(domain: Domain): string {
+    private generateDomainNode(domain: Domain, viewMode: 'current' | 'workspace' = 'workspace'): string {
         const expanderIcon = domain.expanded ? '▼' : '▶';
         const checkboxClass = domain.selected ? 'checked' : (domain.partiallySelected ? 'indeterminate' : '');
         const checkboxSymbol = domain.selected ? '✓' : (domain.partiallySelected ? '▣' : '○');
 
         let subDomainsHtml = '';
         if (domain.expanded) {
+            // Provider already filtered subdomains based on view mode, just render what we received
             subDomainsHtml = domain.subDomains.map(subDomain =>
-                this.generateSubDomainNode(domain.id, subDomain)
+                this.generateSubDomainNode(domain.id, subDomain, viewMode)
             ).join('');
         }
 
+        // In workspace mode, apply grey styling to non-current-file items
+        const greyClass = viewMode === 'workspace' && !domain.inCurrentFile ? 'non-current-file' : '';
+
         return `
-        <div class="tree-node domain-node ${!domain.inCurrentFile ? 'unavailable' : ''}" 
+        <div class="tree-node domain-node ${greyClass}" 
              data-id="${domain.id}"
              role="treeitem" 
              aria-expanded="${domain.expanded}">
@@ -160,7 +164,7 @@ export class DomainsViewHtmlGenerator {
         </div>`;
     }
 
-    private generateSubDomainNode(domainId: string, subDomain: SubDomain): string {
+    private generateSubDomainNode(domainId: string, subDomain: SubDomain, viewMode: 'current' | 'workspace' = 'workspace'): string {
         const expanderIcon = subDomain.expanded ? '▼' : '▶';
         const checkboxClass = subDomain.selected ? 'checked' : (subDomain.partiallySelected ? 'indeterminate' : '');
         const checkboxSymbol = subDomain.selected ? '✓' : (subDomain.partiallySelected ? '▣' : '○');
@@ -215,8 +219,11 @@ export class DomainsViewHtmlGenerator {
             finalCheckboxSymbol = checkboxSymbol;
         }
 
+        // In workspace mode, apply grey styling to non-current-file subdomains
+        const subDomainGreyClass = viewMode === 'workspace' && !subDomain.inCurrentFile ? 'non-current-file' : '';
+
         return `
-        <div class="tree-node subdomain-node ${!isSelectable ? 'empty-subdomain-node' : ''}" 
+        <div class="tree-node subdomain-node ${!isSelectable ? 'empty-subdomain-node' : ''} ${subDomainGreyClass}" 
              data-id="${subDomain.id}"
              role="treeitem"
              aria-expanded="${subDomain.expanded}">

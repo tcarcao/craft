@@ -31,9 +31,9 @@ export class ServicesViewHtmlGenerator {
 		selectedCount: { serviceGroups: number, services: number },
 		totalCount: { serviceGroups: number, services: number }
 	): string {
-		const visibleServiceGroups = viewMode === 'current'
-			? groups.filter(sg => sg.inCurrentFile)
-			: groups;
+		// Don't filter here - the provider already filtered for current mode
+		// For workspace mode, we'll show all groups but style non-current-file items in grey
+		const visibleServiceGroups = groups;
 
 
 		return `<!DOCTYPE html>
@@ -46,7 +46,7 @@ export class ServicesViewHtmlGenerator {
 		</head>
 		<body>
 			${this.generateHeader(viewMode, selectedCount, totalCount)}
-			${this.generateTreeContent(visibleServiceGroups)}
+			${this.generateTreeContent(visibleServiceGroups, viewMode)}
 			${this.generateQuickActions()}
 			${this.generateScript()}
 		</body>
@@ -82,32 +82,35 @@ export class ServicesViewHtmlGenerator {
 		`;
 	}
 
-	private generateTreeContent(serviceGroups: ServiceGroup[]): string {
+	private generateTreeContent(serviceGroups: ServiceGroup[], viewMode: 'current' | 'workspace' = 'workspace'): string {
 		if (serviceGroups.length === 0) {
 			return `<div class="tree-container">
 					<div class="no-services">No services found</div>
 				</div>`;
 		}
 
-		const treeItems = serviceGroups.map(group => this.generateServiceGroup(group)).join('');
+		const treeItems = serviceGroups.map(group => this.generateServiceGroup(group, viewMode)).join('');
 
 		return `<div class="tree-container">${treeItems}</div>`;
 	}
 
-	private generateServiceGroup(group: ServiceGroup): string {
+	private generateServiceGroup(group: ServiceGroup, viewMode: 'current' | 'workspace' = 'workspace'): string {
 		const expanderIcon = group.expanded ? '▼' : '▶';
 		const checkboxClass = group.selected ? 'checked' : (group.partiallySelected ? 'indeterminate' : '');
 		const checkboxSymbol = group.selected ? '✓' : (group.partiallySelected ? '▣' : '○');
 
 		let servicesHtml = '';
 		if (group.expanded) {
-			servicesHtml = group.services.map(service => this.generateServiceNode(group, service)).join('');
+			servicesHtml = group.services.map(service => this.generateServiceNode(group, service, viewMode)).join('');
 		}
 
 		// const selectedCount = group.services.filter(s => s.selected).length;
+		
+		// In workspace mode, apply grey styling to non-current-file items
+		const greyClass = viewMode === 'workspace' && !group.inCurrentFile ? 'non-current-file' : '';
 
 		return `
-        <div class="tree-node domain-node ${!group.inCurrentFile ? 'unavailable' : ''}" 
+        <div class="tree-node domain-node ${greyClass}" 
              data-id="${group.name}"
              role="treeitem" 
              aria-expanded="${group.expanded}">
@@ -143,7 +146,7 @@ export class ServicesViewHtmlGenerator {
         </div>`;
 	}
 
-	private generateServiceNode(group: ServiceGroup, service: Service): string {
+	private generateServiceNode(group: ServiceGroup, service: Service, viewMode: 'current' | 'workspace' = 'workspace'): string {
 		const expanderIcon = service.expanded ? '▼' : '▶';
 		const checkboxClass = service.selected ? 'checked' : (service.partiallySelected ? 'indeterminate' : '');
 		const checkboxSymbol = service.selected ? '✓' : (service.partiallySelected ? '▣' : '○');
@@ -152,11 +155,11 @@ export class ServicesViewHtmlGenerator {
 
 		let contentHtml = '';
 		if (service.expanded) {
-			// Entry Point use cases (where this subdomain is the entry point)
-			if (!isEmpty) {
+			// Provider already filtered subdomains based on view mode, just render what we received
+			if (service.subDomains.length > 0) {
 				contentHtml += `<div class="entry-point-usecases">
 						${service.subDomains.map(subDomain =>
-					this.generateSubDomainNode(group.name, service.id, subDomain)
+					this.generateSubDomainNode(group.name, service.id, subDomain, viewMode)
 				).join('')}
 					</div>`;
 			}
@@ -169,6 +172,8 @@ export class ServicesViewHtmlGenerator {
 		const selectedCount = service.subDomains.filter(sd => sd.selected).length;
 		const clickHandler = isSelectable ? `onclick="toggleService('${group.name}', '${service.id}')"` : '';
 
+		// In workspace mode, apply grey styling to services in non-current-file groups
+		const serviceGreyClass = viewMode === 'workspace' && !group.inCurrentFile ? 'non-current-file' : '';
 
 		const a = `
         <div class="tree-node subdomain-node" 
@@ -195,7 +200,7 @@ export class ServicesViewHtmlGenerator {
         </div>`;
 
 		return `
-			<div class="tree-node subdomain-node ${!isSelectable ? 'empty-subdomain-node' : ''}" 
+			<div class="tree-node subdomain-node ${!isSelectable ? 'empty-subdomain-node' : ''} ${serviceGreyClass}" 
 				 data-id="${service.id}"
 				 role="treeitem"
 				 aria-expanded="${service.expanded}">
@@ -235,7 +240,7 @@ export class ServicesViewHtmlGenerator {
 			</div>`;
 	}
 
-	private generateSubDomainNode(groupId: string, serviceId: string, subDomain: SubDomain): string {
+	private generateSubDomainNode(groupId: string, serviceId: string, subDomain: SubDomain, viewMode: 'current' | 'workspace' = 'workspace'): string {
 		const expanderIcon = subDomain.expanded ? '▼' : '▶';
 		const checkboxClass = subDomain.selected ? 'checked' : (subDomain.partiallySelected ? 'indeterminate' : '');
 		const checkboxSymbol = subDomain.selected ? '✓' : (subDomain.partiallySelected ? '▣' : '○');
@@ -258,9 +263,12 @@ export class ServicesViewHtmlGenerator {
 		}
 
 		const selectedCount = subDomain.useCases.filter(uc => uc.selected).length;
+		
+		// In workspace mode, apply grey styling to non-current-file subdomains
+		const subDomainGreyClass = viewMode === 'workspace' && !subDomain.inCurrentFile ? 'non-current-file' : '';
 
 		return `
-			<div class="tree-node subdomain-node" 
+			<div class="tree-node subdomain-node ${subDomainGreyClass}" 
 				 data-id="${subDomain.id}"
 				 role="treeitem"
 				 aria-expanded="${subDomain.expanded}">

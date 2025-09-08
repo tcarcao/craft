@@ -65,6 +65,7 @@ export interface SubDomain {
     showReferences: boolean;
     selected: boolean;
     partiallySelected: boolean;
+    inCurrentFile: boolean;
     useCases: UseCase[];
     referencedIn: UseCaseReference[];
     selectedUseCases: number;
@@ -121,6 +122,7 @@ export interface Service {
     selected: boolean;
     partiallySelected: boolean;
     focused: boolean; // New property for C4 focus mode
+    inCurrentFile: boolean;
     expanded: boolean;
     blockRange: BlockRange;
 }

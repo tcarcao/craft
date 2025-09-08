@@ -140,6 +140,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         const previousFile = this._state.currentFile;
         
         if (activeEditor && this.isArchDSLDocument(activeEditor.document)) {
+            // We switched to a DSL file - update current file
             this._state.currentFile = activeEditor.document.fileName;
             console.log('Current file updated to:', this._state.currentFile);
             
@@ -150,14 +151,12 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 this.deferredRefresh();
             }
         } else {
-            this._state.currentFile = undefined;
+            // We switched to a non-DSL file or panel (like preview)
+            // Keep the current file state - don't set it to undefined
+            // This maintains the trees showing the last DSL file's content
+            console.log('Switched to non-DSL file/panel, maintaining current file state:', this._state.currentFile);
             
-            // If we lost the current file and we're in current file mode, refresh
-            if (this._isInitialized && 
-                previousFile && 
-                this._state.viewMode === 'current') {
-                this.deferredRefresh();
-            }
+            // Don't refresh or clear the trees when switching to non-DSL files
         }
     }
 
@@ -391,16 +390,37 @@ export class ServicesViewProvider implements WebviewViewProvider {
             ? serviceGroups.filter(d => d.inCurrentFile)
             : serviceGroups;
 
+        // Filter children (services and subdomains) based on current file mode
+        const filteredDomains = this.filterServiceGroupChildren(visibleDomains);
+
         // Calculate selection counts
-        const selectedCount = this.calculateSelectionCounts(visibleDomains);
-        const totalCount = this.calculateTotalCounts(visibleDomains);
+        const selectedCount = this.calculateSelectionCounts(filteredDomains);
+        const totalCount = this.calculateTotalCounts(filteredDomains);
 
         this._view.webview.html = this._htmlGenerator.generateTreeHtml(
-            visibleDomains,
+            filteredDomains,
             this._state.viewMode,
             selectedCount,
             totalCount
         );
+    }
+
+    private filterServiceGroupChildren(serviceGroups: ServiceGroup[]): ServiceGroup[] {
+        if (this._state.viewMode === 'workspace') {
+            // In workspace mode, show all children (HTML generator will apply grey styling)
+            return serviceGroups;
+        }
+
+        // In current mode, filter out children not in current file
+        return serviceGroups.map(group => ({
+            ...group,
+            services: group.services
+                .filter(service => service.inCurrentFile)
+                .map(service => ({
+                    ...service,
+                    subDomains: service.subDomains.filter(subDomain => subDomain.inCurrentFile)
+                }))
+        }));
     }
 
     private calculateSelectionCounts(serviceGroups: ServiceGroup[]) {

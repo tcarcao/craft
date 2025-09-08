@@ -209,6 +209,12 @@ body {
     opacity: 0.5;
 }
 
+/* Grey out non-current-file items in workspace mode */
+.tree-node.non-current-file {
+    opacity: 0.6;
+    color: var(--vscode-descriptionForeground);
+}
+
 .node-content {
     display: flex;
     align-items: center;

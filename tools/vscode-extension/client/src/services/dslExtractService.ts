@@ -36,8 +36,8 @@ export class DslExtractService {
             // Convert the results to Domain structure
             const domains = this.convertToDomainStructure(workspaceResult, currentFileResult);
             const serviceGroups = this.convertToServiceGroups(workspaceResult, currentFileResult, domains);
-            return { domains, serviceGroups };
 
+            return { domains, serviceGroups };
         } catch (error) {
             console.error('Error discovering domains:', error);
             throw error;
@@ -96,6 +96,7 @@ export class DslExtractService {
                     showReferences: false,
                     selected: false,
                     partiallySelected: false,
+                    inCurrentFile: currentFileUriSet.has(subDomainName),
                     useCases: [],
                     selectedUseCases: 0,
                     referencedIn: [],
@@ -254,6 +255,7 @@ workspaceResult: ExtractionResult, currentFileResult: ExtractionResult | null, d
                 selected: false,
                 partiallySelected: false,
                 focused: true, // Default to focused (show as internal in C4)
+                inCurrentFile: currentFileUriSet.has(service.name),
                 expanded: false
             };
 

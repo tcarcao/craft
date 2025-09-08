@@ -133,6 +133,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
         const previousFile = this._state.currentFile;
 
         if (activeEditor && this.isArchDSLDocument(activeEditor.document)) {
+            // We switched to a DSL file - update current file
             this._state.currentFile = activeEditor.document.fileName;
             console.log('Current file updated to:', this._state.currentFile);
 
@@ -143,14 +144,12 @@ export class DomainsViewProvider implements WebviewViewProvider {
                 this.deferredRefresh();
             }
         } else {
-            this._state.currentFile = undefined;
+            // We switched to a non-DSL file or panel (like preview)
+            // Keep the current file state - don't set it to undefined
+            // This maintains the trees showing the last DSL file's content
+            console.log('Switched to non-DSL file/panel, maintaining current file state:', this._state.currentFile);
 
-            // If we lost the current file and we're in current file mode, refresh
-            if (this._isInitialized &&
-                previousFile &&
-                this._state.viewMode === 'current') {
-                this.deferredRefresh();
-            }
+            // Don't refresh or clear the trees when switching to non-DSL files
         }
     }
 
@@ -343,16 +342,32 @@ export class DomainsViewProvider implements WebviewViewProvider {
             ? domains.filter(d => d.inCurrentFile)
             : domains;
 
+        // Filter children (subdomains) based on current file mode
+        const filteredDomains = this.filterDomainChildren(visibleDomains);
+
         // Calculate selection counts
-        const selectedCount = this.calculateSelectionCounts(visibleDomains);
-        const totalCount = this.calculateTotalCounts(visibleDomains);
+        const selectedCount = this.calculateSelectionCounts(filteredDomains);
+        const totalCount = this.calculateTotalCounts(filteredDomains);
 
         this._view.webview.html = this._htmlGenerator.generateTreeHtml(
-            visibleDomains,
+            filteredDomains,
             this._state.viewMode,
             selectedCount,
             totalCount
         );
+    }
+
+    private filterDomainChildren(domains: Domain[]): Domain[] {
+        if (this._state.viewMode === 'workspace') {
+            // In workspace mode, show all children (HTML generator will apply grey styling)
+            return domains;
+        }
+
+        // In current mode, filter out children not in current file
+        return domains.map(domain => ({
+            ...domain,
+            subDomains: domain.subDomains.filter(subDomain => subDomain.inCurrentFile)
+        }));
     }
 
     private calculateSelectionCounts(domains: Domain[]) {
