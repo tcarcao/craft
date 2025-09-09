@@ -19,6 +19,12 @@
       "include": "#use_case"
     },
     {
+      "include": "#domain_definition"
+    },
+    {
+      "include": "#domains_definition"
+    },
+    {
       "include": "#when_external_trigger"
     },
     {
@@ -759,6 +765,98 @@
         {
           "name": "keyword.operator.component-flow.domain-dsl",
           "match": ">"
+        }
+      ]
+    },
+    "domain_definition": {
+      "name": "meta.domain-definition.domain-dsl",
+      "begin": "^\\s*(domain)\\s+([a-zA-Z_][a-zA-Z0-9_.-]*)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.domain.domain-dsl"
+        },
+        "2": {
+          "name": "entity.name.type.domain-name.domain-dsl"
+        },
+        "3": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#subdomain_list"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "domains_definition": {
+      "name": "meta.domains-definition.domain-dsl",
+      "begin": "^\\s*(domains)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.domains.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#domain_block"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "domain_block": {
+      "name": "meta.domain-block.domain-dsl",
+      "begin": "^\\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.type.domain-name.domain-dsl"
+        },
+        "2": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#subdomain_list"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "subdomain_list": {
+      "patterns": [
+        {
+          "name": "entity.name.type.subdomain.domain-dsl",
+          "match": "^\\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\\s*$"
+        },
+        {
+          "include": "#comments"
         }
       ]
     }

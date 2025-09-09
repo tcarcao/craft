@@ -20,10 +20,17 @@ export interface ServiceDefinition {
     blockRange: BlockRange;
 }
 
+export interface DomainDefinition {
+    name: string;
+    subDomains: string[];
+    blockRange: BlockRange;
+}
+
 export interface FileResult {
     domains: string[];
     useCases: UseCaseInfo[];
     serviceDefinitions: ServiceDefinition[];
+    domainDefinitions: DomainDefinition[];
     uri: string;
     fileName: string;
 }
@@ -34,6 +41,7 @@ export interface ExtractionResult {
     domains: string[];
     useCases: UseCaseInfo[];
     serviceDefinitions: ServiceDefinition[];
+    domainDefinitions: DomainDefinition[];
     
     // Individual file results
     fileResults: FileResult[];

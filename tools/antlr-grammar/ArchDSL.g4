@@ -1,7 +1,23 @@
 grammar ArchDSL;
 
-dsl: (arch | services | exposure | use_case)* ;
+dsl: (arch | services | exposure | use_case | domain_def | domains_def)* ;
 
+// Domain hierarchy definitions
+domain_def: 'domain' domain_name '{' NEWLINE* subdomain_list '}' NEWLINE*;
+
+domains_def: 'domains' '{' NEWLINE* domain_block_list '}' NEWLINE*;
+
+domain_block_list: domain_block (NEWLINE+ domain_block)* NEWLINE*;
+
+domain_block: domain_name '{' NEWLINE* subdomain_list '}';
+
+domain_name: IDENTIFIER;
+
+subdomain_list: subdomain (NEWLINE+ subdomain)* NEWLINE*;
+
+subdomain: IDENTIFIER;
+
+// Architecture blocks
 arch: 'arch' arch_name? '{' NEWLINE* arch_sections '}' NEWLINE*;
 
 arch_name: IDENTIFIER;
@@ -32,6 +48,7 @@ modifier: IDENTIFIER (':' IDENTIFIER)?;
 
 simple_component: component_with_modifiers;
 
+// Exposure blocks
 exposure: 'exposure' exposure_name '{' NEWLINE+ exposure_properties '}' NEWLINE*;
 
 exposure_name: IDENTIFIER;
@@ -85,6 +102,7 @@ datastore_list: datastore (',' datastore)* ','?;
 
 datastore: IDENTIFIER;
 
+// Use case blocks
 use_case: 'use_case' string '{' NEWLINE* scenario* '}' NEWLINE*;
 
 scenario: trigger action_block;
@@ -129,8 +147,6 @@ LANGUAGE: 'language';
 DEPLOYMENT: 'deployment';
 
 PERCENTAGE: [0-9]+ '%';
-
-// Removed ambiguous CONNECTOR token - now handled as keywords in parser
 
 IDENTIFIER: [a-zA-Z0-9_][a-zA-Z0-9_.-]*;
 

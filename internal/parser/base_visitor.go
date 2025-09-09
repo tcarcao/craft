@@ -27,6 +27,7 @@ func NewDSLModelBuilder() *DSLModelBuilder {
 			Exposures:     make([]Exposure, 0),
 			Services:      make([]Service, 0),
 			UseCases:      make([]UseCase, 0),
+			Domains:       make([]Domain, 0),
 		},
 		idCounter: 0,
 	}
@@ -54,6 +55,10 @@ func (b *DSLModelBuilder) VisitDsl(ctx *parser.DslContext) interface{} {
 			b.VisitExposure(c)
 		case *parser.Use_caseContext:
 			b.VisitUse_case(c)
+		case *parser.Domain_defContext:
+			b.VisitDomain_def(c)
+		case *parser.Domains_defContext:
+			b.VisitDomains_def(c)
 		}
 	}
 	return nil

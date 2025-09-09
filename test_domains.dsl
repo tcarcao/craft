@@ -1,0 +1,58 @@
+// Test file to verify domain definitions work in VSCode extension
+
+domains {
+    Payment {
+        ProcessPayment
+        ValidateCard
+        RefundPayment
+    }
+    
+    User {
+        CreateAccount
+        UpdateProfile
+        Authentication
+    }
+}
+
+domain Inventory {
+    AddItem
+    RemoveItem
+    UpdateStock
+}
+
+services {
+    PaymentService: {
+        domains: ProcessPayment, ValidateCard
+        data-stores: payment_db
+        language: java
+    },
+    
+    UserService: {
+        domains: CreateAccount, UpdateProfile
+        data-stores: user_db
+        language: golang
+    },
+    
+    // This service domain is not defined in domain definitions above
+    NotificationService: {
+        domains: SendEmail, SendSMS
+        data-stores: notification_db
+        language: nodejs
+    }
+}
+
+use_case "Process User Payment" {
+    when user initiates payment
+        ProcessPayment validates payment details
+        ProcessPayment asks ValidateCard to verify card
+        ProcessPayment notifies "Payment Processed"
+        CreateAccount marks user as verified
+        SendEmail notifies "Payment Confirmation"
+}
+
+use_case "Inventory Management" {
+    when admin adds product
+        AddItem creates new product entry
+        UpdateStock adjusts inventory levels
+        SendSMS notifies "Stock Updated"
+}

@@ -15,15 +15,23 @@ import {
 	Async_actionContext,
 	Internal_actionContext,
 	DomainContext,
-	StringContext
+	StringContext,
+	Domain_defContext,
+	Domains_defContext,
+	Domain_blockContext,
+	Domain_block_listContext,
+	Domain_nameContext,
+	Subdomain_listContext,
+	SubdomainContext
 } from './generated/ArchDSLParser';
-import { ServiceDefinition, UseCaseInfo } from '../../../shared/lib/types/domain-extraction';
+import { ServiceDefinition, UseCaseInfo, DomainDefinition } from '../../../shared/lib/types/domain-extraction';
 
 
 export class DomainVisitor extends ArchDSLVisitor<void> {
 	public domains = new Set<string>();
 	public useCases: UseCaseInfo[] = [];
 	public serviceDefinitions: ServiceDefinition[] = [];
+	public domainDefinitions: DomainDefinition[] = [];
 	
 	// Current use case being processed
 	private currentUseCase: UseCaseInfo | null = null;
@@ -33,6 +41,10 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 	private currentDomainRefList: string[] = [];
 	private currentDatastoreList: string[] = [];
 	private isInDomainList = false;
+	
+	// Current domain definition being processed
+	private currentDomainDefinition: DomainDefinition | null = null;
+	private currentSubDomainList: string[] = [];
 
 	// Visit the root DSL context
 	visitDsl = (ctx: DslContext): void => {
@@ -265,4 +277,137 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 		// Visit children to extract domains
 		this.visitChildren(ctx);
 	};
+
+	// =====================================
+	// Domain Definition Visitors
+	// =====================================
+
+	// Visit single domain definition - "domain domain_name { subdomain_list }"
+	visitDomain_def = (ctx: Domain_defContext): void => {
+		this.currentDomainDefinition = {
+			name: 'Unknown Domain',
+			subDomains: [],
+			blockRange: {
+				startLine: ctx.start?.line || 0,
+				endLine: ctx.stop?.line || 0,
+				fileUri: 'unknown'
+			}
+		};
+		this.currentSubDomainList = [];
+
+		// Visit children to extract domain name and subdomain list
+		this.visitChildren(ctx);
+
+		// Finalize domain definition
+		if (this.currentDomainDefinition) {
+			this.currentDomainDefinition.subDomains = [...this.currentSubDomainList];
+			this.addOrMergeDomainDefinition(this.currentDomainDefinition);
+		}
+
+		// Reset state
+		this.currentDomainDefinition = null;
+		this.currentSubDomainList = [];
+	};
+
+	// Visit multiple domains definition - "domains { domain_block_list }"
+	visitDomains_def = (ctx: Domains_defContext): void => {
+		// Just visit children - individual domain blocks will be handled by visitDomain_block
+		this.visitChildren(ctx);
+	};
+
+	// Visit domain block list
+	visitDomain_block_list = (ctx: Domain_block_listContext): void => {
+		this.visitChildren(ctx);
+	};
+
+	// Visit individual domain block
+	visitDomain_block = (ctx: Domain_blockContext): void => {
+		this.currentDomainDefinition = {
+			name: 'Unknown Domain',
+			subDomains: [],
+			blockRange: {
+				startLine: ctx.start?.line || 0,
+				endLine: ctx.stop?.line || 0,
+				fileUri: 'unknown'
+			}
+		};
+		this.currentSubDomainList = [];
+
+		// Visit children to extract domain name and subdomain list
+		this.visitChildren(ctx);
+
+		// Finalize domain definition
+		if (this.currentDomainDefinition) {
+			this.currentDomainDefinition.subDomains = [...this.currentSubDomainList];
+			this.addOrMergeDomainDefinition(this.currentDomainDefinition);
+		}
+
+		// Reset state
+		this.currentDomainDefinition = null;
+		this.currentSubDomainList = [];
+	};
+
+	// Visit domain name
+	visitDomain_name = (ctx: Domain_nameContext): void => {
+		const domainName = ctx.getText().trim();
+		if (domainName && this.currentDomainDefinition) {
+			this.currentDomainDefinition.name = domainName;
+		}
+	};
+
+	// Visit subdomain list
+	visitSubdomain_list = (ctx: Subdomain_listContext): void => {
+		// Visit children to collect individual subdomains
+		this.visitChildren(ctx);
+	};
+
+	// Visit individual subdomain
+	visitSubdomain = (ctx: SubdomainContext): void => {
+		const subdomainName = ctx.getText().trim();
+		if (subdomainName && this.currentDomainDefinition) {
+			// Add to current subdomain list (duplicates will be handled by addOrMergeDomainDefinition)
+			this.currentSubDomainList.push(subdomainName);
+		}
+	};
+
+	// Helper method to add or merge domain definitions (similar to Go implementation)
+	private addOrMergeDomainDefinition(newDomainDefinition: DomainDefinition): void {
+		// Check if domain definition already exists
+		const existingIndex = this.domainDefinitions.findIndex(def => def.name === newDomainDefinition.name);
+		
+		if (existingIndex !== -1) {
+			// Domain exists, merge subdomains
+			const existing = this.domainDefinitions[existingIndex];
+			const mergedSubDomains = this.mergeSubDomains(existing.subDomains, newDomainDefinition.subDomains);
+			this.domainDefinitions[existingIndex] = {
+				...existing,
+				subDomains: mergedSubDomains
+			};
+		} else {
+			// Domain doesn't exist, add it (but first deduplicate subdomains)
+			const deduplicatedSubDomains = this.deduplicateSubDomains(newDomainDefinition.subDomains);
+			this.domainDefinitions.push({
+				...newDomainDefinition,
+				subDomains: deduplicatedSubDomains
+			});
+		}
+	}
+
+	// Helper method to merge two subdomain arrays, avoiding duplicates
+	private mergeSubDomains(existing: string[], newSubDomains: string[]): string[] {
+		const subDomainSet = new Set<string>();
+		
+		// Add existing subdomains
+		existing.forEach(sub => subDomainSet.add(sub));
+		
+		// Add new subdomains
+		newSubDomains.forEach(sub => subDomainSet.add(sub));
+		
+		return Array.from(subDomainSet);
+	}
+
+	// Helper method to remove duplicate subdomains from an array
+	private deduplicateSubDomains(subDomains: string[]): string[] {
+		return Array.from(new Set(subDomains));
+	}
 }

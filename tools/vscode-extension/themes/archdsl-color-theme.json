@@ -28,11 +28,13 @@
       }
     },
     {
-      "name": "Block Keywords (services, arch, exposure)",
+      "name": "Block Keywords (services, arch, exposure, domain, domains)",
       "scope": [
         "keyword.control.services.domain-dsl",
         "keyword.control.arch.domain-dsl",
-        "keyword.control.exposure.domain-dsl"
+        "keyword.control.exposure.domain-dsl",
+        "keyword.control.domain.domain-dsl",
+        "keyword.control.domains.domain-dsl"
       ],
       "settings": {
         "foreground": "#800080",
@@ -89,6 +91,22 @@
       ],
       "settings": {
         "foreground": "#267f99",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Domain Definition Names",
+      "scope": "entity.name.type.domain-name.domain-dsl",
+      "settings": {
+        "foreground": "#0070C1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Subdomain Names",
+      "scope": "entity.name.type.subdomain.domain-dsl",
+      "settings": {
+        "foreground": "#22863a",
         "fontStyle": "bold"
       }
     },

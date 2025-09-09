@@ -20,6 +20,7 @@ import {
   ExtractionResult,
   ServerCommands,
   ServiceDefinition,
+  DomainDefinition,
   BlockRange
 } from '../../shared/lib/types/domain-extraction';
 import { Parser } from './parser/ArchDSLParser';
@@ -79,6 +80,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       useCases: [],
       fileResults: [],
       serviceDefinitions: [],
+      domainDefinitions: [],
       error: 'No document URI provided'
     };
   }
@@ -92,6 +94,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       useCases: [],
       fileResults: [],
       serviceDefinitions: [],
+      domainDefinitions: [],
       error: 'Document not found'
     };
   }
@@ -106,6 +109,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       useCases: [],
       fileResults: [],
       serviceDefinitions: [],
+      domainDefinitions: [],
       error: error.message
     };
   }
@@ -157,6 +161,7 @@ async function handleExtractAllDomainsFromWorkspace(_args: any[] | undefined, wo
       useCases: [],
       fileResults: [],
       serviceDefinitions: [],
+      domainDefinitions: [],
       error: error.message
     };
   }
@@ -166,6 +171,7 @@ function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult,
   const allDomains = new Set<string>();
   const allUseCases: UseCaseInfo[] = [];
   const allServiceDefinitions: ServiceDefinition[] = [];
+  const allDomainDefinitions: DomainDefinition[] = [];
 
   results.forEach(result => {
     if (result.domains) {
@@ -179,12 +185,32 @@ function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult,
     if (result.serviceDefinitions) {
       result.serviceDefinitions.forEach(sd => allServiceDefinitions.push(sd));
     }
+
+    if (result.domainDefinitions) {
+      result.domainDefinitions.forEach(dd => {
+        // Check if domain already exists and merge if necessary
+        const existingIndex = allDomainDefinitions.findIndex(existing => existing.name === dd.name);
+        if (existingIndex !== -1) {
+          // Merge subdomains
+          const existing = allDomainDefinitions[existingIndex];
+          const mergedSubDomains = Array.from(new Set([...existing.subDomains, ...dd.subDomains]));
+          allDomainDefinitions[existingIndex] = {
+            ...existing,
+            subDomains: mergedSubDomains
+          };
+        } else {
+          // Add new domain definition
+          allDomainDefinitions.push(dd);
+        }
+      });
+    }
   });
 
   return {
     domains: Array.from(allDomains).sort(),
     useCases: allUseCases,
     serviceDefinitions: allServiceDefinitions,
+    domainDefinitions: allDomainDefinitions,
   };
 }
 

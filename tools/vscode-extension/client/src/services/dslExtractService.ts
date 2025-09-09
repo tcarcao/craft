@@ -135,7 +135,29 @@ export class DslExtractService {
         workspaceResult: ExtractionResult,
         subDomainName: string
     ): string {
-        // Check individual file results for domain hierarchy
+        // FIRST PRIORITY: Check domain definitions - this is the new functionality
+        if (workspaceResult.domainDefinitions) {
+            for (const domainDef of workspaceResult.domainDefinitions) {
+                if (domainDef.subDomains.includes(subDomainName)) {
+                    return domainDef.name;
+                }
+            }
+        }
+
+        // Check file-level domain definitions as well
+        if (workspaceResult.fileResults) {
+            for (const fileResult of workspaceResult.fileResults) {
+                if (fileResult.domainDefinitions) {
+                    for (const domainDef of fileResult.domainDefinitions) {
+                        if (domainDef.subDomains.includes(subDomainName)) {
+                            return domainDef.name;
+                        }
+                    }
+                }
+            }
+        }
+
+        // FALLBACK: Check individual file results for domain hierarchy in service definitions
         if (workspaceResult.fileResults) {
             for (const fileResult of workspaceResult.fileResults) {
                 // Check if this sub-domain is defined with a parent in service definitions

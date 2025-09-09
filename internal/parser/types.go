@@ -6,6 +6,7 @@ type DSLModel struct {
 	Exposures     []Exposure     `json:"exposures,omitempty"`
 	Services      []Service      `json:"services,omitempty"`
 	UseCases      []UseCase      `json:"useCases"`
+	Domains       []Domain       `json:"domains,omitempty"`
 }
 
 // Architecture represents an architecture definition
@@ -129,4 +130,10 @@ type Interaction struct {
 	Description string `json:"description"`
 	UseCase     string `json:"useCase"`
 	ScenarioID  string `json:"scenarioId"`
+}
+
+// Domain represents a domain definition with its subdomains
+type Domain struct {
+	Name       string   `json:"name"`
+	SubDomains []string `json:"subDomains"`
 }

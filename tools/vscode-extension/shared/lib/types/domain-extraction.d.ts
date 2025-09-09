@@ -18,10 +18,16 @@ export interface ServiceDefinition {
     language?: string;
     blockRange: BlockRange;
 }
+export interface DomainDefinition {
+    name: string;
+    subDomains: string[];
+    blockRange: BlockRange;
+}
 export interface FileResult {
     domains: string[];
     useCases: UseCaseInfo[];
     serviceDefinitions: ServiceDefinition[];
+    domainDefinitions: DomainDefinition[];
     uri: string;
     fileName: string;
 }
@@ -29,6 +35,7 @@ export interface ExtractionResult {
     domains: string[];
     useCases: UseCaseInfo[];
     serviceDefinitions: ServiceDefinition[];
+    domainDefinitions: DomainDefinition[];
     fileResults: FileResult[];
     error?: string;
 }

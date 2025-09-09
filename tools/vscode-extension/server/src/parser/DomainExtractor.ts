@@ -27,7 +27,8 @@ export class DomainExtractor {
                 domains: [],
                 useCases: [],
                 fileResults: [],
-                serviceDefinitions: []
+                serviceDefinitions: [],
+                domainDefinitions: []
             };
         }
 
@@ -41,6 +42,7 @@ export class DomainExtractor {
 
         visitor.useCases.forEach(useCase => useCase.blockRange.fileUri = fileUri);
         visitor.serviceDefinitions.forEach(sd => sd.blockRange.fileUri = fileUri);
+        visitor.domainDefinitions.forEach(dd => dd.blockRange.fileUri = fileUri);
 
         // Build domain -> use cases mapping
         const domainUseCases: Record<string, string[]> = {};
@@ -57,7 +59,8 @@ export class DomainExtractor {
             domains: Array.from(visitor.domains).sort(),
             useCases: visitor.useCases,
             fileResults: [],
-            serviceDefinitions: visitor.serviceDefinitions
+            serviceDefinitions: visitor.serviceDefinitions,
+            domainDefinitions: visitor.domainDefinitions
         };
 
         return result;
