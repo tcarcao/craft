@@ -255,9 +255,20 @@ workspaceResult: ExtractionResult, currentFileResult: ExtractionResult | null, d
         const serviceDefinitions = workspaceResult.serviceDefinitions;
         const currentFileUriSet = currentFileResult ? new Set(currentFileResult.serviceDefinitions.map(s => s.name) || []) : new Set();
 
-        // Group services by parentDomain
+        // Group services by parentDomain (using domain definitions or explicit parentDomain)
         const groupedServices = serviceDefinitions.reduce((groups, service) => {
-            const parentDomain = service.parentDomain || DomainC.DefaultDomain;
+            // First try explicit parentDomain, then check domain definitions for service domains
+            let parentDomain = service.parentDomain;
+            if (!parentDomain && service.domains && service.domains.length > 0) {
+                // Find parent domain from domain definitions for any of the service's domains
+                for (const serviceDomain of service.domains) {
+                    parentDomain = this.getParentDomainFromResults(workspaceResult, serviceDomain);
+                    if (parentDomain !== DomainC.DefaultDomain) {
+                        break; // Use the first non-Unknown parent domain found
+                    }
+                }
+            }
+            parentDomain = parentDomain || DomainC.DefaultDomain;
             const groupName = parentDomain;
             const domain = domains.find(d => d.name === parentDomain) || DomainC.EmptyDomain;
             const subDomains = domain.subDomains.filter(sd => service.domains.some(otherSd => otherSd === sd.name));

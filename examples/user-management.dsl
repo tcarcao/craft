@@ -12,6 +12,11 @@ exposure default {
     through: APIGateway
 }
 
+domain User {
+    Authentication
+    Profile
+}
+
 services {
     UserService: {
         domains: Authentication, Profile
