@@ -21,6 +21,12 @@ export function extractMinimalSubtree(
   selectedNodes.forEach(node => {
     collectAncestryPath(node, requiredNodes);
   });
+
+  // NEW: Auto-include arch, domains, and exposure blocks when services/domains are selected
+  const architecturalNodes = findArchitecturalNodes(ast);
+  architecturalNodes.forEach(node => {
+    collectAncestryPath(node, requiredNodes);
+  });
   
   // Generate the minimal DSL text
   return generateMinimalDSL(ast, requiredNodes, lines);
@@ -118,6 +124,37 @@ function collectAncestryPath(node: ParserRuleContext, requiredNodes: Set<ParserR
 }
 
 /**
+ * Find architectural nodes (arch, domain definitions, exposure) that should always be included
+ */
+function findArchitecturalNodes(rootNode: ParserRuleContext): ParserRuleContext[] {
+  const architecturalNodes: ParserRuleContext[] = [];
+  
+  function traverse(node: ParseTree): void {
+    if (!node) return;
+    
+    if (node instanceof ParserRuleContext) {
+      const nodeType = node.constructor.name;
+      
+      // Include these node types automatically
+      if (nodeType === 'ArchContext' || 
+          nodeType === 'Domain_defContext' || 
+          nodeType === 'Domains_defContext' || 
+          nodeType === 'ExposureContext') {
+        architecturalNodes.push(node);
+      }
+    }
+    
+    // Continue traversing children
+    for (let i = 0; i < node.getChildCount(); i++) {
+      traverse(node.getChild(i)!);
+    }
+  }
+  
+  traverse(rootNode);
+  return architecturalNodes;
+}
+
+/**
  * Generate minimal DSL text from required nodes
  */
 function generateMinimalDSL(
@@ -156,6 +193,13 @@ function generateMinimalDSL(
         return generateServiceDefinition(node, depth);
       case 'ScenarioContext':
         return generateScenario(node, depth);
+      case 'ArchContext':
+        return generateArch(node, depth);
+      case 'Domain_defContext':
+      case 'Domains_defContext':
+        return generateDomainDefs(node, depth);
+      case 'ExposureContext':
+        return generateExposure(node, depth);
       default:
         return generateGenericNode(node, depth);
     }
@@ -359,6 +403,24 @@ function generateMinimalDSL(
     
     result += '\n';
     return result;
+  }
+
+  function generateArch(node: ParseTree, depth: number): string {
+    // For architecture blocks, include the entire block as-is
+    const archText = getNodeText(node as ParserRuleContext, lines);
+    return archText + '\n\n';
+  }
+
+  function generateDomainDefs(node: ParseTree, depth: number): string {
+    // For domain definitions, include the entire block as-is
+    const domainText = getNodeText(node as ParserRuleContext, lines);
+    return domainText + '\n\n';
+  }
+
+  function generateExposure(node: ParseTree, depth: number): string {
+    // For exposure blocks, include the entire block as-is
+    const exposureText = getNodeText(node as ParserRuleContext, lines);
+    return exposureText + '\n\n';
   }
   
   function generateGenericNode(node: ParseTree, depth: number): string {
