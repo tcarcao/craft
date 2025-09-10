@@ -32,8 +32,10 @@ export class ServicesViewProvider implements WebviewViewProvider {
     ) {
         // Listen for active editor changes
         window.onDidChangeActiveTextEditor(() => {
-            this.updateCurrentFile();
-            this.deferredRefresh();
+            const shouldRefresh = this.updateCurrentFile();
+            if (shouldRefresh) {
+                this.deferredRefresh();
+            }
         });
 
         // Listen for file saves
@@ -142,7 +144,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         });
     }
 
-    private updateCurrentFile() {
+    private updateCurrentFile(): boolean {
         const activeEditor = window.activeTextEditor;
         const previousFile = this._state.currentFile;
         
@@ -151,11 +153,15 @@ export class ServicesViewProvider implements WebviewViewProvider {
             this._state.currentFile = activeEditor.document.fileName;
             console.log('Current file updated to:', this._state.currentFile);
             
-            // If file changed and we're in current file mode, refresh
+            // Only refresh if file actually changed and we're in current file mode
             if (this._isInitialized && 
                 this._state.currentFile !== previousFile && 
                 this._state.viewMode === 'current') {
-                this.deferredRefresh();
+                console.log('File changed from', previousFile, 'to', this._state.currentFile, '- refresh needed');
+                return true; // Refresh needed
+            } else {
+                console.log('No refresh needed - same file or not in current mode');
+                return false; // No refresh needed
             }
         } else {
             // We switched to a non-DSL file or panel (like preview)
@@ -164,6 +170,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
             console.log('Switched to non-DSL file/panel, maintaining current file state:', this._state.currentFile);
             
             // Don't refresh or clear the trees when switching to non-DSL files
+            return false; // No refresh needed
         }
     }
 
