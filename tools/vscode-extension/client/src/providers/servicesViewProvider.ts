@@ -38,6 +38,14 @@ export class ServicesViewProvider implements WebviewViewProvider {
             }
         });
 
+        // Listen for file content changes (real-time)
+        workspace.onDidChangeTextDocument((changeEvent) => {
+            if (this.isArchDSLDocument(changeEvent.document)) {
+                // Only refresh if content is parseable to avoid flickering during invalid intermediate states
+                this.deferredRefreshWithValidation(changeEvent.document);
+            }
+        });
+
         // Listen for file saves
         workspace.onDidSaveTextDocument((document) => {
             if (this.isArchDSLDocument(document)) {
@@ -188,6 +196,37 @@ export class ServicesViewProvider implements WebviewViewProvider {
         // Set new timeout
         this._refreshTimeout = setTimeout(() => {
             this.refreshServices();
+        }, delay);
+    }
+
+    private async deferredRefreshWithValidation(document: TextDocument, delay = 300) {
+        // Clear existing timeout
+        if (this._refreshTimeout) {
+            clearTimeout(this._refreshTimeout);
+        }
+
+        // Set new timeout with validation
+        this._refreshTimeout = setTimeout(async () => {
+            try {
+                // Quick validation check - try to parse the content
+                const content = document.getText();
+                if (content.trim().length === 0) {
+                    return; // Don't refresh on empty content
+                }
+
+                // Attempt to parse the DSL to see if it's valid
+                // We'll use the language server to validate the content
+                await this.languageClient.sendRequest('workspace/executeCommand', {
+                    command: 'archdsl.validateDocument',
+                    arguments: [document.uri.toString()]
+                });
+
+                // If validation succeeds, proceed with refresh
+                this.refreshServices();
+            } catch (error) {
+                // If validation fails, don't refresh to avoid flickering
+                console.log('Skipping refresh due to invalid DSL content during editing');
+            }
         }, delay);
     }
 

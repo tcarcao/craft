@@ -303,7 +303,7 @@ export class ServicesViewHtmlGenerator {
 							<button class="focus-btn ${subDomain.focused ? 'focused' : 'unfocused'}"
 									onclick="event.stopPropagation(); toggleSubDomainFocus('${groupId}', '${serviceId}', '${subDomain.id}')"
 									title="${subDomain.focused ? 'Click to unfocus (show as external in C4)' : 'Click to focus (show as internal in C4)'}">
-								${subDomain.focused ? '🎯' : '⚪'}
+								${subDomain.focused ? '◉' : '◎'}
 							</button>
 							<span class="use-case-badge "
 								  title="${isEmpty ? 'No use cases' : `${selectedCount} of ${subDomain.useCases.length} use cases selected`}">
