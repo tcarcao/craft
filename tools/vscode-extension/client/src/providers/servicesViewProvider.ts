@@ -243,6 +243,14 @@ export class ServicesViewProvider implements WebviewViewProvider {
                         if (existingService) {
                             service.selected = existingService.selected;
                             service.focused = existingService.focused;
+                            
+                            // Preserve subdomain focus states
+                            service.subDomains.forEach(subDomain => {
+                                const existingSubDomain = existingService.subDomains.find(sd => sd.id === subDomain.id);
+                                if (existingSubDomain) {
+                                    subDomain.focused = existingSubDomain.focused;
+                                }
+                            });
                         }
                     });
                     this._serviceTreeService.updateServiceGroupSelectionForCurrentFile(serviceGroup, this._state.viewMode === 'current');
@@ -404,6 +412,12 @@ export class ServicesViewProvider implements WebviewViewProvider {
             const service = serviceGroup.services.find(s => s.id === serviceId);
             if (service) {
                 service.focused = !service.focused;
+                
+                // Cascade focus to all associated subdomains
+                service.subDomains.forEach(subDomain => {
+                    subDomain.focused = service.focused;
+                });
+                
                 this.updateWebview();
             }
         }
@@ -444,11 +458,49 @@ export class ServicesViewProvider implements WebviewViewProvider {
             if (service) {
                 const subDomain = service.subDomains.find(sd => sd.id === subDomainId);
                 if (subDomain) {
-                    subDomain.focused = !subDomain.focused;
+                    const newFocusState = !subDomain.focused;
+                    
+                    // Update focus state for this subdomain in all services that use it
+                    this.updateSubDomainFocusInAllServices(subDomain.name, newFocusState);
+                    
+                    // Update all services' focus state based on their subdomains
+                    this.updateAllServicesFocusBasedOnSubDomains();
+                    
                     this.updateWebview();
                 }
             }
         }
+    }
+
+    private updateServiceFocusBasedOnSubDomains(service: Service) {
+        // If any subdomain is focused, the service should be focused
+        // If no subdomains are focused, the service should be unfocused
+        const hasFocusedSubDomains = service.subDomains.some(subDomain => subDomain.focused);
+        service.focused = hasFocusedSubDomains;
+    }
+
+    private updateSubDomainFocusInAllServices(subDomainName: string, focusState: boolean) {
+        // Update focus state for this subdomain in all services that use it
+        const serviceGroups = Array.from(this._state.serviceGroups.values());
+        serviceGroups.forEach(serviceGroup => {
+            serviceGroup.services.forEach(service => {
+                service.subDomains.forEach(subDomain => {
+                    if (subDomain.name === subDomainName) {
+                        subDomain.focused = focusState;
+                    }
+                });
+            });
+        });
+    }
+
+    private updateAllServicesFocusBasedOnSubDomains() {
+        // Update all services' focus state based on their subdomains
+        const serviceGroups = Array.from(this._state.serviceGroups.values());
+        serviceGroups.forEach(serviceGroup => {
+            serviceGroup.services.forEach(service => {
+                this.updateServiceFocusBasedOnSubDomains(service);
+            });
+        });
     }
 
     private async handleRefresh() {
