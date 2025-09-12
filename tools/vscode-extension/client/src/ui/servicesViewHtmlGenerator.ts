@@ -300,14 +300,16 @@ export class ServicesViewHtmlGenerator {
 					<div class="node-info">
 						<div class="node-header">
 							<span class="node-name">${subDomain.name}</span>
-							<button class="focus-btn ${subDomain.focused ? 'focused' : 'unfocused'}"
-									onclick="event.stopPropagation(); toggleSubDomainFocus('${groupId}', '${serviceId}', '${subDomain.id}')"
-									title="${subDomain.focused ? 'Click to unfocus (show as external in C4)' : 'Click to focus (show as internal in C4)'}">
-								${subDomain.focused ? '◉' : '◎'}
-							</button>
-							<span class="use-case-badge "
-								  title="${isEmpty ? 'No use cases' : `${selectedCount} of ${subDomain.useCases.length} use cases selected`}">
-								  ${isEmpty ? `${subDomain.selected ? '1/1' : '0/1' }` : `${selectedCount}/${subDomain.useCases.length}`}</span>
+							<div class="node-actions">
+								<button class="focus-btn ${subDomain.focused ? 'focused' : 'unfocused'}"
+										onclick="event.stopPropagation(); toggleSubDomainFocus('${groupId}', '${serviceId}', '${subDomain.id}')"
+										title="${subDomain.focused ? 'Click to unfocus (show as external in C4)' : 'Click to focus (show as internal in C4)'}">
+									${subDomain.focused ? '◉' : '◎'}
+								</button>
+								<span class="use-case-badge "
+									  title="${isEmpty ? 'No use cases' : `${selectedCount} of ${subDomain.useCases.length} use cases selected`}">
+									  ${isEmpty ? `${subDomain.selected ? '1/1' : '0/1' }` : `${selectedCount}/${subDomain.useCases.length}`}</span>
+							</div>
 						</div>
 					</div>
 				</div>

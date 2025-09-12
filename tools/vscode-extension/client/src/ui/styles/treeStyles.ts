@@ -371,6 +371,8 @@ body {
     font-weight: 500;
     white-space: nowrap;
     transition: transform 0.1s;
+    min-width: 18px;
+    text-align: center;
 }
 
 .use-case-badge:hover {
@@ -605,35 +607,29 @@ body {
 /* Focus Button */
 .focus-btn {
     background: transparent;
-    border: 1px solid ${COLORS.border};
-    color: ${COLORS.foreground};
+    border: none;
     cursor: pointer;
-    border-radius: 3px;
-    font-size: 12px;
-    padding: 2px 4px;
+    font-size: 14px;
+    padding: 2px;
     margin-right: 4px;
     transition: all 0.2s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 20px;
+    min-width: 18px;
     height: 18px;
 }
 
 .focus-btn.focused {
-    background: ${COLORS.blue};
-    border-color: ${COLORS.blue};
-    color: white;
+    color: ${COLORS.blue};
 }
 
 .focus-btn.unfocused {
-    background: transparent;
-    border-color: ${COLORS.description};
     color: ${COLORS.description};
 }
 
 .focus-btn:hover {
-    transform: scale(1.1);
+    transform: scale(1.15);
     opacity: 0.8;
 }
 

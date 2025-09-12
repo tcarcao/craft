@@ -91,6 +91,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         // Load domains asynchronously
         this.refreshServices().then(() => {
             this._state.isLoading = false;
+            this._isInitialized = true; // Mark as initialized after first load
             this.updateWebview();
         });
 
