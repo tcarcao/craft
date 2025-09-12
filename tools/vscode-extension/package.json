@@ -35,6 +35,25 @@
         "Themes"
     ],
     "contributes": {
+        "configuration": {
+            "title": "Architecture DSL",
+            "properties": {
+                "archdsl.server.url": {
+                    "type": "string",
+                    "default": "http://localhost:8080",
+                    "description": "URL of the ArchDSL server for diagram generation",
+                    "pattern": "^https?:\\/\\/.+",
+                    "patternErrorMessage": "Must be a valid HTTP or HTTPS URL"
+                },
+                "archdsl.server.timeout": {
+                    "type": "number",
+                    "default": 30000,
+                    "minimum": 5000,
+                    "maximum": 120000,
+                    "description": "Timeout for server requests in milliseconds (5-120 seconds)"
+                }
+            }
+        },
         "languages": [
             {
                 "id": "archdsl",
@@ -91,6 +110,11 @@
             {
                 "command": "archdsl.previewDomainsFromSelection",
                 "title": "ArchDSL: Preview Domain Diagram from selection",
+                "category": "ArchDSL"
+            },
+            {
+                "command": "archdsl.openSettings",
+                "title": "ArchDSL: Open Settings",
                 "category": "ArchDSL"
             }
         ],

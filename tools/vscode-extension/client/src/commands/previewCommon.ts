@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const axios = require('axios');
 import { window, WebviewPanel } from 'vscode';
+import { getArchDSLConfig } from '../utils/config';
 
 export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string, focusInfo?: any) {
     if (!previewPanel) {
@@ -9,6 +10,9 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
     }
 
     try {
+        // Get configuration settings
+        const { serverUrl, timeout } = getArchDSLConfig();
+
         const requestBody: any = {
             DSL: text
         };
@@ -23,10 +27,11 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
             }
         }
         
-        const { data } = await axios.post(`http://localhost:8080/preview/${documentType.toLowerCase()}`, requestBody, {
+        const { data } = await axios.post(`${serverUrl}/preview/${documentType.toLowerCase()}`, requestBody, {
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: timeout
         });
 
         const diagram = await data.data;
@@ -63,6 +68,20 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
             </html>`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-        window.showErrorMessage(`Failed to generate preview: ${error.message}`);
+        const { serverUrl } = getArchDSLConfig();
+        
+        let errorMessage = 'Failed to generate preview';
+        
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+            errorMessage = `Cannot connect to ArchDSL server at ${serverUrl}. Please check if the server is running and the URL is correct in settings.`;
+        } else if (error.code === 'ECONNABORTED') {
+            errorMessage = `Request to ArchDSL server timed out. You can increase the timeout in settings or check server performance.`;
+        } else if (error.response) {
+            errorMessage = `Server error (${error.response.status}): ${error.response.data?.message || error.message}`;
+        } else {
+            errorMessage = `${errorMessage}: ${error.message}`;
+        }
+        
+        window.showErrorMessage(errorMessage);
     }
 }

@@ -46,6 +46,9 @@ export function registerPreviewCommands(context: ExtensionContext) {
                     handlePreviewPartialDomains(partialDSL);
                     break;
             }
+        }),
+        commands.registerCommand('archdsl.openSettings', () => {
+            commands.executeCommand('workbench.action.openSettings', 'archdsl.');
         })
     );
 }
