@@ -1,6 +1,6 @@
 grammar ArchDSL;
 
-dsl: (arch | services | exposure | use_case | domain_def | domains_def)* ;
+dsl: (arch | services | service_def | exposure | use_case | domain_def | domains_def)* ;
 
 // Domain hierarchy definitions
 domain_def: 'domain' domain_name '{' NEWLINE* subdomain_list '}' NEWLINE*;
@@ -69,6 +69,9 @@ gateway: IDENTIFIER;
 
 // Enhanced services (keeping existing + adding deployment)
 services: 'services' '{' NEWLINE* service_definition_list? '}' NEWLINE*;
+
+// Single service definition
+service_def: 'service' service_name ':' '{' NEWLINE* service_properties '}' NEWLINE*;
 
 service_definition_list: service_definition (',' NEWLINE* service_definition)* ','? NEWLINE*;
 

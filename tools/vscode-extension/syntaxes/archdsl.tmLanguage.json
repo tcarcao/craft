@@ -13,6 +13,9 @@
       "include": "#services"
     },
     {
+      "include": "#single_service"
+    },
+    {
       "include": "#exposure"
     },
     {
@@ -116,6 +119,38 @@
           "name": "punctuation.separator.colon.domain-dsl"
         },
         "3": {
+          "name": "punctuation.section.braces.begin.domain-dsl"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.domain-dsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#service_properties"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "single_service": {
+      "name": "meta.single-service.domain-dsl",
+      "begin": "^\\s*(service)\\s+([a-zA-Z_][a-zA-Z0-9_-]*|\"[^\"]*\")\\s*(:)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.service.domain-dsl"
+        },
+        "2": {
+          "name": "entity.name.type.service.domain-dsl"
+        },
+        "3": {
+          "name": "punctuation.separator.colon.domain-dsl"
+        },
+        "4": {
           "name": "punctuation.section.braces.begin.domain-dsl"
         }
       },

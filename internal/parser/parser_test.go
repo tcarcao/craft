@@ -1083,6 +1083,120 @@ func TestDSLWithoutServices(t *testing.T) {
 	}
 }
 
+// Test single service definition (service name: { ... })
+func TestParser_SingleServiceDefinition(t *testing.T) {
+	dsl := `service PaymentService: {
+		domains: ProcessPayment, ValidateCard
+		data-stores: payment_db, audit_db
+		language: java
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify we have one service
+	if len(model.Services) != 1 {
+		t.Fatalf("Expected 1 service, got %d", len(model.Services))
+	}
+
+	service := model.Services[0]
+	if service.Name != "PaymentService" {
+		t.Errorf("Expected service name 'PaymentService', got '%s'", service.Name)
+	}
+
+	// Verify domains
+	expectedDomains := []string{"ProcessPayment", "ValidateCard"}
+	if len(service.Domains) != len(expectedDomains) {
+		t.Errorf("Expected %d domains, got %d", len(expectedDomains), len(service.Domains))
+	}
+	for i, expectedDomain := range expectedDomains {
+		if service.Domains[i] != expectedDomain {
+			t.Errorf("Expected domain '%s' at index %d, got '%s'", expectedDomain, i, service.Domains[i])
+		}
+	}
+
+	// Verify data stores
+	expectedDataStores := []string{"payment_db", "audit_db"}
+	if len(service.DataStores) != len(expectedDataStores) {
+		t.Errorf("Expected %d data stores, got %d", len(expectedDataStores), len(service.DataStores))
+	}
+	for i, expectedStore := range expectedDataStores {
+		if service.DataStores[i] != expectedStore {
+			t.Errorf("Expected data store '%s' at index %d, got '%s'", expectedStore, i, service.DataStores[i])
+		}
+	}
+
+	// Verify language
+	if service.Language != "java" {
+		t.Errorf("Expected language 'java', got '%s'", service.Language)
+	}
+}
+
+// Test mixed service definitions (both single service and services block)
+func TestParser_MixedServiceDefinitions(t *testing.T) {
+	dsl := `service PaymentService: {
+		domains: ProcessPayment
+		language: java
+	}
+
+	services {
+		UserService: {
+			domains: CreateAccount, UpdateProfile
+			language: golang
+		},
+		InventoryService: {
+			domains: AddItem, RemoveItem
+			language: nodejs
+		}
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify we have three services total
+	if len(model.Services) != 3 {
+		t.Fatalf("Expected 3 services, got %d", len(model.Services))
+	}
+
+	// Find services by name
+	paymentService := findServiceByName(model.Services, "PaymentService")
+	userService := findServiceByName(model.Services, "UserService")
+	inventoryService := findServiceByName(model.Services, "InventoryService")
+
+	if paymentService == nil {
+		t.Error("PaymentService not found")
+	} else {
+		if paymentService.Language != "java" {
+			t.Errorf("Expected PaymentService language 'java', got '%s'", paymentService.Language)
+		}
+		if len(paymentService.Domains) != 1 || paymentService.Domains[0] != "ProcessPayment" {
+			t.Errorf("Expected PaymentService domains [ProcessPayment], got %v", paymentService.Domains)
+		}
+	}
+
+	if userService == nil {
+		t.Error("UserService not found")
+	} else {
+		if userService.Language != "golang" {
+			t.Errorf("Expected UserService language 'golang', got '%s'", userService.Language)
+		}
+	}
+
+	if inventoryService == nil {
+		t.Error("InventoryService not found")
+	} else {
+		if inventoryService.Language != "nodejs" {
+			t.Errorf("Expected InventoryService language 'nodejs', got '%s'", inventoryService.Language)
+		}
+	}
+}
+
 // Test Architecture Definitions
 func TestParser_BasicArchitectureDefinition(t *testing.T) {
 	dsl := `arch {

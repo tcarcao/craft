@@ -22,6 +22,32 @@ func (b *DSLModelBuilder) VisitServices(ctx *parser.ServicesContext) interface{}
 	return nil
 }
 
+// Visit single service definition (service name: { ... })
+func (b *DSLModelBuilder) VisitService_def(ctx *parser.Service_defContext) interface{} {
+	service := Service{
+		Domains:    make([]string, 0),
+		DataStores: make([]string, 0),
+		Deployment: DeploymentStrategy{
+			Rules: make([]DeploymentRule, 0),
+		},
+	}
+
+	// Extract service name and properties
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		child := ctx.GetChild(i)
+		if serviceName, ok := child.(*parser.Service_nameContext); ok {
+			service.Name = b.extractServiceName(serviceName)
+		} else if serviceProps, ok := child.(*parser.Service_propertiesContext); ok {
+			b.currentService = &service
+			b.VisitService_properties(serviceProps)
+		}
+	}
+
+	b.model.Services = append(b.model.Services, service)
+	b.currentService = nil
+	return nil
+}
+
 // Visit service definition list
 func (b *DSLModelBuilder) VisitService_definition_list(ctx *parser.Service_definition_listContext) interface{} {
 	for i := 0; i < ctx.GetChildCount(); i++ {
