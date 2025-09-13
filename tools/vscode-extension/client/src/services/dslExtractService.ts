@@ -77,7 +77,7 @@ export class DslExtractService {
                 name: parentDomainName,
                 description: `Domain: ${parentDomainName}`,
                 expanded: parentDomainName === DomainC.DefaultDomain, // Auto-expand Unknown
-                selected: false,
+                selected: true,
                 partiallySelected: false,
                 inCurrentFile: subDomainNames.some(name => currentFileUriSet.has(name)),
                 subDomains: [],
@@ -94,7 +94,7 @@ export class DslExtractService {
                     description: `Sub-domain: ${subDomainName}`,
                     expanded: false,
                     showReferences: false,
-                    selected: false,
+                    selected: true,
                     partiallySelected: false,
                     focused: true, // Default to focused (show as internal in C4)
                     inCurrentFile: currentFileUriSet.has(subDomainName),
@@ -191,7 +191,7 @@ export class DslExtractService {
                                 id: DomainC.GenerateUseCaseId(parentDomainName, subDomainName, useCaseInfo.name),
                                 name: useCaseInfo.name,
                                 description: this.generateUseCaseDescription(useCaseInfo, fileResult.fileName),
-                                selected: false,
+                                selected: true,
                                 fileName: fileResult.fileName,
                                 blockRange: useCaseInfo.blockRange,
                                 scenarios: useCaseInfo.scenarios || [],
@@ -286,7 +286,7 @@ workspaceResult: ExtractionResult, currentFileResult: ExtractionResult | null, d
                 // language: service.language,
                 dependencies: [],
                 blockRange: service.blockRange,
-                selected: false,
+                selected: true,
                 partiallySelected: false,
                 focused: true, // Default to focused (show as internal in C4)
                 inCurrentFile: currentFileUriSet.has(service.name),
