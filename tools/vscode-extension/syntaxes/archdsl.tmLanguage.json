@@ -109,16 +109,13 @@
     },
     "service_definition": {
       "name": "meta.service-definition.domain-dsl",
-      "begin": "^\\s*([a-zA-Z_][a-zA-Z0-9_-]*|\"[^\"]*\")\\s*(:)\\s*(\\{)",
+      "begin": "^\\s*([a-zA-Z_][a-zA-Z0-9_-]*|\"[^\"]*\")\\s*(\\{)",
       "end": "\\}",
       "beginCaptures": {
         "1": {
           "name": "entity.name.type.service.domain-dsl"
         },
         "2": {
-          "name": "punctuation.separator.colon.domain-dsl"
-        },
-        "3": {
           "name": "punctuation.section.braces.begin.domain-dsl"
         }
       },
@@ -138,7 +135,7 @@
     },
     "single_service": {
       "name": "meta.single-service.domain-dsl",
-      "begin": "^\\s*(service)\\s+([a-zA-Z_][a-zA-Z0-9_-]*|\"[^\"]*\")\\s*(:)\\s*(\\{)",
+      "begin": "^\\s*(service)\\s+([a-zA-Z_][a-zA-Z0-9_-]*|\"[^\"]*\")\\s*(\\{)",
       "end": "\\}",
       "beginCaptures": {
         "1": {
@@ -148,9 +145,6 @@
           "name": "entity.name.type.service.domain-dsl"
         },
         "3": {
-          "name": "punctuation.separator.colon.domain-dsl"
-        },
-        "4": {
           "name": "punctuation.section.braces.begin.domain-dsl"
         }
       },
