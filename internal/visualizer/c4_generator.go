@@ -30,7 +30,7 @@ type C4DiagramGenerator struct {
 	gatewaySystem      *C4System
 	focusedServices    map[string]bool // Services to show as internal
 	focusedSubDomains  map[string]bool // SubDomains to show as internal
-	hasFocus           bool           // Whether focus mode is enabled
+	hasFocus           bool            // Whether focus mode is enabled
 }
 
 // NewC4DiagramGenerator creates a new redesigned generator
@@ -55,7 +55,7 @@ func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames [
 	for _, serviceName := range focusedServiceNames {
 		focusedServices[serviceName] = true
 	}
-	
+
 	return &C4DiagramGenerator{
 		mode:               mode,
 		systems:            make(map[string]*C4System),
@@ -76,12 +76,12 @@ func NewC4DiagramGeneratorWithFocusAndSubDomains(mode C4GenerationMode, focusedS
 	for _, serviceName := range focusedServiceNames {
 		focusedServices[serviceName] = true
 	}
-	
+
 	focusedSubDomains := make(map[string]bool)
 	for _, subDomainName := range focusedSubDomainNames {
 		focusedSubDomains[subDomainName] = true
 	}
-	
+
 	return &C4DiagramGenerator{
 		mode:               mode,
 		systems:            make(map[string]*C4System),
@@ -163,7 +163,7 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 				// Only add actors that interact with focused services (or all if no focus)
 				if scenario.Trigger.Actor != "" && !strings.HasPrefix(strings.ToUpper(scenario.Trigger.Actor), "CRON") {
 					shouldAddActor := !g.hasFocus // No focus - add all actors
-					
+
 					if g.hasFocus {
 						// Focus mode - only add if actor interacts with focused services
 						involvedDomains := g.extractDomainsFromActions(scenario.Actions)
@@ -175,7 +175,7 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 							}
 						}
 					}
-					
+
 					if shouldAddActor {
 						g.actors[scenario.Trigger.Actor] = true
 					}
@@ -190,7 +190,7 @@ func (g *C4DiagramGenerator) createServiceSystems() {
 	for _, service := range g.model.Services {
 		// In focus mode, mark non-focused services as external
 		isExternal := g.hasFocus && !g.focusedServices[service.Name]
-		
+
 		system := &C4System{
 			Name:        service.Name,
 			Description: fmt.Sprintf("%s Service - Handles business logic", service.Name),
@@ -269,7 +269,7 @@ func (g *C4DiagramGenerator) createDatabaseContainers(service parser.Service, sy
 func (g *C4DiagramGenerator) createInfrastructureSystems() {
 	// In focus mode, only create infrastructure if focused services have interactions
 	shouldCreateInfrastructure := g.shouldCreateInfrastructure()
-	
+
 	if shouldCreateInfrastructure && g.hasArchitectureComponents() {
 		g.createPresentationSystem()
 		g.createGatewaySystem()
@@ -285,7 +285,7 @@ func (g *C4DiagramGenerator) shouldCreateInfrastructure() bool {
 		// No focus mode - use original logic
 		return len(g.userInteractionMap) > 0
 	}
-	
+
 	// Focus mode - only create if focused services have user interactions
 	for _, services := range g.userInteractionMap {
 		for _, serviceName := range services {
@@ -295,7 +295,7 @@ func (g *C4DiagramGenerator) shouldCreateInfrastructure() bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -363,7 +363,7 @@ func (g *C4DiagramGenerator) createGatewaySystem() {
 func (g *C4DiagramGenerator) createEventSystemIfNeeded() {
 	// Check if any async actions exist in focused services (or all if no focus)
 	hasRelevantAsyncActions := false
-	
+
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
@@ -373,14 +373,14 @@ func (g *C4DiagramGenerator) createEventSystemIfNeeded() {
 						hasRelevantAsyncActions = true
 						break
 					}
-					
+
 					// Focus mode - only include if action involves focused services
 					actionService := g.findServiceForDomain(action.Domain)
 					if actionService != "" && g.focusedServices[actionService] {
 						hasRelevantAsyncActions = true
 						break
 					}
-					
+
 					// Also check target domain
 					if action.TargetDomain != "" {
 						targetService := g.findServiceForDomain(action.TargetDomain)
@@ -520,11 +520,6 @@ func GenerateC4ContextDiagram(model *parser.DSLModel, mode C4GenerationMode) str
 
 func GenerateC4ContainerDiagram(model *parser.DSLModel, mode C4GenerationMode) string {
 	generator := NewC4DiagramGenerator(mode)
-	return generator.GenerateC4Diagram(model, C4Containers)
-}
-
-func GenerateC4ContainerDiagramWithFocus(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string) string {
-	generator := NewC4DiagramGeneratorWithFocus(mode, focusedServiceNames)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 
