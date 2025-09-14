@@ -104,7 +104,8 @@ function generateUseCaseId(domainName: string, subDomainName: string, useCaseNam
 }
 
 export interface DomainTreeState {
-    domains: Map<string, Domain>;
+    currentFileDomains: Map<string, Domain>;
+    workspaceDomains: Map<string, Domain>;
     expandedNodes: Set<string>;
     selectedNodes: Set<string>;
     viewMode: 'current' | 'workspace';
@@ -143,7 +144,8 @@ export interface ServiceGroup {
 }
 
 export interface ServiceTreeState {
-    serviceGroups: Map<string, ServiceGroup>;
+    currentFileServiceGroups: Map<string, ServiceGroup>;
+    workspaceServiceGroups: Map<string, ServiceGroup>;
     viewMode: 'current' | 'workspace';
     boundariesMode: 'transparent' | 'boundaries';
     expandedNodes: Set<string>;

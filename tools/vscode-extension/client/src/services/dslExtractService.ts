@@ -9,8 +9,11 @@ import {
     ServiceDefinition
 } from '../../../shared/lib/types/domain-extraction';
 import { Domain, DomainC, DSLDiscoveryOptions, DSLDiscoveryResult, Service, ServiceGroup, SubDomain, UseCase, UseCaseReference } from '../types/domain';
+import { ServicesViewService } from './servicesViewService';
 
 export class DslExtractService {
+    private readonly servicesViewService = new ServicesViewService();
+    
     constructor(private readonly languageClient: LanguageClient) { }
 
     async discoverDSL(options: DSLDiscoveryOptions = {}): Promise<DSLDiscoveryResult> {
@@ -298,13 +301,22 @@ workspaceResult: ExtractionResult, currentFileResult: ExtractionResult | null, d
         }, {} as Record<string, Service[]>);
 
         // Convert grouped services to ServiceGroup array
-        return Object.entries(groupedServices).map(([groupName, services]) => ({
-            name: groupName,
-            services: services,
-            expanded: false,
-            selected: false,
-            partiallySelected: false,
-            inCurrentFile: services.map(s => s.name).some(name => currentFileUriSet.has(name))
-        }));
+        const serviceGroups = Object.entries(groupedServices).map(([groupName, services]) => {
+            return {
+                name: groupName,
+                services: services,
+                expanded: false,
+                selected: false, // Will be calculated properly below
+                partiallySelected: false, // Will be calculated properly below
+                inCurrentFile: services.map(s => s.name).some(name => currentFileUriSet.has(name))
+            };
+        });
+
+        // Calculate proper selection states for all service groups based on their children
+        serviceGroups.forEach(serviceGroup => {
+            this.servicesViewService.updateServiceGroupSelection(serviceGroup);
+        });
+
+        return serviceGroups;
     }
 }

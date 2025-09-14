@@ -115,7 +115,8 @@ export class ServicesViewHtmlGenerator {
 			servicesHtml = group.services.map(service => this.generateServiceNode(group, service, viewMode)).join('');
 		}
 
-		// const selectedCount = group.services.filter(s => s.selected).length;
+		const selectedServices = group.services.filter(s => s.selected).length;
+		const totalServices = group.services.length;
 		
 		// In workspace mode, apply grey styling to non-current-file items
 		const greyClass = viewMode === 'workspace' && !group.inCurrentFile ? 'non-current-file' : '';
@@ -143,7 +144,7 @@ export class ServicesViewHtmlGenerator {
                     <div class="node-header">
                         <span class="node-name">${group.name}</span>
                         <span class="use-case-badge" 
-                              title="TODO: ${0} of ${0} use cases selected">${0}/${0}</span>
+                              title="${selectedServices} of ${totalServices} services selected">${selectedServices}/${totalServices}</span>
                     </div>
                     <div class="node-meta">
                         ${group.services.length} service${group.services.length !== 1 ? 's' : ''}

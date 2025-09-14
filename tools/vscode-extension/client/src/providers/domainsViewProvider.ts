@@ -13,13 +13,26 @@ export class DomainsViewProvider implements WebviewViewProvider {
 
     private _view?: WebviewView;
     private _state: DomainTreeState = {
-        domains: new Map(),
+        currentFileDomains: new Map(),
+        workspaceDomains: new Map(),
         expandedNodes: new Set(),
         selectedNodes: new Set(),
         viewMode: 'current',
         currentFile: undefined,
         isLoading: false
     };
+
+    // Helper method to get the appropriate domain map based on view mode
+    private getDomainsMap(): Map<string, Domain> {
+        return this._state.viewMode === 'current' 
+            ? this._state.currentFileDomains 
+            : this._state.workspaceDomains;
+    }
+
+    // Helper method to get both domain maps for dual updates
+    private getBothDomainMaps(): Map<string, Domain>[] {
+        return [this._state.currentFileDomains, this._state.workspaceDomains];
+    }
 
     private _isInitialized = false;
     private _refreshTimeout?: NodeJS.Timeout;
@@ -222,41 +235,42 @@ export class DomainsViewProvider implements WebviewViewProvider {
             const { domains } = await this._extractService.discoverDSL({ currentFile: this._state.currentFile });
             domains.forEach(domain => this._domainService.updateDomainCounts(domain));
 
-            // Preserve existing expansion and selection states
-            domains.forEach(domain => {
-                const existingDomain = this._state.domains.get(domain.id);
+            // Update both current file and workspace domains with preserved states
+            // Create deep copies to avoid shared references
+            const currentDomains = domains.filter(d => d.inCurrentFile).map(d => this.deepCopyDomain(d));
+            const workspaceDomains = domains.map(d => this.deepCopyDomain(d));
+
+            // Preserve existing expansion and selection states for current file domains
+            currentDomains.forEach(domain => {
+                const existingDomain = this._state.currentFileDomains.get(domain.id);
                 if (existingDomain) {
-                    // Preserve domain expansion state
-                    domain.expanded = existingDomain.expanded;
-
-                    // Preserve subdomain states
-                    domain.subDomains.forEach(subDomain => {
-                        const existingSubDomain = existingDomain.subDomains.find(sd => sd.id === subDomain.id);
-                        if (existingSubDomain) {
-                            subDomain.expanded = existingSubDomain.expanded;
-
-                            // Preserve use case selection states
-                            subDomain.useCases.forEach(useCase => {
-                                const existingUseCase = existingSubDomain.useCases.find(uc => uc.id === useCase.id);
-                                if (existingUseCase) {
-                                    useCase.selected = existingUseCase.selected;
-                                }
-                            });
-                        }
-                    });
-
-                    // Recalculate selection states
-                    this._domainService.updateDomainCounts(domain);
+                    this.preserveDomainStates(domain, existingDomain);
                 }
-
-                this._state.domains.set(domain.id, domain);
+                this._state.currentFileDomains.set(domain.id, domain);
             });
 
-            // Remove domains that no longer exist
-            const currentDomainIds = new Set(domains.map(d => d.id));
-            for (const [domainId] of this._state.domains) {
+            // Preserve existing expansion and selection states for workspace domains
+            workspaceDomains.forEach(domain => {
+                const existingDomain = this._state.workspaceDomains.get(domain.id);
+                if (existingDomain) {
+                    this.preserveDomainStates(domain, existingDomain);
+                }
+                this._state.workspaceDomains.set(domain.id, domain);
+            });
+
+            // Remove domains that no longer exist from current file
+            const currentDomainIds = new Set(currentDomains.map(d => d.id));
+            for (const [domainId] of this._state.currentFileDomains) {
                 if (!currentDomainIds.has(domainId)) {
-                    this._state.domains.delete(domainId);
+                    this._state.currentFileDomains.delete(domainId);
+                }
+            }
+
+            // Remove domains that no longer exist from workspace
+            const workspaceDomainIds = new Set(workspaceDomains.map(d => d.id));
+            for (const [domainId] of this._state.workspaceDomains) {
+                if (!workspaceDomainIds.has(domainId)) {
+                    this._state.workspaceDomains.delete(domainId);
                 }
             }
 
@@ -271,62 +285,109 @@ export class DomainsViewProvider implements WebviewViewProvider {
     }
 
     private async handleToggleDomain(domainId: string) {
-        const domain = this._state.domains.get(domainId);
-        if (domain) {
-            const newSelectedState = !domain.selected && !domain.partiallySelected;
-            this._domainService.toggleDomainSelection(domain, newSelectedState);
-            this.updateWebview();
-        }
+        // Get the target selection state from the current view
+        const currentViewDomain = this.getDomainsMap().get(domainId);
+        if (!currentViewDomain) return;
+        
+        const newSelectedState = !currentViewDomain.selected && !currentViewDomain.partiallySelected;
+        
+        // Determine which subdomains to update based on current view mode
+        const subDomainsToUpdate = this._state.viewMode === 'current' 
+            ? currentViewDomain.subDomains.filter(sd => sd.inCurrentFile) // Only current file subdomains
+            : currentViewDomain.subDomains; // All subdomains in workspace mode
+            
+        // Apply updates to both maps
+        this.updateSelectionInBothMaps(domainId, (domain) => {
+            subDomainsToUpdate.forEach(targetSubDomain => {
+                const subDomain = domain.subDomains.find(sd => sd.id === targetSubDomain.id);
+                if (subDomain) {
+                    subDomain.selected = newSelectedState;
+                    subDomain.useCases.forEach(useCase => useCase.selected = newSelectedState);
+                }
+            });
+        });
+        
+        this.updateWebview();
     }
 
     private async handleToggleSubDomain(domainId: string, subDomainId: string) {
-        const domain = this._state.domains.get(domainId);
-        if (domain) {
+        // Find the subdomain in current view to get target state
+        const currentViewDomain = this.getDomainsMap().get(domainId);
+        const currentViewSubDomain = currentViewDomain?.subDomains.find(sd => sd.id === subDomainId);
+        if (!currentViewSubDomain) return;
+        
+        const newSelectedState = !currentViewSubDomain.selected && !currentViewSubDomain.partiallySelected;
+        
+        // Apply updates to both maps
+        this.updateSelectionInBothMaps(domainId, (domain) => {
             const subDomain = domain.subDomains.find(sd => sd.id === subDomainId);
             if (subDomain) {
-                const newSelectedState = !subDomain.selected && !subDomain.partiallySelected;
-                this._domainService.toggleSubDomainSelection(domain, subDomainId, newSelectedState);
-                this.updateWebview();
+                subDomain.selected = newSelectedState;
+                subDomain.useCases.forEach(useCase => useCase.selected = newSelectedState);
             }
-        }
+        });
+        
+        this.updateWebview();
     }
 
     private async handleToggleUseCase(domainId: string, subDomainId: string, useCaseId: string) {
-        const domain = this._state.domains.get(domainId);
-        if (domain) {
-            this._domainService.toggleUseCaseSelection(domain, subDomainId, useCaseId);
-            this.updateWebview();
-        }
+        // Find the use case in current view to get target state
+        const currentViewDomain = this.getDomainsMap().get(domainId);
+        const currentViewSubDomain = currentViewDomain?.subDomains.find(sd => sd.id === subDomainId);
+        const currentViewUseCase = currentViewSubDomain?.useCases.find(uc => uc.id === useCaseId);
+        if (!currentViewUseCase) return;
+        
+        const newSelectedState = !currentViewUseCase.selected;
+        
+        // Apply updates to both maps
+        this.updateSelectionInBothMaps(domainId, (domain) => {
+            const subDomain = domain.subDomains.find(sd => sd.id === subDomainId);
+            const useCase = subDomain?.useCases.find(uc => uc.id === useCaseId);
+            if (useCase) {
+                useCase.selected = newSelectedState;
+            }
+        });
+        
+        this.updateWebview();
     }
 
     private async handleToggleExpansion(domainId: string) {
-        const domain = this._state.domains.get(domainId);
-        if (domain) {
-            domain.expanded = !domain.expanded;
-            this.updateWebview();
-        }
+        // Update expansion state in both maps to keep them in sync
+        this.getBothDomainMaps().forEach(domainMap => {
+            const domain = domainMap.get(domainId);
+            if (domain) {
+                domain.expanded = !domain.expanded;
+            }
+        });
+        this.updateWebview();
     }
 
     private async handleToggleSubDomainExpansion(domainId: string, subDomainId: string) {
-        const domain = this._state.domains.get(domainId);
-        if (domain) {
-            const subDomain = domain.subDomains.find(sd => sd.id === subDomainId);
-            if (subDomain) {
-                subDomain.expanded = !subDomain.expanded;
-                this.updateWebview();
+        // Update expansion state in both maps to keep them in sync
+        this.getBothDomainMaps().forEach(domainMap => {
+            const domain = domainMap.get(domainId);
+            if (domain) {
+                const subDomain = domain.subDomains.find(sd => sd.id === subDomainId);
+                if (subDomain) {
+                    subDomain.expanded = !subDomain.expanded;
+                }
             }
-        }
+        });
+        this.updateWebview();
     }
 
     private async handleToggleReferences(domainId: string, subDomainId: string) {
-        const domain = this._state.domains.get(domainId);
-        if (domain) {
-            const subDomain = domain.subDomains.find(sd => sd.id === subDomainId);
-            if (subDomain) {
-                subDomain.showReferences = !subDomain.showReferences;
-                this.updateWebview();
+        // Update references state in both maps to keep them in sync
+        this.getBothDomainMaps().forEach(domainMap => {
+            const domain = domainMap.get(domainId);
+            if (domain) {
+                const subDomain = domain.subDomains.find(sd => sd.id === subDomainId);
+                if (subDomain) {
+                    subDomain.showReferences = !subDomain.showReferences;
+                }
             }
-        }
+        });
+        this.updateWebview();
     }
 
     private async handleSetViewMode(mode: 'current' | 'workspace') {
@@ -335,21 +396,32 @@ export class DomainsViewProvider implements WebviewViewProvider {
     }
 
     private async handleSelectAll() {
-        const domains = Array.from(this._state.domains.values());
+        const domains = Array.from(this.getDomainsMap().values());
         this._domainService.selectAll(domains, this._state.viewMode === 'current');
         this.updateWebview();
     }
 
     private async handleSelectNone() {
-        const domains = Array.from(this._state.domains.values());
-        this._domainService.selectNone(domains);
+        // Update selection in both maps to keep them in sync
+        this.getBothDomainMaps().forEach(domainMap => {
+            const domains = Array.from(domainMap.values());
+            this._domainService.selectNone(domains);
+        });
         this.updateWebview();
     }
 
     private async handleSelectCurrentFileOnly() {
-        const domains = Array.from(this._state.domains.values());
-        this._domainService.selectNone(domains);
-        this._domainService.selectAll(domains.filter(d => d.inCurrentFile), false);
+        // Clear all selections in both maps first
+        this.getBothDomainMaps().forEach(domainMap => {
+            const domains = Array.from(domainMap.values());
+            this._domainService.selectNone(domains);
+        });
+        
+        // Then select only current file domains in both maps
+        this.getBothDomainMaps().forEach(domainMap => {
+            const domains = Array.from(domainMap.values());
+            this._domainService.selectAll(domains.filter(d => d.inCurrentFile), false);
+        });
         this.updateWebview();
     }
 
@@ -384,7 +456,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
             return;
         }
 
-        const domains = Array.from(this._state.domains.values());
+        const domains = Array.from(this.getDomainsMap().values());
         const visibleDomains = this._state.viewMode === 'current'
             ? domains.filter(d => d.inCurrentFile)
             : domains;
@@ -453,10 +525,68 @@ export class DomainsViewProvider implements WebviewViewProvider {
     }
 
     private getSelectedUseCases(): UseCase[] {
-        return Array.from(this._state.domains.values())
+        return Array.from(this.getDomainsMap().values())
             .filter(domain => domain.selected || domain.partiallySelected)
             .flatMap(domain => domain.subDomains)
             .flatMap(subDomain => subDomain.useCases)
             .filter(useCase => useCase.selected);
+    }
+
+    // Helper method to preserve domain states
+    private preserveDomainStates(domain: Domain, existingDomain: Domain) {
+        // Preserve domain expansion state
+        domain.expanded = existingDomain.expanded;
+
+        // Preserve subdomain states
+        domain.subDomains.forEach(subDomain => {
+            const existingSubDomain = existingDomain.subDomains.find(sd => sd.id === subDomain.id);
+            if (existingSubDomain) {
+                subDomain.expanded = existingSubDomain.expanded;
+                subDomain.showReferences = existingSubDomain.showReferences;
+
+                // Preserve use case selection states
+                subDomain.useCases.forEach(useCase => {
+                    const existingUseCase = existingSubDomain.useCases.find(uc => uc.id === useCase.id);
+                    if (existingUseCase) {
+                        useCase.selected = existingUseCase.selected;
+                    }
+                });
+            }
+        });
+
+        // Recalculate selection states
+        this._domainService.updateDomainCounts(domain);
+    }
+
+    // Generic helper method for selection updates
+    private updateSelectionInBothMaps(
+        domainId: string,
+        updateFn: (domain: Domain) => void
+    ) {
+        // 1) Update in current file map
+        const currentFileDomain = this._state.currentFileDomains.get(domainId);
+        if (currentFileDomain) {
+            updateFn(currentFileDomain);
+            this._domainService.updateDomainCounts(currentFileDomain);
+        }
+        
+        // 2) Update in workspace map  
+        const workspaceDomain = this._state.workspaceDomains.get(domainId);
+        if (workspaceDomain) {
+            updateFn(workspaceDomain);
+            this._domainService.updateDomainCounts(workspaceDomain);
+        }
+    }
+
+    // Helper method to create deep copies of domains to avoid shared references
+    private deepCopyDomain(domain: Domain): Domain {
+        return {
+            ...domain,
+            subDomains: domain.subDomains.map(subDomain => ({
+                ...subDomain,
+                useCases: subDomain.useCases.map(useCase => ({ ...useCase })),
+                referencedIn: subDomain.referencedIn.map(ref => ({ ...ref }))
+            }))
+        };
     }
 }
