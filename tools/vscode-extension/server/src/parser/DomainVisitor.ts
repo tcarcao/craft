@@ -2,8 +2,10 @@
 import { ArchDSLVisitor } from './generated/ArchDSLVisitor';
 import { 
 	DslContext, 
-	ServicesContext, 
-	Service_definitionContext, 
+	Services_defContext, 
+	Service_blockContext, 
+	Service_block_listContext,
+	Service_defContext,
 	Use_caseContext,
 	Domain_listContext,
 	Domain_refContext,
@@ -52,13 +54,17 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 	};
 
 	// Visit services section
-	visitServices = (ctx: ServicesContext): void => {
+	visitServices_def = (ctx: Services_defContext): void => {
 		this.visitChildren(ctx);
 	};
 
-	// Visit individual service definition
-	visitService_definition = (ctx: Service_definitionContext): void => {
-		
+	// Visit service block list
+	visitService_block_list = (ctx: Service_block_listContext): void => {
+		this.visitChildren(ctx);
+	};
+
+	// Visit individual service block
+	visitService_block = (ctx: Service_blockContext): void => {
 		const serviceDefinition: ServiceDefinition = {
 			name: 'Unknown Service',
 			domains: [],
@@ -76,6 +82,27 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 		// Visit children to collect service data
 		this.visitChildren(ctx);
 	};
+
+	// Visit single service definition
+	visitService_def = (ctx: Service_defContext): void => {
+		const serviceDefinition: ServiceDefinition = {
+			name: 'Unknown Service',
+			domains: [],
+			dataStores: [],
+			language: undefined,
+			parentDomain: undefined,
+			blockRange: {
+				startLine: ctx.start?.line || 0,
+				endLine: ctx.stop?.line || 0,
+				fileUri: 'unknown'
+			}
+		};
+		this.serviceDefinitions.push(serviceDefinition);
+
+		// Visit children to collect service data
+		this.visitChildren(ctx);
+	};
+
 
 	// Visit service name
 	visitService_name = (ctx: Service_nameContext): void => {

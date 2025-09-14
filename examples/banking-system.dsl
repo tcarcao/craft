@@ -1,15 +1,15 @@
 services {
-  AccountService: {
+  AccountService {
     domains: AccountManagement, BalanceTracking
     data-stores: account_db, transaction_log
     language: java
-  },
-  PaymentService: {
+  }
+  PaymentService {
     domains: PaymentProcessing, TransactionValidation
     data-stores: payment_db, fraud_detection_cache
     language: golang
-  },
-  NotificationService: {
+  }
+  NotificationService {
     domains: CustomerNotification
     data-stores: notification_queue
     language: python

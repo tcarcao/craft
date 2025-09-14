@@ -755,7 +755,7 @@ func BenchmarkParser_ComplexCase(b *testing.B) {
 
 func TestSimpleServiceParsing(t *testing.T) {
 	dslContent := `services {
-  TestService: {
+  TestService {
     domains: TestDomain
   }
 }`
@@ -797,23 +797,23 @@ func TestSimpleServiceParsing(t *testing.T) {
 func TestServiceNameParsing(t *testing.T) {
 	// Test DSL with all supported service name formats
 	dslContent := `services {
-  WalletService: {
+  WalletService {
     domains: Wallet, WalletItemPurchase
     data-stores: wallet_db
-  },
-  "Order Service": {
+  }
+  "Order Service" {
     domains: OrderManagement
     data-stores: order_db
-  },
-  service-re-go-vas: {
+  }
+  service-re-go-vas {
     domains: VASScheduling, VASProcessing
     data-stores: vas_db, vas_cache
-  },
-  "complex-service name": {
+  }
+  "complex-service name" {
     domains: ComplexDomain
     data-stores: complex_db
-  },
-  simple_underscore_service: {
+  }
+  simple_underscore_service {
     domains: UnderscoreDomain
     data-stores: underscore_db
   }
@@ -936,7 +936,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 		{
 			name: "Service with hyphens and numbers",
 			dslContent: `services {
-  service-123-test: {
+  service-123-test {
     domains: TestDomain,
     data-stores: test_db
   }
@@ -947,7 +947,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 		{
 			name: "Service with underscores",
 			dslContent: `services {
-  service_test_123: {
+  service_test_123 {
     domains: TestDomain,
     data-stores: test_db
   }
@@ -958,7 +958,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 		{
 			name: "Quoted service with special characters",
 			dslContent: `services {
-  "Service with spaces & symbols": {
+  "Service with spaces & symbols" {
     domains: TestDomain,
     data-stores: test_db
   }
@@ -969,7 +969,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 		{
 			name: "Single character service name",
 			dslContent: `services {
-  A: {
+  A {
     domains: TestDomain,
     data-stores: test_db
   }
@@ -1007,7 +1007,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 
 func TestServiceLanguageParsing(t *testing.T) {
 	dslContent := `services {
-  TestService: {
+  TestService {
     domains: TestDomain
 	language: golang
   }
@@ -1085,7 +1085,7 @@ func TestDSLWithoutServices(t *testing.T) {
 
 // Test single service definition (service name: { ... })
 func TestParser_SingleServiceDefinition(t *testing.T) {
-	dsl := `service PaymentService: {
+	dsl := `service PaymentService {
 		domains: ProcessPayment, ValidateCard
 		data-stores: payment_db, audit_db
 		language: java
@@ -1137,17 +1137,17 @@ func TestParser_SingleServiceDefinition(t *testing.T) {
 
 // Test mixed service definitions (both single service and services block)
 func TestParser_MixedServiceDefinitions(t *testing.T) {
-	dsl := `service PaymentService: {
+	dsl := `service PaymentService {
 		domains: ProcessPayment
 		language: java
 	}
 
 	services {
-		UserService: {
+		UserService {
 			domains: CreateAccount, UpdateProfile
 			language: golang
-		},
-		InventoryService: {
+		}
+		InventoryService {
 			domains: AddItem, RemoveItem
 			language: nodejs
 		}
@@ -1558,7 +1558,7 @@ func TestParser_PartialExposureDefinition(t *testing.T) {
 // Test Enhanced Services with Deployment
 func TestParser_ServiceWithCanaryDeployment(t *testing.T) {
 	dsl := `services {
-		PaymentService: {
+		PaymentService {
 			domains: Payment, Billing
 			data-stores: payment_db, audit_log
 			language: golang
@@ -1614,7 +1614,7 @@ func TestParser_ServiceWithCanaryDeployment(t *testing.T) {
 
 func TestParser_ServiceWithBlueGreenDeployment(t *testing.T) {
 	dsl := `services {
-		OrderService: {
+		OrderService {
 			domains: Order, Inventory
 			deployment: blue_green
 		}
@@ -1639,7 +1639,7 @@ func TestParser_ServiceWithBlueGreenDeployment(t *testing.T) {
 
 func TestParser_ServiceWithRollingDeployment(t *testing.T) {
 	dsl := `services {
-		UserService: {
+		UserService {
 			domains: User, Profile
 			deployment: rolling(25% -> batch1, 25% -> batch2, 25% -> batch3, 25% -> batch4)
 		}
@@ -1689,13 +1689,13 @@ func TestParser_ComplexMixedDSL(t *testing.T) {
 	}
 
 	services {
-		UserService: {
+		UserService {
 			domains: User, Profile
 			data-stores: user_db
 			language: golang
 			deployment: canary(20% -> staging, 80% -> production)
-		},
-		OrderService: {
+		}
+		OrderService {
 			domains: Order, Payment
 			data-stores: order_db, payment_db
 			language: java
@@ -1797,7 +1797,7 @@ func TestParser_InvalidArchitecture(t *testing.T) {
 		{
 			name: "Invalid deployment strategy",
 			dsl: `services {
-				TestService: {
+				TestService {
 					domains: Test
 					deployment: invalid_strategy
 				}
@@ -1806,7 +1806,7 @@ func TestParser_InvalidArchitecture(t *testing.T) {
 		{
 			name: "Malformed deployment config",
 			dsl: `services {
-				TestService: {
+				TestService {
 					domains: Test
 					deployment: canary(invalid config)
 				}
@@ -1815,7 +1815,7 @@ func TestParser_InvalidArchitecture(t *testing.T) {
 		{
 			name: "Invalid percentage in deployment",
 			dsl: `services {
-				TestService: {
+				TestService {
 					domains: Test
 					deployment: canary(invalid% -> target)
 				}
@@ -2007,7 +2007,7 @@ func BenchmarkParser_ExposureDefinition(b *testing.B) {
 
 func BenchmarkParser_ServiceWithDeployment(b *testing.B) {
 	dsl := `services {
-		BenchmarkService: {
+		BenchmarkService {
 			domains: Domain1, Domain2, Domain3
 			data-stores: db1, db2, cache1, cache2
 			language: golang
@@ -2041,7 +2041,7 @@ func BenchmarkParser_ComplexMixedDSL(b *testing.B) {
 	}
 
 	services {
-		UserService: {
+		UserService {
 			domains: User, Profile, Authentication
 			data-stores: user_db, profile_cache
 			language: golang
@@ -2204,15 +2204,15 @@ func TestParser_ComplexComponentChains(t *testing.T) {
 
 func TestParser_DeploymentEdgeCases(t *testing.T) {
 	dsl := `services {
-		Service1: {
+		Service1 {
 			domains: Domain1
 			deployment: canary(100% -> production)
-		},
-		Service2: {
+		}
+		Service2 {
 			domains: Domain2
 			deployment: rolling(50% -> half1, 50% -> half2)
-		},
-		Service3: {
+		}
+		Service3 {
 			domains: Domain3
 			deployment: blue_green
 		}
@@ -2409,7 +2409,7 @@ func TestParser_OrderIndependence(t *testing.T) {
 	}
 
 	services {
-		AuthService: {
+		AuthService {
 			domains: Auth, User
 			deployment: blue_green
 		}
@@ -2711,11 +2711,11 @@ func TestParser_DomainsWithServices(t *testing.T) {
 	}
 
 	services {
-		UserService: {
+		UserService {
 			domains: User, Product
 			data-stores: user_db
-		},
-		AnalyticsService: {
+		}
+		AnalyticsService {
 			domains: Reporting, Metrics
 			data-stores: analytics_db, metrics_cache
 			language: python
@@ -2789,13 +2789,13 @@ func TestParser_CompleteDSLWithDomains(t *testing.T) {
 	}
 
 	services {
-		UserService: {
+		UserService {
 			domains: User
 			data-stores: user_db
 			language: golang
 			deployment: canary(20% -> staging, 80% -> production)
-		},
-		ProductService: {
+		}
+		ProductService {
 			domains: Product
 			data-stores: product_db, product_cache
 			language: java
@@ -3127,13 +3127,13 @@ func BenchmarkParser_ComplexDSLWithDomains(b *testing.B) {
 	}
 
 	services {
-		UserService: {
+		UserService {
 			domains: User, Product
 			data-stores: user_db, user_cache
 			language: golang
 			deployment: canary(10% -> staging, 90% -> production)
 		},
-		OrderService: {
+		OrderService {
 			domains: Order, Payment, Inventory
 			data-stores: order_db, payment_db
 			language: java

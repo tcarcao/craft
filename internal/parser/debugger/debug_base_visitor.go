@@ -66,8 +66,8 @@ func (d *DebugVisitor) VisitDsl(ctx *parser.DslContext) interface{} {
 		switch c := child.(type) {
 		case *parser.ArchContext:
 			d.VisitArch(c)
-		case *parser.ServicesContext:
-			d.VisitServices(c)
+		case *parser.Services_defContext:
+			d.VisitServices_def(c)
 		case *parser.ExposureContext:
 			d.VisitExposure(c)
 		case *parser.Use_caseContext:

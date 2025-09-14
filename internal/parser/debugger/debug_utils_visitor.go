@@ -92,7 +92,7 @@ func debugParseDSL(t *testing.T, dsl string) {
 }
 
 // Additional stub methods for the remaining visitor interfaces
-func (d *DebugVisitor) VisitServices(ctx *parser.ServicesContext) interface{} {
+func (d *DebugVisitor) VisitServices_def(ctx *parser.Services_defContext) interface{} {
 	fmt.Printf("%sServices: %d children\n", d.indent(), ctx.GetChildCount())
 	return nil
 }

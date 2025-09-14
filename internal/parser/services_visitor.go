@@ -12,11 +12,11 @@ import (
 // =============================================================================
 
 // Visit services section
-func (b *DSLModelBuilder) VisitServices(ctx *parser.ServicesContext) interface{} {
+func (b *DSLModelBuilder) VisitServices_def(ctx *parser.Services_defContext) interface{} {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if serviceDefList, ok := child.(*parser.Service_definition_listContext); ok {
-			b.VisitService_definition_list(serviceDefList)
+		if serviceBlockList, ok := child.(*parser.Service_block_listContext); ok {
+			b.VisitService_block_list(serviceBlockList)
 		}
 	}
 	return nil
@@ -48,19 +48,19 @@ func (b *DSLModelBuilder) VisitService_def(ctx *parser.Service_defContext) inter
 	return nil
 }
 
-// Visit service definition list
-func (b *DSLModelBuilder) VisitService_definition_list(ctx *parser.Service_definition_listContext) interface{} {
+// Visit service block list
+func (b *DSLModelBuilder) VisitService_block_list(ctx *parser.Service_block_listContext) interface{} {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if serviceDef, ok := child.(*parser.Service_definitionContext); ok {
-			b.VisitService_definition(serviceDef)
+		if serviceBlock, ok := child.(*parser.Service_blockContext); ok {
+			b.VisitService_block(serviceBlock)
 		}
 	}
 	return nil
 }
 
-// Visit service definition
-func (b *DSLModelBuilder) VisitService_definition(ctx *parser.Service_definitionContext) interface{} {
+// Visit service block
+func (b *DSLModelBuilder) VisitService_block(ctx *parser.Service_blockContext) interface{} {
 	service := Service{
 		Domains:    make([]string, 0),
 		DataStores: make([]string, 0),

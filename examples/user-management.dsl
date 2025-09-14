@@ -18,12 +18,12 @@ domain User {
 }
 
 services {
-    UserService: {
+    UserService {
         domains: Authentication, Profile
         data-stores: user_db
         language: golang
-    },
-    CommsService: {
+    }
+    CommsService {
         domains: Notifier
     }
 }
