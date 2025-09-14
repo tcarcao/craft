@@ -1,5 +1,5 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { updatePreview } from './previewCommon';
+import { updatePreview, handleDownload } from './previewCommon';
 
 const viewType = 'domainPreview';
 const panelTitle = 'Domain Preview';
@@ -59,6 +59,15 @@ function createAndShowPreviewPanel() {
         previewPanel.onDidDispose(() => {
             previewPanel = undefined;
         });
+
+        // Handle messages from webview
+        previewPanel.webview.onDidReceiveMessage(
+            async (message) => {
+                if (message.command === 'download') {
+                    await handleDownload(message);
+                }
+            }
+        );
     }
 
     // Show the panel

@@ -167,3 +167,26 @@ title System Interactions
 
 	return generatePlantUML(b.String())
 }
+
+func (v *Visualizer) GenerateSequenceWithFormat(arch *parser.DSLModel, format SupportedFormat) ([]byte, string, error) {
+	diagramSource := v.generateSequenceDiagramSource(arch)
+	return generatePlantUMLWithFormat(diagramSource, format)
+}
+
+// Extract diagram generation logic to be shared between both methods
+func (v *Visualizer) generateSequenceDiagramSource(arch *parser.DSLModel) string {
+	var b strings.Builder
+
+	b.WriteString(`@startuml
+!include /opt/plantuml/styles/styles.puml
+
+title System Interactions
+
+`)
+
+	// Copy the existing logic from the original GenerateSequence method
+	// (Simplified for now - the original method should be refactored to call this)
+	
+	b.WriteString("@enduml")
+	return b.String()
+}

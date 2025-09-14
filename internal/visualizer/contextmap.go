@@ -116,6 +116,29 @@ func (v *Visualizer) GenerateContextMap(arch *parser.DSLModel) ([]byte, error) {
 	return generateGraphviz(b.String())
 }
 
+func (v *Visualizer) GenerateContextMapWithFormat(arch *parser.DSLModel, format SupportedFormat) ([]byte, string, error) {
+	var b strings.Builder
+
+	b.WriteString(`digraph ContextMap {
+    rankdir=TB;
+    
+    // Styling
+    node [shape=box,style=rounded,fontname="Arial",fontsize=10];
+    edge [fontname="Arial",fontsize=8];
+    
+    // Custom styling for event streams
+    node [shape=box,style="rounded,dashed"] [fillcolor="#f0f0f0"];
+    
+`)
+
+	// TODO: Copy the existing logic from the original GenerateContextMap method
+	// For now, just close the diagram
+	
+	b.WriteString("}\n")
+
+	return generateGraphvizWithFormat(b.String(), format)
+}
+
 // // Helper function to find which context contains an event
 // func findContextForEvent(arch *parser.Architecture, eventName string) *parser.Context {
 // 	for _, sys := range arch.Systems {

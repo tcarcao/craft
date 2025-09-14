@@ -15,6 +15,13 @@ func (v *Visualizer) GenerateDomainDiagram(model *parser.DSLModel) ([]byte, erro
 	return generatePlantUML(diagramTxt)
 }
 
+func (v *Visualizer) GenerateDomainDiagramWithFormat(model *parser.DSLModel, format SupportedFormat) ([]byte, string, error) {
+	generator := NewPlantUMLGenerator()
+	diagramTxt := generator.GeneratePlantUML(model)
+	fmt.Println(diagramTxt)
+	return generatePlantUMLWithFormat(diagramTxt, format)
+}
+
 // PlantUMLGenerator generates PlantUML diagrams from DSL models
 type PlantUMLGenerator struct {
 	domains         map[string]bool

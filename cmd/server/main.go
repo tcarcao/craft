@@ -206,6 +206,15 @@ type PreviewResponse struct {
 	Data    string `json:"data,omitempty"` // base64 encoded diagram
 }
 
+type DownloadRequest struct {
+	DSL            string     `json:"dsl"`
+	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
+	BoundariesMode string     `json:"boundariesMode,omitempty"`
+	Format         string     `json:"format"`         // png, svg, pdf, puml
+	DiagramType    string     `json:"diagramType"`    // c4, domain, context, sequence
+	Filename       string     `json:"filename,omitempty"`
+}
+
 func (s *Server) handlePreviewDomain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req PreviewRequest
@@ -365,6 +374,97 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req DownloadRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+			return
+		}
+
+		// Parse DSL
+		p := parser.NewParser()
+		model, err := p.ParseString(req.DSL)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+			return
+		}
+
+		// Convert format string to SupportedFormat
+		var format visualizer.SupportedFormat
+		switch req.Format {
+		case "png":
+			format = visualizer.FormatPNG
+		case "svg":
+			format = visualizer.FormatSVG
+		case "pdf":
+			format = visualizer.FormatPDF
+		case "puml":
+			format = visualizer.FormatPUML
+		default:
+			format = visualizer.FormatPNG
+		}
+
+		var diagram []byte
+		var contentType string
+		var defaultFilename string
+
+		// Generate diagram based on type
+		switch req.DiagramType {
+		case "c4":
+			// Parse boundaries mode
+			boundariesMode := visualizer.C4ModeBoundaries
+			if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
+				boundariesMode = visualizer.C4ModeTransparent
+			}
+
+			// Generate C4 diagram with focus and format
+			if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
+				diagram, contentType, err = s.viz.GenerateC4WithFocusSubDomainsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, format)
+			} else {
+				diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, format)
+			}
+			defaultFilename = "c4-diagram"
+
+		case "domain":
+			diagram, contentType, err = s.viz.GenerateDomainDiagramWithFormat(model, format)
+			defaultFilename = "domain-diagram"
+
+		case "context":
+			diagram, contentType, err = s.viz.GenerateContextMapWithFormat(model, format)
+			defaultFilename = "context-map"
+
+		case "sequence":
+			diagram, contentType, err = s.viz.GenerateSequenceWithFormat(model, format)
+			defaultFilename = "sequence-diagram"
+
+		default:
+			respondWithError(w, http.StatusBadRequest, "Invalid diagram type")
+			return
+		}
+
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+			return
+		}
+
+		// Determine filename
+		filename := req.Filename
+		if filename == "" {
+			extension := string(format)
+			if format == visualizer.FormatPUML {
+				extension = "puml"
+			}
+			filename = fmt.Sprintf("%s.%s", defaultFilename, extension)
+		}
+
+		// Set response headers
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		w.Write(diagram)
+	}
+}
+
 func main() {
 	server, err := NewServer()
 	if err != nil {
@@ -383,6 +483,8 @@ func main() {
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
 	r.HandleFunc("/preview/context", server.handlePreviewContext()).Methods("POST")
 	r.HandleFunc("/preview/sequence", server.handlePreviewSequence()).Methods("POST")
+	
+	r.HandleFunc("/download", server.handleDownloadDiagramWithFormat()).Methods("POST")
 
 	// CORS middleware for VSCode extension
 	r.Use(func(next http.Handler) http.Handler {

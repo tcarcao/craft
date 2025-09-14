@@ -1,5 +1,5 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { updatePreview } from './previewCommon';
+import { updatePreview, handleDownload } from './previewCommon';
 
 let previewPanel: WebviewPanel | undefined;
 
@@ -26,6 +26,15 @@ export async function handlePreviewSequence() {
             previewPanel.onDidDispose(() => {
                 previewPanel = undefined;
             });
+
+            // Handle messages from webview
+            previewPanel.webview.onDidReceiveMessage(
+                async (message) => {
+                    if (message.command === 'download') {
+                        await handleDownload(message);
+                    }
+                }
+            );
         }
 
         // Show the panel

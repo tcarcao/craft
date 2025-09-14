@@ -51,6 +51,11 @@
                     "minimum": 5000,
                     "maximum": 120000,
                     "description": "Timeout for server requests in milliseconds (5-120 seconds)"
+                },
+                "archdsl.downloadPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Default path for downloading diagram files. If empty, user will be prompted to choose location for each download."
                 }
             }
         },
