@@ -14,7 +14,6 @@ export interface UseCaseInfo {
 export interface ServiceDefinition {
     name: string;
     domains: string[];
-    parentDomain?: string;
     dataStores?: string[];
     language?: string;
     blockRange: BlockRange;

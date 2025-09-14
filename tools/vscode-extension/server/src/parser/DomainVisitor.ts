@@ -70,7 +70,6 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 			domains: [],
 			dataStores: [],
 			language: undefined,
-			parentDomain: undefined,
 			blockRange: {
 				startLine: ctx.start?.line || 0,
 				endLine: ctx.stop?.line || 0,
@@ -90,7 +89,6 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 			domains: [],
 			dataStores: [],
 			language: undefined,
-			parentDomain: undefined,
 			blockRange: {
 				startLine: ctx.start?.line || 0,
 				endLine: ctx.stop?.line || 0,
@@ -144,14 +142,6 @@ export class DomainVisitor extends ArchDSLVisitor<void> {
 				this.serviceDefinitions[this.serviceDefinitions.length - 1].language = parts[1].trim();
 			}
 		}
-		
-		// TODO: Handle parent_domain when you extend the grammar
-		// else if (propertyText.startsWith('parent_domain:')) {
-		//     const parts = propertyText.split(':');
-		//     if (parts.length > 1 && this.serviceDefinitions.length > 0) {
-		//         this.serviceDefinitions[this.serviceDefinitions.length - 1].parentDomain = parts[1].trim();
-		//     }
-		// }
 	};
 
 	// Visit domain list - THIS IS WHERE WE ADD DOMAINS
