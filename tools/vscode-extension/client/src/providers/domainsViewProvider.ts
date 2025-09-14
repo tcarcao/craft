@@ -237,8 +237,8 @@ export class DomainsViewProvider implements WebviewViewProvider {
 
             // Update both current file and workspace domains with preserved states
             // Create deep copies to avoid shared references
-            const currentDomains = domains.filter(d => d.inCurrentFile).map(d => this.deepCopyDomain(d));
-            const workspaceDomains = domains.map(d => this.deepCopyDomain(d));
+            const currentDomains = domains.filter(d => d.inCurrentFile).map(d => this.deepCopyDomainCurrentFile(d));
+            const workspaceDomains = domains.map(d => this.deepCopyDomainWorkspace(d));
 
             // Preserve existing expansion and selection states for current file domains
             currentDomains.forEach(domain => {
@@ -578,11 +578,19 @@ export class DomainsViewProvider implements WebviewViewProvider {
         }
     }
 
+    private deepCopyDomainCurrentFile(domain: Domain): Domain {
+        return this.deepCopyDomain(domain, true);
+    }
+
+    private deepCopyDomainWorkspace(domain: Domain): Domain {
+        return this.deepCopyDomain(domain, false);
+    }
+
     // Helper method to create deep copies of domains to avoid shared references
-    private deepCopyDomain(domain: Domain): Domain {
+    private deepCopyDomain(domain: Domain, inCurrentFileFilter: boolean): Domain {
         return {
             ...domain,
-            subDomains: domain.subDomains.map(subDomain => ({
+            subDomains: domain.subDomains.filter(sd => inCurrentFileFilter === true ? sd.inCurrentFile : true).map(subDomain => ({
                 ...subDomain,
                 useCases: subDomain.useCases.map(useCase => ({ ...useCase })),
                 referencedIn: subDomain.referencedIn.map(ref => ({ ...ref }))

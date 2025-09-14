@@ -250,8 +250,8 @@ export class ServicesViewProvider implements WebviewViewProvider {
 
             // Update both current file and workspace service groups with preserved states
             // Create deep copies to avoid shared references
-            const currentServiceGroups = serviceGroups.filter(sg => sg.inCurrentFile).map(sg => this.deepCopyServiceGroup(sg));
-            const workspaceServiceGroups = serviceGroups.map(sg => this.deepCopyServiceGroup(sg));
+            const currentServiceGroups = serviceGroups.filter(sg => sg.inCurrentFile).map(sg => this.deepCopyServiceGroupCurrentFile(sg));
+            const workspaceServiceGroups = serviceGroups.map(sg => this.deepCopyServiceGroupWorkspace(sg));
 
             // Preserve existing states for current file service groups
             currentServiceGroups.forEach(serviceGroup => {
@@ -787,11 +787,19 @@ export class ServicesViewProvider implements WebviewViewProvider {
         });
     }
 
+    private deepCopyServiceGroupCurrentFile(serviceGroup: ServiceGroup): ServiceGroup {
+        return this.deepCopyServiceGroup(serviceGroup, true);
+    }
+
+    private deepCopyServiceGroupWorkspace(serviceGroup: ServiceGroup): ServiceGroup {
+        return this.deepCopyServiceGroup(serviceGroup, false);
+    }
+
     // Helper method to create deep copies of service groups to avoid shared references
-    private deepCopyServiceGroup(serviceGroup: ServiceGroup): ServiceGroup {
+    private deepCopyServiceGroup(serviceGroup: ServiceGroup, inCurrentFileFilter: boolean): ServiceGroup {
         return {
             ...serviceGroup,
-            services: serviceGroup.services.map(service => ({
+            services: serviceGroup.services.filter(service => inCurrentFileFilter === true ? service.inCurrentFile : true).map(service => ({
                 ...service,
                 domain: { ...service.domain },
                 subDomains: service.subDomains.map(subDomain => ({
