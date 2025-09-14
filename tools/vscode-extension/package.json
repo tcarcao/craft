@@ -98,16 +98,6 @@
                 "category": "ArchDSL"
             },
             {
-                "command": "archdsl.previewContext",
-                "title": "ArchDSL: Preview Context Map",
-                "category": "ArchDSL"
-            },
-            {
-                "command": "archdsl.previewSequence",
-                "title": "ArchDSL: Preview Sequence Diagram",
-                "category": "ArchDSL"
-            },
-            {
                 "command": "archdsl.previewDomain",
                 "title": "ArchDSL: Preview Domain Diagram",
                 "category": "ArchDSL"
@@ -127,14 +117,6 @@
             {
                 "command": "archdsl.previewC4",
                 "key": "ctrl+shift+c"
-            },
-            {
-                "command": "archdsl.previewContext",
-                "key": "ctrl+shift+m"
-            },
-            {
-                "command": "archdsl.previewSequence",
-                "key": "ctrl+shift+s"
             },
             {
                 "command": "archdsl.previewDomain",

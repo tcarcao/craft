@@ -31,11 +31,9 @@ type Response struct {
 }
 
 type Server struct {
-	tmpl         *template.Template
-	viz          *visualizer.Visualizer
-	lastC4       []byte
-	lastContext  []byte
-	lastSequence []byte
+	tmpl   *template.Template
+	viz    *visualizer.Visualizer
+	lastC4 []byte
 }
 
 func NewServer() (*Server, error) {
@@ -90,25 +88,6 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 			}
 		}
 
-		if generateContext {
-			diagram, err := s.viz.GenerateContextMap(arch)
-			if err != nil {
-				log.Printf("Error generating Context Map: %v", err)
-			} else {
-				s.lastContext = diagram
-				resp.Context = base64.StdEncoding.EncodeToString(diagram)
-			}
-		}
-
-		if generateSequence {
-			diagram, err := s.viz.GenerateSequence(arch)
-			if err != nil {
-				log.Printf("Error generating Sequence diagram: %v", err)
-			} else {
-				s.lastSequence = diagram
-				resp.Sequence = base64.StdEncoding.EncodeToString(diagram)
-			}
-		}
 
 		s.tmpl.Execute(w, resp)
 	}
@@ -123,10 +102,6 @@ func (s *Server) handleViewDiagram() http.HandlerFunc {
 		switch diagramType {
 		case "c4":
 			diagram = s.lastC4
-		case "context":
-			diagram = s.lastContext
-		case "sequence":
-			diagram = s.lastSequence
 		default:
 			http.NotFound(w, r)
 			return
@@ -154,12 +129,6 @@ func (s *Server) handleDownloadDiagram() http.HandlerFunc {
 		case "c4":
 			diagram = s.lastC4
 			filename = "c4-diagram.png"
-		case "context":
-			diagram = s.lastContext
-			filename = "context-map.png"
-		case "sequence":
-			diagram = s.lastSequence
-			filename = "sequence-diagram.png"
 		default:
 			http.NotFound(w, r)
 			return
@@ -299,69 +268,7 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 	}
 }
 
-func (s *Server) handlePreviewContext() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req PreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
-			return
-		}
 
-		p := parser.NewParser()
-
-		arch, err := p.ParseString(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
-
-		diagram, err := s.viz.GenerateContextMap(arch)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
-			return
-		}
-
-		response := PreviewResponse{
-			Success: true,
-			Data:    base64.StdEncoding.EncodeToString(diagram),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	}
-}
-
-func (s *Server) handlePreviewSequence() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req PreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
-			return
-		}
-
-		p := parser.NewParser()
-
-		arch, err := p.ParseString(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
-
-		diagram, err := s.viz.GenerateSequence(arch)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
-			return
-		}
-
-		response := PreviewResponse{
-			Success: true,
-			Data:    base64.StdEncoding.EncodeToString(diagram),
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	}
-}
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	log.Printf("[%d] %s", code, message)
@@ -430,13 +337,6 @@ func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
 			diagram, contentType, err = s.viz.GenerateDomainDiagramWithFormat(model, format)
 			defaultFilename = "domain-diagram"
 
-		case "context":
-			diagram, contentType, err = s.viz.GenerateContextMapWithFormat(model, format)
-			defaultFilename = "context-map"
-
-		case "sequence":
-			diagram, contentType, err = s.viz.GenerateSequenceWithFormat(model, format)
-			defaultFilename = "sequence-diagram"
 
 		default:
 			respondWithError(w, http.StatusBadRequest, "Invalid diagram type")
@@ -481,8 +381,6 @@ func main() {
 
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
-	r.HandleFunc("/preview/context", server.handlePreviewContext()).Methods("POST")
-	r.HandleFunc("/preview/sequence", server.handlePreviewSequence()).Methods("POST")
 	
 	r.HandleFunc("/download", server.handleDownloadDiagramWithFormat()).Methods("POST")
 

@@ -1,8 +1,6 @@
 // client/src/commands/index.ts
 import { commands, ExtensionContext } from 'vscode';
 import { handlePreviewC4, handlePreviewSelectedC4, handlePreviewPartialC4, cleanUpPreviewC4 } from './previewC4';
-import { handlePreviewContext } from './previewContext';
-import { handlePreviewSequence } from './previewSequence';
 import { handlePreviewDomain, handlePreviewDomainsFromSelection, handlePreviewPartialDomains, cleanUpPreviewDomain } from './previewDomain';
 
 export function registerPreviewCommands(context: ExtensionContext) {
@@ -12,12 +10,6 @@ export function registerPreviewCommands(context: ExtensionContext) {
         ),
         commands.registerCommand('archdsl.previewSelectedC4', () =>
             handlePreviewSelectedC4()
-        ),
-        commands.registerCommand('archdsl.previewContext', () =>
-            handlePreviewContext()
-        ),
-        commands.registerCommand('archdsl.previewSequence', () =>
-            handlePreviewSequence()
         ),
         commands.registerCommand('archdsl.previewDomain', () =>
             handlePreviewDomain()

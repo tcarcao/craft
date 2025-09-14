@@ -51,28 +51,19 @@ func (p *Processor) generateDiagrams(arch *parser.DSLModel, outputDir string) er
 	// Generate C4 diagram
 	c4Content, err := p.visualizer.GenerateC4(arch, visualizer.C4ModeBoundaries)
 	if err != nil {
-		return fmt.Errorf("failed to write C4 diagram: %v", err)
+		return fmt.Errorf("failed to generate C4 diagram: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(outputDir, "c4.puml"), []byte(c4Content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(outputDir, "c4.png"), c4Content, 0644); err != nil {
 		return fmt.Errorf("failed to write C4 diagram: %v", err)
 	}
 
-	// Generate context map
-	contextMapContent, err := p.visualizer.GenerateContextMap(arch)
+	// Generate domain diagram
+	domainContent, err := p.visualizer.GenerateDomainDiagram(arch)
 	if err != nil {
-		return fmt.Errorf("failed to write context map: %v", err)
+		return fmt.Errorf("failed to generate domain diagram: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(outputDir, "context-map.dot"), []byte(contextMapContent), 0644); err != nil {
-		return fmt.Errorf("failed to write context map: %v", err)
-	}
-
-	// Generate sequence diagrams
-	seqContent, err := p.visualizer.GenerateSequence(arch)
-	if err != nil {
-		return fmt.Errorf("failed to write sequence diagrams: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(outputDir, "sequences.puml"), []byte(seqContent), 0644); err != nil {
-		return fmt.Errorf("failed to write sequence diagrams: %v", err)
+	if err := os.WriteFile(filepath.Join(outputDir, "domain.png"), domainContent, 0644); err != nil {
+		return fmt.Errorf("failed to write domain diagram: %v", err)
 	}
 
 	return nil
