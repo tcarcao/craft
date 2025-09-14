@@ -135,7 +135,7 @@ async function handleExtractAllDomainsFromWorkspace(_args: any[] | undefined, wo
         // })
       },
       {
-        include: ['**/*.dsl'],
+        include: ['**/*.craft'],
         exclude: ['**/node_modules/**'],
         concurrency: 5
       }
@@ -244,7 +244,7 @@ async function handleExtractPartialDslFromBlockRanges(args: any[] | undefined, w
         combinedParts.push(extractedDSL);
       },
       {
-        include: ['**/*.dsl'],
+        include: ['**/*.craft'],
         exclude: ['**/node_modules/**'],
         concurrency: 5
       }

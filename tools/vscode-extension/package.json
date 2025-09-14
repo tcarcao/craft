@@ -1,7 +1,7 @@
 {
-    "name": "archdsl",
-    "displayName": "Architecture DSL",
-    "description": "Syntax highlighting for Architecture DSL",
+    "name": "craft",
+    "displayName": "Craft Language",
+    "description": "Syntax highlighting for Craft architecture language",
     "version": "0.0.1",
     "main": "./client/out/extension",
     "engines": {
@@ -36,23 +36,23 @@
     ],
     "contributes": {
         "configuration": {
-            "title": "Architecture DSL",
+            "title": "Craft Language",
             "properties": {
-                "archdsl.server.url": {
+                "craft.server.url": {
                     "type": "string",
                     "default": "http://localhost:8080",
-                    "description": "URL of the ArchDSL server for diagram generation",
+                    "description": "URL of the Craft server for diagram generation",
                     "pattern": "^https?:\\/\\/.+",
                     "patternErrorMessage": "Must be a valid HTTP or HTTPS URL"
                 },
-                "archdsl.server.timeout": {
+                "craft.server.timeout": {
                     "type": "number",
                     "default": 30000,
                     "minimum": 5000,
                     "maximum": 120000,
                     "description": "Timeout for server requests in milliseconds (5-120 seconds)"
                 },
-                "archdsl.downloadPath": {
+                "craft.downloadPath": {
                     "type": "string",
                     "default": "",
                     "description": "Default path for downloading diagram files. If empty, user will be prompted to choose location for each download."
@@ -61,65 +61,65 @@
         },
         "languages": [
             {
-                "id": "archdsl",
+                "id": "craft",
                 "aliases": [
-                    "Architecture DSL",
-                    "archdsl"
+                    "Craft Language",
+                    "craft"
                 ],
                 "extensions": [
-                    ".dsl"
+                    ".craft"
                 ],
                 "configuration": "./language-configuration.json"
             }
         ],
         "grammars": [
             {
-                "language": "archdsl",
-                "scopeName": "source.archdsl",
-                "path": "./syntaxes/archdsl.tmLanguage.json"
+                "language": "craft",
+                "scopeName": "source.craft",
+                "path": "./syntaxes/craft.tmLanguage.json"
             }
         ],
         "themes": [
             {
-                "label": "Architecture DSL Theme",
+                "label": "Craft Language Theme",
                 "uiTheme": "vs",
-                "path": "./themes/archdsl-color-theme.json"
+                "path": "./themes/craft-color-theme.json"
             }
         ],
         "commands": [
             {
-                "command": "archdsl.previewC4",
-                "title": "ArchDSL: Preview C4 Diagram",
-                "category": "ArchDSL"
+                "command": "craft.previewC4",
+                "title": "Craft: Preview C4 Diagram",
+                "category": "Craft"
             },
             {
-                "command": "archdsl.previewSelectedC4",
-                "title": "ArchDSL: Preview Selected C4 Diagram",
-                "category": "ArchDSL"
+                "command": "craft.previewSelectedC4",
+                "title": "Craft: Preview Selected C4 Diagram",
+                "category": "Craft"
             },
             {
-                "command": "archdsl.previewDomain",
-                "title": "ArchDSL: Preview Domain Diagram",
-                "category": "ArchDSL"
+                "command": "craft.previewDomain",
+                "title": "Craft: Preview Domain Diagram",
+                "category": "Craft"
             },
             {
-                "command": "archdsl.previewDomainsFromSelection",
-                "title": "ArchDSL: Preview Domain Diagram from selection",
-                "category": "ArchDSL"
+                "command": "craft.previewDomainsFromSelection",
+                "title": "Craft: Preview Domain Diagram from selection",
+                "category": "Craft"
             },
             {
-                "command": "archdsl.openSettings",
-                "title": "ArchDSL: Open Settings",
-                "category": "ArchDSL"
+                "command": "craft.openSettings",
+                "title": "Craft: Open Settings",
+                "category": "Craft"
             }
         ],
         "keybindings": [
             {
-                "command": "archdsl.previewC4",
+                "command": "craft.previewC4",
                 "key": "ctrl+shift+c"
             },
             {
-                "command": "archdsl.previewDomain",
+                "command": "craft.previewDomain",
                 "key": "ctrl+shift+d"
             }
         ],

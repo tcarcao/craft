@@ -1,0 +1,75 @@
+// Complete test file for diagram generation logic
+
+arch main {
+    presentation:
+        WebUI[port: 3000]
+        MobileApp[version: 2.1]
+        
+    gateway:
+        APIGateway > LoadBalancer[replicas: 3] > Backend
+}
+
+domains {
+    Payment {
+        ProcessPayment
+        ValidateCard
+        RefundPayment
+    }
+    
+    User {
+        CreateAccount
+        UpdateProfile
+        Authentication
+    }
+}
+
+domain Inventory {
+    AddItem
+    RemoveItem
+    UpdateStock
+}
+
+exposure PaymentAPI {
+    to: external, mobile
+    of: ProcessPayment, ValidateCard
+    through: APIGateway
+}
+
+services {
+    PaymentService {
+        domains: ProcessPayment, ValidateCard
+        data-stores: payment_db
+        language: java
+    }
+    
+    UserService {
+        domains: CreateAccount, UpdateProfile
+        data-stores: user_db
+        language: golang
+    }
+    
+    InventoryService {
+        domains: AddItem, RemoveItem, UpdateStock
+        data-stores: inventory_db
+        language: nodejs
+    }
+}
+
+service TestService {
+    domains: ProcessPayment
+    data-stores: test_db
+    language: python
+}
+
+use_case "Process Payment" {
+    when user initiates payment
+        ProcessPayment validates payment details
+        ProcessPayment asks ValidateCard to verify card
+        ProcessPayment notifies "Payment Processed"
+}
+
+use_case "Manage Inventory" {
+    when admin adds item
+        AddItem creates inventory entry
+        UpdateStock adjusts quantities
+}

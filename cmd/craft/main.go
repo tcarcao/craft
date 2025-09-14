@@ -8,17 +8,17 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/tcarcao/archdsl/internal/processor"
+	"github.com/tcarcao/craft/internal/processor"
 )
 
 func main() {
-	inputFile := flag.String("input", "", "Input DSL file path")
+	inputFile := flag.String("input", "", "Input Craft file path")
 	outputDir := flag.String("output", "", "Output directory for generated diagrams")
 
 	flag.Parse()
 
 	if *inputFile == "" || *outputDir == "" {
-		fmt.Println("Usage: archdsl -input <dsl-file> -output <output-dir>")
+		fmt.Println("Usage: craft -input <craft-file> -output <output-dir>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}

@@ -3,7 +3,7 @@ package visualizer
 import (
 	"fmt"
 
-	"github.com/tcarcao/archdsl/internal/parser"
+	"github.com/tcarcao/craft/internal/parser"
 )
 
 func (v *Visualizer) GenerateC4(arch *parser.DSLModel, boundariesMode C4GenerationMode) ([]byte, error) {

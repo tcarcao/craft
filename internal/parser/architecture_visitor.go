@@ -2,7 +2,7 @@ package parser
 
 import (
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/tcarcao/archdsl/pkg/parser"
+	"github.com/tcarcao/craft/pkg/parser"
 )
 
 // =============================================================================

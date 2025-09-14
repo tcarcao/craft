@@ -1,4 +1,4 @@
-grammar ArchDSL;
+grammar Craft;
 
 dsl: (arch | services_def | service_def | exposure | use_case | domain_def | domains_def)* ;
 

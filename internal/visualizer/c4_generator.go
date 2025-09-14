@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tcarcao/archdsl/internal/parser"
+	"github.com/tcarcao/craft/internal/parser"
 )
 
 // C4GenerationMode determines how domains are represented

@@ -183,8 +183,8 @@ export class DomainsViewProvider implements WebviewViewProvider {
     }
 
     private isArchDSLDocument(document: TextDocument): boolean {
-        return document.languageId === 'archdsl' ||
-            document.fileName.endsWith('.dsl');
+        return document.languageId === 'craft' ||
+            document.fileName.endsWith('.craft');
     }
 
     private deferredRefresh(delay = 300) {

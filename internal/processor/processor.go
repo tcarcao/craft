@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tcarcao/archdsl/internal/parser"
-	"github.com/tcarcao/archdsl/internal/visualizer"
+	"github.com/tcarcao/craft/internal/parser"
+	"github.com/tcarcao/craft/internal/visualizer"
 )
 
 type Processor struct {

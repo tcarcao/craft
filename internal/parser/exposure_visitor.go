@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"github.com/tcarcao/archdsl/pkg/parser"
+	"github.com/tcarcao/craft/pkg/parser"
 )
 
 // =============================================================================

@@ -1,4 +1,4 @@
-# ArchDSL v2 Research: Use Case Modeling Approach
+# Craft v2 Research: Use Case Modeling Approach
 
 ## Current v1 Limitations
 - Architecture descriptions are static, don't capture business logic flow

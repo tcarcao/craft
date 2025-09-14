@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const axios = require('axios');
 import { window, WebviewPanel, workspace, Uri } from 'vscode';
-import { getArchDSLConfig } from '../utils/config';
+import { getCraftConfig } from '../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -13,7 +13,7 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
 
     try {
         // Get configuration settings
-        const { serverUrl, timeout } = getArchDSLConfig();
+        const { serverUrl, timeout } = getCraftConfig();
 
         const requestBody: any = {
             DSL: text
@@ -124,14 +124,14 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
             </html>`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-        const { serverUrl } = getArchDSLConfig();
+        const { serverUrl } = getCraftConfig();
         
         let errorMessage = 'Failed to generate preview';
         
         if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-            errorMessage = `Cannot connect to ArchDSL server at ${serverUrl}. Please check if the server is running and the URL is correct in settings.`;
+            errorMessage = `Cannot connect to Craft server at ${serverUrl}. Please check if the server is running and the URL is correct in settings.`;
         } else if (error.code === 'ECONNABORTED') {
-            errorMessage = `Request to ArchDSL server timed out. You can increase the timeout in settings or check server performance.`;
+            errorMessage = `Request to Craft server timed out. You can increase the timeout in settings or check server performance.`;
         } else if (error.response) {
             errorMessage = `Server error (${error.response.status}): ${error.response.data?.message || error.message}`;
         } else {
@@ -144,7 +144,7 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
 
 export async function handleDownload(message: any) {
     try {
-        const { serverUrl, timeout } = getArchDSLConfig();
+        const { serverUrl, timeout } = getCraftConfig();
         
         const requestBody = {
             DSL: message.dsl,
@@ -174,7 +174,7 @@ export async function handleDownload(message: any) {
         const filename = `${message.diagramType}-diagram-${timestamp}.${extension}`;
 
         // Get download location from settings or show dialog
-        const downloadPath = workspace.getConfiguration('archdsl').get<string>('downloadPath');
+        const downloadPath = workspace.getConfiguration('craft').get<string>('downloadPath');
         
         let saveUri: Uri;
         if (downloadPath && fs.existsSync(downloadPath)) {
@@ -213,8 +213,8 @@ export async function handleDownload(message: any) {
         let errorMessage = 'Failed to download diagram';
         
         if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-            const { serverUrl } = getArchDSLConfig();
-            errorMessage = `Cannot connect to ArchDSL server at ${serverUrl}. Please check if the server is running.`;
+            const { serverUrl } = getCraftConfig();
+            errorMessage = `Cannot connect to Craft server at ${serverUrl}. Please check if the server is running.`;
         } else if (error.response) {
             errorMessage = `Server error (${error.response.status}): ${error.response.data?.message || error.message}`;
         } else {

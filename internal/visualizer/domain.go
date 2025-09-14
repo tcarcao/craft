@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tcarcao/archdsl/internal/parser"
+	"github.com/tcarcao/craft/internal/parser"
 )
 
 func (v *Visualizer) GenerateDomainDiagram(model *parser.DSLModel) ([]byte, error) {

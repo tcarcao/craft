@@ -1,12 +1,12 @@
 .PHONY: build run test clean
 
-IMAGE_NAME=archdsl
+IMAGE_NAME=craft
 IMAGE_TAG=latest
 DOCKERFILE_PATH=build/package/Dockerfile
 ANTLR_IMAGE_NAME=antlr/antlr4
 ANTLR_IMAGE_TAG=4.13.2
 ANTLR_GRAMMAR_PATH=tools/antlr-grammar
-ANTLR_GRAMMAR_FILENAME=ArchDSL.g4
+ANTLR_GRAMMAR_FILENAME=Craft.g4
 GOLANG_GRAMMAR_PATH=pkg/parser/
 VSCODE_EXTENSION=tools/vscode-extension/server
 

@@ -5,19 +5,19 @@ import { handlePreviewDomain, handlePreviewDomainsFromSelection, handlePreviewPa
 
 export function registerPreviewCommands(context: ExtensionContext) {
     context.subscriptions.push(
-        commands.registerCommand('archdsl.previewC4', () =>
+        commands.registerCommand('craft.previewC4', () =>
             handlePreviewC4()
         ),
-        commands.registerCommand('archdsl.previewSelectedC4', () =>
+        commands.registerCommand('craft.previewSelectedC4', () =>
             handlePreviewSelectedC4()
         ),
-        commands.registerCommand('archdsl.previewDomain', () =>
+        commands.registerCommand('craft.previewDomain', () =>
             handlePreviewDomain()
         ),
-        commands.registerCommand('archdsl.previewDomainsFromSelection', () =>
+        commands.registerCommand('craft.previewDomainsFromSelection', () =>
             handlePreviewDomainsFromSelection()
         ),
-        commands.registerCommand('archdsl.previewPartialDSL', (partialDSL, diagramType) => {
+        commands.registerCommand('craft.previewPartialDSL', (partialDSL, diagramType) => {
             switch(diagramType) {
                 case "C4":
                     handlePreviewPartialC4(partialDSL);
@@ -28,7 +28,7 @@ export function registerPreviewCommands(context: ExtensionContext) {
                     break;
             }
         }),
-        commands.registerCommand('archdsl.previewPartialDSLWithFocus', (partialDSL, diagramType, focusInfo) => {
+        commands.registerCommand('craft.previewPartialDSLWithFocus', (partialDSL, diagramType, focusInfo) => {
             switch(diagramType) {
                 case "C4":
                     handlePreviewPartialC4(partialDSL, focusInfo);
@@ -39,8 +39,8 @@ export function registerPreviewCommands(context: ExtensionContext) {
                     break;
             }
         }),
-        commands.registerCommand('archdsl.openSettings', () => {
-            commands.executeCommand('workbench.action.openSettings', 'archdsl.');
+        commands.registerCommand('craft.openSettings', () => {
+            commands.executeCommand('workbench.action.openSettings', 'craft.');
         })
     );
 }

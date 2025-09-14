@@ -1,13 +1,13 @@
-# ArchDSL
+# Craft
 
 A domain-specific language for modeling business use cases and domain interactions, with powerful visualization capabilities for domain-driven design and C4 architecture diagrams.
 
 ## 🚧 v2.0 Development Status
 
-ArchDSL is currently under active development, representing a complete transformation from architecture description to business use case modeling.
+Craft is currently under active development, representing a complete transformation from architecture description to business use case modeling.
 
-## What is ArchDSL?
-ArchDSL is a complete reimagining of architecture description language, shifting from static architecture documentation to dynamic use case modeling. It enables teams to:
+## What is Craft?
+Craft is a complete reimagining of architecture description language, shifting from static architecture documentation to dynamic use case modeling. It enables teams to:
 
 - Model business use cases as the primary unit of system design
 - Capture domain interactions through scenario-based descriptions
@@ -119,7 +119,7 @@ Notification sends welcome email
 ```
 
 ## VS Code Extension
-Install the ArchDSL extension for VS Code to get:
+Install the Craft extension for VS Code to get:
 
 - **Syntax highlighting** and auto-completion
 - **Hierarchical domain view** with real-time discovery

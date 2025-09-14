@@ -1,6 +1,6 @@
-# Architecture DSL Extension
+# Craft Language Extension
 
-This extension provides syntax highlighting and language support for Architecture DSL files.
+This extension provides syntax highlighting and language support for Craft Language files.
 
 ## Structure
 
@@ -39,7 +39,7 @@ This extension provides syntax highlighting and language support for Architectur
 cd vscode-extension
 npm install
 vsce package
-code --install-extension archdsl-0.0.1.vsix
+code --install-extension craft-0.0.1.vsix
 ```
 
 ## Development
@@ -56,7 +56,7 @@ code --install-extension archdsl-0.0.1.vsix
 
 1. Open the extension in VS Code
 2. Press F5 to run the extension in debug mode
-3. Open a `.dsl` file to test syntax highlighting
+3. Open a `.craft` file to test syntax highlighting
 
 ## Contributing
 

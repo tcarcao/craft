@@ -1,5 +1,5 @@
 // go.mod
-module github.com/tcarcao/archdsl
+module github.com/tcarcao/craft
 
 go 1.22.0
 

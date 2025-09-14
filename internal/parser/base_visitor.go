@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/antlr4-go/antlr/v4"
-	"github.com/tcarcao/archdsl/pkg/parser"
+	"github.com/tcarcao/craft/pkg/parser"
 )
 
 // DSLModelBuilder builds the structured model from the parse tree

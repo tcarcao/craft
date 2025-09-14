@@ -2,7 +2,7 @@
 
 ## Why Pivot from Architecture DSL?
 
-Current v1 ArchDSL focuses on static architecture:
+Current v1 Craft focuses on static architecture:
 - System definitions
 - Component relationships  
 - Data flow descriptions

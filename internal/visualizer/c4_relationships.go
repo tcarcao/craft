@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tcarcao/archdsl/internal/parser"
+	"github.com/tcarcao/craft/internal/parser"
 )
 
 // Relationship creation methods for generator

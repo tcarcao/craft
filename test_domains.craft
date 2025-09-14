@@ -21,20 +21,20 @@ domain Inventory {
 }
 
 services {
-    PaymentService: {
+    PaymentService {
         domains: ProcessPayment, ValidateCard
         data-stores: payment_db
         language: java
-    },
+    }
     
-    UserService: {
+    UserService {
         domains: CreateAccount, UpdateProfile
         data-stores: user_db
         language: golang
-    },
+    }
     
     // This service domain is not defined in domain definitions above
-    NotificationService: {
+    NotificationService {
         domains: SendEmail, SendSMS
         data-stores: notification_db
         language: nodejs

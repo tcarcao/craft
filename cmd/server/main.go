@@ -11,8 +11,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/tcarcao/archdsl/internal/parser"
-	"github.com/tcarcao/archdsl/internal/visualizer"
+	"github.com/tcarcao/craft/internal/parser"
+	"github.com/tcarcao/craft/internal/visualizer"
 )
 
 //go:embed templates

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "Domain DSL",
-  "scopeName": "source.archdsl",
+  "name": "Craft Language",
+  "scopeName": "source.craft",
   "patterns": [
     {
       "include": "#comments"

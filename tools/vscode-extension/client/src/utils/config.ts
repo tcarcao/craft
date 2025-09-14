@@ -1,13 +1,13 @@
 // client/src/utils/config.ts
 import { workspace } from 'vscode';
 
-export interface ArchDSLConfig {
+export interface CraftConfig {
     serverUrl: string;
     timeout: number;
 }
 
-export function getArchDSLConfig(): ArchDSLConfig {
-    const config = workspace.getConfiguration('archdsl.server');
+export function getCraftConfig(): CraftConfig {
+    const config = workspace.getConfiguration('craft.server');
     return {
         serverUrl: config.get<string>('url', 'http://localhost:8080'),
         timeout: config.get<number>('timeout', 30000)
