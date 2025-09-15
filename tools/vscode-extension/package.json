@@ -128,7 +128,7 @@
                 {
                     "id": "dslDomainContainer",
                     "title": "DSL Domains",
-                    "icon": "$(symbol-namespace)"
+                    "icon": "resources/craft_icon.svg"
                 }
             ]
         },
@@ -138,13 +138,13 @@
                     "id": "dslDomainView",
                     "name": "Domain Manager",
                     "type": "webview",
-                    "icon": "$(symbol-namespace)"
+                    "icon": "resources/craft_icon.svg"
                 },
                 {
                     "id": "dslServicesView",
                     "name": "Services",
                     "type": "webview",
-                    "icon": "$(symbol-namespace)"
+                    "icon": "resources/craft_icon.svg"
                 }
             ]
         }
