@@ -1,5 +1,5 @@
 // server/src/DomainExtractor.ts
-import { ArchDSLVisitor } from './generated/ArchDSLVisitor';
+import { CraftVisitor } from './generated/CraftVisitor';
 import { 
 	DslContext, 
 	Services_defContext, 
@@ -25,11 +25,11 @@ import {
 	Domain_nameContext,
 	Subdomain_listContext,
 	SubdomainContext
-} from './generated/ArchDSLParser';
+} from './generated/CraftParser';
 import { ServiceDefinition, UseCaseInfo, DomainDefinition } from '../../../shared/lib/types/domain-extraction';
 
 
-export class DomainVisitor extends ArchDSLVisitor<void> {
+export class DomainVisitor extends CraftVisitor<void> {
 	public domains = new Set<string>();
 	public useCases: UseCaseInfo[] = [];
 	public serviceDefinitions: ServiceDefinition[] = [];

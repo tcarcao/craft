@@ -51,7 +51,7 @@ export interface ExtractionResult {
 
 // Command request/response types
 export const ServerCommands = {
-  EXTRACT_DOMAINS_FROM_CURRENT: 'archdsl.extractDomains',
-  EXTRACT_DOMAINS_FROM_WORKSPACE: 'archdsl.extractAllDomainsFromWorkspace',
-  EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES: 'archdsl.extractDslFromBlockRanges'
+  EXTRACT_DOMAINS_FROM_CURRENT: 'craft.extractDomains',
+  EXTRACT_DOMAINS_FROM_WORKSPACE: 'craft.extractAllDomainsFromWorkspace',
+  EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES: 'craft.extractDslFromBlockRanges'
 } as const;

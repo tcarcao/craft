@@ -9,7 +9,7 @@ import (
 
 // DSLModelBuilder builds the structured model from the parse tree
 type DSLModelBuilder struct {
-	*parser.BaseArchDSLVisitor
+	*parser.BaseCraftVisitor
 	model               *DSLModel
 	currentArchitecture *Architecture
 	currentExposure     *Exposure
@@ -21,7 +21,7 @@ type DSLModelBuilder struct {
 
 func NewDSLModelBuilder() *DSLModelBuilder {
 	return &DSLModelBuilder{
-		BaseArchDSLVisitor: &parser.BaseArchDSLVisitor{},
+		BaseCraftVisitor: &parser.BaseCraftVisitor{},
 		model: &DSLModel{
 			Architectures: make([]Architecture, 0),
 			Exposures:     make([]Exposure, 0),
@@ -70,7 +70,7 @@ func (b *DSLModelBuilder) extractIdentifier(ctx *antlr.BaseParserRuleContext) st
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if terminalNode, ok := ctx.GetChild(i).(antlr.TerminalNode); ok {
 			tokenType := terminalNode.GetSymbol().GetTokenType()
-			if tokenType == parser.ArchDSLLexerIDENTIFIER {
+			if tokenType == parser.CraftLexerIDENTIFIER {
 				return terminalNode.GetText()
 			}
 		}
@@ -85,9 +85,9 @@ func (b *DSLModelBuilder) extractIdentifier(ctx *antlr.BaseParserRuleContext) st
 // Utility function to parse DSL content into model
 func ParseDSLToModel(dslContent string) (*DSLModel, error) {
 	inputStream := antlr.NewInputStream(dslContent)
-	lexer := parser.NewArchDSLLexer(inputStream)
+	lexer := parser.NewCraftLexer(inputStream)
 	tokenStream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-	p := parser.NewArchDSLParser(tokenStream)
+	p := parser.NewCraftParser(tokenStream)
 
 	// Add error listener
 	errorListener := &CustomErrorListener{

@@ -27,7 +27,7 @@ func debugParseDSL(t *testing.T, dsl string) {
 	fmt.Printf("Input DSL:\n%s\n\n", dsl)
 
 	inputStream := antlr.NewInputStream(dsl)
-	lexer := parser.NewArchDSLLexer(inputStream)
+	lexer := parser.NewCraftLexer(inputStream)
 
 	// Debug tokens with better formatting
 	fmt.Println("=== TOKENS ===")
@@ -57,9 +57,9 @@ func debugParseDSL(t *testing.T, dsl string) {
 	}
 
 	// Reset for parsing
-	lexer2 := parser.NewArchDSLLexer(antlr.NewInputStream(dsl))
+	lexer2 := parser.NewCraftLexer(antlr.NewInputStream(dsl))
 	tokenStream2 := antlr.NewCommonTokenStream(lexer2, antlr.TokenDefaultChannel)
-	p := parser.NewArchDSLParser(tokenStream2)
+	p := parser.NewCraftParser(tokenStream2)
 
 	// Add error listener
 	errorListener := &CustomErrorListener{

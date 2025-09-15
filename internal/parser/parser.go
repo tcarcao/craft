@@ -28,12 +28,12 @@ func NewParser() *Parser {
 
 func (p *Parser) ParseString(dslContent string) (*DSLModel, error) {
 	inputStream := antlr.NewInputStream(dslContent)
-	lexer := parser.NewArchDSLLexer(inputStream)
+	lexer := parser.NewCraftLexer(inputStream)
 	lexer.RemoveErrorListeners()
 	lexer.AddErrorListener(p.errorListener)
 
 	tokenStream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
-	dslParser := parser.NewArchDSLParser(tokenStream)
+	dslParser := parser.NewCraftParser(tokenStream)
 
 	dslParser.RemoveErrorListeners()
 	dslParser.AddErrorListener(p.errorListener)

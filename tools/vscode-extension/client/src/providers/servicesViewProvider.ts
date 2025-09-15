@@ -53,7 +53,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
 
         // Listen for file content changes (real-time)
         workspace.onDidChangeTextDocument((changeEvent) => {
-            if (this.isArchDSLDocument(changeEvent.document)) {
+            if (this.isCraftDocument(changeEvent.document)) {
                 // Only refresh if content is parseable to avoid flickering during invalid intermediate states
                 this.deferredRefreshWithValidation(changeEvent.document);
             }
@@ -61,20 +61,20 @@ export class ServicesViewProvider implements WebviewViewProvider {
 
         // Listen for file saves
         workspace.onDidSaveTextDocument((document) => {
-            if (this.isArchDSLDocument(document)) {
+            if (this.isCraftDocument(document)) {
                 this.deferredRefresh();
             }
         });
 
         // Listen for file opens/closes
         workspace.onDidOpenTextDocument((document) => {
-            if (this.isArchDSLDocument(document)) {
+            if (this.isCraftDocument(document)) {
                 this.deferredRefresh();
             }
         });
 
         workspace.onDidCloseTextDocument((document) => {
-            if (this.isArchDSLDocument(document)) {
+            if (this.isCraftDocument(document)) {
                 this.deferredRefresh();
             }
         });
@@ -170,7 +170,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         const activeEditor = window.activeTextEditor;
         const previousFile = this._state.currentFile;
         
-        if (activeEditor && this.isArchDSLDocument(activeEditor.document)) {
+        if (activeEditor && this.isCraftDocument(activeEditor.document)) {
             // We switched to a DSL file - update current file
             this._state.currentFile = activeEditor.document.fileName;
             console.log('Current file updated to:', this._state.currentFile);
@@ -196,7 +196,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         }
     }
 
-    private isArchDSLDocument(document: TextDocument): boolean {
+    private isCraftDocument(document: TextDocument): boolean {
         return document.languageId === 'craft' || 
                document.fileName.endsWith('.craft');
     }
@@ -231,7 +231,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 // Attempt to parse the DSL to see if it's valid
                 // We'll use the language server to validate the content
                 await this.languageClient.sendRequest('workspace/executeCommand', {
-                    command: 'archdsl.validateDocument',
+                    command: 'craft.validateDocument',
                     arguments: [document.uri.toString()]
                 });
 
@@ -488,7 +488,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
             boundariesMode: this._state.boundariesMode
         };
         
-        commands.executeCommand('archdsl.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
+        commands.executeCommand('craft.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
     }
 
     private handleToggleServiceFocus(serviceGroupId: string, serviceId: string) {

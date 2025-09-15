@@ -25,7 +25,7 @@ func (b *DSLModelBuilder) VisitArch(ctx *parser.ArchContext) interface{} {
 			// Extract name from arch_name context
 			for j := 0; j < archName.GetChildCount(); j++ {
 				if terminalNode, ok := archName.GetChild(j).(antlr.TerminalNode); ok {
-					if terminalNode.GetSymbol().GetTokenType() == parser.ArchDSLLexerIDENTIFIER {
+					if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 						arch.Name = terminalNode.GetText()
 						break
 					}
@@ -177,7 +177,7 @@ func (b *DSLModelBuilder) extractComponentWithModifiers(ctx *parser.Component_wi
 			// Extract IDENTIFIER from component_name context
 			for j := 0; j < componentName.GetChildCount(); j++ {
 				if terminalNode, ok := componentName.GetChild(j).(antlr.TerminalNode); ok {
-					if terminalNode.GetSymbol().GetTokenType() == parser.ArchDSLLexerIDENTIFIER {
+					if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 						component.Name = terminalNode.GetText()
 						break
 					}
@@ -219,7 +219,7 @@ func (b *DSLModelBuilder) extractModifier(ctx *parser.ModifierContext) *Componen
 	identifiers := make([]string, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		if terminalNode, ok := ctx.GetChild(i).(antlr.TerminalNode); ok {
-			if terminalNode.GetSymbol().GetTokenType() == parser.ArchDSLLexerIDENTIFIER {
+			if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 				identifiers = append(identifiers, terminalNode.GetText())
 			}
 		}

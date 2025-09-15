@@ -41,7 +41,7 @@ function startLanguageServer(context: ExtensionContext) {
     };
 
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: 'file', language: 'archdsl' }],
+        documentSelector: [{ scheme: 'file', language: 'craft' }],
         synchronize: {
             // Notify the server about file changes to '.clientrc files contained in the workspace
             fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
@@ -49,8 +49,8 @@ function startLanguageServer(context: ExtensionContext) {
     };
 
     client = new LanguageClient(
-        'archdslLanguageServer',
-        'ArchDSL Language Server',
+        'craftLanguageServer',
+        'Craft Language Server',
         serverOptions,
         clientOptions
     );

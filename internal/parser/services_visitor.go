@@ -93,9 +93,9 @@ func (b *DSLModelBuilder) extractServiceName(ctx *parser.Service_nameContext) st
 			text := terminalNode.GetText()
 
 			switch tokenType {
-			case parser.ArchDSLLexerIDENTIFIER:
+			case parser.CraftLexerIDENTIFIER:
 				return text
-			case parser.ArchDSLLexerSTRING:
+			case parser.CraftLexerSTRING:
 				return strings.Trim(text, "\"")
 			}
 		}
@@ -125,7 +125,7 @@ func (b *DSLModelBuilder) VisitService_property(ctx *parser.Service_propertyCont
 		if terminalNode, ok := child.(antlr.TerminalNode); ok {
 			tokenType := terminalNode.GetSymbol().GetTokenType()
 			switch tokenType {
-			case parser.ArchDSLLexerDOMAINS:
+			case parser.CraftLexerDOMAINS:
 				// Find the domain_list after this token
 				for j := i + 1; j < ctx.GetChildCount(); j++ {
 					if domainList, ok := ctx.GetChild(j).(*parser.Domain_listContext); ok {
@@ -133,7 +133,7 @@ func (b *DSLModelBuilder) VisitService_property(ctx *parser.Service_propertyCont
 						break
 					}
 				}
-			case parser.ArchDSLLexerDATA_STORES:
+			case parser.CraftLexerDATA_STORES:
 				// Find the datastore_list after this token
 				for j := i + 1; j < ctx.GetChildCount(); j++ {
 					if datastoreList, ok := ctx.GetChild(j).(*parser.Datastore_listContext); ok {
@@ -141,17 +141,17 @@ func (b *DSLModelBuilder) VisitService_property(ctx *parser.Service_propertyCont
 						break
 					}
 				}
-			case parser.ArchDSLLexerLANGUAGE:
+			case parser.CraftLexerLANGUAGE:
 				// Find the IDENTIFIER after this token
 				for j := i + 1; j < ctx.GetChildCount(); j++ {
 					if terminalNode, ok := ctx.GetChild(j).(antlr.TerminalNode); ok {
-						if terminalNode.GetSymbol().GetTokenType() == parser.ArchDSLLexerIDENTIFIER {
+						if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 							b.currentService.Language = terminalNode.GetText()
 							break
 						}
 					}
 				}
-			case parser.ArchDSLLexerDEPLOYMENT:
+			case parser.CraftLexerDEPLOYMENT:
 				// Find the deployment_strategy after this token
 				for j := i + 1; j < ctx.GetChildCount(); j++ {
 					if deploymentStrategy, ok := ctx.GetChild(j).(*parser.Deployment_strategyContext); ok {
@@ -211,7 +211,7 @@ func (b *DSLModelBuilder) extractDeploymentRule(ctx *parser.Deployment_ruleConte
 		if terminalNode, ok := child.(antlr.TerminalNode); ok {
 			tokenType := terminalNode.GetSymbol().GetTokenType()
 			switch tokenType {
-			case parser.ArchDSLLexerPERCENTAGE:
+			case parser.CraftLexerPERCENTAGE:
 				rule.Percentage = terminalNode.GetText()
 			}
 		} else if deploymentTarget, ok := child.(*parser.Deployment_targetContext); ok {

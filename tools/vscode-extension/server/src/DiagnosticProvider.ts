@@ -6,7 +6,7 @@ import {
     Range
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Parser } from './parser/ArchDSLParser';
+import { Parser } from './parser/CraftParser';
 
 export class DiagnosticProvider {
     private parser: Parser;

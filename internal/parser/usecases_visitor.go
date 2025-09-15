@@ -28,7 +28,7 @@ func (b *DSLModelBuilder) VisitUse_case(ctx *parser.Use_caseContext) interface{}
 			// Extract the STRING token from the string context
 			for j := 0; j < stringCtx.GetChildCount(); j++ {
 				if terminalNode, ok := stringCtx.GetChild(j).(antlr.TerminalNode); ok {
-					if terminalNode.GetSymbol().GetTokenType() == parser.ArchDSLLexerSTRING {
+					if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerSTRING {
 						name := terminalNode.GetText()
 						useCase.Name = strings.Trim(name, "\"")
 						break
@@ -302,9 +302,9 @@ func (b *DSLModelBuilder) extractWordsFromPhrase(ctx *parser.PhraseContext) []st
 			text := terminalNode.GetText()
 
 			switch tokenType {
-			case parser.ArchDSLLexerIDENTIFIER:
+			case parser.CraftLexerIDENTIFIER:
 				words = append(words, text)
-			case parser.ArchDSLLexerSTRING:
+			case parser.CraftLexerSTRING:
 				words = append(words, strings.Trim(text, "\""))
 			}
 		} else if connectorWord, ok := child.(*parser.Connector_wordContext); ok {

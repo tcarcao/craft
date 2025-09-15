@@ -2,7 +2,7 @@ import { ParseTree, ParserRuleContext, TerminalNode, Token } from 'antlr4ng';
 import { BlockRange } from '../../../shared/lib/types/domain-extraction';
 
 /**
- * Extracts minimal subtree from ArchDSL AST with ancestry
+ * Extracts minimal subtree from Craft AST with ancestry
  * @param ast - The full AST from antlr4ng (ParserRuleContext)
  * @param selectedRanges - Array of {startLine, endLine} objects for selected blocks
  * @param originalText - The original DSL text

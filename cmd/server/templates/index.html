@@ -261,12 +261,12 @@
 
     require(['vs/editor/editor.main'], function() {
         // Register language
-        monaco.languages.register({ id: 'archdsl' });
+        monaco.languages.register({ id: 'craft' });
 
         // Define syntax highlighting rules
-        monaco.languages.setMonarchTokensProvider('archdsl', {
+        monaco.languages.setMonarchTokensProvider('craft', {
             defaultToken: '',
-            tokenPostfix: '.archdsl',
+            tokenPostfix: '.craft',
 
             keywords: [
                 'system', 'bounded', 'context', 'aggregate', 'component',
@@ -326,7 +326,7 @@
         });
 
         // Define theme
-        monaco.editor.defineTheme('archDslTheme', {
+        monaco.editor.defineTheme('craftTheme', {
             base: 'vs',
             inherit: true,
             rules: [
@@ -376,8 +376,8 @@
         // Create editor
         editor = monaco.editor.create(document.getElementById('editor'), {
             value: {{.Input}},
-        language: 'archdsl',
-            theme: 'archDslTheme',
+        language: 'craft',
+            theme: 'craftTheme',
             automaticLayout: true,
             formatOnType: true,
             formatOnPaste: true,

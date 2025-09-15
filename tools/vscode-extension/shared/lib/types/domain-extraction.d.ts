@@ -39,7 +39,7 @@ export interface ExtractionResult {
     error?: string;
 }
 export declare const ServerCommands: {
-    readonly EXTRACT_DOMAINS_FROM_CURRENT: "archdsl.extractDomains";
-    readonly EXTRACT_DOMAINS_FROM_WORKSPACE: "archdsl.extractAllDomainsFromWorkspace";
-    readonly EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES: "archdsl.extractDslFromBlockRanges";
+    readonly EXTRACT_DOMAINS_FROM_CURRENT: "craft.extractDomains";
+    readonly EXTRACT_DOMAINS_FROM_WORKSPACE: "craft.extractAllDomainsFromWorkspace";
+    readonly EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES: "craft.extractDslFromBlockRanges";
 };

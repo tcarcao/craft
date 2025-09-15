@@ -1,7 +1,7 @@
 // server/src/DomainExtractor.ts
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Parser } from './ArchDSLParser';
-import { DslContext} from './generated/ArchDSLParser';
+import { Parser } from './CraftParser';
+import { DslContext} from './generated/CraftParser';
 import { ExtractionResult } from '../../../shared/lib/types/domain-extraction';
 import { DomainVisitor } from './DomainVisitor';
 

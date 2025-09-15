@@ -9,19 +9,19 @@ import (
 
 // Enhanced debug visitor to see what's being parsed
 type DebugVisitor struct {
-	*parser.BaseArchDSLVisitor
+	*parser.BaseCraftVisitor
 	depth int
-	lexer *parser.ArchDSLLexer // Store lexer reference for token name lookup
+	lexer *parser.CraftLexer // Store lexer reference for token name lookup
 }
 
 func NewDebugVisitor() *DebugVisitor {
 	return &DebugVisitor{
-		BaseArchDSLVisitor: &parser.BaseArchDSLVisitor{},
-		depth:              0,
+		BaseCraftVisitor: &parser.BaseCraftVisitor{},
+		depth:            0,
 	}
 }
 
-func (d *DebugVisitor) setLexer(lexer *parser.ArchDSLLexer) {
+func (d *DebugVisitor) setLexer(lexer *parser.CraftLexer) {
 	d.lexer = lexer
 }
 

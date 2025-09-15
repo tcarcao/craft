@@ -1,7 +1,7 @@
-// src/parser/ArchDSLParser.ts
+// src/parser/CraftParser.ts
 import { CharStream, CommonTokenStream } from "antlr4ng";
-import { ArchDSLLexer } from "./generated/ArchDSLLexer";
-import { ArchDSLParser } from "./generated/ArchDSLParser";
+import { CraftLexer } from "./generated/CraftLexer";
+import { CraftParser } from "./generated/CraftParser";
 import { CustomErrorListener } from './ErrorListener';
 import { BlockRange } from '../../../shared/lib/types/domain-extraction';
 import { extractMinimalSubtree } from './DSLExtractor';
@@ -65,17 +65,17 @@ export class Parser {
         }
     }
 
-    private initializeParser(input: string): [ArchDSLLexer, ArchDSLParser] {
+    private initializeParser(input: string): [CraftLexer, CraftParser] {
         const inputStream = CharStream.fromString(input);
 
         // Create lexer
-        const lexer = new ArchDSLLexer(inputStream);
+        const lexer = new CraftLexer(inputStream);
 
         // Create token stream
         const tokenStream = new CommonTokenStream(lexer);
 
         // Create parser
-        const parser = new ArchDSLParser(tokenStream);
+        const parser = new CraftParser(tokenStream);
 
         return [lexer, parser];
     }

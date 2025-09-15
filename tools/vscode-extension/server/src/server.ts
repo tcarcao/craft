@@ -23,7 +23,7 @@ import {
   DomainDefinition,
   BlockRange
 } from '../../shared/lib/types/domain-extraction';
-import { Parser } from './parser/ArchDSLParser';
+import { Parser } from './parser/CraftParser';
 
 // Create connection and documents manager
 const connection = createConnection(ProposedFeatures.all);
