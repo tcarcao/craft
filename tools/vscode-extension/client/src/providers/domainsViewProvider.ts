@@ -452,7 +452,10 @@ export class DomainsViewProvider implements WebviewViewProvider {
         }
 
         if (this._state.isLoading) {
-            this._view.webview.html = this._htmlGenerator.generateLoadingHtml();
+            const cssUri = this._view.webview.asWebviewUri(
+                Uri.joinPath(this._extensionUri, 'client', 'src', 'ui', 'styles', 'treeStyles.css')
+            );
+            this._view.webview.html = this._htmlGenerator.generateLoadingHtml(cssUri.toString());
             return;
         }
 
@@ -472,12 +475,17 @@ export class DomainsViewProvider implements WebviewViewProvider {
             Uri.joinPath(this._extensionUri, 'client', 'node_modules', '@vscode/codicons', 'dist', 'codicon.css')
         );
         
+        const cssUri = this._view.webview.asWebviewUri(
+            Uri.joinPath(this._extensionUri, 'client', 'src', 'ui', 'styles', 'treeStyles.css')
+        );
+        
         this._view.webview.html = this._htmlGenerator.generateTreeHtml(
             filteredDomains,
             this._state.viewMode,
             selectedCount,
             totalCount,
-            codiconsUri.toString()
+            codiconsUri.toString(),
+            cssUri.toString()
         );
     }
 

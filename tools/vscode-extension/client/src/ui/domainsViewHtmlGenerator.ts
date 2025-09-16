@@ -1,18 +1,17 @@
 // src/ui/htmlGenerator.ts
 
 import { Domain, SubDomain, UseCase, UseCaseReference } from '../types/domain';
-import { domainTreeStyles } from './styles/treeStyles';
 
 export class DomainsViewHtmlGenerator {
 
-    generateLoadingHtml(): string {
+    generateLoadingHtml(cssUri: string): string {
         return `<!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>DSL Domain Tree</title>
-            <style>${domainTreeStyles}</style>
+            <link href="${cssUri}" rel="stylesheet" />
         </head>
         <body>
             <div class="loading-container">
@@ -28,7 +27,8 @@ export class DomainsViewHtmlGenerator {
         viewMode: 'current' | 'workspace',
         selectedCount: { domains: number, subDomains: number, useCases: number },
         totalCount: { domains: number, subDomains: number, useCases: number },
-        codiconsUri?: string
+        codiconsUri: string,
+        cssUri: string
     ): string {
         // Don't filter here - the provider already filtered for current mode
         // For workspace mode, we'll show all domains but style non-current-file items in grey
@@ -40,8 +40,8 @@ export class DomainsViewHtmlGenerator {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>DSL Domain Tree</title>
-            ${codiconsUri ? `<link href="${codiconsUri}" rel="stylesheet" />` : ''}
-            <style>${domainTreeStyles}</style>
+            <link href="${codiconsUri}" rel="stylesheet" />
+            <link href="${cssUri}" rel="stylesheet" />
         </head>
         <body>
             ${this.generateHeader(viewMode, selectedCount, totalCount)}

@@ -3,18 +3,17 @@
 
 // import { serviceTreeStyles } from './styles/serviceViewStyles';
 import { Service, ServiceGroup, SubDomain, UseCase } from '../types/domain';
-import { domainTreeStyles } from './styles/treeStyles';
 
 export class ServicesViewHtmlGenerator {
 
-	public generateLoadingHtml(): string {
+	public generateLoadingHtml(cssUri: string): string {
 		return `<!DOCTYPE html>
 		<html lang="en">
 		<head>
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1.0">
 			<title>DSL Services</title>
-			<style>${domainTreeStyles}</style>
+			<link href="${cssUri}" rel="stylesheet" />
 		</head>
 		<body>
 			<div class="loading-container">
@@ -31,7 +30,8 @@ export class ServicesViewHtmlGenerator {
 		selectedCount: { serviceGroups: number, services: number },
 		totalCount: { serviceGroups: number, services: number },
 		boundariesMode: 'transparent' | 'boundaries' = 'boundaries',
-		codiconsUri?: string
+		codiconsUri: string,
+		cssUri: string
 	): string {
 		// Don't filter here - the provider already filtered for current mode
 		// For workspace mode, we'll show all groups but style non-current-file items in grey
@@ -44,8 +44,8 @@ export class ServicesViewHtmlGenerator {
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1.0">
 			<title>DSL Services</title>
-			${codiconsUri ? `<link href="${codiconsUri}" rel="stylesheet" />` : ''}
-			<style>${domainTreeStyles}</style>
+			<link href="${codiconsUri}" rel="stylesheet" />
+			<link href="${cssUri}" rel="stylesheet" />
 		</head>
 		<body>
 			${this.generateHeader(viewMode, selectedCount, totalCount, boundariesMode)}
@@ -67,7 +67,7 @@ export class ServicesViewHtmlGenerator {
 				<div class="header-row">
 					<h3 class="title">Services</h3>
 					<div class="header-actions">
-						${selectedCount.services > 0 ? '<button class="header-btn" onclick="preview()" title="Preview"><i class="codicon codicon-play"></i></button>' : ''}
+						${selectedCount.services > 0 ? '<button class="header-btn" onclick="preview()" title="Preview"><i class="codicon codicon-preview"></i></button>' : ''}
 						<button class="header-btn" onclick="refresh()" title="Refresh services"><i class="codicon codicon-refresh"></i></button>
 					</div>
 				</div>
