@@ -20,7 +20,7 @@ docker-run:
 
 docker-clean:
 	@echo "Removing Docker image..."
-	podman rmi $(IMAGE_NAME):$(IMAGE_TAG)
+	podman rmi -f $(IMAGE_NAME):$(IMAGE_TAG)
 
 docker-build-antlr-image:
 	@if [ -z "$$(podman images -q $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG))" ]; then \

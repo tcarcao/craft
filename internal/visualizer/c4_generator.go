@@ -441,6 +441,46 @@ func (g *C4DiagramGenerator) createRelationships() {
 	g.createServiceRelationships()
 	g.createDatabaseRelationships()
 	g.createEventRelationships()
+
+	// Deduplicate relationships to prevent duplicate arrows
+	g.deduplicateRelationships()
+}
+
+// deduplicateRelationships removes duplicate relationships based on From->To pairs
+func (g *C4DiagramGenerator) deduplicateRelationships() {
+	// Deduplicate system-level relationships
+	g.systemRelations = g.deduplicateRelationshipSlice(g.systemRelations)
+	
+	// Deduplicate container-level relationships
+	g.relations = g.deduplicateRelationshipSlice(g.relations)
+}
+
+// deduplicateRelationshipSlice removes duplicates from a relationship slice
+func (g *C4DiagramGenerator) deduplicateRelationshipSlice(relationships []C4Relation) []C4Relation {
+	seen := make(map[string]C4Relation)
+	
+	for _, relation := range relationships {
+		// Create a unique key based on From->To pair
+		key := fmt.Sprintf("%s->%s", relation.From, relation.To)
+		
+		// If we haven't seen this relationship before, or if the current one has more detail, keep it
+		if existing, exists := seen[key]; !exists {
+			seen[key] = relation
+		} else {
+			// If the new relation has a more detailed description, prefer it
+			if len(relation.Description) > len(existing.Description) {
+				seen[key] = relation
+			}
+		}
+	}
+	
+	// Convert map back to slice
+	result := make([]C4Relation, 0, len(seen))
+	for _, relation := range seen {
+		result = append(result, relation)
+	}
+	
+	return result
 }
 
 // Helper methods (continuing in next part due to length)
