@@ -49,7 +49,7 @@ func (p *Processor) generateDiagrams(arch *parser.DSLModel, outputDir string) er
 	}
 
 	// Generate C4 diagram
-	c4Content, err := p.visualizer.GenerateC4(arch, visualizer.C4ModeBoundaries)
+	c4Content, err := p.visualizer.GenerateC4(arch, visualizer.C4ModeBoundaries, true)
 	if err != nil {
 		return fmt.Errorf("failed to generate C4 diagram: %v", err)
 	}

@@ -27,6 +27,11 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
             if (focusInfo.boundariesMode) {
                 requestBody.boundariesMode = focusInfo.boundariesMode;
             }
+            
+            // Add database visibility if provided
+            if (focusInfo.showDatabases !== undefined) {
+                requestBody.showDatabases = focusInfo.showDatabases;
+            }
         }
         
         const { data } = await axios.post(`${serverUrl}/preview/${documentType.toLowerCase()}`, requestBody, {

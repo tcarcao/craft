@@ -15,6 +15,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         workspaceServiceGroups: new Map(),
         viewMode: 'current',
         boundariesMode: 'boundaries',
+        showDatabases: true,
         expandedNodes: new Set(),
         selectedNodes: new Set(),
         currentFile: undefined,
@@ -137,6 +138,9 @@ export class ServicesViewProvider implements WebviewViewProvider {
                     break;
                 case 'setBoundariesMode':
                     this.handleSetBoundariesMode(data.mode);
+                    break;
+                case 'setDatabaseVisibility':
+                    this.handleSetDatabaseVisibility(data.show);
                     break;
                 case 'selectAll':
                     this.handleSelectAll();
@@ -438,6 +442,11 @@ export class ServicesViewProvider implements WebviewViewProvider {
         this.updateWebview();
     }
 
+    private handleSetDatabaseVisibility(show: boolean) {
+        this._state.showDatabases = show;
+        this.updateWebview();
+    }
+
     // private handleSetGroupBy(groupBy: 'type' | 'domain') {
     //     this._groupBy = groupBy;
     //     this.updateServiceGroups();
@@ -485,7 +494,8 @@ export class ServicesViewProvider implements WebviewViewProvider {
             focusedSubDomainNames: focusedSubDomains.map(sd => sd.name),
             hasFocusedServices: focusedServices.length > 0,
             hasFocusedSubDomains: focusedSubDomains.length > 0,
-            boundariesMode: this._state.boundariesMode
+            boundariesMode: this._state.boundariesMode,
+            showDatabases: this._state.showDatabases
         };
         
         commands.executeCommand('craft.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
@@ -648,6 +658,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
             selectedCount,
             totalCount,
             this._state.boundariesMode,
+            this._state.showDatabases,
             codiconsUri.toString(),
             cssUri.toString()
         );

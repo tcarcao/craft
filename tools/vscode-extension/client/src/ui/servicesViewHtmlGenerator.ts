@@ -30,6 +30,7 @@ export class ServicesViewHtmlGenerator {
 		selectedCount: { serviceGroups: number, services: number },
 		totalCount: { serviceGroups: number, services: number },
 		boundariesMode: 'transparent' | 'boundaries' = 'boundaries',
+		showDatabases: boolean = true,
 		codiconsUri: string,
 		cssUri: string
 	): string {
@@ -48,7 +49,7 @@ export class ServicesViewHtmlGenerator {
 			<link href="${cssUri}" rel="stylesheet" />
 		</head>
 		<body>
-			${this.generateHeader(viewMode, selectedCount, totalCount, boundariesMode)}
+			${this.generateHeader(viewMode, selectedCount, totalCount, boundariesMode, showDatabases)}
 			${this.generateTreeContent(visibleServiceGroups, viewMode)}
 			${this.generateQuickActions()}
 			${this.generateScript()}
@@ -60,7 +61,8 @@ export class ServicesViewHtmlGenerator {
 		viewMode: 'current' | 'workspace',
 		selectedCount: { serviceGroups: number, services: number },
 		totalCount: { serviceGroups: number, services: number },
-		boundariesMode: 'transparent' | 'boundaries' = 'boundaries'
+		boundariesMode: 'transparent' | 'boundaries' = 'boundaries',
+		showDatabases: boolean = true
 	): string {
 		return `
 			<div class="header">
@@ -81,13 +83,63 @@ export class ServicesViewHtmlGenerator {
 							title="Show services from entire workspace">Workspace</button>
 				</div>
 				
-				<div class="view-mode-toggle">
-					<button class="mode-btn ${boundariesMode === 'transparent' ? 'active' : ''}" 
-							onclick="setBoundariesMode('transparent')"
-							title="Show service-to-service connections (transparent boundaries)">Transparent</button>
-					<button class="mode-btn ${boundariesMode === 'boundaries' ? 'active' : ''}" 
-							onclick="setBoundariesMode('boundaries')"
-							title="Show domain-to-domain connections (domain boundaries)">Boundaries</button>
+				<div class="diagram-options">
+					<div class="options-header" onclick="toggleDiagramOptions()">
+						<span class="options-title">Diagram Options</span>
+						<span class="options-expander" id="diagram-options-expander">▶</span>
+					</div>
+					<div class="options-content" id="diagram-options-content" style="display: none;">
+						<div class="option-group">
+							<label class="option-label">Mode:</label>
+							<div class="option-toggle">
+								<button class="option-btn ${boundariesMode === 'transparent' ? 'active' : ''}" 
+										onclick="setBoundariesMode('transparent')"
+										title="Show service-to-service connections">Transparent</button>
+								<button class="option-btn ${boundariesMode === 'boundaries' ? 'active' : ''}" 
+										onclick="setBoundariesMode('boundaries')"
+										title="Show domain-to-domain connections">Boundaries</button>
+							</div>
+						</div>
+						
+						<div class="option-group">
+							<label class="option-label">Database:</label>
+							<div class="option-toggle">
+								<button class="option-btn ${showDatabases ? 'active' : ''}" 
+										onclick="setDatabaseVisibility(true)"
+										title="Show databases in diagram">Show</button>
+								<button class="option-btn ${!showDatabases ? 'active' : ''}" 
+										onclick="setDatabaseVisibility(false)"
+										title="Hide databases from diagram">Hide</button>
+							</div>
+						</div>
+						
+						<div class="option-group">
+							<label class="option-label">Focus Layer:</label>
+							<div class="option-toggle">
+								<button class="option-btn active" 
+										onclick="setFocusLayer('business')"
+										title="Focus on business logic and domains">Business</button>
+								<button class="option-btn" 
+										onclick="setFocusLayer('presentation')"
+										title="Focus on presentation and UI components">Presentation</button>
+								<button class="option-btn" 
+										onclick="setFocusLayer('composition')"
+										title="Focus on service composition and integration">Composition</button>
+							</div>
+						</div>
+						
+						<div class="option-group">
+							<label class="option-label">Infrastructure:</label>
+							<div class="option-toggle">
+								<button class="option-btn active" 
+										onclick="setInfrastructureVisibility(true)"
+										title="Show infrastructure components">Show</button>
+								<button class="option-btn" 
+										onclick="setInfrastructureVisibility(false)"
+										title="Hide infrastructure components">Hide</button>
+							</div>
+						</div>
+					</div>
 				</div>
 				
 				<div class="selection-info">
@@ -458,6 +510,61 @@ export class ServicesViewHtmlGenerator {
 			
 			function refresh() {
 				vscode.postMessage({ type: 'refresh' });
+			}
+			
+			// Diagram Options Functions
+			function toggleDiagramOptions() {
+				const content = document.getElementById('diagram-options-content');
+				const expander = document.getElementById('diagram-options-expander');
+				
+				if (content.style.display === 'none') {
+					content.style.display = 'block';
+					expander.textContent = '▼';
+				} else {
+					content.style.display = 'none';
+					expander.textContent = '▶';
+				}
+			}
+			
+			function setDatabaseVisibility(show) {
+				console.log('Set database visibility:', show);
+				vscode.postMessage({ type: 'setDatabaseVisibility', show });
+				
+				// Update button states
+				updateOptionButtons('Database', show ? 'Show' : 'Hide');
+			}
+			
+			function setFocusLayer(layer) {
+				// TODO: Implement focus layer logic
+				console.log('Set focus layer:', layer);
+				vscode.postMessage({ type: 'setFocusLayer', layer });
+				
+				// Update button states
+				updateOptionButtons('Focus Layer', layer);
+			}
+			
+			function setInfrastructureVisibility(show) {
+				// TODO: Implement infrastructure visibility logic
+				console.log('Set infrastructure visibility:', show);
+				vscode.postMessage({ type: 'setInfrastructureVisibility', show });
+				
+				// Update button states
+				updateOptionButtons('Infrastructure', show ? 'Show' : 'Hide');
+			}
+			
+			function updateOptionButtons(groupLabel, activeValue) {
+				// Find the option group and update button states
+				const groups = document.querySelectorAll('.option-group');
+				groups.forEach(group => {
+					const label = group.querySelector('.option-label');
+					if (label && label.textContent.includes(groupLabel)) {
+						const buttons = group.querySelectorAll('.option-btn');
+						buttons.forEach(btn => {
+							const isActive = btn.textContent.toLowerCase() === activeValue.toLowerCase();
+							btn.classList.toggle('active', isActive);
+						});
+					}
+				});
 			}
 			
 			// Keyboard shortcuts

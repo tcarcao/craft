@@ -31,10 +31,11 @@ type C4DiagramGenerator struct {
 	focusedServices    map[string]bool // Services to show as internal
 	focusedSubDomains  map[string]bool // SubDomains to show as internal
 	hasFocus           bool            // Whether focus mode is enabled
+	showDatabases      bool            // Whether to show database containers
 }
 
 // NewC4DiagramGenerator creates a new redesigned generator
-func NewC4DiagramGenerator(mode C4GenerationMode) *C4DiagramGenerator {
+func NewC4DiagramGenerator(mode C4GenerationMode, showDatabases bool) *C4DiagramGenerator {
 	return &C4DiagramGenerator{
 		mode:               mode,
 		systems:            make(map[string]*C4System),
@@ -46,11 +47,12 @@ func NewC4DiagramGenerator(mode C4GenerationMode) *C4DiagramGenerator {
 		focusedServices:    make(map[string]bool),
 		focusedSubDomains:  make(map[string]bool),
 		hasFocus:           false,
+		showDatabases:      showDatabases,
 	}
 }
 
 // NewC4DiagramGeneratorWithFocus creates a generator with service focus
-func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames []string) *C4DiagramGenerator {
+func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames []string, showDatabases bool) *C4DiagramGenerator {
 	focusedServices := make(map[string]bool)
 	for _, serviceName := range focusedServiceNames {
 		focusedServices[serviceName] = true
@@ -67,11 +69,12 @@ func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames [
 		focusedServices:    focusedServices,
 		focusedSubDomains:  make(map[string]bool),
 		hasFocus:           len(focusedServiceNames) > 0,
+		showDatabases:      showDatabases,
 	}
 }
 
 // NewC4DiagramGeneratorWithFocusAndSubDomains creates a generator with service and subdomain focus
-func NewC4DiagramGeneratorWithFocusAndSubDomains(mode C4GenerationMode, focusedServiceNames []string, focusedSubDomainNames []string) *C4DiagramGenerator {
+func NewC4DiagramGeneratorWithFocusAndSubDomains(mode C4GenerationMode, focusedServiceNames []string, focusedSubDomainNames []string, showDatabases bool) *C4DiagramGenerator {
 	focusedServices := make(map[string]bool)
 	for _, serviceName := range focusedServiceNames {
 		focusedServices[serviceName] = true
@@ -93,6 +96,7 @@ func NewC4DiagramGeneratorWithFocusAndSubDomains(mode C4GenerationMode, focusedS
 		focusedServices:    focusedServices,
 		focusedSubDomains:  focusedSubDomains,
 		hasFocus:           len(focusedServiceNames) > 0 || len(focusedSubDomainNames) > 0,
+		showDatabases:      showDatabases,
 	}
 }
 
@@ -206,8 +210,10 @@ func (g *C4DiagramGenerator) createServiceSystems() {
 			g.createApplicationContainer(service, system)
 		}
 
-		// Create database containers
-		g.createDatabaseContainers(service, system)
+		// Create database containers if enabled
+		if g.showDatabases {
+			g.createDatabaseContainers(service, system)
+		}
 
 		g.systems[service.Name] = system
 	}
@@ -439,7 +445,9 @@ func (g *C4DiagramGenerator) createRelationships() {
 
 	// Create inter-service and internal relationships
 	g.createServiceRelationships()
-	g.createDatabaseRelationships()
+	if g.showDatabases {
+		g.createDatabaseRelationships()
+	}
 	g.createEventRelationships()
 
 	// Deduplicate relationships to prevent duplicate arrows
@@ -553,22 +561,22 @@ func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario parser.Sc
 }
 
 // Main generation functions
-func GenerateC4ContextDiagram(model *parser.DSLModel, mode C4GenerationMode) string {
-	generator := NewC4DiagramGenerator(mode)
+func GenerateC4ContextDiagram(model *parser.DSLModel, mode C4GenerationMode, showDatabases bool) string {
+	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Context)
 }
 
-func GenerateC4ContainerDiagram(model *parser.DSLModel, mode C4GenerationMode) string {
-	generator := NewC4DiagramGenerator(mode)
+func GenerateC4ContainerDiagram(model *parser.DSLModel, mode C4GenerationMode, showDatabases bool) string {
+	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 
-func GenerateC4ContainerDiagramWithFocusAndSubDomains(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string, focusedSubDomainNames []string) string {
-	generator := NewC4DiagramGeneratorWithFocusAndSubDomains(mode, focusedServiceNames, focusedSubDomainNames)
+func GenerateC4ContainerDiagramWithFocusAndSubDomains(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string, focusedSubDomainNames []string, showDatabases bool) string {
+	generator := NewC4DiagramGeneratorWithFocusAndSubDomains(mode, focusedServiceNames, focusedSubDomainNames, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 
-func GenerateC4ComponentDiagram(model *parser.DSLModel, mode C4GenerationMode) string {
-	generator := NewC4DiagramGenerator(mode)
+func GenerateC4ComponentDiagram(model *parser.DSLModel, mode C4GenerationMode, showDatabases bool) string {
+	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Components)
 }

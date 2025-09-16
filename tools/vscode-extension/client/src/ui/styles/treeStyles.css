@@ -105,6 +105,95 @@ body {
     margin-bottom: 12px;
 }
 
+/* Diagram Options */
+.diagram-options {
+    margin-bottom: 12px;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 3px;
+    background: var(--vscode-sideBar-background);
+}
+
+.options-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.1s;
+    user-select: none;
+}
+
+.options-header:hover {
+    background: var(--vscode-list-hoverBackground);
+}
+
+.options-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--vscode-foreground);
+}
+
+.options-expander {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    transition: transform 0.2s ease;
+}
+
+.options-content {
+    padding: 8px 12px;
+    border-top: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-input-background);
+}
+
+.option-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.option-group:last-child {
+    margin-bottom: 0;
+}
+
+.option-label {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    font-weight: 600;
+    min-width: 80px;
+    text-transform: uppercase;
+}
+
+.option-toggle {
+    display: flex;
+    background: var(--vscode-input-background);
+    border-radius: 2px;
+    overflow: hidden;
+    border: 1px solid var(--vscode-input-border);
+    flex: 1;
+}
+
+.option-btn {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    color: var(--vscode-foreground);
+    transition: background-color 0.1s;
+    flex: 1;
+    text-align: center;
+}
+
+.option-btn.active {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.option-btn:hover:not(.active) {
+    background: var(--vscode-list-hoverBackground);
+}
+
 .mode-btn {
     background: none;
     border: none;

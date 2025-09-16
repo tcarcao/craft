@@ -79,7 +79,7 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 		}
 
 		if generateC4 {
-			diagram, err := s.viz.GenerateC4(arch, "boundaries")
+			diagram, err := s.viz.GenerateC4(arch, "boundaries", true)
 			if err != nil {
 				log.Printf("Error generating C4 diagram: %v", err)
 			} else {
@@ -160,6 +160,7 @@ type PreviewRequest struct {
 	DSL            string     `json:"dsl"`
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
+	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
 }
 
 type FocusInfo struct {
@@ -179,6 +180,7 @@ type DownloadRequest struct {
 	DSL            string     `json:"dsl"`
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
+	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
 	Format         string     `json:"format"`         // png, svg, pdf, puml
 	DiagramType    string     `json:"diagramType"`    // c4, domain, context, sequence
 	Filename       string     `json:"filename,omitempty"`
@@ -244,12 +246,18 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 			boundariesMode = visualizer.C4ModeTransparent
 		}
 
-		// Generate C4 diagram with focus information and boundaries mode
+		// Parse database visibility, default to true if not provided
+		showDatabases := true
+		if req.ShowDatabases != nil {
+			showDatabases = *req.ShowDatabases
+		}
+
+		// Generate C4 diagram with focus information, boundaries mode, and database visibility
 		var diagram []byte
 		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
-			diagram, err = s.viz.GenerateC4WithFocusAndSubDomains(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode)
+			diagram, err = s.viz.GenerateC4WithFocusAndSubDomains(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, showDatabases)
 		} else {
-			diagram, err = s.viz.GenerateC4(arch, boundariesMode)
+			diagram, err = s.viz.GenerateC4(arch, boundariesMode, showDatabases)
 		}
 
 		if err != nil {
@@ -325,11 +333,17 @@ func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
 				boundariesMode = visualizer.C4ModeTransparent
 			}
 
+			// Parse database visibility, default to true if not provided
+			showDatabases := true
+			if req.ShowDatabases != nil {
+				showDatabases = *req.ShowDatabases
+			}
+
 			// Generate C4 diagram with focus and format
 			if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
-				diagram, contentType, err = s.viz.GenerateC4WithFocusSubDomainsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, format)
+				diagram, contentType, err = s.viz.GenerateC4WithFocusSubDomainsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, showDatabases, format)
 			} else {
-				diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, format)
+				diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, showDatabases, format)
 			}
 			defaultFilename = "c4-diagram"
 
