@@ -98,8 +98,16 @@ body {
 .header-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
 }
 
 .title {
@@ -113,7 +121,6 @@ body {
     background: ${COLORS.primary};
     color: var(--vscode-button-foreground);
     border: none;
-    padding: 4px 8px;
     cursor: pointer;
     border-radius: 2px;
     font-size: 11px;
@@ -121,6 +128,8 @@ body {
     margin-left: 4px;
     width: 28px;
     height: 28px;
+    display: flex;
+    align-items: center;
 }
 
 .header-btn:hover {
@@ -592,6 +601,11 @@ body {
     font-size: 11px;
     flex: 1;
     min-width: 0;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
     transition: all 0.1s;
 }
 

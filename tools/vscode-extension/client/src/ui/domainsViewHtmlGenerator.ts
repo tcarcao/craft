@@ -27,7 +27,8 @@ export class DomainsViewHtmlGenerator {
         domains: Domain[],
         viewMode: 'current' | 'workspace',
         selectedCount: { domains: number, subDomains: number, useCases: number },
-        totalCount: { domains: number, subDomains: number, useCases: number }
+        totalCount: { domains: number, subDomains: number, useCases: number },
+        codiconsUri?: string
     ): string {
         // Don't filter here - the provider already filtered for current mode
         // For workspace mode, we'll show all domains but style non-current-file items in grey
@@ -39,6 +40,7 @@ export class DomainsViewHtmlGenerator {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>DSL Domain Tree</title>
+            ${codiconsUri ? `<link href="${codiconsUri}" rel="stylesheet" />` : ''}
             <style>${domainTreeStyles}</style>
         </head>
         <body>
@@ -59,8 +61,10 @@ export class DomainsViewHtmlGenerator {
         <div class="header">
             <div class="header-row">
                 <h3 class="title">Domain Tree</h3>
-                ${selectedCount.useCases > 0 ? '<button class="header-btn" onclick="preview()" title="Preview">👀</button>' : ''}
-                <button class="header-btn" onclick="refresh()" title="Refresh domains">↻</button>
+                <div class="header-actions">
+                    ${selectedCount.useCases > 0 ? '<button class="header-btn" onclick="preview()" title="Preview"><i class="codicon codicon-preview"></i></button>' : ''}
+                    <button class="header-btn" onclick="refresh()" title="Refresh domains"><i class="codicon codicon-refresh"></i></button>
+                </div>
             </div>
             
             <div class="view-mode-toggle">
@@ -154,12 +158,6 @@ export class DomainsViewHtmlGenerator {
             </div>
             <div class="node-children" ${!domain.expanded ? 'style="display: none;"' : ''} role="group">
                 ${subDomainsHtml}
-            </div>
-            <div class="node-tooltip">
-                <strong>${domain.name}</strong><br/>
-                Subdomains: ${domain.subDomains.length}<br/>
-                Use Cases: ${domain.totalUseCases}<br/>
-                Files: ${/*domain.files.join(', ')*/''}
             </div>
         </div>`;
     }
@@ -312,15 +310,17 @@ export class DomainsViewHtmlGenerator {
     private generateQuickActions(): string {
         return `
         <div class="quick-actions">
-            <button class="action-btn" onclick="selectAll()" title="Select all visible domains">
-                Select All
-            </button>
-            <button class="action-btn" onclick="selectNone()" title="Deselect all domains">
-                Select None
-            </button>
-            <button class="action-btn" onclick="selectCurrentFileOnly()" title="Select only domains from current file">
-                Current File Only
-            </button>
+            <div class="action-group">
+                <button class="action-btn" onclick="selectAll()" title="Select all visible domains">
+                    Select All
+                </button>
+                <button class="action-btn" onclick="selectNone()" title="Deselect all domains">
+                    Select None
+                </button>
+                <button class="action-btn" onclick="selectCurrentFileOnly()" title="Select only domains from current file">
+                    Current File Only
+                </button>
+            </div>
         </div>`;
     }
 

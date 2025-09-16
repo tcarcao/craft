@@ -30,7 +30,8 @@ export class ServicesViewHtmlGenerator {
 		viewMode: 'current' | 'workspace',
 		selectedCount: { serviceGroups: number, services: number },
 		totalCount: { serviceGroups: number, services: number },
-		boundariesMode: 'transparent' | 'boundaries' = 'boundaries'
+		boundariesMode: 'transparent' | 'boundaries' = 'boundaries',
+		codiconsUri?: string
 	): string {
 		// Don't filter here - the provider already filtered for current mode
 		// For workspace mode, we'll show all groups but style non-current-file items in grey
@@ -43,6 +44,7 @@ export class ServicesViewHtmlGenerator {
 			<meta charset="UTF-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1.0">
 			<title>DSL Services</title>
+			${codiconsUri ? `<link href="${codiconsUri}" rel="stylesheet" />` : ''}
 			<style>${domainTreeStyles}</style>
 		</head>
 		<body>
@@ -64,8 +66,10 @@ export class ServicesViewHtmlGenerator {
 			<div class="header">
 				<div class="header-row">
 					<h3 class="title">Services</h3>
-					${selectedCount.services > 0 ? '<button class="header-btn" onclick="preview()" title="Preview">👀</button>' : ''}
-					<button class="header-btn" onclick="refresh()" title="Refresh services">↻</button>
+					<div class="header-actions">
+						${selectedCount.services > 0 ? '<button class="header-btn" onclick="preview()" title="Preview"><i class="codicon codicon-play"></i></button>' : ''}
+						<button class="header-btn" onclick="refresh()" title="Refresh services"><i class="codicon codicon-refresh"></i></button>
+					</div>
 				</div>
 				
 				<div class="view-mode-toggle">
@@ -351,12 +355,10 @@ export class ServicesViewHtmlGenerator {
 		return `
 			<div class="quick-actions">
 				<div class="action-group">
-					<label>Selection:</label>
 					<button class="action-btn" onclick="selectAll()">Select All</button>
 					<button class="action-btn" onclick="selectNone()">Select None</button>
 				</div>
 				<div class="action-group">
-					<label>Focus (C4):</label>
 					<button class="action-btn" onclick="focusAll()" title="Focus all services (show as internal)">◉ Focus All</button>
 					<button class="action-btn" onclick="focusNone()" title="Unfocus all services (show as external)">◎ Unfocus All</button>
 				</div>

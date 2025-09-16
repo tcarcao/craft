@@ -468,11 +468,16 @@ export class DomainsViewProvider implements WebviewViewProvider {
         const selectedCount = this.calculateSelectionCounts(filteredDomains);
         const totalCount = this.calculateTotalCounts(filteredDomains);
 
+        const codiconsUri = this._view.webview.asWebviewUri(
+            Uri.joinPath(this._extensionUri, 'client', 'node_modules', '@vscode/codicons', 'dist', 'codicon.css')
+        );
+        
         this._view.webview.html = this._htmlGenerator.generateTreeHtml(
             filteredDomains,
             this._state.viewMode,
             selectedCount,
-            totalCount
+            totalCount,
+            codiconsUri.toString()
         );
     }
 
