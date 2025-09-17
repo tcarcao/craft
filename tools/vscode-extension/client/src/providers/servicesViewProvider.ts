@@ -16,6 +16,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         viewMode: 'current',
         boundariesMode: 'boundaries',
         showDatabases: true,
+        optionsExpanded: false,
         expandedNodes: new Set(),
         selectedNodes: new Set(),
         currentFile: undefined,
@@ -141,6 +142,9 @@ export class ServicesViewProvider implements WebviewViewProvider {
                     break;
                 case 'setDatabaseVisibility':
                     this.handleSetDatabaseVisibility(data.show);
+                    break;
+                case 'toggleDiagramOptions':
+                    this.handleToggleDiagramOptions();
                     break;
                 case 'selectAll':
                     this.handleSelectAll();
@@ -447,6 +451,11 @@ export class ServicesViewProvider implements WebviewViewProvider {
         this.updateWebview();
     }
 
+    private handleToggleDiagramOptions() {
+        this._state.optionsExpanded = !this._state.optionsExpanded;
+        this.updateWebview();
+    }
+
     // private handleSetGroupBy(groupBy: 'type' | 'domain') {
     //     this._groupBy = groupBy;
     //     this.updateServiceGroups();
@@ -659,6 +668,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
             totalCount,
             this._state.boundariesMode,
             this._state.showDatabases,
+            this._state.optionsExpanded,
             codiconsUri.toString(),
             cssUri.toString()
         );

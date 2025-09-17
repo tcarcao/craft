@@ -149,6 +149,7 @@ export interface ServiceTreeState {
     viewMode: 'current' | 'workspace';
     boundariesMode: 'transparent' | 'boundaries';
     showDatabases: boolean;
+    optionsExpanded: boolean;
     expandedNodes: Set<string>;
     selectedNodes: Set<string>;
     currentFile?: string;

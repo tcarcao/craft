@@ -31,6 +31,7 @@ export class ServicesViewHtmlGenerator {
 		totalCount: { serviceGroups: number, services: number },
 		boundariesMode: 'transparent' | 'boundaries' = 'boundaries',
 		showDatabases: boolean = true,
+		optionsExpanded: boolean = false,
 		codiconsUri: string,
 		cssUri: string
 	): string {
@@ -49,7 +50,7 @@ export class ServicesViewHtmlGenerator {
 			<link href="${cssUri}" rel="stylesheet" />
 		</head>
 		<body>
-			${this.generateHeader(viewMode, selectedCount, totalCount, boundariesMode, showDatabases)}
+			${this.generateHeader(viewMode, selectedCount, totalCount, boundariesMode, showDatabases, optionsExpanded)}
 			${this.generateTreeContent(visibleServiceGroups, viewMode)}
 			${this.generateQuickActions()}
 			${this.generateScript()}
@@ -62,7 +63,8 @@ export class ServicesViewHtmlGenerator {
 		selectedCount: { serviceGroups: number, services: number },
 		totalCount: { serviceGroups: number, services: number },
 		boundariesMode: 'transparent' | 'boundaries' = 'boundaries',
-		showDatabases: boolean = true
+		showDatabases: boolean = true,
+		optionsExpanded: boolean = false
 	): string {
 		return `
 			<div class="header">
@@ -86,9 +88,9 @@ export class ServicesViewHtmlGenerator {
 				<div class="diagram-options">
 					<div class="options-header" onclick="toggleDiagramOptions()">
 						<span class="options-title">Diagram Options</span>
-						<span class="options-expander" id="diagram-options-expander">▶</span>
+						<span class="options-expander" id="diagram-options-expander">${optionsExpanded ? '▼' : '▶'}</span>
 					</div>
-					<div class="options-content" id="diagram-options-content" style="display: none;">
+					<div class="options-content" id="diagram-options-content" style="display: ${optionsExpanded ? 'block' : 'none'};">
 						<div class="option-group">
 							<label class="option-label">Mode:</label>
 							<div class="option-toggle">
@@ -514,16 +516,7 @@ export class ServicesViewHtmlGenerator {
 			
 			// Diagram Options Functions
 			function toggleDiagramOptions() {
-				const content = document.getElementById('diagram-options-content');
-				const expander = document.getElementById('diagram-options-expander');
-				
-				if (content.style.display === 'none') {
-					content.style.display = 'block';
-					expander.textContent = '▼';
-				} else {
-					content.style.display = 'none';
-					expander.textContent = '▶';
-				}
+				vscode.postMessage({ type: 'toggleDiagramOptions' });
 			}
 			
 			function setDatabaseVisibility(show) {
