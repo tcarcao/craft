@@ -586,6 +586,107 @@ export class ServicesViewHtmlGenerator {
 				}
 			});
 			
+			// Listen for state updates from the provider
+			window.addEventListener('message', event => {
+				const message = event.data;
+				if (message.type === 'stateUpdate') {
+					handleStateUpdate(message.updateType, message.data);
+				} else if (message.type === 'nodeUpdate') {
+					handleNodeUpdate(message.nodeType, message.nodeId, message.data);
+				}
+			});
+			
+			function handleStateUpdate(updateType, data) {
+				switch (updateType) {
+					case 'databaseVisibility':
+						updateDatabaseVisibilityUI(data.showDatabases);
+						break;
+					case 'optionsExpanded':
+						updateOptionsExpandedUI(data.optionsExpanded);
+						break;
+				}
+			}
+			
+			function updateDatabaseVisibilityUI(showDatabases) {
+				// Update the active button state
+				const showBtn = document.querySelector('[onclick="setDatabaseVisibility(true)"]');
+				const hideBtn = document.querySelector('[onclick="setDatabaseVisibility(false)"]');
+				
+				if (showBtn && hideBtn) {
+					if (showDatabases) {
+						showBtn.classList.add('active');
+						hideBtn.classList.remove('active');
+					} else {
+						showBtn.classList.remove('active');
+						hideBtn.classList.add('active');
+					}
+				}
+			}
+			
+			function updateOptionsExpandedUI(expanded) {
+				const content = document.getElementById('diagram-options-content');
+				const expander = document.getElementById('diagram-options-expander');
+				
+				if (content && expander) {
+					if (expanded) {
+						content.style.display = 'block';
+						expander.textContent = '▼';
+					} else {
+						content.style.display = 'none';
+						expander.textContent = '▶';
+					}
+				}
+			}
+			
+			function handleNodeUpdate(nodeType, nodeId, data) {
+				switch (nodeType) {
+					case 'serviceGroup':
+						updateServiceGroupNode(nodeId, data);
+						break;
+					case 'service':
+						updateServiceNode(nodeId, data);
+						break;
+					case 'subDomain':
+						updateSubDomainNode(nodeId, data);
+						break;
+				}
+			}
+			
+			function updateServiceGroupNode(groupId, groupData) {
+				// Update checkbox state
+				const checkbox = document.querySelector(\`[data-group-id="\${groupId}"] .tree-checkbox\`);
+				if (checkbox) {
+					const symbol = groupData.selected ? '☑' : (groupData.partiallySelected ? '☐' : '☐');
+					checkbox.textContent = symbol;
+				}
+				
+				// Update selection counts if there's a count display
+				const countElement = document.querySelector(\`[data-group-id="\${groupId}"] .selection-count\`);
+				if (countElement && groupData.services) {
+					const selectedCount = groupData.services.filter(s => s.selected).length;
+					const totalCount = groupData.services.length;
+					countElement.textContent = \`(\${selectedCount} of \${totalCount} services selected)\`;
+				}
+			}
+			
+			function updateServiceNode(serviceId, serviceData) {
+				// Update checkbox state
+				const checkbox = document.querySelector(\`[data-service-id="\${serviceId}"] .tree-checkbox\`);
+				if (checkbox) {
+					const symbol = serviceData.selected ? '☑' : (serviceData.partiallySelected ? '☐' : '☐');
+					checkbox.textContent = symbol;
+				}
+			}
+			
+			function updateSubDomainNode(subDomainId, subDomainData) {
+				// Update checkbox state
+				const checkbox = document.querySelector(\`[data-subdomain-id="\${subDomainId}"] .tree-checkbox\`);
+				if (checkbox) {
+					const symbol = subDomainData.selected ? '☑' : (subDomainData.partiallySelected ? '☐' : '☐');
+					checkbox.textContent = symbol;
+				}
+			}
+			
 			console.log('🔧 Services view initialized. Ctrl+D to generate diagram.');
 		</script>`;
 	}

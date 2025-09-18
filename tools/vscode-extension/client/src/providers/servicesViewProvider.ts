@@ -327,7 +327,8 @@ export class ServicesViewProvider implements WebviewViewProvider {
             });
         });
         
-        this.updateWebview();
+        // Send targeted update instead of full webview regeneration
+        this.sendNodeUpdate('serviceGroup', groupId, currentViewGroup);
     }
 
     private handleToggleService(serviceGroupId: string, serviceId: string) {
@@ -346,7 +347,10 @@ export class ServicesViewProvider implements WebviewViewProvider {
             }
         });
         
-        this.updateWebview();
+        // Send targeted update instead of full webview regeneration
+        this.sendNodeUpdate('service', serviceId, currentViewService);
+        // Also update the parent group since its selection state may have changed
+        this.sendNodeUpdate('serviceGroup', serviceGroupId, currentViewGroup);
     }
 
     private handleToggleSubDomain(serviceGroupId: string, serviceId: string, subDomainId: string) {
@@ -368,7 +372,10 @@ export class ServicesViewProvider implements WebviewViewProvider {
             }
         });
         
-        this.updateWebview();
+        // Send targeted updates instead of full webview regeneration
+        this.sendNodeUpdate('subDomain', subDomainId, currentViewSubDomain);
+        this.sendNodeUpdate('service', serviceId, currentViewService);
+        this.sendNodeUpdate('serviceGroup', serviceGroupId, currentViewGroup);
     }
 
     private handleToggleUseCase(serviceGroupId: string, serviceId: string, subDomainId: string, useCaseId: string) {
@@ -448,12 +455,33 @@ export class ServicesViewProvider implements WebviewViewProvider {
 
     private handleSetDatabaseVisibility(show: boolean) {
         this._state.showDatabases = show;
-        this.updateWebview();
+        this.sendStateUpdate('databaseVisibility', { showDatabases: show });
     }
 
     private handleToggleDiagramOptions() {
         this._state.optionsExpanded = !this._state.optionsExpanded;
-        this.updateWebview();
+        this.sendStateUpdate('optionsExpanded', { optionsExpanded: this._state.optionsExpanded });
+    }
+
+    private sendStateUpdate(updateType: string, data: any) {
+        if (this._view) {
+            this._view.webview.postMessage({
+                type: 'stateUpdate',
+                updateType: updateType,
+                data: data
+            });
+        }
+    }
+
+    private sendNodeUpdate(nodeType: string, nodeId: string, nodeData: any) {
+        if (this._view) {
+            this._view.webview.postMessage({
+                type: 'nodeUpdate',
+                nodeType: nodeType,
+                nodeId: nodeId,
+                data: nodeData
+            });
+        }
     }
 
     // private handleSetGroupBy(groupBy: 'type' | 'domain') {
