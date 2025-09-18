@@ -10,12 +10,27 @@
 	"dependencies": {
 		"@vscode/codicons": "^0.0.40",
 		"axios": "^1.0.0",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1",
 		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
 		"@types/mocha": "^10.0.6",
 		"@types/node": "^20",
+		"@types/react": "^18.3.0",
+		"@types/react-dom": "^18.3.0",
 		"@types/vscode": "^1.75.1",
-		"@vscode/test-electron": "^2.3.9"
+		"@vscode/test-electron": "^2.3.9",
+		"css-loader": "^7.1.2",
+		"html-webpack-plugin": "^5.6.0",
+		"style-loader": "^4.0.0",
+		"ts-loader": "^9.5.1",
+		"webpack": "^5.96.1",
+		"webpack-cli": "^5.1.4"
+	},
+	"scripts": {
+		"compile": "tsc && mkdir -p out/styles && mkdir -p out/@vscode/codicons && cp src/ui/styles/treeStyles.css out/styles/ && cp -r ./node_modules/@vscode/codicons/dist out/@vscode/codicons && pnpm run build-webview",
+		"build-webview": "webpack --mode production",
+		"watch-webview": "webpack --mode development --watch"
 	}
 }

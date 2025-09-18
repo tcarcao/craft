@@ -15,7 +15,7 @@
     },
     "scripts": {
         "vscode:prepublish": "pnpm run compile",
-        "compile": "tsc -b",
+        "compile": "tsc -b && cd client && pnpm run compile",
         "watch": "tsc -b -w",
         "lint": "eslint",
         "postinstall": "cd client && pnpm install && cd ../server && pnpm install && cd .."

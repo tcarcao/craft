@@ -1,7 +1,6 @@
-import { Uri, WebviewViewProvider, WebviewView, WebviewViewResolveContext, CancellationToken, TextDocument, window, workspace, commands } from 'vscode';
+import { Uri, WebviewViewProvider, WebviewView, WebviewViewResolveContext, CancellationToken, TextDocument, window, workspace, commands, ExtensionContext } from 'vscode';
 import { ServicesViewService } from '../services/servicesViewService';
 import { DslExtractService } from '../services/dslExtractService';
-import { ServicesViewHtmlGenerator } from '../ui/servicesViewHtmlGenerator';
 import { ServiceTreeState, ServiceGroup, Service, UseCase, SubDomain } from '../types/domain';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ServerCommands } from '../../../shared/lib/types/domain-extraction';
@@ -35,6 +34,50 @@ export class ServicesViewProvider implements WebviewViewProvider {
         return [this._state.currentFileServiceGroups, this._state.workspaceServiceGroups];
     }
 
+    private getWebviewContent(): string {
+        if (!this._view) return '';
+
+        const scriptUri = this._view.webview.asWebviewUri(
+            Uri.joinPath(this._extensionUri, 'client', 'out', 'webview', 'services.js')
+        );
+
+        const codiconsUri = this._view.webview.asWebviewUri(
+            Uri.joinPath(this._extensionUri, 'client', 'out', '@vscode/codicons', 'dist', 'codicon.css')
+        );
+
+        const stylesUri = this._view.webview.asWebviewUri(
+            Uri.joinPath(this._extensionUri, 'client', 'out', 'styles', 'treeStyles.css')
+        );
+
+        // Generate a nonce for security
+        const nonce = this.getNonce();
+
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${this._view.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${this._view.webview.cspSource};">
+            <link href="${codiconsUri}" rel="stylesheet">
+            <link href="${stylesUri}" rel="stylesheet">
+            <title>Services View</title>
+        </head>
+        <body>
+            <div id="root">Loading...</div>
+            <script nonce="${nonce}" src="${scriptUri}"></script>
+        </body>
+        </html>`;
+    }
+
+    private getNonce(): string {
+        let text = '';
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        for (let i = 0; i < 32; i++) {
+            text += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return text;
+    }
+
     private _isInitialized = false;
     private _refreshTimeout?: NodeJS.Timeout;
 
@@ -43,7 +86,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         private readonly _extensionUri: Uri,
         private readonly _extractService: DslExtractService,
         private readonly _serviceTreeService: ServicesViewService,
-        private readonly _htmlGenerator: ServicesViewHtmlGenerator
+        private readonly _context: ExtensionContext
     ) {
         // Listen for active editor changes
         window.onDidChangeActiveTextEditor(() => {
@@ -91,12 +134,16 @@ export class ServicesViewProvider implements WebviewViewProvider {
 
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri]
+            localResourceRoots: [
+                Uri.joinPath(this._extensionUri, 'client', 'out')
+            ]
         };
+
+        // Set up the React webview HTML
+        webviewView.webview.html = this.getWebviewContent();
 
         // Show loading state initially
         this._state.isLoading = true;
-        this.updateWebview();
 
         this.updateCurrentFile();
 
@@ -105,70 +152,24 @@ export class ServicesViewProvider implements WebviewViewProvider {
         
         // Load domains asynchronously
         this.refreshServices().then(() => {
-            this._state.isLoading = false;
             this._isInitialized = true; // Mark as initialized after first load
-            this.updateWebview();
+            this.sendInitialData();
         });
 
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
-                case 'toggleServiceGroup':
-                    this.handleToggleServiceGroup(data.groupId);
-                    break;
-                case 'toggleService':
-                    this.handleToggleService(data.serviceGroupId, data.serviceId);
-                    break;
-                case 'toggleSubDomain':
-                    this.handleToggleSubDomain(data.serviceGroupId, data.serviceId, data.subDomainId);
-                    break;
-                case 'toggleUseCase':
-                    this.handleToggleUseCase(data.serviceGroupId, data.serviceId, data.subDomainId, data.useCaseId);
-                    break;
-                case 'toggleGroupExpansion':
-                    this.handleToggleGroupExpansion(data.groupId);
-                    break;
-                case 'toggleServiceExpansion':
-                    this.handleToggleServiceExpansion(data.groupId, data.serviceId);
-                    break;
-                case 'toggleSubDomainExpansion':
-                    this.handleToggleSubDomainExpansion(data.groupId, data.serviceId, data.subDomainId);
-                    break;
-                case 'setViewMode':
-                    this.handleSetViewMode(data.mode);
-                    break;
-                case 'setBoundariesMode':
-                    this.handleSetBoundariesMode(data.mode);
-                    break;
-                case 'setDatabaseVisibility':
-                    this.handleSetDatabaseVisibility(data.show);
-                    break;
-                case 'toggleDiagramOptions':
-                    this.handleToggleDiagramOptions();
-                    break;
-                case 'selectAll':
-                    this.handleSelectAll();
-                    break;
-                case 'selectNone':
-                    this.handleSelectNone();
-                    break;
-                case 'toggleServiceFocus':
-                    this.handleToggleServiceFocus(data.serviceGroupId, data.serviceId);
-                    break;
-                case 'focusAll':
-                    this.handleFocusAll();
-                    break;
-                case 'focusNone':
-                    this.handleFocusNone();
-                    break;
-                case 'toggleSubDomainFocus':
-                    this.handleToggleSubDomainFocus(data.serviceGroupId, data.serviceId, data.subDomainId);
-                    break;
                 case 'preview':
-                    this.handlePreview();
+                    this.handlePreview(data.selectedServices, data.selectedUseCases, data.focusInfo);
                     break;
                 case 'refresh':
                     this.handleRefresh();
+                    break;
+                case 'setViewMode':
+                    this.handleSetViewMode(data.viewMode);
+                    break;
+                case 'ready':
+                    this.sendInitialData();
                     break;
             }
         });
@@ -295,9 +296,9 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 }
             }
 
-            // Only update webview if not in loading state (to avoid double updates)
-            if (!this._state.isLoading) {
-                this.updateWebview();
+            // Only update webview if already initialized (to avoid double updates)
+            if (this._isInitialized) {
+                this.sendDataRefresh();
             }
         } catch (error) {
             console.error('Error refreshing domains:', error);
@@ -305,401 +306,73 @@ export class ServicesViewProvider implements WebviewViewProvider {
         }
     }
 
-    private handleToggleServiceGroup(groupId: string) {
-        // Get the target selection state from the current view
-        const currentViewGroup = this.getServiceGroupsMap().get(groupId);
-        if (!currentViewGroup) return;
-        
-        const newSelectedState = !currentViewGroup.selected && !currentViewGroup.partiallySelected;
-        
-        // Determine which services to update based on current view mode
-        const servicesToUpdate = this._state.viewMode === 'current' 
-            ? currentViewGroup.services.filter(s => s.inCurrentFile) // Only current file services
-            : currentViewGroup.services; // All services in workspace mode
-            
-        // Apply updates to both maps
-        this.updateSelectionInBothMaps(groupId, (group, isCurrentFile) => {
-            servicesToUpdate.forEach(targetService => {
-                const service = group.services.find(s => s.id === targetService.id);
-                if (service) {
-                    this.updateServiceSelection(service, newSelectedState);
-                }
-            });
-        });
-        
-        // Send targeted update instead of full webview regeneration
-        this.sendNodeUpdate('serviceGroup', groupId, currentViewGroup);
-    }
 
-    private handleToggleService(serviceGroupId: string, serviceId: string) {
-        // Find the service in current view to get target state
-        const currentViewGroup = this.getServiceGroupsMap().get(serviceGroupId);
-        const currentViewService = currentViewGroup?.services.find(s => s.id === serviceId);
-        if (!currentViewService) return;
-        
-        const newSelectedState = !currentViewService.selected && !currentViewService.partiallySelected;
-        
-        // Apply updates to both maps
-        this.updateSelectionInBothMaps(serviceGroupId, (group, isCurrentFile) => {
-            const service = group.services.find(s => s.id === serviceId);
-            if (service) {
-                this.updateServiceSelection(service, newSelectedState);
-            }
-        });
-        
-        // Send targeted update instead of full webview regeneration
-        this.sendNodeUpdate('service', serviceId, currentViewService);
-        // Also update the parent group since its selection state may have changed
-        this.sendNodeUpdate('serviceGroup', serviceGroupId, currentViewGroup);
-    }
-
-    private handleToggleSubDomain(serviceGroupId: string, serviceId: string, subDomainId: string) {
-        // Find the subdomain in current view to get target state
-        const currentViewGroup = this.getServiceGroupsMap().get(serviceGroupId);
-        const currentViewService = currentViewGroup?.services.find(s => s.id === serviceId);
-        const currentViewSubDomain = currentViewService?.subDomains.find(sd => sd.id === subDomainId);
-        if (!currentViewSubDomain) return;
-        
-        const newSelectedState = !currentViewSubDomain.selected && !currentViewSubDomain.partiallySelected;
-        
-        // Apply updates to both maps
-        this.updateSelectionInBothMaps(serviceGroupId, (group, isCurrentFile) => {
-            const service = group.services.find(s => s.id === serviceId);
-            const subDomain = service?.subDomains.find(sd => sd.id === subDomainId);
-            if (subDomain) {
-                subDomain.selected = newSelectedState;
-                subDomain.useCases.forEach(uc => uc.selected = newSelectedState);
-            }
-        });
-        
-        // Send targeted updates instead of full webview regeneration
-        this.sendNodeUpdate('subDomain', subDomainId, currentViewSubDomain);
-        this.sendNodeUpdate('service', serviceId, currentViewService);
-        this.sendNodeUpdate('serviceGroup', serviceGroupId, currentViewGroup);
-    }
-
-    private handleToggleUseCase(serviceGroupId: string, serviceId: string, subDomainId: string, useCaseId: string) {
-        // Find the use case in current view to get target state
-        const currentViewGroup = this.getServiceGroupsMap().get(serviceGroupId);
-        const currentViewService = currentViewGroup?.services.find(s => s.id === serviceId);
-        const currentViewSubDomain = currentViewService?.subDomains.find(sd => sd.id === subDomainId);
-        const currentViewUseCase = currentViewSubDomain?.useCases.find(uc => uc.id === useCaseId);
-        if (!currentViewUseCase) return;
-        
-        const newSelectedState = !currentViewUseCase.selected;
-        
-        // Apply updates to both maps
-        this.updateSelectionInBothMaps(serviceGroupId, (group) => {
-            const service = group.services.find(s => s.id === serviceId);
-            const subDomain = service?.subDomains.find(sd => sd.id === subDomainId);
-            const useCase = subDomain?.useCases.find(uc => uc.id === useCaseId);
-            if (useCase) {
-                useCase.selected = newSelectedState;
-            }
-        });
-        
-        this.updateWebview();
-    }
-
-    private handleToggleGroupExpansion(groupId: string) {
-        // Update expansion state in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroup = serviceGroupsMap.get(groupId);
-            if (serviceGroup) {
-                serviceGroup.expanded = !serviceGroup.expanded;
-            }
-        });
-        this.updateWebview();
-    }
-
-    private handleToggleServiceExpansion(groupId: string, serviceId: string) {
-        // Update expansion state in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroup = serviceGroupsMap.get(groupId);
-            if (serviceGroup) {
-                const service = serviceGroup.services.find(s => s.id === serviceId);
-                if (service) {
-                    service.expanded = !service.expanded;
-                }
-            }
-        });
-        this.updateWebview();
-    }
-
-    private handleToggleSubDomainExpansion(groupId: string, serviceId: string, subDomainId: string) {
-        // Update expansion state in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroup = serviceGroupsMap.get(groupId);
-            if (serviceGroup) {
-                const service = serviceGroup.services.find(s => s.id === serviceId);
-                if (service) {
-                    const subDomain = service.subDomains.find(sd => sd.id === subDomainId);
-                    if (subDomain) {
-                        subDomain.expanded = !subDomain.expanded;
-                    }
-                }
-            }
-        });
-        this.updateWebview();
-    }
-
-    private handleSetViewMode(mode: 'current' | 'workspace') {
-        this._state.viewMode = mode;
-        this.updateWebview();
-    }
-
-    private handleSetBoundariesMode(mode: 'transparent' | 'boundaries') {
-        this._state.boundariesMode = mode;
-        this.updateWebview();
-    }
-
-    private handleSetDatabaseVisibility(show: boolean) {
-        this._state.showDatabases = show;
-        this.sendStateUpdate('databaseVisibility', { showDatabases: show });
-    }
-
-    private handleToggleDiagramOptions() {
-        this._state.optionsExpanded = !this._state.optionsExpanded;
-        this.sendStateUpdate('optionsExpanded', { optionsExpanded: this._state.optionsExpanded });
-    }
-
-    private sendStateUpdate(updateType: string, data: any) {
-        if (this._view) {
-            this._view.webview.postMessage({
-                type: 'stateUpdate',
-                updateType: updateType,
-                data: data
-            });
-        }
-    }
-
-    private sendNodeUpdate(nodeType: string, nodeId: string, nodeData: any) {
-        if (this._view) {
-            this._view.webview.postMessage({
-                type: 'nodeUpdate',
-                nodeType: nodeType,
-                nodeId: nodeId,
-                data: nodeData
-            });
-        }
-    }
-
-    // private handleSetGroupBy(groupBy: 'type' | 'domain') {
-    //     this._groupBy = groupBy;
-    //     this.updateServiceGroups();
-    //     this.updateWebview();
-    // }
-
-    private handleSelectAll() {
-        // Update selection in both maps with appropriate filtering
-        const currentFileServices = Array.from(this._state.currentFileServiceGroups.values());
-        this._serviceTreeService.selectAll(currentFileServices, true); // current file only
-        
-        const workspaceServices = Array.from(this._state.workspaceServiceGroups.values());
-        this._serviceTreeService.selectAll(workspaceServices, false); // all services
-        
-        this.updateWebview();
-    }
-
-    private handleSelectNone() {
-        // Update selection in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const groupServices = Array.from(serviceGroupsMap.values());
-            this._serviceTreeService.selectNone(groupServices);
-        });
-        this.updateWebview();
-    }
-
-    private async handlePreview() {
-        console.log('handle preview here we go');
-        const selectedServices = this.getSelectedServices();
-        const selectedUseCases = this.getSelectedUseCases();
+    private async handlePreview(selectedServices: any[], selectedUseCases: any[], focusInfo: any) {
+        console.log('handle preview here we go', selectedServices, selectedUseCases);
         const blockRanges = [];
         selectedServices.forEach(s => blockRanges.push(s.blockRange));
         selectedUseCases.forEach(uc => blockRanges.push(uc.blockRange));
+        
         const partialDsl: string = await this.languageClient.sendRequest('workspace/executeCommand', {
             command: ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES,
             arguments: [blockRanges]
         });
         console.log(partialDsl);
         
-        // Get focus information
-        const focusedServices = this.getFocusedServices();
-        const focusedSubDomains = this.getFocusedSubDomains();
-        const focusInfo = {
-            focusedServiceNames: focusedServices.map(s => s.name),
-            focusedSubDomainNames: focusedSubDomains.map(sd => sd.name),
-            hasFocusedServices: focusedServices.length > 0,
-            hasFocusedSubDomains: focusedSubDomains.length > 0,
-            boundariesMode: this._state.boundariesMode,
-            showDatabases: this._state.showDatabases
-        };
-        
         commands.executeCommand('craft.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
     }
 
-    private handleToggleServiceFocus(serviceGroupId: string, serviceId: string) {
-        // Update focus state in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroup = serviceGroupsMap.get(serviceGroupId);
-            if (serviceGroup) {
-                const service = serviceGroup.services.find(s => s.id === serviceId);
-                if (service) {
-                    service.focused = !service.focused;
-                    
-                    // Cascade focus to all associated subdomains
-                    service.subDomains.forEach(subDomain => {
-                        subDomain.focused = service.focused;
-                    });
-                }
-            }
-        });
-        this.updateWebview();
-    }
-
-    private handleFocusAll() {
-        // Update focus state in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroups = Array.from(serviceGroupsMap.values());
-            serviceGroups.forEach(serviceGroup => {
-                serviceGroup.services.forEach(service => {
-                    service.focused = true;
-                    // Also focus all subdomains
-                    service.subDomains.forEach(subDomain => {
-                        subDomain.focused = true;
-                    });
-                });
-            });
-        });
-        this.updateWebview();
-    }
-
-    private handleFocusNone() {
-        // Update focus state in both maps to keep them in sync
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroups = Array.from(serviceGroupsMap.values());
-            serviceGroups.forEach(serviceGroup => {
-                serviceGroup.services.forEach(service => {
-                    service.focused = false;
-                    // Also unfocus all subdomains
-                    service.subDomains.forEach(subDomain => {
-                        subDomain.focused = false;
-                    });
-                });
-            });
-        });
-        this.updateWebview();
-    }
-
-    private handleToggleSubDomainFocus(serviceGroupId: string, serviceId: string, subDomainId: string) {
-        // Get the new focus state from the current view mode map first
-        const serviceGroup = this.getServiceGroupsMap().get(serviceGroupId);
-        if (serviceGroup) {
-            const service = serviceGroup.services.find(s => s.id === serviceId);
-            if (service) {
-                const subDomain = service.subDomains.find(sd => sd.id === subDomainId);
-                if (subDomain) {
-                    const newFocusState = !subDomain.focused;
-                    
-                    // Update focus state for this subdomain in all services that use it in both maps
-                    this.updateSubDomainFocusInAllServices(subDomain.name, newFocusState);
-                    
-                    // Update all services' focus state based on their subdomains in both maps
-                    this.updateAllServicesFocusBasedOnSubDomains();
-                    
-                    this.updateWebview();
-                }
-            }
-        }
-    }
-
-    private updateServiceFocusBasedOnSubDomains(service: Service) {
-        // If any subdomain is focused, the service should be focused
-        // If no subdomains are focused, the service should be unfocused
-        const hasFocusedSubDomains = service.subDomains.some(subDomain => subDomain.focused);
-        service.focused = hasFocusedSubDomains;
-    }
-
-    private updateSubDomainFocusInAllServices(subDomainName: string, focusState: boolean) {
-        // Update focus state for this subdomain in all services that use it in both maps
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroups = Array.from(serviceGroupsMap.values());
-            serviceGroups.forEach(serviceGroup => {
-                serviceGroup.services.forEach(service => {
-                    service.subDomains.forEach(subDomain => {
-                        if (subDomain.name === subDomainName) {
-                            subDomain.focused = focusState;
-                        }
-                    });
-                });
-            });
-        });
-    }
-
-    private updateAllServicesFocusBasedOnSubDomains() {
-        // Update all services' focus state based on their subdomains in both maps
-        this.getBothServiceGroupsMaps().forEach(serviceGroupsMap => {
-            const serviceGroups = Array.from(serviceGroupsMap.values());
-            serviceGroups.forEach(serviceGroup => {
-                serviceGroup.services.forEach(service => {
-                    this.updateServiceFocusBasedOnSubDomains(service);
-                });
-            });
-        });
-    }
 
     private async handleRefresh() {
-        this._state.isLoading = true;
-        this.updateWebview();
         await this.refreshServices();
-        this._state.isLoading = false;
-        this.updateWebview();
+        this.sendDataRefresh();
     }
 
-    private updateWebview() {
-        if (!this._view) {
-            return;
-        }
+    private async handleSetViewMode(viewMode: 'current' | 'workspace') {
+        this._state.viewMode = viewMode;
+        await this.refreshServices();
+        this.sendDataRefresh();
+    }
 
-        if (this._state.isLoading) {
-            const cssUri = this._view.webview.asWebviewUri(
-                Uri.joinPath(this._extensionUri, 'client', 'src', 'ui', 'styles', 'treeStyles.css')
-            );
-            this._view.webview.html = this._htmlGenerator.generateLoadingHtml(cssUri.toString());
-            return;
-        }
+
+    private sendDataRefresh() {
+        if (!this._view) return;
 
         const serviceGroups = Array.from(this.getServiceGroupsMap().values());
-        const visibleDomains = this._state.viewMode === 'current' 
+        const visibleGroups = this._state.viewMode === 'current' 
             ? serviceGroups.filter(d => d.inCurrentFile)
             : serviceGroups;
 
-        // Calculate selection counts BEFORE filtering children
-        const selectedCount = this.calculateSelectionCounts(visibleDomains);
-        const totalCount = this.calculateTotalCounts(visibleDomains);
+        const filteredGroups = this.filterServiceGroupChildren(visibleGroups);
 
-        // Filter children (services and subdomains) based on current file mode for display
-        const filteredDomains = this.filterServiceGroupChildren(visibleDomains);
+        this._view.webview.postMessage({
+            type: 'dataRefresh',
+            data: {
+                serviceGroups: filteredGroups,
+                currentFile: this._state.currentFile,
+                viewMode: this._state.viewMode
+            }
+        });
+    }
 
-        const codiconsUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'node_modules', '@vscode/codicons', 'dist', 'codicon.css')
-        );
-        
-        const cssUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'src', 'ui', 'styles', 'treeStyles.css')
-        );
-        
-        this._view.webview.html = this._htmlGenerator.generateTreeHtml(
-            filteredDomains,
-            this._state.viewMode,
-            selectedCount,
-            totalCount,
-            this._state.boundariesMode,
-            this._state.showDatabases,
-            this._state.optionsExpanded,
-            codiconsUri.toString(),
-            cssUri.toString()
-        );
+    private sendInitialData() {
+        if (!this._view) return;
+
+        const serviceGroups = Array.from(this.getServiceGroupsMap().values());
+        const visibleGroups = this._state.viewMode === 'current' 
+            ? serviceGroups.filter(d => d.inCurrentFile)
+            : serviceGroups;
+
+        const filteredGroups = this.filterServiceGroupChildren(visibleGroups);
+
+        this._view.webview.postMessage({
+            type: 'initialData',
+            data: {
+                serviceGroups: filteredGroups,
+                currentFile: this._state.currentFile,
+                viewMode: this._state.viewMode
+            }
+        });
     }
 
     private filterServiceGroupChildren(serviceGroups: ServiceGroup[]): ServiceGroup[] {
@@ -720,132 +393,23 @@ export class ServicesViewProvider implements WebviewViewProvider {
         }));
     }
 
-    private calculateSelectionCounts(serviceGroups: ServiceGroup[]) {
-        let selectedServiceGroups = 0;
-        let selectedServices = 0;
 
-        serviceGroups.forEach(serviceGroup => {
-            if (serviceGroup.selected) {
-                selectedServiceGroups++;
-            }
-            
-            // In current file mode, only count services that are in current file
-            const relevantServices = this._state.viewMode === 'current' 
-                ? serviceGroup.services.filter(s => s.inCurrentFile)
-                : serviceGroup.services;
-                
-            relevantServices.forEach(service => {
-                if (service.selected) {
-                    selectedServices++;
-                }
-            });
-        });
-
-        return { serviceGroups: selectedServiceGroups, services: selectedServices };
-    }
-
-    private calculateTotalCounts(serviceGroups: ServiceGroup[]) {
-        const totalServiceGroups = serviceGroups.length;
-        let totalServices = 0;
-
-        serviceGroups.forEach(serviceGroup => {
-            // In current file mode, only count services that are in current file
-            const relevantServices = this._state.viewMode === 'current' 
-                ? serviceGroup.services.filter(s => s.inCurrentFile)
-                : serviceGroup.services;
-                
-            totalServices += relevantServices.length;
-        });
-
-        return { serviceGroups: totalServiceGroups, services: totalServices };
-    }
-
-    private getSelectedServices(): Service[] {
-        return Array.from(this.getServiceGroupsMap().values())
-            .filter(serviceGroup => serviceGroup.selected || serviceGroup.partiallySelected)
-            .flatMap(serviceGroup => serviceGroup.services)
-            .filter(service => service.selected || service.partiallySelected);
-    }
-
-    private getSelectedUseCases(): UseCase[] {
-        return Array.from(this.getServiceGroupsMap().values())
-            .filter(serviceGroup => serviceGroup.selected || serviceGroup.partiallySelected)
-            .flatMap(serviceGroup => serviceGroup.services)
-            .filter(service => service.selected || service.partiallySelected)
-            .flatMap(service => service.subDomains)
-            .filter(subDomain => subDomain.selected || subDomain.partiallySelected)
-            .flatMap(subDomain => subDomain.useCases)
-            .filter(useCase => useCase.selected);
-    }
-
-    private getFocusedServices(): Service[] {
-        return Array.from(this.getServiceGroupsMap().values())
-            .flatMap(serviceGroup => serviceGroup.services)
-            .filter(service => service.focused);
-    }
-
-    private getFocusedSubDomains(): SubDomain[] {
-        return Array.from(this.getServiceGroupsMap().values())
-            .flatMap(serviceGroup => serviceGroup.services)
-            .flatMap(service => service.subDomains)
-            .filter(subDomain => subDomain.focused);
-    }
-
-    // Helper method to preserve service group states
+    // Helper method to preserve service group states  
     private preserveServiceGroupStates(serviceGroup: ServiceGroup, existingServiceGroup: ServiceGroup) {
+        // Only preserve basic structural states, not selection/focus since React manages those
         serviceGroup.expanded = existingServiceGroup.expanded;
         serviceGroup.services.forEach(service => {
             const existingService = existingServiceGroup.services.find(s => s.id === service.id);
             if (existingService) {
-                service.selected = existingService.selected;
-                service.focused = existingService.focused;
-                service.expanded = existingService.expanded; // Preserve service expansion state
+                service.expanded = existingService.expanded;
                 
-                // Preserve subdomain states
                 service.subDomains.forEach(subDomain => {
                     const existingSubDomain = existingService.subDomains.find(sd => sd.id === subDomain.id);
                     if (existingSubDomain) {
-                        subDomain.focused = existingSubDomain.focused;
-                        subDomain.expanded = existingSubDomain.expanded; // Preserve subdomain expansion state
+                        subDomain.expanded = existingSubDomain.expanded;
                     }
                 });
             }
-        });
-        this._serviceTreeService.updateServiceGroupSelectionForCurrentFile(serviceGroup, this._state.viewMode === 'current');
-    }
-
-    // Generic helper method for selection updates
-    private updateSelectionInBothMaps(
-        groupId: string,
-        updateFn: (group: ServiceGroup, isCurrentFile: boolean) => void
-    ) {
-        // 1) Update in current file map
-        const currentFileGroup = this._state.currentFileServiceGroups.get(groupId);
-        if (currentFileGroup) {
-            updateFn(currentFileGroup, true);
-        }
-        
-        // 2) Update in workspace map  
-        const workspaceGroup = this._state.workspaceServiceGroups.get(groupId);
-        if (workspaceGroup) {
-            updateFn(workspaceGroup, false);
-        }
-        
-        // 3) Recalculate selection states
-        if (currentFileGroup) {
-            this._serviceTreeService.updateServiceGroupSelectionForCurrentFile(currentFileGroup, true);
-        }
-        if (workspaceGroup) {
-            this._serviceTreeService.updateServiceGroupSelection(workspaceGroup);
-        }
-    }
-
-
-    private updateServiceSelection(service: Service, selectedState: boolean) {
-        service.selected = selectedState;
-        service.subDomains.forEach(sd => {
-            sd.selected = selectedState;
-            sd.useCases.forEach(uc => uc.selected = selectedState);
         });
     }
 
