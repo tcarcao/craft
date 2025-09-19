@@ -319,7 +319,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         });
         console.log(partialDsl);
         
-        commands.executeCommand('craft.previewPartialDSLWithFocus', partialDsl, "C4", focusInfo);
+        commands.executeCommand('craft.previewC4PartialDSL', partialDsl, focusInfo);
     }
 
 

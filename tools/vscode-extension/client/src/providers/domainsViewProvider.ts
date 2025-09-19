@@ -1,9 +1,9 @@
 import { Uri, WebviewViewProvider, WebviewView, WebviewViewResolveContext, CancellationToken, TextDocument, window, workspace, commands, ExtensionContext } from 'vscode';
 import { DomainsViewService } from '../services/domainsViewService';
 import { DslExtractService } from '../services/dslExtractService';
-import { Domain, DomainTreeState, UseCase } from '../types/domain';
+import { Domain, DomainTreeState, UseCase, ServiceGroup, Service } from '../types/domain';
 import { LanguageClient } from 'vscode-languageclient/node';
-import { ServerCommands } from '../../../shared/lib/types/domain-extraction';
+import { ServerCommands, BlockRange } from '../../../shared/lib/types/domain-extraction';
 
 export class DomainsViewProvider implements WebviewViewProvider {
     public static readonly viewType = 'dslDomainView';
@@ -18,6 +18,9 @@ export class DomainsViewProvider implements WebviewViewProvider {
         currentFile: undefined,
         isLoading: false
     };
+    
+    // Store service groups for service block range lookup
+    private _serviceGroups: ServiceGroup[] = [];
 
     // Helper method to get the appropriate domain map based on view mode
     private getDomainsMap(): Map<string, Domain> {
@@ -154,7 +157,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
                 case 'preview':
-                    this.handlePreview(data.selectedDomains, data.selectedUseCases);
+                    this.handlePreview(data.selectedDomains, data.selectedUseCases, data.diagramMode);
                     break;
                 case 'refresh':
                     this.handleRefresh();
@@ -249,7 +252,10 @@ export class DomainsViewProvider implements WebviewViewProvider {
 
     private async refreshDomains() {
         try {
-            const { domains } = await this._extractService.discoverDSL({ currentFile: this._state.currentFile });
+            const { domains, serviceGroups } = await this._extractService.discoverDSL({ currentFile: this._state.currentFile });
+            
+            // Store service groups for service block range lookup
+            this._serviceGroups = serviceGroups;
 
             // Update both current file and workspace domains with preserved states
             // Create deep copies to avoid shared references
@@ -300,9 +306,15 @@ export class DomainsViewProvider implements WebviewViewProvider {
         }
     }
 
-    private async handlePreview(selectedDomains: Domain[], selectedUseCases: UseCase[]) {
+    private async handlePreview(selectedDomains: Domain[], selectedUseCases: UseCase[], diagramMode: string = 'detailed') {
         console.log('handle preview here we go');
+        
+        // Collect use case block ranges
         const blockRanges = selectedUseCases.map(uc => uc.blockRange);
+        
+        // Collect service block ranges for selected subdomains
+        const serviceBlockRanges = this.getServiceBlockRangesForSubDomains(selectedDomains);
+        blockRanges.push(...serviceBlockRanges);
         
         const partialDsl: string = await this.languageClient.sendRequest('workspace/executeCommand', {
             command: ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES,
@@ -310,7 +322,42 @@ export class DomainsViewProvider implements WebviewViewProvider {
         });
         console.log(partialDsl);
         
-        commands.executeCommand('craft.previewPartialDSL', partialDsl, "Domain");
+        // Choose diagram type based on mode
+        const diagramType = diagramMode === 'architecture' ? 'Architecture' : 'Domain';
+        commands.executeCommand('craft.previewPartialDSL', partialDsl, diagramType);
+    }
+
+    private getServiceBlockRangesForSubDomains(selectedDomains: Domain[]): BlockRange[] {
+        const serviceBlockRanges: BlockRange[] = [];
+        const processedServices = new Set<string>(); // Avoid duplicate services
+        
+        // Get all selected subdomain names
+        const selectedSubDomainNames = new Set<string>();
+        selectedDomains.forEach(domain => {
+            domain.subDomains.forEach(subDomain => {
+                if (subDomain.selected) {
+                    selectedSubDomainNames.add(subDomain.name);
+                }
+            });
+        });
+        
+        // Find services that contain the selected subdomains
+        this._serviceGroups.forEach(serviceGroup => {
+            serviceGroup.services.forEach(service => {
+                // Check if this service contains any of the selected subdomains
+                const hasSelectedSubDomain = service.subDomains.some(subDomain => 
+                    selectedSubDomainNames.has(subDomain.name)
+                );
+                
+                // If this service contains selected subdomains and we haven't processed it yet
+                if (hasSelectedSubDomain && !processedServices.has(service.id)) {
+                    serviceBlockRanges.push(service.blockRange);
+                    processedServices.add(service.id);
+                }
+            });
+        });
+        
+        return serviceBlockRanges;
     }
 
     private async handleRefresh() {

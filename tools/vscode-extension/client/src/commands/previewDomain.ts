@@ -40,7 +40,12 @@ export async function handlePreviewDomainsFromSelection() {
 
 export async function handlePreviewPartialDomains(text: string) {
     createAndShowPreviewPanel();
-    updatePreview(previewPanel, text, "Domain");
+    updatePreview(previewPanel, text, "Domain", undefined, "detailed");
+}
+
+export async function handlePreviewPartialArchitecture(text: string) {
+    createAndShowPreviewPanel();
+    updatePreview(previewPanel, text, "Domain", undefined, "architecture");
 }
 
 function createAndShowPreviewPanel() {

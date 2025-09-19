@@ -161,6 +161,7 @@ type PreviewRequest struct {
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
 	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
+	DomainMode     string     `json:"domainMode,omitempty"`     // detailed, architecture
 }
 
 type FocusInfo struct {
@@ -181,6 +182,7 @@ type DownloadRequest struct {
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
 	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
+	DomainMode     string     `json:"domainMode,omitempty"`     // detailed, architecture
 	Format         string     `json:"format"`         // png, svg, pdf, puml
 	DiagramType    string     `json:"diagramType"`    // c4, domain, context, sequence
 	Filename       string     `json:"filename,omitempty"`
@@ -203,8 +205,14 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 			return
 		}
 
-		// Generate Model diagram
-		diagram, err := s.viz.GenerateDomainDiagram(model)
+		// Parse domain mode, default to "detailed" if not provided or invalid
+		domainMode := visualizer.DomainModeDetailed
+		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
+			domainMode = visualizer.DomainModeArchitecture
+		}
+
+		// Generate Model diagram with mode
+		diagram, err := s.viz.GenerateDomainDiagramWithMode(model, domainMode)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
 			return
@@ -348,10 +356,20 @@ func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
 			defaultFilename = "c4-diagram"
 
 		case "domain":
-			diagram, contentType, err = s.viz.GenerateDomainDiagramWithFormat(model, format)
-			defaultFilename = "domain-diagram"
-
-
+			// Parse domain mode, default to "detailed" if not provided or invalid
+			domainMode := visualizer.DomainModeDetailed
+			if req.DomainMode == string(visualizer.DomainModeArchitecture) {
+				domainMode = visualizer.DomainModeArchitecture
+			}
+			
+			diagram, contentType, err = s.viz.GenerateDomainDiagramWithModeAndFormat(model, domainMode, format)
+			
+			// Set filename based on mode
+			if domainMode == visualizer.DomainModeArchitecture {
+				defaultFilename = "architecture-diagram"
+			} else {
+				defaultFilename = "domain-diagram"
+			}
 		default:
 			respondWithError(w, http.StatusBadRequest, "Invalid diagram type")
 			return

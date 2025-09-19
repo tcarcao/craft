@@ -5,7 +5,7 @@ import { getCraftConfig } from '../utils/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string, focusInfo?: any) {
+export async function updatePreview(previewPanel: WebviewPanel | undefined, text: string, documentType: string, focusInfo?: any, domainMode?: string) {
     if (!previewPanel) {
         console.log('not there');
         return;
@@ -32,6 +32,11 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
             if (focusInfo.showDatabases !== undefined) {
                 requestBody.showDatabases = focusInfo.showDatabases;
             }
+        }
+        
+        // Add domain mode for domain diagrams
+        if (documentType.toLowerCase() === 'domain' && domainMode) {
+            requestBody.domainMode = domainMode;
         }
         
         const { data } = await axios.post(`${serverUrl}/preview/${documentType.toLowerCase()}`, requestBody, {
@@ -121,7 +126,8 @@ export async function updatePreview(previewPanel: WebviewPanel | undefined, text
                             diagramType: '${documentType.toLowerCase()}',
                             format: format,
                             dsl: \`${text.replace(/`/g, '\\`').replace(/\${/g, '\\${')}\`,
-                            focusInfo: ${JSON.stringify(focusInfo || null)}
+                            focusInfo: ${JSON.stringify(focusInfo || null)},
+                            domainMode: '${domainMode || 'detailed'}'
                         });
                     }
                 </script>
@@ -156,7 +162,8 @@ export async function handleDownload(message: any) {
             focusInfo: message.focusInfo,
             format: message.format,
             diagramType: message.diagramType,
-            boundariesMode: message.focusInfo?.boundariesMode
+            boundariesMode: message.focusInfo?.boundariesMode,
+            domainMode: message.domainMode
         };
 
         // Make request to backend

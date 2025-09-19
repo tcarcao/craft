@@ -1,7 +1,7 @@
 // client/src/commands/index.ts
 import { commands, ExtensionContext } from 'vscode';
 import { handlePreviewC4, handlePreviewSelectedC4, handlePreviewPartialC4, cleanUpPreviewC4 } from './previewC4';
-import { handlePreviewDomain, handlePreviewDomainsFromSelection, handlePreviewPartialDomains, cleanUpPreviewDomain } from './previewDomain';
+import { handlePreviewDomain, handlePreviewDomainsFromSelection, handlePreviewPartialDomains, handlePreviewPartialArchitecture, cleanUpPreviewDomain } from './previewDomain';
 
 export function registerPreviewCommands(context: ExtensionContext) {
     context.subscriptions.push(
@@ -22,22 +22,17 @@ export function registerPreviewCommands(context: ExtensionContext) {
                 case "C4":
                     handlePreviewPartialC4(partialDSL);
                     break;
+                case "Architecture":
+                    handlePreviewPartialArchitecture(partialDSL);
+                    break;
                 case "Domain":
                 default:
                     handlePreviewPartialDomains(partialDSL);
                     break;
             }
         }),
-        commands.registerCommand('craft.previewPartialDSLWithFocus', (partialDSL, diagramType, focusInfo) => {
-            switch(diagramType) {
-                case "C4":
-                    handlePreviewPartialC4(partialDSL, focusInfo);
-                    break;
-                case "Domain":
-                default:
-                    handlePreviewPartialDomains(partialDSL);
-                    break;
-            }
+        commands.registerCommand('craft.previewC4PartialDSL', (partialDSL, focusInfo) => {
+            handlePreviewPartialC4(partialDSL, focusInfo);
         }),
         commands.registerCommand('craft.openSettings', () => {
             commands.executeCommand('workbench.action.openSettings', 'craft.');
