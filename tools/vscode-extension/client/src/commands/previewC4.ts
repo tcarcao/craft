@@ -1,5 +1,5 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { updatePreview, handleDownload } from './previewCommon';
+import { updateC4Preview, handleDownload, C4PreviewOptions } from './previewCommon';
 
 const viewType = 'c4Preview';
 const panelTitle = 'C4 Preview';
@@ -16,7 +16,7 @@ export async function handlePreviewC4() {
     createAndShowPreviewPanel();
 
     // Update content
-    updatePreview(previewPanel, activeEditor.document.getText(), "C4");
+    await updateC4Preview(previewPanel, activeEditor.document.getText());
 }
 
 export async function handlePreviewSelectedC4() {
@@ -35,12 +35,12 @@ export async function handlePreviewSelectedC4() {
 
     // Update content
     const selectedText = activeEditor.document.getText(activeEditor.selection);
-    updatePreview(previewPanel, selectedText, "C4");
+    await updateC4Preview(previewPanel, selectedText);
 }
 
-export async function handlePreviewPartialC4(text: string, focusInfo?: any) {
+export async function handlePreviewPartialC4(text: string, focusInfo?: C4PreviewOptions) {
     createAndShowPreviewPanel();
-    updatePreview(previewPanel, text, "C4", focusInfo);
+    await updateC4Preview(previewPanel, text, focusInfo);
 }
 
 function createAndShowPreviewPanel() {

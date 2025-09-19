@@ -156,13 +156,20 @@ func (s *Server) respondWithError(w http.ResponseWriter, err error, input string
 	})
 }
 
-type PreviewRequest struct {
+// Domain-specific preview request
+type DomainPreviewRequest struct {
+	DSL        string `json:"dsl"`
+	DomainMode string `json:"domainMode,omitempty"` // detailed, architecture
+}
+
+// C4-specific preview request
+type C4PreviewRequest struct {
 	DSL            string     `json:"dsl"`
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
 	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
-	DomainMode     string     `json:"domainMode,omitempty"`     // detailed, architecture
 }
+
 
 type FocusInfo struct {
 	FocusedServiceNames    []string `json:"focusedServiceNames"`
@@ -177,20 +184,28 @@ type PreviewResponse struct {
 	Data    string `json:"data,omitempty"` // base64 encoded diagram
 }
 
-type DownloadRequest struct {
+// Domain-specific download request
+type DomainDownloadRequest struct {
+	DSL        string `json:"dsl"`
+	DomainMode string `json:"domainMode,omitempty"` // detailed, architecture
+	Format     string `json:"format"`               // png, svg, pdf, puml
+	Filename   string `json:"filename,omitempty"`
+}
+
+// C4-specific download request
+type C4DownloadRequest struct {
 	DSL            string     `json:"dsl"`
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
 	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
-	DomainMode     string     `json:"domainMode,omitempty"`     // detailed, architecture
-	Format         string     `json:"format"`         // png, svg, pdf, puml
-	DiagramType    string     `json:"diagramType"`    // c4, domain, context, sequence
+	Format         string     `json:"format"` // png, svg, pdf, puml
 	Filename       string     `json:"filename,omitempty"`
 }
 
+
 func (s *Server) handlePreviewDomain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req PreviewRequest
+		var req DomainPreviewRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondWithError(w, http.StatusBadRequest, "Invalid request format")
 			return
@@ -231,7 +246,7 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 
 func (s *Server) handlePreviewC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req PreviewRequest
+		var req C4PreviewRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondWithError(w, http.StatusBadRequest, "Invalid request format")
 			return
@@ -297,9 +312,9 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
+func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req DownloadRequest
+		var req DomainDownloadRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondWithError(w, http.StatusBadRequest, "Invalid request format")
 			return
@@ -328,51 +343,93 @@ func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
 			format = visualizer.FormatPNG
 		}
 
+		// Parse domain mode, default to "detailed" if not provided or invalid
+		domainMode := visualizer.DomainModeDetailed
+		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
+			domainMode = visualizer.DomainModeArchitecture
+		}
+		
+		diagram, contentType, err := s.viz.GenerateDomainDiagramWithModeAndFormat(model, domainMode, format)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+			return
+		}
+		
+		// Set filename based on mode
+		var defaultFilename string
+		if domainMode == visualizer.DomainModeArchitecture {
+			defaultFilename = "architecture-diagram"
+		} else {
+			defaultFilename = "domain-diagram"
+		}
+
+		// Determine filename
+		filename := req.Filename
+		if filename == "" {
+			extension := string(format)
+			if format == visualizer.FormatPUML {
+				extension = "puml"
+			}
+			filename = fmt.Sprintf("%s.%s", defaultFilename, extension)
+		}
+
+		// Set response headers
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		w.Write(diagram)
+	}
+}
+
+func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req C4DownloadRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+			return
+		}
+
+		// Parse DSL
+		p := parser.NewParser()
+		model, err := p.ParseString(req.DSL)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+			return
+		}
+
+		// Convert format string to SupportedFormat
+		var format visualizer.SupportedFormat
+		switch req.Format {
+		case "png":
+			format = visualizer.FormatPNG
+		case "svg":
+			format = visualizer.FormatSVG
+		case "pdf":
+			format = visualizer.FormatPDF
+		case "puml":
+			format = visualizer.FormatPUML
+		default:
+			format = visualizer.FormatPNG
+		}
+
+		// Parse boundaries mode
+		boundariesMode := visualizer.C4ModeBoundaries
+		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
+			boundariesMode = visualizer.C4ModeTransparent
+		}
+
+		// Parse database visibility, default to true if not provided
+		showDatabases := true
+		if req.ShowDatabases != nil {
+			showDatabases = *req.ShowDatabases
+		}
+
+		// Generate C4 diagram with focus and format
 		var diagram []byte
 		var contentType string
-		var defaultFilename string
-
-		// Generate diagram based on type
-		switch req.DiagramType {
-		case "c4":
-			// Parse boundaries mode
-			boundariesMode := visualizer.C4ModeBoundaries
-			if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
-				boundariesMode = visualizer.C4ModeTransparent
-			}
-
-			// Parse database visibility, default to true if not provided
-			showDatabases := true
-			if req.ShowDatabases != nil {
-				showDatabases = *req.ShowDatabases
-			}
-
-			// Generate C4 diagram with focus and format
-			if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
-				diagram, contentType, err = s.viz.GenerateC4WithFocusSubDomainsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, showDatabases, format)
-			} else {
-				diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, showDatabases, format)
-			}
-			defaultFilename = "c4-diagram"
-
-		case "domain":
-			// Parse domain mode, default to "detailed" if not provided or invalid
-			domainMode := visualizer.DomainModeDetailed
-			if req.DomainMode == string(visualizer.DomainModeArchitecture) {
-				domainMode = visualizer.DomainModeArchitecture
-			}
-			
-			diagram, contentType, err = s.viz.GenerateDomainDiagramWithModeAndFormat(model, domainMode, format)
-			
-			// Set filename based on mode
-			if domainMode == visualizer.DomainModeArchitecture {
-				defaultFilename = "architecture-diagram"
-			} else {
-				defaultFilename = "domain-diagram"
-			}
-		default:
-			respondWithError(w, http.StatusBadRequest, "Invalid diagram type")
-			return
+		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
+			diagram, contentType, err = s.viz.GenerateC4WithFocusSubDomainsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, showDatabases, format)
+		} else {
+			diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, showDatabases, format)
 		}
 
 		if err != nil {
@@ -387,7 +444,7 @@ func (s *Server) handleDownloadDiagramWithFormat() http.HandlerFunc {
 			if format == visualizer.FormatPUML {
 				extension = "puml"
 			}
-			filename = fmt.Sprintf("%s.%s", defaultFilename, extension)
+			filename = fmt.Sprintf("c4-diagram.%s", extension)
 		}
 
 		// Set response headers
@@ -414,7 +471,8 @@ func main() {
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
 	
-	r.HandleFunc("/download", server.handleDownloadDiagramWithFormat()).Methods("POST")
+	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
+	r.HandleFunc("/download/c4", server.handleDownloadC4Diagram()).Methods("POST")
 
 	// CORS middleware for VSCode extension
 	r.Use(func(next http.Handler) http.Handler {

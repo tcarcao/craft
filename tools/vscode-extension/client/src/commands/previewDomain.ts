@@ -1,5 +1,5 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { updatePreview, handleDownload } from './previewCommon';
+import { updateDomainPreview, handleDownload, DomainPreviewOptions } from './previewCommon';
 
 const viewType = 'domainPreview';
 const panelTitle = 'Domain Preview';
@@ -16,7 +16,7 @@ export async function handlePreviewDomain() {
     createAndShowPreviewPanel();
 
     // Update content
-    updatePreview(previewPanel, activeEditor.document.getText(), "Domain");
+    await updateDomainPreview(previewPanel, activeEditor.document.getText());
 }
 
 export async function handlePreviewDomainsFromSelection() {
@@ -35,17 +35,17 @@ export async function handlePreviewDomainsFromSelection() {
 
     // Update content
     const selectedText = activeEditor.document.getText(activeEditor.selection);
-    updatePreview(previewPanel, selectedText, "Domain");
+    await updateDomainPreview(previewPanel, selectedText);
 }
 
 export async function handlePreviewPartialDomains(text: string) {
     createAndShowPreviewPanel();
-    updatePreview(previewPanel, text, "Domain", undefined, "detailed");
+    await updateDomainPreview(previewPanel, text, { domainMode: 'detailed' });
 }
 
 export async function handlePreviewPartialArchitecture(text: string) {
     createAndShowPreviewPanel();
-    updatePreview(previewPanel, text, "Domain", undefined, "architecture");
+    await updateDomainPreview(previewPanel, text, { domainMode: 'architecture' });
 }
 
 function createAndShowPreviewPanel() {
