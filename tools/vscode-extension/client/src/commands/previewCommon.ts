@@ -95,40 +95,6 @@ export async function previewC4Diagram(
     }
 }
 
-export async function updateDomainPreview(
-    previewPanel: WebviewPanel | undefined,
-    text: string,
-    options?: DomainPreviewOptions
-): Promise<void> {
-    if (!previewPanel) {
-        console.log('Preview panel not available');
-        return;
-    }
-
-    try {
-        await previewDomainDiagram(previewPanel, text, options);
-    } catch (error: unknown) {
-        handlePreviewError(error);
-    }
-}
-
-export async function updateC4Preview(
-    previewPanel: WebviewPanel | undefined,
-    text: string,
-    options?: C4PreviewOptions
-): Promise<void> {
-    if (!previewPanel) {
-        console.log('Preview panel not available');
-        return;
-    }
-
-    try {
-        await previewC4Diagram(previewPanel, text, options);
-    } catch (error: unknown) {
-        handlePreviewError(error);
-    }
-}
-
 // Helper function to update webview content
 function updateWebviewContent(
     previewPanel: WebviewPanel,
@@ -229,7 +195,7 @@ function updateWebviewContent(
 }
 
 // Helper function to handle preview errors
-function handlePreviewError(error: unknown): void {
+export function handlePreviewError(error: unknown): void {
     const { serverUrl } = getCraftConfig();
     
     let errorMessage = 'Failed to generate preview';
