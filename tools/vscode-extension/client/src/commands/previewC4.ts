@@ -1,5 +1,5 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { updateC4Preview, handleDownload, C4PreviewOptions } from './previewCommon';
+import { previewC4Diagram, handlePreviewError, handleDownload, C4PreviewOptions } from './previewCommon';
 
 const viewType = 'c4Preview';
 const panelTitle = 'C4 Preview';
@@ -41,6 +41,24 @@ export async function handlePreviewSelectedC4() {
 export async function handlePreviewPartialC4(text: string, focusInfo?: C4PreviewOptions) {
     createAndShowPreviewPanel();
     await updateC4Preview(previewPanel, text, focusInfo);
+}
+
+
+async function updateC4Preview(
+    previewPanel: WebviewPanel | undefined,
+    text: string,
+    options?: C4PreviewOptions
+): Promise<void> {
+    if (!previewPanel) {
+        console.log('Preview panel not available');
+        return;
+    }
+
+    try {
+        await previewC4Diagram(previewPanel, text, options);
+    } catch (error: unknown) {
+        handlePreviewError(error);
+    }
 }
 
 function createAndShowPreviewPanel() {

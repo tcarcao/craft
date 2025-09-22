@@ -1,5 +1,5 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
-import { updateDomainPreview, handleDownload, DomainPreviewOptions } from './previewCommon';
+import { previewDomainDiagram, handlePreviewError, handleDownload, DomainPreviewOptions } from './previewCommon';
 
 const viewType = 'domainPreview';
 const panelTitle = 'Domain Preview';
@@ -46,6 +46,23 @@ export async function handlePreviewPartialDomains(text: string) {
 export async function handlePreviewPartialArchitecture(text: string) {
     createAndShowPreviewPanel();
     await updateDomainPreview(previewPanel, text, { domainMode: 'architecture' });
+}
+
+export async function updateDomainPreview(
+    previewPanel: WebviewPanel | undefined,
+    text: string,
+    options?: DomainPreviewOptions
+): Promise<void> {
+    if (!previewPanel) {
+        console.log('Preview panel not available');
+        return;
+    }
+
+    try {
+        await previewDomainDiagram(previewPanel, text, options);
+    } catch (error: unknown) {
+        handlePreviewError(error);
+    }
 }
 
 function createAndShowPreviewPanel() {
