@@ -34,6 +34,8 @@ func NewDSLModelBuilder() *DSLModelBuilder {
 }
 
 func (b *DSLModelBuilder) GetModel() *DSLModel {
+	// Apply service merging before returning the model
+	b.model.Services = MergeServices(b.model.Services)
 	return b.model
 }
 
