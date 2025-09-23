@@ -590,7 +590,7 @@ export const ExampleUsages = {
             }
         );
         
-        console.log(`Processed ${results.length} files`);
+        console.debug(`Processed ${results.length} files`);
         return results;
     },
 
@@ -625,7 +625,7 @@ export const ExampleUsages = {
             {
                 include: ['**/*.ts'],
                 onProgress: (processed, total, current) => {
-                    console.log(`[${processed}/${total}] Processing: ${path.basename(current)}`);
+                    console.debug(`[${processed}/${total}] Processing: ${path.basename(current)}`);
                 },
                 onResult: (result) => {
                     results.push(result);

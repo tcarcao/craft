@@ -248,7 +248,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
                 this.refreshServices();
             } catch (error) {
                 // If validation fails, don't refresh to avoid flickering
-                console.log('Skipping refresh due to invalid DSL content during editing');
+                console.warn('Skipping refresh due to invalid DSL content during editing');
             }
         }, delay);
     }
@@ -308,7 +308,6 @@ export class ServicesViewProvider implements WebviewViewProvider {
 
 
     private async handlePreview(selectedServices: any[], selectedUseCases: any[], focusInfo: any) {
-        console.log('handle preview here we go', selectedServices, selectedUseCases);
         const blockRanges = [];
         selectedServices.forEach(s => blockRanges.push(s.blockRange));
         selectedUseCases.forEach(uc => blockRanges.push(uc.blockRange));

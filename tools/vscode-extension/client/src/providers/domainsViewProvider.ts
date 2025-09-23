@@ -245,7 +245,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
                 this.refreshDomains();
             } catch (error) {
                 // If validation fails, don't refresh to avoid flickering
-                console.log('Skipping refresh due to invalid DSL content during editing');
+                console.warn('Skipping refresh due to invalid DSL content during editing');
             }
         }, delay);
     }
@@ -306,9 +306,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
         }
     }
 
-    private async handlePreview(selectedDomains: Domain[], selectedUseCases: UseCase[], diagramMode: string = 'detailed') {
-        console.log('handle preview here we go');
-        
+    private async handlePreview(selectedDomains: Domain[], selectedUseCases: UseCase[], diagramMode: string = 'detailed') {       
         // Collect use case block ranges
         const blockRanges = selectedUseCases.map(uc => uc.blockRange);
         

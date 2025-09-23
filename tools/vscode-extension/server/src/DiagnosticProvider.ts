@@ -21,7 +21,7 @@ export class DiagnosticProvider {
 
         const diagnostics: Diagnostic[] = [];
 
-        console.log(result.errors);
+        console.error(result.errors);
 
         if (!result.success) {
             result.errors.forEach(error => {

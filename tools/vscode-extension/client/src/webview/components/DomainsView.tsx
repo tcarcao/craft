@@ -772,7 +772,7 @@ const CrossReferencesList: React.FC<CrossReferencesListProps> = ({ references })
 
   const navigateToUseCase = (useCaseId: string) => {
     // TODO: Implement navigation to use case
-    console.log('Navigate to use case:', useCaseId);
+    console.debug('Navigate to use case:', useCaseId);
   };
 
   return (
