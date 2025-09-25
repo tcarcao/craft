@@ -1,0 +1,30 @@
+===
+Phrase parsing works
+===
+
+use_case "Test" {
+    when User starts
+        System validates user input
+}
+
+---
+
+(source_file
+  (use_case_block
+    (string)
+    (scenario
+      (when_clause
+        (external_trigger
+          (trigger_actor
+            (identifier))
+          (trigger_verb
+            (identifier)))
+        (action
+          (internal_action
+            (action_subject
+              (identifier))
+            (action_verb
+              (identifier))
+            (phrase
+              (identifier)
+              (identifier))))))))

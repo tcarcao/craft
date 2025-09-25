@@ -1,6 +1,6 @@
 // client/src/extension.ts
 import * as path from 'path';
-import { workspace, ExtensionContext, window } from 'vscode';
+import { workspace, ExtensionContext, window, languages } from 'vscode';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -13,6 +13,7 @@ import { DomainsViewService } from './services/domainsViewService';
 import { ServicesViewProvider } from './providers/servicesViewProvider';
 import { DslExtractService } from './services/dslExtractService';
 import { ServicesViewService } from './services/servicesViewService';
+import { TreeSitterHighlightProvider } from './TreeSitterHighlightProvider';
 
 let domainTreeProvider: DomainsViewProvider;
 let serviceTreeProvider: ServicesViewProvider;
@@ -22,6 +23,24 @@ export function activate(context: ExtensionContext) {
     startLanguageServer(context);
     registerDomainView(context, client);
     registerPreviewCommands(context);
+    registerTreeSitterHighlighting(context);
+}
+
+function registerTreeSitterHighlighting(context: ExtensionContext) {
+    console.log('🔄 Registering Tree-sitter semantic highlighting for Craft...');
+    
+    // Register Tree-sitter semantic highlighting for Craft files
+    const highlightProvider = new TreeSitterHighlightProvider();
+    
+    const disposable = languages.registerDocumentSemanticTokensProvider(
+        { language: 'craft' },
+        highlightProvider,
+        highlightProvider.legend
+    );
+    
+    context.subscriptions.push(disposable);
+    console.log('✅ Tree-sitter syntax highlighting registered for Craft language');
+    console.log('📋 Token legend:', highlightProvider.legend);
 }
 
 function startLanguageServer(context: ExtensionContext) {

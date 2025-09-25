@@ -11,13 +11,15 @@
 		"glob": "^11.0.3",
 		"vscode-languageserver": "^9.0.1",
 		"vscode-languageserver-textdocument": "^1.0.11",
-		"vscode-uri": "^3.1.0"
+		"vscode-uri": "^3.1.0",
+		"web-tree-sitter": "^0.25.10"
 	},
 	"scripts": {
 		"generate": "antlr-ng -Dlanguage=TypeScript ../../antlr-grammar/Craft.g4 -v true -o src/parser/generated --exact-output-dir",
 		"postinstall": "pnpm run generate"
 	},
 	"devDependencies": {
-		"antlr-ng": "^1.0.10"
+		"antlr-ng": "^1.0.10",
+		"node-gyp": "^11.4.2"
 	}
 }

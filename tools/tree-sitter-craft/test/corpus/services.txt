@@ -1,0 +1,60 @@
+===
+Simple services block
+===
+
+services {
+    UserService {
+        domains: Authentication, Profile
+        language: golang
+        data-stores: user_db, cache
+    }
+}
+
+---
+
+(source_file
+  (services_block
+    (service_definition
+      (identifier)
+      (service_property
+        (domains_property
+          (identifier_list (identifier) (identifier))))
+      (service_property
+        (language_property (identifier)))
+      (service_property
+        (data_stores_property
+          (identifier_list (identifier) (identifier)))))))
+
+===
+Multiple services
+===
+
+services {
+    UserService {
+        domains: Authentication, Profile
+        language: golang
+    }
+    PaymentService {
+        domains: Payment
+        language: java
+    }
+}
+
+---
+
+(source_file
+  (services_block
+    (service_definition
+      (identifier)
+      (service_property
+        (domains_property
+          (identifier_list (identifier) (identifier))))
+      (service_property
+        (language_property (identifier))))
+    (service_definition
+      (identifier)
+      (service_property
+        (domains_property
+          (identifier_list (identifier))))
+      (service_property
+        (language_property (identifier))))))

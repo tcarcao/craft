@@ -62,6 +62,7 @@
       "scope": [
         "keyword.other.property.domains.domain-dsl",
         "keyword.other.property.datastores.domain-dsl",
+        "keyword.other.property.data-stores.domain-dsl",
         "keyword.other.property.language.domain-dsl",
         "keyword.other.property.deployment.domain-dsl",
         "keyword.other.property.to.domain-dsl",
@@ -107,6 +108,46 @@
       "scope": "entity.name.type.subdomain.domain-dsl",
       "settings": {
         "foreground": "#22863a",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Data Store Names",
+      "scope": "entity.name.type.datastore.domain-dsl",
+      "settings": {
+        "foreground": "#e36209",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Phrase Words",
+      "scope": "entity.name.variable.phrase.domain-dsl",
+      "settings": {
+        "foreground": "#a31515",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Modifier Keys",
+      "scope": "entity.name.tag.modifier.key.domain-dsl",
+      "settings": {
+        "foreground": "#0451a5",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Modifier Values",
+      "scope": "entity.name.tag.modifier.value.domain-dsl",
+      "settings": {
+        "foreground": "#0969da",
+        "fontStyle": "normal"
+      }
+    },
+    {
+      "name": "Flow Arrows",
+      "scope": "punctuation.separator.arrow.domain-dsl",
+      "settings": {
+        "foreground": "#cf222e",
         "fontStyle": "bold"
       }
     },
@@ -165,7 +206,7 @@
         "keyword.other.cron.domain-dsl"
       ],
       "settings": {
-        "foreground": "#6f42c1",
+        "foreground": "#22863a",
         "fontStyle": "bold"
       }
     },

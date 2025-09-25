@@ -1,0 +1,32 @@
+{
+  "name": "tree-sitter-craft",
+  "version": "1.0.0",
+  "description": "Tree-sitter grammar for Craft DSL",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tcarcao/tree-sitter-craft.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "craft",
+    "dsl"
+  ],
+  "dependencies": {
+    "tree-sitter-cli": "^0.25.10"
+  },
+  "scripts": {
+    "build": "npx tree-sitter generate",
+    "build-wasm": "./build.sh",
+    "build-force": "./build-force.sh",
+    "dev": "./dev.sh",
+    "dev-wasm": "./dev.sh --wasm",
+    "test": "npx tree-sitter test",
+    "setup": "./setup-docker.sh"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "main": "index.js"
+}

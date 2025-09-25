@@ -1,6 +1,6 @@
 grammar Craft;
 
-dsl: (arch | services_def | service_def | exposure | use_case | domain_def | domains_def)* ;
+dsl: NEWLINE* (arch | services_def | service_def | exposure | use_case | domain_def | domains_def)* ;
 
 // Domain hierarchy definitions
 domain_def: 'domain' domain_name '{' NEWLINE* subdomain_list '}' NEWLINE*;

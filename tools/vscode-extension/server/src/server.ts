@@ -9,9 +9,14 @@ import {
   TextDocumentSyncKind,
   InitializeResult,
   ExecuteCommandParams,
+  DocumentFormattingParams,
+  TextEdit,
+  CompletionParams,
+  CompletionItem,
+  CompletionItemKind,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { DiagnosticProvider } from './DiagnosticProvider';
+import { TreeSitterDiagnosticProvider } from './TreeSitterDiagnosticProvider';
 import { DomainExtractor } from './parser/DomainExtractor';
 import { WorkspaceParser } from './services/documentsProcessor';
 import {
@@ -24,14 +29,20 @@ import {
   BlockRange
 } from '../../shared/lib/types/domain-extraction';
 import { Parser } from './parser/CraftParser';
+import { CraftCompletionProvider } from './parser/CraftCompletionProvider';
+import { TreeSitterCompletionProvider } from './parser/TreeSitterCompletionProvider';
+import { TreeSitterFormatterProvider } from './parser/TreeSitterFormatterProvider';
 
 // Create connection and documents manager
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments<TextDocument>(TextDocument);
-let diagnosticProvider: DiagnosticProvider;
+let treeSitterDiagnosticProvider: TreeSitterDiagnosticProvider;
 let domainExtractor: DomainExtractor;
 const workspaceParser = new WorkspaceParser(documents);
 const parser = new Parser();
+const completionProvider = new CraftCompletionProvider();
+const treeSitterCompletionProvider = new TreeSitterCompletionProvider();
+const treeSitterFormatter = new TreeSitterFormatterProvider();
 
 
 connection.onInitialize((params: InitializeParams) => {
@@ -39,7 +50,7 @@ connection.onInitialize((params: InitializeParams) => {
     workspaceParser.setWorkspaceFolders(params.workspaceFolders);
   }
 
-  diagnosticProvider = new DiagnosticProvider();
+  treeSitterDiagnosticProvider = new TreeSitterDiagnosticProvider();
   domainExtractor = new DomainExtractor();
 
   const result: InitializeResult = {
@@ -51,6 +62,10 @@ connection.onInitialize((params: InitializeParams) => {
           ServerCommands.EXTRACT_DOMAINS_FROM_WORKSPACE,
           ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES,
         ]
+      },
+      documentFormattingProvider: true,
+      completionProvider: {
+        triggerCharacters: [' ', ':', '{', '\n']
       }
       // Enable other capabilities as needed
     }
@@ -71,6 +86,67 @@ connection.onExecuteCommand((params: ExecuteCommandParams) => {
       return { error: 'Unknown command' };
   }
 });
+
+// Handle document formatting
+connection.onDocumentFormatting(async (params: DocumentFormattingParams): Promise<TextEdit[]> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return [];
+  }
+
+  try {
+    const formattedContent = await formatCraftDocument(document.getText());
+    return [{
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: document.lineCount, character: 0 }
+      },
+      newText: formattedContent
+    }];
+  } catch (error) {
+    connection.console.error(`Error formatting document: ${error}`);
+    return [];
+  }
+});
+
+// Handle autocomplete
+connection.onCompletion(async (params: CompletionParams): Promise<CompletionItem[]> => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return [];
+  }
+
+  try {
+    // Try Tree-sitter completion first
+    const treeSitterCompletions = await treeSitterCompletionProvider.getCompletions(document, params.position);
+    if (treeSitterCompletions.length > 0) {
+      return treeSitterCompletions;
+    }
+    
+    // Fallback to ANTLR completion if Tree-sitter returns nothing
+    return completionProvider.getCompletions(document, params.position);
+  } catch (error) {
+    connection.console.error(`Error providing completions: ${error}`);
+    return [];
+  }
+});
+
+async function formatCraftDocument(content: string): Promise<string> {
+  try {
+    // Use Tree-sitter formatter
+    const document = TextDocument.create('temp://format.craft', 'craft', 1, content);
+    const edits = await treeSitterFormatter.formatDocument(document);
+    
+    if (edits.length > 0) {
+      return edits[0].newText;
+    }
+    
+    return content; // No changes needed
+  } catch (error) {
+    connection.console.error(`Error in formatting: ${error}`);
+    return content; // Return original content on any error
+  }
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleExtractDomains(args: any[] | undefined): Promise<ExtractionResult> {
@@ -260,10 +336,10 @@ documents.onDidChangeContent(change => {
 
 async function validateDocument(document: TextDocument): Promise<void> {
   try {
-    const diagnostics = diagnosticProvider.getDiagnostics(document);
+    const treeSitterDiagnostics = await treeSitterDiagnosticProvider.getDiagnostics(document);
 
     // Send diagnostics to VS Code
-    connection.sendDiagnostics({ uri: document.uri, diagnostics });
+    connection.sendDiagnostics({ uri: document.uri, diagnostics: treeSitterDiagnostics });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     connection.console.error(`Error validating document: ${error.message}`);

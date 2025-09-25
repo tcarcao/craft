@@ -1,0 +1,25 @@
+# Generated files - do not version
+src/tree_sitter
+src/parser.c
+src/grammar.json  
+src/node-types.json
+tree-sitter-craft.wasm
+docker
+
+# Build artifacts
+build/
+node_modules/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+test/actual/

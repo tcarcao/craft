@@ -72,11 +72,211 @@
                 "configuration": "./language-configuration.json"
             }
         ],
-        "grammars": [
+        "semanticTokenTypes": [
+            {
+                "id": "craft-flow-keyword",
+                "description": "Flow control keywords like use_case, when"
+            },
+            {
+                "id": "craft-services-keyword",
+                "description": "Services block keyword"
+            },
+            {
+                "id": "craft-arch-keyword",
+                "description": "Architecture block keyword"
+            },
+            {
+                "id": "craft-exposure-keyword",
+                "description": "Exposure block keyword"
+            },
+            {
+                "id": "craft-domain-keyword",
+                "description": "Domain block keyword"
+            },
+            {
+                "id": "craft-domains-property",
+                "description": "Domains property keyword"
+            },
+            {
+                "id": "craft-language-property",
+                "description": "Language property keyword"
+            },
+            {
+                "id": "craft-data-stores-property",
+                "description": "Data stores property keyword"
+            },
+            {
+                "id": "craft-to-property",
+                "description": "To property keyword"
+            },
+            {
+                "id": "craft-through-property",
+                "description": "Through property keyword"
+            },
+            {
+                "id": "craft-presentation-section",
+                "description": "Presentation section keyword"
+            },
+            {
+                "id": "craft-gateway-section",
+                "description": "Gateway section keyword"
+            },
+            {
+                "id": "craft-asks-verb",
+                "description": "Asks action verb"
+            },
+            {
+                "id": "craft-notifies-verb",
+                "description": "Notifies action verb"
+            },
+            {
+                "id": "craft-listens-verb",
+                "description": "Listens action verb"
+            },
+            {
+                "id": "craft-service-name",
+                "description": "Service names"
+            },
+            {
+                "id": "craft-domain-name",
+                "description": "Domain definition names"
+            },
+            {
+                "id": "craft-domain-list",
+                "description": "Domain list values"
+            },
+            {
+                "id": "craft-data-store-name",
+                "description": "Data store names"
+            },
+            {
+                "id": "craft-subdomain-name",
+                "description": "Subdomain names"
+            },
+            {
+                "id": "craft-component-name",
+                "description": "Component names"
+            },
+            {
+                "id": "craft-exposure-name",
+                "description": "Exposure names"
+            },
+            {
+                "id": "craft-language-value",
+                "description": "Language values"
+            },
+            {
+                "id": "craft-actor-name",
+                "description": "Actor names"
+            },
+            {
+                "id": "craft-regular-verb",
+                "description": "Regular verbs"
+            },
+            {
+                "id": "craft-phrase-word",
+                "description": "Words in phrases"
+            },
+            {
+                "id": "craft-modifier-key",
+                "description": "Modifier keys"
+            },
+            {
+                "id": "craft-modifier-value",
+                "description": "Modifier values"
+            },
+            {
+                "id": "craft-flow-arrow",
+                "description": "Flow arrows"
+            },
+            {
+                "id": "craft-usecase-string",
+                "description": "Use case names"
+            },
+            {
+                "id": "craft-event-string",
+                "description": "Event strings"
+            },
+            {
+                "id": "craft-regular-string",
+                "description": "Regular strings"
+            },
+            {
+                "id": "craft-comment",
+                "description": "Comments"
+            },
+            {
+                "id": "craft-braces",
+                "description": "Braces"
+            },
+            {
+                "id": "craft-colon",
+                "description": "Colons"
+            },
+            {
+                "id": "craft-comma",
+                "description": "Commas"
+            }
+        ],
+        "semanticTokenModifiers": [
+            {
+                "id": "declaration",
+                "description": "When declaring something"
+            },
+            {
+                "id": "definition",
+                "description": "When defining a block"
+            },
+            {
+                "id": "modification",
+                "description": "Property assignments"
+            },
+            {
+                "id": "static",
+                "description": "Static keywords and operators"
+            }
+        ],
+        "semanticTokenScopes": [
             {
                 "language": "craft",
-                "scopeName": "source.craft",
-                "path": "./syntaxes/craft.tmLanguage.json"
+                "scopes": {
+                    "craft-flow-keyword": ["keyword.control.flow.domain-dsl"],
+                    "craft-services-keyword": ["keyword.control.services.domain-dsl"],
+                    "craft-arch-keyword": ["keyword.control.arch.domain-dsl"],
+                    "craft-exposure-keyword": ["keyword.control.exposure.domain-dsl"],
+                    "craft-domain-keyword": ["keyword.control.domain.domain-dsl"],
+                    "craft-domains-property": ["keyword.other.property.domains.domain-dsl"],
+                    "craft-language-property": ["keyword.other.property.language.domain-dsl"],
+                    "craft-data-stores-property": ["keyword.other.property.data-stores.domain-dsl"],
+                    "craft-to-property": ["keyword.other.property.to.domain-dsl"],
+                    "craft-through-property": ["keyword.other.property.through.domain-dsl"],
+                    "craft-presentation-section": ["keyword.other.section.presentation.domain-dsl"],
+                    "craft-gateway-section": ["keyword.other.section.gateway.domain-dsl"],
+                    "craft-asks-verb": ["keyword.other.asks.domain-dsl"],
+                    "craft-notifies-verb": ["keyword.other.notifies.domain-dsl"],
+                    "craft-listens-verb": ["keyword.other.listens.domain-dsl"],
+                    "craft-service-name": ["entity.name.type.service.domain-dsl"],
+                    "craft-domain-name": ["entity.name.type.domain-name.domain-dsl"],
+                    "craft-domain-list": ["entity.name.type.domain.list.domain-dsl"],
+                    "craft-data-store-name": ["entity.name.type.datastore.domain-dsl"],
+                    "craft-subdomain-name": ["entity.name.type.subdomain.domain-dsl"],
+                    "craft-component-name": ["entity.name.type.component.domain-dsl"],
+                    "craft-exposure-name": ["entity.name.type.exposure.domain-dsl"],
+                    "craft-language-value": ["entity.name.type.language.domain-dsl"],
+                    "craft-actor-name": ["entity.name.class.actor.domain-dsl"],
+                    "craft-regular-verb": ["entity.name.function.verb.domain-dsl"],
+                    "craft-phrase-word": ["entity.name.variable.phrase.domain-dsl"],
+                    "craft-modifier-key": ["entity.name.tag.modifier.key.domain-dsl"],
+                    "craft-modifier-value": ["entity.name.tag.modifier.value.domain-dsl"],
+                    "craft-flow-arrow": ["punctuation.separator.arrow.domain-dsl"],
+                    "craft-usecase-string": ["string.quoted.double.usecase.domain-dsl"],
+                    "craft-event-string": ["string.quoted.double.event.domain-dsl"],
+                    "craft-regular-string": ["string.quoted.double.domain-dsl"],
+                    "craft-comment": ["comment.line.double-slash.domain-dsl"],
+                    "craft-braces": ["punctuation.section.braces.begin.domain-dsl"],
+                    "craft-colon": ["punctuation.separator.colon.domain-dsl"],
+                    "craft-comma": ["punctuation.separator.comma.domain-dsl"]
+                }
             }
         ],
         "themes": [
@@ -86,6 +286,9 @@
                 "path": "./themes/craft-color-theme.json"
             }
         ],
+        "configurationDefaults": {
+            "editor.semanticHighlighting.enabled": true
+        },
         "commands": [
             {
                 "command": "craft.previewC4",

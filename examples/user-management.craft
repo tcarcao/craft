@@ -1,8 +1,8 @@
 arch {
-    presentation: 
+    presentation:
         WebApp[framework:react, ssl]
         MobileApp
-        
+
     gateway:
         LoadBalancer[ssl:true] > APIGateway[type:nginx]
 }
@@ -27,7 +27,7 @@ services {
         domains: Notifier
     }
 }
-
+// this is a comment
 use_case "User Registration" {
     when Business_User creates Account
         Authentication validates email format

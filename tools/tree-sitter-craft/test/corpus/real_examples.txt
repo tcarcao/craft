@@ -1,0 +1,179 @@
+===
+Banking system services
+===
+
+services {
+  AccountService {
+    domains: AccountManagement, BalanceTracking
+    data-stores: account_db, transaction_log
+    language: java
+  }
+  PaymentService {
+    domains: PaymentProcessing, TransactionValidation
+    data-stores: payment_db, fraud_detection_cache
+    language: golang
+  }
+}
+
+---
+
+(source_file
+  (services_block
+    (service_definition
+      (identifier)
+      (service_property
+        (domains_property
+          (identifier_list
+            (identifier)
+            (identifier))))
+      (service_property
+        (data_stores_property
+          (identifier_list
+            (identifier)
+            (identifier))))
+      (service_property
+        (language_property
+          (identifier))))
+    (service_definition
+      (identifier)
+      (service_property
+        (domains_property
+          (identifier_list
+            (identifier)
+            (identifier))))
+      (service_property
+        (data_stores_property
+          (identifier_list
+            (identifier)
+            (identifier))))
+      (service_property
+        (language_property
+          (identifier))))))
+
+===
+User management arch
+===
+
+arch {
+    presentation:
+        WebApp[framework:react, ssl]
+        MobileApp
+
+    gateway:
+        LoadBalancer[ssl:true] > APIGateway[type:nginx]
+}
+
+---
+
+(source_file
+  (arch_block
+    (arch_section
+      (presentation_section
+        (arch_component_list
+          (arch_component
+            (simple_component
+              (component_with_modifiers
+                (component_name
+                  (identifier))
+                (component_modifiers
+                  (modifier_list
+                    (modifier
+                      (modifier_key
+                        (identifier))
+                      (modifier_value
+                        (identifier)))
+                    (modifier
+                      (modifier_key
+                        (identifier))))))))
+          (arch_continuation
+            (arch_component_list
+              (arch_component
+                (simple_component
+                  (component_with_modifiers
+                    (component_name
+                      (identifier)))))
+              (arch_continuation
+                (arch_section
+                  (gateway_section
+                    (arch_component_list
+                      (arch_component
+                        (component_flow
+                          (component_with_modifiers
+                            (component_name
+                              (identifier))
+                            (component_modifiers
+                              (modifier_list
+                                (modifier
+                                  (modifier_key
+                                    (identifier))
+                                  (modifier_value
+                                    (boolean))))))
+                          (component_with_modifiers
+                            (component_name
+                              (identifier))
+                            (component_modifiers
+                              (modifier_list
+                                (modifier
+                                  (modifier_key
+                                    (identifier))
+                                  (modifier_value
+                                    (identifier))))))))
+                      (arch_continuation))))))))))))
+
+===
+Simple use case
+===
+
+use_case "User Registration" {
+    when Business_User creates Account
+        Authentication validates email format
+        Authentication notifies "User Registered"
+}
+
+---
+
+(source_file
+  (use_case_block
+    (string)
+    (scenario
+      (when_clause
+        (external_trigger
+          (trigger_actor
+            (identifier))
+          (trigger_verb
+            (identifier))
+          (phrase
+            (identifier)))
+        (action
+          (internal_action
+            (action_subject
+              (identifier))
+            (action_verb
+              (identifier))
+            (phrase
+              (identifier)
+              (identifier))))
+        (action
+          (async_action
+            (action_subject
+              (identifier))
+            (string)))))))
+
+===
+Domain definition
+===
+
+domain User {
+    Authentication
+    Profile
+}
+
+---
+
+(source_file
+  (domain_block
+    (identifier)
+    (subdomain
+      (identifier))
+    (subdomain
+      (identifier))))
