@@ -120,8 +120,17 @@ export class DslExtractService {
                     subDomain.referencedIn.push(useCase);
                 });
 
+                // Update subdomain counters
+                subDomain.totalUseCases = subDomain.useCases.length;
+                subDomain.selectedUseCases = subDomain.useCases.filter(uc => uc.selected).length;
+
                 domain.subDomains.push(subDomain);
             });
+
+            // Update domain counters after all subdomains are processed
+            domain.totalUseCases = domain.subDomains.reduce((total, sd) => total + sd.totalUseCases, 0);
+            domain.selectedUseCases = domain.subDomains.reduce((total, sd) => total + sd.selectedUseCases, 0);
+            domain.selectedSubDomains = domain.subDomains.filter(sd => sd.selected).length;
 
             domains.push(domain);
         });

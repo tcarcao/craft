@@ -26,10 +26,10 @@ import {
   ServerCommands,
   ServiceDefinition,
   DomainDefinition,
+  ActorDefinition,
   BlockRange
 } from '../../shared/lib/types/domain-extraction';
 import { Parser } from './parser/CraftParser';
-import { CraftCompletionProvider } from './parser/CraftCompletionProvider';
 import { TreeSitterCompletionProvider } from './parser/TreeSitterCompletionProvider';
 import { TreeSitterFormatterProvider } from './parser/TreeSitterFormatterProvider';
 
@@ -40,8 +40,19 @@ let treeSitterDiagnosticProvider: TreeSitterDiagnosticProvider;
 let domainExtractor: DomainExtractor;
 const workspaceParser = new WorkspaceParser(documents);
 const parser = new Parser();
-const completionProvider = new CraftCompletionProvider();
-const treeSitterCompletionProvider = new TreeSitterCompletionProvider();
+
+// Actor provider function for completion provider
+const getWorkspaceActors = async (): Promise<ActorDefinition[]> => {
+  try {
+    const result = await handleExtractAllDomainsFromWorkspace(undefined, workspaceParser);
+    return result.actorDefinitions || [];
+  } catch (error) {
+    console.error('Error getting actors for completion:', error);
+    return [];
+  }
+};
+
+const treeSitterCompletionProvider = new TreeSitterCompletionProvider(getWorkspaceActors);
 const treeSitterFormatter = new TreeSitterFormatterProvider();
 
 
@@ -65,7 +76,9 @@ connection.onInitialize((params: InitializeParams) => {
       },
       documentFormattingProvider: true,
       completionProvider: {
-        triggerCharacters: [' ', ':', '{', '\n']
+        triggerCharacters: [' ', ':', '{', '\n'],
+        resolveProvider: true,
+        allCommitCharacters: ['{', '}', ' ', '\n']
       }
       // Enable other capabilities as needed
     }
@@ -113,22 +126,56 @@ connection.onDocumentFormatting(async (params: DocumentFormattingParams): Promis
 connection.onCompletion(async (params: CompletionParams): Promise<CompletionItem[]> => {
   const document = documents.get(params.textDocument.uri);
   if (!document) {
+    connection.console.log('No document found for completion');
     return [];
   }
 
+  connection.console.log(`Completion requested at ${params.position.line}:${params.position.character}, context: ${JSON.stringify(params.context)}`);
+
   try {
-    // Try Tree-sitter completion first
-    const treeSitterCompletions = await treeSitterCompletionProvider.getCompletions(document, params.position);
-    if (treeSitterCompletions.length > 0) {
-      return treeSitterCompletions;
+    // Use only Tree-sitter completion provider
+    const completions = await treeSitterCompletionProvider.getCompletions(document, params.position);
+    connection.console.log(`Tree-sitter completions: ${completions.length} items`);
+    
+    // If no completions from tree-sitter, provide basic fallback
+    if (completions.length === 0) {
+      connection.console.log('Providing fallback completions');
+      return [
+        {
+          label: 'actors',
+          kind: CompletionItemKind.Module,
+          detail: 'Actors definition block',
+          insertText: 'actors {\n    $1\n}',
+          insertTextFormat: 2
+        },
+        {
+          label: 'services',
+          kind: CompletionItemKind.Module,
+          detail: 'Services definition block',
+          insertText: 'services {\n    $1\n}',
+          insertTextFormat: 2
+        },
+        {
+          label: 'use_case',
+          kind: CompletionItemKind.Class,
+          detail: 'Use case definition',
+          insertText: 'use_case "$1" {\n    $2\n}',
+          insertTextFormat: 2
+        }
+      ];
     }
     
-    // Fallback to ANTLR completion if Tree-sitter returns nothing
-    return completionProvider.getCompletions(document, params.position);
+    return completions;
   } catch (error) {
     connection.console.error(`Error providing completions: ${error}`);
     return [];
   }
+});
+
+// Handle completion resolve for additional details
+connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
+  // Add any additional information to completion items if needed
+  return item;
 });
 
 async function formatCraftDocument(content: string): Promise<string> {
@@ -157,6 +204,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       fileResults: [],
       serviceDefinitions: [],
       domainDefinitions: [],
+      actorDefinitions: [],
       error: 'No document URI provided'
     };
   }
@@ -171,6 +219,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       fileResults: [],
       serviceDefinitions: [],
       domainDefinitions: [],
+      actorDefinitions: [],
       error: 'Document not found'
     };
   }
@@ -186,6 +235,7 @@ async function handleExtractDomains(args: any[] | undefined): Promise<Extraction
       fileResults: [],
       serviceDefinitions: [],
       domainDefinitions: [],
+      actorDefinitions: [],
       error: error.message
     };
   }
@@ -238,6 +288,7 @@ async function handleExtractAllDomainsFromWorkspace(_args: any[] | undefined, wo
       fileResults: [],
       serviceDefinitions: [],
       domainDefinitions: [],
+      actorDefinitions: [],
       error: error.message
     };
   }
@@ -248,6 +299,7 @@ function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult,
   const allUseCases: UseCaseInfo[] = [];
   const allServiceDefinitions: ServiceDefinition[] = [];
   const allDomainDefinitions: DomainDefinition[] = [];
+  const allActorDefinitions: ActorDefinition[] = [];
 
   results.forEach(result => {
     if (result.domains) {
@@ -280,6 +332,18 @@ function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult,
         }
       });
     }
+
+    if (result.actorDefinitions) {
+      result.actorDefinitions.forEach(ad => {
+        // Check if actor already exists - avoid duplicates across files
+        const existingIndex = allActorDefinitions.findIndex(existing => existing.name === ad.name);
+        if (existingIndex === -1) {
+          // Actor doesn't exist, add it
+          allActorDefinitions.push(ad);
+        }
+        // Note: If actor exists, we could merge or overwrite, but for now just keep the first one
+      });
+    }
   });
 
   return {
@@ -287,6 +351,7 @@ function combineExtractionResults(results: FileResult[]): Omit<ExtractionResult,
     useCases: allUseCases,
     serviceDefinitions: allServiceDefinitions,
     domainDefinitions: allDomainDefinitions,
+    actorDefinitions: allActorDefinitions,
   };
 }
 

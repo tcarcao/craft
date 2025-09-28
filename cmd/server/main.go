@@ -88,7 +88,6 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 			}
 		}
 
-
 		s.tmpl.Execute(w, resp)
 	}
 }
@@ -170,12 +169,11 @@ type C4PreviewRequest struct {
 	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
 }
 
-
 type FocusInfo struct {
-	FocusedServiceNames    []string `json:"focusedServiceNames"`
-	FocusedSubDomainNames  []string `json:"focusedSubDomainNames"`
-	HasFocusedServices     bool     `json:"hasFocusedServices"`
-	HasFocusedSubDomains   bool     `json:"hasFocusedSubDomains"`
+	FocusedServiceNames   []string `json:"focusedServiceNames"`
+	FocusedSubDomainNames []string `json:"focusedSubDomainNames"`
+	HasFocusedServices    bool     `json:"hasFocusedServices"`
+	HasFocusedSubDomains  bool     `json:"hasFocusedSubDomains"`
 }
 
 type PreviewResponse struct {
@@ -201,7 +199,6 @@ type C4DownloadRequest struct {
 	Format         string     `json:"format"` // png, svg, pdf, puml
 	Filename       string     `json:"filename,omitempty"`
 }
-
 
 func (s *Server) handlePreviewDomain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -299,8 +296,6 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 	}
 }
 
-
-
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	log.Printf("[%d] %s", code, message)
 	response := PreviewResponse{
@@ -348,13 +343,13 @@ func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
 			domainMode = visualizer.DomainModeArchitecture
 		}
-		
+
 		diagram, contentType, err := s.viz.GenerateDomainDiagramWithModeAndFormat(model, domainMode, format)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
 			return
 		}
-		
+
 		// Set filename based on mode
 		var defaultFilename string
 		if domainMode == visualizer.DomainModeArchitecture {
@@ -470,7 +465,7 @@ func main() {
 
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
-	
+
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
 	r.HandleFunc("/download/c4", server.handleDownloadC4Diagram()).Methods("POST")
 

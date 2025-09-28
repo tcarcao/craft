@@ -22,11 +22,17 @@ export interface DomainDefinition {
     subDomains: string[];
     blockRange: BlockRange;
 }
+export interface ActorDefinition {
+    name: string;
+    type: 'user' | 'system' | 'service';
+    blockRange: BlockRange;
+}
 export interface FileResult {
     domains: string[];
     useCases: UseCaseInfo[];
     serviceDefinitions: ServiceDefinition[];
     domainDefinitions: DomainDefinition[];
+    actorDefinitions: ActorDefinition[];
     uri: string;
     fileName: string;
 }
@@ -35,6 +41,7 @@ export interface ExtractionResult {
     useCases: UseCaseInfo[];
     serviceDefinitions: ServiceDefinition[];
     domainDefinitions: DomainDefinition[];
+    actorDefinitions: ActorDefinition[];
     fileResults: FileResult[];
     error?: string;
 }

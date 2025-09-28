@@ -7,6 +7,7 @@ type DSLModel struct {
 	Services      []Service      `json:"services,omitempty"`
 	UseCases      []UseCase      `json:"useCases"`
 	Domains       []Domain       `json:"domains,omitempty"`
+	Actors        []Actor        `json:"actors,omitempty"`
 }
 
 // Architecture represents an architecture definition
@@ -137,3 +138,18 @@ type Domain struct {
 	Name       string   `json:"name"`
 	SubDomains []string `json:"subDomains"`
 }
+
+// Actor represents an actor definition with its type
+type Actor struct {
+	Name string    `json:"name"`
+	Type ActorType `json:"type"`
+}
+
+// ActorType defines the different types of actors
+type ActorType string
+
+const (
+	ActorTypeUser    ActorType = "user"
+	ActorTypeSystem  ActorType = "system"
+	ActorTypeService ActorType = "service"
+)

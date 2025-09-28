@@ -89,23 +89,23 @@ services {
 		t.Errorf("Expected %d data stores for UserService, got %d", len(expectedDataStores), len(userService.DataStores))
 	}
 
-	// Verify language is preserved (should be "Go" from first definition)
-	if userService.Language != "Go" {
-		t.Errorf("Expected language 'Go' for UserService, got '%s'", userService.Language)
+	// Verify language is preserved (should be "go" from first definition)
+	if userService.Language != "go" {
+		t.Errorf("Expected language 'go' for UserService, got '%s'", userService.Language)
 	}
 
-	// Verify deployment strategy is preserved and rules are merged
-	if userService.Deployment.Type != "canary" {
-		t.Errorf("Expected deployment type 'canary' for UserService, got '%s'", userService.Deployment.Type)
+	// Verify deployment strategy is empty (not defined in DSL)
+	if userService.Deployment.Type != "" {
+		t.Errorf("Expected empty deployment type for UserService, got '%s'", userService.Deployment.Type)
 	}
 
-	if len(userService.Deployment.Rules) != 2 {
-		t.Errorf("Expected 2 deployment rules for UserService, got %d", len(userService.Deployment.Rules))
+	if len(userService.Deployment.Rules) != 0 {
+		t.Errorf("Expected 0 deployment rules for UserService, got %d", len(userService.Deployment.Rules))
 	}
 
 	// Verify PaymentService remains unchanged
-	if paymentService.Language != "Java" {
-		t.Errorf("Expected language 'Java' for PaymentService, got '%s'", paymentService.Language)
+	if paymentService.Language != "java" {
+		t.Errorf("Expected language 'java' for PaymentService, got '%s'", paymentService.Language)
 	}
 
 	if len(paymentService.Domains) != 1 || paymentService.Domains[0] != "Payment" {
@@ -121,7 +121,7 @@ func TestServiceMergerDirectly(t *testing.T) {
 	service1 := Service{
 		Name:     "TestService",
 		Domains:  []string{"Domain1", "Domain2"},
-		Language: "Go",
+		Language: "go",
 	}
 	merger.AddService(service1)
 
@@ -148,8 +148,8 @@ func TestServiceMergerDirectly(t *testing.T) {
 	}
 
 	// Check language is preserved from first definition
-	if service.Language != "Go" {
-		t.Errorf("Expected language 'Go', got '%s'", service.Language)
+	if service.Language != "go" {
+		t.Errorf("Expected language 'go', got '%s'", service.Language)
 	}
 
 	// Check data stores are merged

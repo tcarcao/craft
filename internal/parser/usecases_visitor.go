@@ -82,23 +82,22 @@ func (b *DSLModelBuilder) VisitScenario(ctx *parser.ScenarioContext) interface{}
 func (b *DSLModelBuilder) VisitTrigger(ctx *parser.TriggerContext) interface{} {
 	trigger := Trigger{}
 
-	// Analyze trigger type and extract information
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
-		switch c := child.(type) {
-		case *parser.External_triggerContext:
-			trigger.Type = TriggerTypeExternal
-			b.processExternalTrigger(c, &trigger)
-		case *parser.Quoted_eventContext:
-			if b.hasDomainListens(ctx) {
-				trigger.Type = TriggerTypeDomainListen
-				trigger.Domain = b.extractDomainFromTrigger(ctx)
-				trigger.Event = strings.Trim(c.GetText(), "\"")
-			} else {
-				trigger.Type = TriggerTypeEvent
-				trigger.Event = strings.Trim(c.GetText(), "\"")
-			}
+	// Handle the three trigger patterns properly
+	if externalTrigger := ctx.External_trigger(); externalTrigger != nil {
+		// Pattern 1: 'when' external_trigger NEWLINE+
+		trigger.Type = TriggerTypeExternal
+		b.processExternalTrigger(externalTrigger.(*parser.External_triggerContext), &trigger)
+	} else if domain := ctx.Domain(); domain != nil {
+		// Pattern 3: 'when' domain 'listens' quoted_event NEWLINE+
+		trigger.Type = TriggerTypeDomainListen
+		trigger.Domain = domain.GetText()
+		if quotedEvent := ctx.Quoted_event(); quotedEvent != nil {
+			trigger.Event = strings.Trim(quotedEvent.GetText(), "\"")
 		}
+	} else if quotedEvent := ctx.Quoted_event(); quotedEvent != nil {
+		// Pattern 2: 'when' quoted_event NEWLINE+
+		trigger.Type = TriggerTypeEvent
+		trigger.Event = strings.Trim(quotedEvent.GetText(), "\"")
 	}
 
 	// Generate description
@@ -126,35 +125,6 @@ func (b *DSLModelBuilder) processExternalTrigger(ctx *parser.External_triggerCon
 	}
 }
 
-// Check if trigger has "domain listens"
-func (b *DSLModelBuilder) hasDomainListens(ctx *parser.TriggerContext) bool {
-	hasDomain := false
-	hasListens := false
-
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		child := ctx.GetChild(i)
-		if _, ok := child.(*parser.DomainContext); ok {
-			hasDomain = true
-		}
-		if terminalNode, ok := child.(antlr.TerminalNode); ok {
-			if terminalNode.GetText() == "listens" {
-				hasListens = true
-			}
-		}
-	}
-
-	return hasDomain && hasListens
-}
-
-// Extract domain from trigger context
-func (b *DSLModelBuilder) extractDomainFromTrigger(ctx *parser.TriggerContext) string {
-	for i := 0; i < ctx.GetChildCount(); i++ {
-		if domain, ok := ctx.GetChild(i).(*parser.DomainContext); ok {
-			return domain.GetText()
-		}
-	}
-	return ""
-}
 
 // Generate human-readable trigger description
 func (b *DSLModelBuilder) generateTriggerDescription(trigger Trigger) string {
@@ -297,18 +267,26 @@ func (b *DSLModelBuilder) extractWordsFromPhrase(ctx *parser.PhraseContext) []st
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 
-		if terminalNode, ok := child.(antlr.TerminalNode); ok {
-			tokenType := terminalNode.GetSymbol().GetTokenType()
-			text := terminalNode.GetText()
-
+		switch c := child.(type) {
+		case *parser.IdentifierContext:
+			// Handle the new identifier rule context
+			words = append(words, c.GetText())
+		case *parser.StringContext:
+			// Handle string context
+			words = append(words, strings.Trim(c.GetText(), "\""))
+		case *parser.Connector_wordContext:
+			// Handle connector words
+			words = append(words, c.GetText())
+		case antlr.TerminalNode:
+			// Handle any remaining terminal nodes (fallback)
+			tokenType := c.GetSymbol().GetTokenType()
+			text := c.GetText()
 			switch tokenType {
 			case parser.CraftLexerIDENTIFIER:
 				words = append(words, text)
 			case parser.CraftLexerSTRING:
 				words = append(words, strings.Trim(text, "\""))
 			}
-		} else if connectorWord, ok := child.(*parser.Connector_wordContext); ok {
-			words = append(words, connectorWord.GetText())
 		}
 	}
 

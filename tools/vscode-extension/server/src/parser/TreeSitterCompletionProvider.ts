@@ -1,6 +1,7 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node';
 import * as path from 'path';
+import { ActorDefinition } from '../../../shared/lib/types/domain-extraction';
 
 // Import web-tree-sitter (WASM-based for distribution)
 const TreeSitter = require('web-tree-sitter');
@@ -23,8 +24,10 @@ export class TreeSitterCompletionProvider {
   private parser: any = null;
   private language: any = null;
   private initializationPromise: Promise<void>;
+  private actorProvider?: () => Promise<ActorDefinition[]>;
 
-  constructor() {
+  constructor(actorProvider?: () => Promise<ActorDefinition[]>) {
+    this.actorProvider = actorProvider;
     this.initializationPromise = this.initializeParser();
   }
 
@@ -66,7 +69,12 @@ export class TreeSitterCompletionProvider {
 
     try {
       const context = this.analyzeCompletionContext(document, position);
-      return this.getCompletionsForContext(context);
+      console.log(`TreeSitter completion context: node=${context.nodeType}, ancestors=[${context.ancestorTypes.join(', ')}], text="${context.currentText}"`);
+      
+      const completions = await this.getCompletionsForContext(context);
+      console.log(`TreeSitter generated ${completions.length} completions`);
+      
+      return completions;
     } catch (error) {
       console.error('Error getting Tree-sitter completions:', error);
       return [];
@@ -189,7 +197,7 @@ export class TreeSitterCompletionProvider {
     return 0;
   }
 
-  private getCompletionsForContext(context: TreeSitterCompletionContext): CompletionItem[] {
+  private async getCompletionsForContext(context: TreeSitterCompletionContext): Promise<CompletionItem[]> {
     const completions: CompletionItem[] = [];
 
     // AST-based context detection using actual node types
@@ -197,22 +205,32 @@ export class TreeSitterCompletionProvider {
     const parentNodeType = context.parentNodeType;
     
     // Check ancestors for specific contexts
-    const isInSourceFile = context.ancestorTypes.includes('source_file');
     const isInArchBlock = context.ancestorTypes.includes('arch_block');
     const isInUseCaseBlock = context.ancestorTypes.includes('use_case_block');
     const isInServicesBlock = context.ancestorTypes.includes('services_block');
     const isInExposureBlock = context.ancestorTypes.includes('exposure_block');
+    const isInActorsBlock = context.ancestorTypes.includes('actors_block');
     const isInPresentationSection = context.ancestorTypes.includes('presentation_section');
     const isInGatewaySection = context.ancestorTypes.includes('gateway_section');
 
-    // Top-level completions (when in source_file but not in any block)
-    if (isInSourceFile && !isInArchBlock && !isInUseCaseBlock && !isInServicesBlock && !isInExposureBlock) {
+    // Always show top-level completions unless clearly in a specific block context
+    const isInSpecificBlock = isInArchBlock || isInUseCaseBlock || isInServicesBlock || isInExposureBlock || isInActorsBlock;
+    const shouldShowTopLevel = !isInSpecificBlock || 
+                               currentNodeType === 'ERROR' || 
+                               context.currentText.trim().length === 0 ||
+                               context.isAtStartOfLine;
+    
+    console.log(`Top-level check: node=${currentNodeType}, inSpecificBlock=${isInSpecificBlock}, shouldShow=${shouldShowTopLevel}`);
+    
+    if (shouldShowTopLevel) {
       completions.push(
-        this.createCompletionItem('services', 'services {\\n    $1\\n}', 'Top-level services block', CompletionItemKind.Module),
+        this.createCompletionItem('actors', 'actors {\\n    $1\\n}', 'Actors definition block', CompletionItemKind.Module),
+        this.createCompletionItem('services', 'services {\\n    $1\\n}', 'Services definition block', CompletionItemKind.Module),
         this.createCompletionItem('use_case', 'use_case "$1" {\\n    $2\\n}', 'Use case definition', CompletionItemKind.Class),
         this.createCompletionItem('domain', 'domain $1 {\\n    $2\\n}', 'Domain definition', CompletionItemKind.Module),
         this.createCompletionItem('arch', 'arch {\\n    $1\\n}', 'Architecture definition', CompletionItemKind.Module),
-        this.createCompletionItem('exposure', 'exposure $1 {\\n    $2\\n}', 'Exposure definition', CompletionItemKind.Interface)
+        this.createCompletionItem('exposure', 'exposure $1 {\\n    $2\\n}', 'Exposure definition', CompletionItemKind.Interface),
+        this.createCompletionItem('actor', 'actor $1 $2', 'Individual actor definition', CompletionItemKind.Class)
       );
     }
 
@@ -220,6 +238,15 @@ export class TreeSitterCompletionProvider {
     if (this.isInServicesBlock(context)) {
       completions.push(
         this.createCompletionItem('ServiceName', '$1 {\\n    domains: $2\\n    language: $3\\n}', 'Service definition', CompletionItemKind.Class)
+      );
+    }
+
+    // Actors block context
+    if (isInActorsBlock) {
+      completions.push(
+        this.createCompletionItem('user', 'user $1', 'User actor definition', CompletionItemKind.Class),
+        this.createCompletionItem('system', 'system $1', 'System actor definition', CompletionItemKind.Class),
+        this.createCompletionItem('service', 'service $1', 'Service actor definition', CompletionItemKind.Class)
       );
     }
 
@@ -250,6 +277,17 @@ export class TreeSitterCompletionProvider {
           this.createCompletionItem('CRON', 'CRON "$1"', 'Scheduled trigger', CompletionItemKind.Event),
           this.createCompletionItem('listens', 'listens $1', 'Domain event listener', CompletionItemKind.Event)
         );
+
+        // Add actor name completions for triggers
+        const actorCompletions = await this.getActorCompletions();
+        completions.push(...actorCompletions.map(actor => 
+          this.createCompletionItem(
+            actor.name, 
+            `${actor.name} $1`, 
+            `${actor.type} actor trigger`, 
+            CompletionItemKind.Event
+          )
+        ));
       }
       
       // Action completions
@@ -297,6 +335,19 @@ export class TreeSitterCompletionProvider {
         this.createCompletionItem('to', 'to: $1', 'Target user/actor', CompletionItemKind.Property),
         this.createCompletionItem('through', 'through: $1', 'Through component/gateway', CompletionItemKind.Property)
       );
+
+      // Add actor name completions for exposure "to" property
+      if (this.isInToProperty(context)) {
+        const actorCompletions = await this.getActorCompletions();
+        completions.push(...actorCompletions.map(actor => 
+          this.createCompletionItem(
+            actor.name, 
+            actor.name, 
+            `${actor.type} actor for exposure`, 
+            CompletionItemKind.Value
+          )
+        ));
+      }
     }
 
     // Language keywords and common values
@@ -306,6 +357,19 @@ export class TreeSitterCompletionProvider {
         ...this.getDeploymentCompletions(),
         ...this.getBooleanCompletions()
       );
+    }
+
+    // Add actor name completions in general contexts where actors might be referenced
+    if (this.shouldShowActorNames(context)) {
+      const actorCompletions = await this.getActorCompletions();
+      completions.push(...actorCompletions.map(actor => 
+        this.createCompletionItem(
+          actor.name, 
+          actor.name, 
+          `${actor.type} actor`, 
+          CompletionItemKind.Value
+        )
+      ));
     }
 
     return completions;
@@ -336,6 +400,41 @@ export class TreeSitterCompletionProvider {
     return context.nodeType === 'string' || 
            context.parentNodeType === 'service_property' ||
            context.parentNodeType === 'exposure_property';
+  }
+
+  private isInToProperty(context: TreeSitterCompletionContext): boolean {
+    return context.ancestorTypes.includes('to_property') ||
+           (context.parentNodeType === 'to_property') ||
+           (context.currentText.includes('to:'));
+  }
+
+  private shouldShowActorNames(context: TreeSitterCompletionContext): boolean {
+    // Show actor names in contexts where they might be referenced
+    return (
+      // In exposure "to" property
+      this.isInToProperty(context) ||
+      // In when clauses for triggers
+      this.isInWhenClause(context) ||
+      // When typing identifiers after keywords that expect actor names
+      (context.currentText.includes('User ') || context.currentText.includes('System ')) ||
+      // In general identifier contexts where not in specific blocks
+      (context.nodeType === 'identifier' && !context.ancestorTypes.includes('service_definition')) ||
+      // When cursor is at start and we have empty context
+      (context.isAtStartOfLine && context.currentText.trim().length === 0)
+    );
+  }
+
+  private async getActorCompletions(): Promise<ActorDefinition[]> {
+    if (!this.actorProvider) {
+      return [];
+    }
+    
+    try {
+      return await this.actorProvider();
+    } catch (error) {
+      console.error('Error getting actor definitions for completion:', error);
+      return [];
+    }
   }
 
   private needsTrigger(context: TreeSitterCompletionContext): boolean {

@@ -20,10 +20,6 @@ func (v *Visualizer) GenerateDomainDiagram(model *parser.DSLModel) ([]byte, erro
 	return v.GenerateDomainDiagramWithMode(model, DomainModeDetailed)
 }
 
-func (v *Visualizer) GenerateDomainDiagramWithFormat(model *parser.DSLModel, format SupportedFormat) ([]byte, string, error) {
-	return v.GenerateDomainDiagramWithModeAndFormat(model, DomainModeDetailed, format)
-}
-
 func (v *Visualizer) GenerateDomainDiagramWithMode(model *parser.DSLModel, mode DomainMode) ([]byte, error) {
 	data, _, err := v.GenerateDomainDiagramWithModeAndFormat(model, mode, FormatPNG)
 	return data, err
@@ -31,7 +27,7 @@ func (v *Visualizer) GenerateDomainDiagramWithMode(model *parser.DSLModel, mode 
 
 func (v *Visualizer) GenerateDomainDiagramWithModeAndFormat(model *parser.DSLModel, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
 	var diagramTxt string
-	
+
 	switch mode {
 	case DomainModeArchitecture:
 		generator := NewPlantUMLArchitectureGenerator()
@@ -43,14 +39,14 @@ func (v *Visualizer) GenerateDomainDiagramWithModeAndFormat(model *parser.DSLMod
 		generator := NewPlantUMLGenerator()
 		diagramTxt = generator.GeneratePlantUML(model)
 	}
-	
+
 	fmt.Println(diagramTxt)
 	return generatePlantUMLWithFormat(diagramTxt, format)
 }
 
-
 // PlantUMLGenerator generates PlantUML diagrams from DSL models
 type PlantUMLGenerator struct {
+	model           *parser.DSLModel // Reference to the model for actor information
 	domains         map[string]bool
 	actors          map[string]bool
 	events          map[string]bool
@@ -74,7 +70,7 @@ type FlowStep struct {
 // PlantUMLArchitectureGenerator generates simplified PlantUML architecture diagrams from DSL models
 type PlantUMLArchitectureGenerator struct {
 	subDomains      map[string]bool
-	connections     map[string]bool   // key: "from->to" to avoid duplicates
+	connections     map[string]bool // key: "from->to" to avoid duplicates
 	events          map[string]bool
 	eventPublishers map[string]string // event -> domain that publishes it
 	services        map[string]bool   // services that contain subdomains
@@ -119,6 +115,7 @@ func NewPlantUMLArchitectureGenerator() *PlantUMLArchitectureGenerator {
 // GeneratePlantUML converts a DSL model to PlantUML code
 func (g *PlantUMLGenerator) GeneratePlantUML(model *parser.DSLModel) string {
 	// Reset state
+	g.model = model
 	g.domains = make(map[string]bool)
 	g.actors = make(map[string]bool)
 	g.events = make(map[string]bool)
@@ -463,12 +460,14 @@ func (g *PlantUMLGenerator) buildPlantUMLContent() string {
 	}
 	sb.WriteString("\n")
 
-	// Define actors
+	// Define actors with proper types
 	if len(g.actors) > 0 {
 		sb.WriteString("' Actors\n")
 		actors := g.getSortedActors()
-		for _, actor := range actors {
-			sb.WriteString(fmt.Sprintf("actor %s\n", actor))
+		for _, actorName := range actors {
+			actorInfo := g.getActorInfoFromModel(actorName)
+			elementType := g.getActorPlantUMLElement(actorInfo)
+			sb.WriteString(fmt.Sprintf("%s %s\n", elementType, actorName))
 		}
 		sb.WriteString("\n")
 	}
@@ -562,7 +561,7 @@ func GenerateDomainFlowDiagram(model *parser.DSLModel) string {
 func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *parser.DSLModel) {
 	for _, service := range model.Services {
 		g.services[service.Name] = true
-		
+
 		// Map each domain in this service to the service
 		for _, domain := range service.Domains {
 			g.domainToService[domain] = service.Name
@@ -599,7 +598,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 			if action.Domain != "" && action.TargetDomain != "" {
 				g.subDomains[action.Domain] = true
 				g.subDomains[action.TargetDomain] = true
-				
+
 				// Create connection key to avoid duplicates
 				connectionKey := action.Domain + "->" + action.TargetDomain
 				g.connections[connectionKey] = true
@@ -609,7 +608,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 			if action.Domain != "" && action.Event != "" {
 				g.subDomains[action.Domain] = true
 				g.events[action.Event] = true
-				
+
 				// Create connection from domain to its queue
 				domainQueue := g.getDomainQueueNameForArchitecture(action.Domain)
 				connectionKey := action.Domain + "->" + domainQueue
@@ -622,7 +621,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 			}
 		}
 	}
-	
+
 	// Handle triggers that involve domains
 	trigger := scenario.Trigger
 	switch trigger.Type {
@@ -631,7 +630,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 		if trigger.Domain != "" && trigger.Event != "" {
 			g.subDomains[trigger.Domain] = true
 			g.events[trigger.Event] = true
-			
+
 			// Find which domain published this event
 			publishingDomain := g.findEventPublisherForArchitecture(trigger.Event)
 			if publishingDomain != "" {
@@ -705,7 +704,7 @@ func (g *PlantUMLArchitectureGenerator) generateUniqueAliasesForArchitecture() {
 func (g *PlantUMLArchitectureGenerator) createBaseAliasForArchitecture(subDomain string) string {
 	// Similar to the original createBaseAlias but simpler for architecture view
 	words := strings.Fields(strings.ReplaceAll(subDomain, "_", " "))
-	
+
 	// Filter out common words
 	commonWords := map[string]bool{
 		"the": true, "a": true, "an": true, "and": true, "or": true,
@@ -824,11 +823,11 @@ func (g *PlantUMLArchitectureGenerator) defineServiceBoundaries(sb *strings.Buil
 	}
 
 	sb.WriteString("' Service boundaries\n")
-	
+
 	// Group subdomains by service
 	serviceToSubDomains := make(map[string][]string)
 	ungroupedSubDomains := make([]string, 0)
-	
+
 	for subDomain := range g.subDomains {
 		if service, exists := g.domainToService[subDomain]; exists {
 			serviceToSubDomains[service] = append(serviceToSubDomains[service], subDomain)
@@ -836,26 +835,26 @@ func (g *PlantUMLArchitectureGenerator) defineServiceBoundaries(sb *strings.Buil
 			ungroupedSubDomains = append(ungroupedSubDomains, subDomain)
 		}
 	}
-	
+
 	// Create service boundary rectangles
 	for service, subDomains := range serviceToSubDomains {
 		if len(subDomains) > 0 {
 			serviceAlias := g.serviceAliases[service]
 			displayName := g.formatSubDomainName(service)
-			
+
 			sb.WriteString(fmt.Sprintf("rectangle \"%s\" as %s {\n", displayName, serviceAlias))
-			
+
 			// Add subdomains inside the service boundary
 			for _, subDomain := range subDomains {
 				alias := g.domainAliases[subDomain]
 				subDomainDisplayName := g.formatSubDomainName(subDomain)
 				sb.WriteString(fmt.Sprintf("  frame \"%s\" as %s\n", subDomainDisplayName, alias))
 			}
-			
+
 			sb.WriteString("}\n")
 		}
 	}
-	
+
 	// Add ungrouped subdomains (not part of any service) outside service boundaries
 	if len(ungroupedSubDomains) > 0 {
 		sb.WriteString("\n' Ungrouped subdomains\n")
@@ -865,7 +864,7 @@ func (g *PlantUMLArchitectureGenerator) defineServiceBoundaries(sb *strings.Buil
 			sb.WriteString(fmt.Sprintf("frame \"%s\" as %s\n", displayName, alias))
 		}
 	}
-	
+
 	sb.WriteString("\n")
 }
 
@@ -908,4 +907,38 @@ func (g *PlantUMLArchitectureGenerator) getElementAliasForArchitecture(element s
 
 	// Must be an actor or other element
 	return element
+}
+
+// getActorInfoFromModel finds actor information from the DSL model
+func (g *PlantUMLGenerator) getActorInfoFromModel(actorName string) *parser.Actor {
+	if g.model == nil {
+		return nil
+	}
+
+	for _, actor := range g.model.Actors {
+		if actor.Name == actorName {
+			return &actor
+		}
+	}
+	return nil
+}
+
+// getActorPlantUMLElement returns the appropriate PlantUML element type for an actor
+func (g *PlantUMLGenerator) getActorPlantUMLElement(actor *parser.Actor) string {
+	if actor == nil {
+		// Default fallback for actors not found in the model (legacy behavior)
+		return "actor"
+	}
+
+	switch actor.Type {
+	case parser.ActorTypeUser:
+		return "actor"
+	case parser.ActorTypeSystem:
+		return "boundary" // Use boundary for external systems in domain diagrams
+	case parser.ActorTypeService:
+		return "control" // Use control for external services in domain diagrams
+	default:
+		// Default fallback
+		return "actor"
+	}
 }

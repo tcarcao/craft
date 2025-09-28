@@ -21,6 +21,8 @@ module.exports = grammar({
       $.service_block,   // maps to ANTLR 'service_def'
       $.domain_block,    // maps to ANTLR 'domain_def'
       $.domains_block,   // maps to ANTLR 'domains_def'
+      $.actors_block,    // maps to ANTLR 'actors_def'
+      $.actor_block,     // maps to ANTLR 'actor_def'
       $.exposure_block,  // maps to ANTLR 'exposure'
       $.use_case_block,  // maps to ANTLR 'use_case'
     ),
@@ -231,6 +233,37 @@ module.exports = grammar({
     ),
 
     subdomain: $ => $.identifier,
+
+    // Actors definitions - following same pattern as domains/services
+    // ANTLR: actor_def: 'actor' actor_type actor_name NEWLINE*;
+    actor_block: $ => seq(
+      'actor',
+      $.actor_type,
+      $.actor_name,
+      repeat($._newline),
+    ),
+
+    // ANTLR: actors_def: 'actors' '{' NEWLINE* actor_definition_list '}' NEWLINE*;  
+    actors_block: $ => seq(
+      'actors',
+      '{',
+      optional($._newline),
+      repeat(seq($.actor_definition, optional($._newline))),
+      '}',
+      repeat($._newline),
+    ),
+
+    // ANTLR: actor_definition: actor_type actor_name;
+    actor_definition: $ => seq(
+      $.actor_type,
+      $.actor_name,
+    ),
+
+    // ANTLR: actor_type: 'user' | 'system' | 'service';
+    actor_type: $ => choice('user', 'system', 'service'),
+
+    // ANTLR: actor_name: IDENTIFIER;
+    actor_name: $ => $.identifier,
 
     // Exposure blocks - ANTLR mapping
     exposure_block: $ => seq(

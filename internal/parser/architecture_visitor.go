@@ -24,7 +24,16 @@ func (b *DSLModelBuilder) VisitArch(ctx *parser.ArchContext) interface{} {
 		if archName, ok := child.(*parser.Arch_nameContext); ok {
 			// Extract name from arch_name context
 			for j := 0; j < archName.GetChildCount(); j++ {
-				if terminalNode, ok := archName.GetChild(j).(antlr.TerminalNode); ok {
+				archChild := archName.GetChild(j)
+				
+				// First check for identifier context (new grammar structure)
+				if identifierCtx, ok := archChild.(*parser.IdentifierContext); ok {
+					arch.Name = identifierCtx.GetText()
+					break
+				}
+				
+				// Then check for terminal nodes (fallback)
+				if terminalNode, ok := archChild.(antlr.TerminalNode); ok {
 					if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 						arch.Name = terminalNode.GetText()
 						break
@@ -174,9 +183,18 @@ func (b *DSLModelBuilder) extractComponentWithModifiers(ctx *parser.Component_wi
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if componentName, ok := child.(*parser.Component_nameContext); ok {
-			// Extract IDENTIFIER from component_name context
+			// Extract name from component_name context
 			for j := 0; j < componentName.GetChildCount(); j++ {
-				if terminalNode, ok := componentName.GetChild(j).(antlr.TerminalNode); ok {
+				compChild := componentName.GetChild(j)
+				
+				// First check for identifier context (new grammar structure)
+				if identifierCtx, ok := compChild.(*parser.IdentifierContext); ok {
+					component.Name = identifierCtx.GetText()
+					break
+				}
+				
+				// Then check for terminal nodes (fallback)
+				if terminalNode, ok := compChild.(antlr.TerminalNode); ok {
 					if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 						component.Name = terminalNode.GetText()
 						break
@@ -215,10 +233,16 @@ func (b *DSLModelBuilder) extractComponentModifiers(ctx *parser.Component_modifi
 func (b *DSLModelBuilder) extractModifier(ctx *parser.ModifierContext) *ComponentModifier {
 	modifier := &ComponentModifier{}
 
-	// Find IDENTIFIER tokens
+	// Find identifier contexts (key and optional value)
 	identifiers := make([]string, 0)
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if terminalNode, ok := ctx.GetChild(i).(antlr.TerminalNode); ok {
+		child := ctx.GetChild(i)
+		
+		// Check for identifier context (new grammar structure)
+		if identifierCtx, ok := child.(*parser.IdentifierContext); ok {
+			identifiers = append(identifiers, identifierCtx.GetText())
+		} else if terminalNode, ok := child.(antlr.TerminalNode); ok {
+			// Check for terminal IDENTIFIER nodes (fallback)
 			if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 				identifiers = append(identifiers, terminalNode.GetText())
 			}

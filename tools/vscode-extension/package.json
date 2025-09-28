@@ -94,6 +94,18 @@
                 "description": "Domain block keyword"
             },
             {
+                "id": "craft-actor-keyword",
+                "description": "Actor block keyword"
+            },
+            {
+                "id": "craft-actors-keyword",
+                "description": "Actors block keyword"
+            },
+            {
+                "id": "craft-actor-type",
+                "description": "Actor type keywords (user, system, service)"
+            },
+            {
                 "id": "craft-domains-property",
                 "description": "Domains property keyword"
             },
@@ -167,7 +179,11 @@
             },
             {
                 "id": "craft-actor-name",
-                "description": "Actor names"
+                "description": "Actor names (in use cases)"
+            },
+            {
+                "id": "craft-actor-definition",
+                "description": "Actor definition names"
             },
             {
                 "id": "craft-regular-verb",
@@ -245,6 +261,9 @@
                     "craft-arch-keyword": ["keyword.control.arch.domain-dsl"],
                     "craft-exposure-keyword": ["keyword.control.exposure.domain-dsl"],
                     "craft-domain-keyword": ["keyword.control.domain.domain-dsl"],
+                    "craft-actor-keyword": ["keyword.control.actor.domain-dsl"],
+                    "craft-actors-keyword": ["keyword.control.actors.domain-dsl"],
+                    "craft-actor-type": ["keyword.other.actor-type.domain-dsl"],
                     "craft-domains-property": ["keyword.other.property.domains.domain-dsl"],
                     "craft-language-property": ["keyword.other.property.language.domain-dsl"],
                     "craft-data-stores-property": ["keyword.other.property.data-stores.domain-dsl"],
@@ -264,6 +283,7 @@
                     "craft-exposure-name": ["entity.name.type.exposure.domain-dsl"],
                     "craft-language-value": ["entity.name.type.language.domain-dsl"],
                     "craft-actor-name": ["entity.name.class.actor.domain-dsl"],
+                    "craft-actor-definition": ["entity.name.type.actor-name.domain-dsl"],
                     "craft-regular-verb": ["entity.name.function.verb.domain-dsl"],
                     "craft-phrase-word": ["entity.name.variable.phrase.domain-dsl"],
                     "craft-modifier-key": ["entity.name.tag.modifier.key.domain-dsl"],

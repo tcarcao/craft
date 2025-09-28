@@ -20,6 +20,8 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
     'craft-arch-keyword',        // arch
     'craft-exposure-keyword',    // exposure
     'craft-domain-keyword',      // domain
+    'craft-actors-keyword',      // actors
+    'craft-actor-keyword',       // actor
     'craft-domains-property',    // domains
     'craft-language-property',   // language
     'craft-data-stores-property', // data-stores
@@ -37,6 +39,8 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
     'craft-subdomain-name',      // Subdomain names
     'craft-component-name',      // Component names
     'craft-exposure-name',       // Exposure names
+    'craft-actor-type',          // Actor types (user, system, service)
+    'craft-actor-definition',    // Actor names in definitions
     'craft-language-value',      // Language values
     'craft-actor-name',          // Actor names (Business_User)
     'craft-regular-verb',        // Regular verbs (creates, validates)
@@ -248,6 +252,10 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
         return { type: this.tokenTypes.indexOf('craft-exposure-keyword'), modifiers: 0 };
       case 'domain':
         return { type: this.tokenTypes.indexOf('craft-domain-keyword'), modifiers: 0 };
+      case 'actors':
+        return { type: this.tokenTypes.indexOf('craft-actors-keyword'), modifiers: 0 };
+      case 'actor':
+        return { type: this.tokenTypes.indexOf('craft-actor-keyword'), modifiers: 0 };
       case 'use_case':
       case 'when':
         return { type: this.tokenTypes.indexOf('craft-flow-keyword'), modifiers: 0 };
@@ -282,6 +290,12 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
       case 'updates':
       case 'deletes':
         return { type: this.tokenTypes.indexOf('craft-regular-verb'), modifiers: 0 };
+
+      // === ACTOR TYPES ===
+      case 'user':
+      case 'system':
+      case 'service':
+        return { type: this.tokenTypes.indexOf('craft-actor-type'), modifiers: 0 };
 
       // === STRINGS - CONTEXT DEPENDENT ===
       case 'string':
@@ -359,6 +373,11 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
         // Subdomain names → craft-subdomain-name → entity.name.type.subdomain.domain-dsl
         if (parent.type === 'subdomain') {
           return { type: this.tokenTypes.indexOf('craft-subdomain-name'), modifiers: 0 };
+        }
+        
+        // Actor names in definitions → craft-actor-definition
+        if (parent.type === 'actor_name') {
+          return { type: this.tokenTypes.indexOf('craft-actor-definition'), modifiers: 0 };
         }
         
         // Domain list values → craft-domain-list → entity.name.type.domain.list.domain-dsl

@@ -88,7 +88,15 @@ func (b *DSLModelBuilder) VisitService_block(ctx *parser.Service_blockContext) i
 // Extract service name from service_name context
 func (b *DSLModelBuilder) extractServiceName(ctx *parser.Service_nameContext) string {
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if terminalNode, ok := ctx.GetChild(i).(antlr.TerminalNode); ok {
+		child := ctx.GetChild(i)
+		
+		// First check if it's an identifier context (new grammar structure)
+		if identifierCtx, ok := child.(*parser.IdentifierContext); ok {
+			return identifierCtx.GetText()
+		}
+		
+		// Then check for terminal nodes (STRING tokens or direct IDENTIFIER)
+		if terminalNode, ok := child.(antlr.TerminalNode); ok {
 			tokenType := terminalNode.GetSymbol().GetTokenType()
 			text := terminalNode.GetText()
 
@@ -142,9 +150,18 @@ func (b *DSLModelBuilder) VisitService_property(ctx *parser.Service_propertyCont
 					}
 				}
 			case parser.CraftLexerLANGUAGE:
-				// Find the IDENTIFIER after this token
+				// Find the identifier context after this token
 				for j := i + 1; j < ctx.GetChildCount(); j++ {
-					if terminalNode, ok := ctx.GetChild(j).(antlr.TerminalNode); ok {
+					child := ctx.GetChild(j)
+					
+					// First check for identifier context (new grammar structure)
+					if identifierCtx, ok := child.(*parser.IdentifierContext); ok {
+						b.currentService.Language = identifierCtx.GetText()
+						break
+					}
+					
+					// Then check for terminal nodes (fallback)
+					if terminalNode, ok := child.(antlr.TerminalNode); ok {
 						if terminalNode.GetSymbol().GetTokenType() == parser.CraftLexerIDENTIFIER {
 							b.currentService.Language = terminalNode.GetText()
 							break

@@ -24,9 +24,15 @@ import {
 	Domain_block_listContext,
 	Domain_nameContext,
 	Subdomain_listContext,
-	SubdomainContext
+	SubdomainContext,
+	Actor_defContext,
+	Actors_defContext,
+	Actor_definitionContext,
+	Actor_definition_listContext,
+	ActorTypeContext,
+	Actor_nameContext
 } from './generated/CraftParser';
-import { ServiceDefinition, UseCaseInfo, DomainDefinition } from '../../../shared/lib/types/domain-extraction';
+import { ServiceDefinition, UseCaseInfo, DomainDefinition, ActorDefinition } from '../../../shared/lib/types/domain-extraction';
 
 
 export class DomainVisitor extends CraftVisitor<void> {
@@ -34,6 +40,7 @@ export class DomainVisitor extends CraftVisitor<void> {
 	public useCases: UseCaseInfo[] = [];
 	public serviceDefinitions: ServiceDefinition[] = [];
 	public domainDefinitions: DomainDefinition[] = [];
+	public actorDefinitions: ActorDefinition[] = [];
 	
 	// Current use case being processed
 	private currentUseCase: UseCaseInfo | null = null;
@@ -427,4 +434,94 @@ export class DomainVisitor extends CraftVisitor<void> {
 	private deduplicateSubDomains(subDomains: string[]): string[] {
 		return Array.from(new Set(subDomains));
 	}
+
+	// =====================================
+	// Actor Definition Visitors
+	// =====================================
+
+	// Visit single actor definition - "actor actorType actor_name"
+	visitActor_def = (ctx: Actor_defContext): void => {
+		const actorDefinition: ActorDefinition = {
+			name: 'Unknown Actor',
+			type: 'user',
+			blockRange: {
+				startLine: ctx.start?.line || 0,
+				endLine: ctx.stop?.line || 0,
+				fileUri: 'unknown'
+			}
+		};
+
+		// Visit children to extract actor type and name
+		this.visitChildren(ctx);
+
+		// Extract actor type
+		const actorTypeChild = ctx.actorType();
+		if (actorTypeChild) {
+			const typeText = actorTypeChild.getText().trim();
+			if (typeText === 'user' || typeText === 'system' || typeText === 'service') {
+				actorDefinition.type = typeText;
+			}
+		}
+
+		// Extract actor name
+		const actorNameChild = ctx.actor_name();
+		if (actorNameChild) {
+			actorDefinition.name = actorNameChild.getText().trim();
+		}
+
+		this.actorDefinitions.push(actorDefinition);
+	};
+
+	// Visit multiple actors definition - "actors { actor_definition_list }"
+	visitActors_def = (ctx: Actors_defContext): void => {
+		// Just visit children - individual actor definitions will be handled by visitActor_definition
+		this.visitChildren(ctx);
+	};
+
+	// Visit actor definition list
+	visitActor_definition_list = (ctx: Actor_definition_listContext): void => {
+		this.visitChildren(ctx);
+	};
+
+	// Visit individual actor definition within actors block
+	visitActor_definition = (ctx: Actor_definitionContext): void => {
+		const actorDefinition: ActorDefinition = {
+			name: 'Unknown Actor',
+			type: 'user',
+			blockRange: {
+				startLine: ctx.start?.line || 0,
+				endLine: ctx.stop?.line || 0,
+				fileUri: 'unknown'
+			}
+		};
+
+		// Extract actor type
+		const actorTypeChild = ctx.actorType();
+		if (actorTypeChild) {
+			const typeText = actorTypeChild.getText().trim();
+			if (typeText === 'user' || typeText === 'system' || typeText === 'service') {
+				actorDefinition.type = typeText;
+			}
+		}
+
+		// Extract actor name
+		const actorNameChild = ctx.actor_name();
+		if (actorNameChild) {
+			actorDefinition.name = actorNameChild.getText().trim();
+		}
+
+		this.actorDefinitions.push(actorDefinition);
+	};
+
+	// Visit actor type (redundant but included for completeness)
+	visitActorType = (ctx: ActorTypeContext): void => {
+		// This is handled by the parent contexts
+		this.visitChildren(ctx);
+	};
+
+	// Visit actor name (redundant but included for completeness)
+	visitActor_name = (ctx: Actor_nameContext): void => {
+		// This is handled by the parent contexts
+		this.visitChildren(ctx);
+	};
 }

@@ -1,3 +1,11 @@
+actors {
+    user Business_User
+    system CronA
+    service Database
+}
+
+actor user Customer_Support
+
 arch {
     presentation:
         WebApp[framework:react, ssl]
@@ -27,6 +35,7 @@ services {
         domains: Notifier
     }
 }
+
 // this is a comment
 use_case "User Registration" {
     when Business_User creates Account

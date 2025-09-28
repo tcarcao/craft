@@ -28,13 +28,15 @@
       }
     },
     {
-      "name": "Block Keywords (services, arch, exposure, domain, domains)",
+      "name": "Block Keywords (services, arch, exposure, domain, domains, actor, actors)",
       "scope": [
         "keyword.control.services.domain-dsl",
         "keyword.control.arch.domain-dsl",
         "keyword.control.exposure.domain-dsl",
         "keyword.control.domain.domain-dsl",
-        "keyword.control.domains.domain-dsl"
+        "keyword.control.domains.domain-dsl",
+        "keyword.control.actor.domain-dsl",
+        "keyword.control.actors.domain-dsl"
       ],
       "settings": {
         "foreground": "#800080",
@@ -168,10 +170,26 @@
       }
     },
     {
-      "name": "Actor Names",
+      "name": "Actor Names (in use cases)",
       "scope": "entity.name.class.actor.domain-dsl",
       "settings": {
         "foreground": "#b8860b",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Actor Types (user, system, service)",
+      "scope": "keyword.other.actor-type.domain-dsl",
+      "settings": {
+        "foreground": "#d73a49",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Actor Definition Names",
+      "scope": "entity.name.type.actor-name.domain-dsl",
+      "settings": {
+        "foreground": "#0070C1",
         "fontStyle": "bold"
       }
     },

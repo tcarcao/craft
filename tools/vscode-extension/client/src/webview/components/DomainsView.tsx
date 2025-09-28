@@ -532,6 +532,11 @@ const DomainItem: React.FC<DomainItemProps> = ({
     !domain.inCurrentFile && viewMode === 'workspace' ? 'non-current-file' : ''
   ].filter(Boolean).join(' ');
 
+  // Calculate actual counters from current state
+  const totalUseCases = domain.subDomains.reduce((total, sd) => total + sd.useCases.length, 0);
+  const selectedUseCases = domain.subDomains.reduce((total, sd) => 
+    total + sd.useCases.filter(uc => uc.selected).length, 0);
+
   return (
     <div className={domainClasses}>
       <div className="node-content" onClick={onToggleDomain}>
@@ -561,8 +566,8 @@ const DomainItem: React.FC<DomainItemProps> = ({
         <div className="node-info">
           <div className="node-header">
             <span className="node-name">{domain.name}</span>
-            <span className="use-case-badge" title={`${domain.selectedUseCases} of ${domain.totalUseCases} use cases selected`}>
-              {domain.selectedUseCases}/{domain.totalUseCases}
+            <span className="use-case-badge" title={`${selectedUseCases} of ${totalUseCases} use cases selected`}>
+              {selectedUseCases}/{totalUseCases}
             </span>
           </div>
           <div className="node-meta">

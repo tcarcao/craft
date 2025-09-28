@@ -610,11 +610,13 @@ func (g *C4DiagramGenerator) addIconIncludes(sb *strings.Builder) {
 
 // buildContextDiagram builds system context diagram
 func (g *C4DiagramGenerator) buildContextDiagram(sb *strings.Builder) {
-	// Add actors
+	// Add actors based on their type
 	actors := g.getSortedActors()
-	for _, actor := range actors {
-		sb.WriteString(fmt.Sprintf("Person(%s, \"%s\", \"External user\")\n",
-			g.sanitizeIdentifier(actor), actor))
+	for _, actorName := range actors {
+		actorInfo := g.getActorInfo(actorName)
+		elementType, description := g.getActorC4Element(actorInfo)
+		sb.WriteString(fmt.Sprintf("%s(%s, \"%s\", \"%s\")\n",
+			elementType, g.sanitizeIdentifier(actorName), actorName, description))
 	}
 	if len(actors) > 0 {
 		sb.WriteString("\n")
@@ -652,11 +654,13 @@ func (g *C4DiagramGenerator) buildContextDiagram(sb *strings.Builder) {
 
 // buildContainerDiagram builds container diagram with proper system separation
 func (g *C4DiagramGenerator) buildContainerDiagram(sb *strings.Builder) {
-	// Add actors
+	// Add actors based on their type
 	actors := g.getSortedActors()
-	for _, actor := range actors {
-		sb.WriteString(fmt.Sprintf("Person(%s, \"%s\", \"External user\")\n",
-			g.sanitizeIdentifier(actor), actor))
+	for _, actorName := range actors {
+		actorInfo := g.getActorInfo(actorName)
+		elementType, description := g.getActorC4Element(actorInfo)
+		sb.WriteString(fmt.Sprintf("%s(%s, \"%s\", \"%s\")\n",
+			elementType, g.sanitizeIdentifier(actorName), actorName, description))
 	}
 	if len(actors) > 0 {
 		sb.WriteString("\n")
@@ -1062,6 +1066,36 @@ func (g *C4DiagramGenerator) getDatabaseIcon(technology string) string {
 	}
 
 	return ", $sprite=\"database\""
+}
+
+// getActorInfo finds actor information from the DSL model
+func (g *C4DiagramGenerator) getActorInfo(actorName string) *parser.Actor {
+	for _, actor := range g.model.Actors {
+		if actor.Name == actorName {
+			return &actor
+		}
+	}
+	return nil
+}
+
+// getActorC4Element returns the appropriate C4 element type and description for an actor
+func (g *C4DiagramGenerator) getActorC4Element(actor *parser.Actor) (string, string) {
+	if actor == nil {
+		// Default fallback for actors not found in the model (legacy behavior)
+		return "Person", "External user"
+	}
+
+	switch actor.Type {
+	case parser.ActorTypeUser:
+		return "Person", "External user"
+	case parser.ActorTypeSystem:
+		return "System_Ext", "External system"
+	case parser.ActorTypeService:
+		return "System_Ext", "External service"
+	default:
+		// Default fallback
+		return "Person", "External user"
+	}
 }
 
 // sanitizeIdentifier replaces special characters for PlantUML

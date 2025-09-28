@@ -28,6 +28,7 @@ func NewDSLModelBuilder() *DSLModelBuilder {
 			Services:      make([]Service, 0),
 			UseCases:      make([]UseCase, 0),
 			Domains:       make([]Domain, 0),
+			Actors:        make([]Actor, 0),
 		},
 		idCounter: 0,
 	}
@@ -63,21 +64,45 @@ func (b *DSLModelBuilder) VisitDsl(ctx *parser.DslContext) interface{} {
 			b.VisitDomain_def(c)
 		case *parser.Domains_defContext:
 			b.VisitDomains_def(c)
+		case *parser.Actor_defContext:
+			b.VisitActor_def(c)
+		case *parser.Actors_defContext:
+			b.VisitActors_def(c)
 		}
 	}
 	return nil
 }
 
 func (b *DSLModelBuilder) extractIdentifier(ctx *antlr.BaseParserRuleContext) string {
+	if ctx == nil {
+		return ""
+	}
+	
+	// Check if this is actually an IdentifierContext (from the new grammar)
+	if identifierCtx, ok := interface{}(ctx).(*parser.IdentifierContext); ok {
+		return identifierCtx.GetText()
+	}
+	
+	// Otherwise, use the original logic for terminal nodes
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if terminalNode, ok := ctx.GetChild(i).(antlr.TerminalNode); ok {
+		child := ctx.GetChild(i)
+		
+		// Check if it's an IdentifierContext child
+		if identifierCtx, ok := child.(*parser.IdentifierContext); ok {
+			return identifierCtx.GetText()
+		}
+		
+		// Check for terminal IDENTIFIER nodes (original logic)
+		if terminalNode, ok := child.(antlr.TerminalNode); ok {
 			tokenType := terminalNode.GetSymbol().GetTokenType()
 			if tokenType == parser.CraftLexerIDENTIFIER {
 				return terminalNode.GetText()
 			}
 		}
 	}
-	return ""
+	
+	// Fallback: if we can't find a proper identifier, return the text
+	return ctx.GetText()
 }
 
 // =============================================================================

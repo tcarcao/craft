@@ -139,7 +139,9 @@ function findArchitecturalNodes(rootNode: ParserRuleContext): ParserRuleContext[
       if (nodeType === 'ArchContext' || 
           nodeType === 'Domain_defContext' || 
           nodeType === 'Domains_defContext' || 
-          nodeType === 'ExposureContext') {
+          nodeType === 'ExposureContext' ||
+          nodeType === 'Actor_defContext' ||
+          nodeType === 'Actors_defContext') {
         architecturalNodes.push(node);
       }
     }
@@ -200,20 +202,31 @@ function generateMinimalDSL(
         return generateDomainDefs(node, depth);
       case 'ExposureContext':
         return generateExposure(node, depth);
+      case 'Actor_defContext':
+      case 'Actors_defContext':
+        return generateActorDefs(node, depth);
       default:
-        return generateGenericNode(node, depth);
+        // Ensure comments and other generic nodes end with newline
+        const text = generateGenericNode(node, depth);
+        return text.endsWith('\n') ? text : text + '\n';
     }
   }
   
   function generateDsl(node: ParseTree, depth: number): string {
     let result = '';
+    let lastWasBlock = false;
     
     for (let i = 0; i < node.getChildCount(); i++) {
       const child = node.getChild(i)!;
       if (child instanceof ParserRuleContext && (shouldIncludeNode(child) || hasRequiredDescendant(child))) {
         const childText = generateNode(child, depth);
         if (childText.trim()) {
+          // Add spacing between blocks to prevent comment/use_case merging
+          if (lastWasBlock && !childText.startsWith('\n')) {
+            result += '\n';
+          }
           result += childText;
+          lastWasBlock = true;
         }
       }
     }
@@ -422,6 +435,12 @@ function generateMinimalDSL(
     const exposureText = getNodeText(node as ParserRuleContext, lines);
     return exposureText + '\n\n';
   }
+
+  function generateActorDefs(node: ParseTree, depth: number): string {
+    // For actor definitions, include the entire block as-is
+    const actorText = getNodeText(node as ParserRuleContext, lines);
+    return actorText + '\n\n';
+  }
   
   function generateGenericNode(node: ParseTree, depth: number): string {
     return getNodeText(node as ParserRuleContext, lines);
@@ -433,7 +452,8 @@ function generateMinimalDSL(
     const startLine = node.start.line - 1;
     const startCol = node.start.column;
     const endLine = node.stop.line - 1;
-    const endCol = node.stop.column + (node.stop.text?.length || 1);
+    // Fix: Use the stop token's end position correctly
+    const endCol = node.stop.column + (node.stop.text?.length || 0);
     
     if (startLine === endLine) {
       return lines[startLine].substring(startCol, endCol);
@@ -443,7 +463,9 @@ function generateMinimalDSL(
     for (let i = startLine + 1; i < endLine; i++) {
       result += '\n' + lines[i];
     }
-    result += '\n' + lines[endLine].substring(0, endCol);
+    if (endLine < lines.length) {
+      result += '\n' + lines[endLine].substring(0, endCol);
+    }
     
     return result;
   }
