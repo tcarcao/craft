@@ -41,18 +41,9 @@ let domainExtractor: DomainExtractor;
 const workspaceParser = new WorkspaceParser(documents);
 const parser = new Parser();
 
-// Actor provider function for completion provider
-const getWorkspaceActors = async (): Promise<ActorDefinition[]> => {
-  try {
-    const result = await handleExtractAllDomainsFromWorkspace(undefined, workspaceParser);
-    return result.actorDefinitions || [];
-  } catch (error) {
-    console.error('Error getting actors for completion:', error);
-    return [];
-  }
-};
+// Tree-sitter providers for language features
 
-const treeSitterCompletionProvider = new TreeSitterCompletionProvider(getWorkspaceActors);
+const treeSitterCompletionProvider = new TreeSitterCompletionProvider();
 const treeSitterFormatter = new TreeSitterFormatterProvider();
 
 

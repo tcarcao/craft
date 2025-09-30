@@ -32,6 +32,7 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
     'craft-asks-verb',           // asks
     'craft-notifies-verb',       // notifies
     'craft-listens-verb',        // listens
+    'craft-returns-verb',        // returns
     'craft-service-name',        // Service names
     'craft-domain-name',         // Domain definition names
     'craft-domain-list',         // Domain list values
@@ -45,6 +46,7 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
     'craft-actor-name',          // Actor names (Business_User)
     'craft-regular-verb',        // Regular verbs (creates, validates)
     'craft-phrase-word',         // Words in phrases (email, format, etc.)
+    'craft-connector-word',      // Connector words (a, an, the, to, from, etc.)
     'craft-modifier-key',        // Modifier keys (framework, ssl, type)
     'craft-modifier-value',      // Modifier values (react, true, nginx)
     'craft-flow-arrow',          // Flow arrows (>)
@@ -237,9 +239,6 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
     const nodeType = node.type;
     const parent = node.parent;
     
-    // DEBUG: Disabled for production
-    // console.log(`🔍 TOKEN: "${node.text}" (${nodeType}) | Parent: ${parent?.type}`);
-    
     // GRANULAR MAPPING USING VALID TOKEN TYPE NAMES
     switch (nodeType) {
       
@@ -285,11 +284,21 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
         return { type: this.tokenTypes.indexOf('craft-notifies-verb'), modifiers: 0 };
       case 'listens':
         return { type: this.tokenTypes.indexOf('craft-listens-verb'), modifiers: 0 };
+      case 'returns':
+        return { type: this.tokenTypes.indexOf('craft-returns-verb'), modifiers: 0 };
       case 'creates':
       case 'validates':
       case 'updates':
       case 'deletes':
         return { type: this.tokenTypes.indexOf('craft-regular-verb'), modifiers: 0 };
+
+      // === CONNECTOR WORDS ===
+      // Check parent context to determine styling
+      case 'connector_word':
+        if (parent?.type === 'phrase') {
+          return { type: this.tokenTypes.indexOf('craft-phrase-word'), modifiers: 0 };
+        }
+        return { type: this.tokenTypes.indexOf('craft-connector-word'), modifiers: 0 };
 
       // === ACTOR TYPES ===
       case 'user':
@@ -411,7 +420,6 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
           const currentIndex = identifiers.findIndex((child: any) => 
             child.startIndex === node.startIndex && child.endIndex === node.endIndex
           );
-          // console.log(`🔍 TRIGGER DEBUG: "${node.text}" | CurrentIndex: ${currentIndex}`);
           
           if (currentIndex === 0) {
             // First identifier = Actor name → craft-actor-name → entity.name.class.actor.domain-dsl
@@ -456,7 +464,6 @@ export class TreeSitterHighlightProvider implements vscode.DocumentSemanticToken
           const currentIndex = identifiers.findIndex((child: any) => 
             child.startIndex === node.startIndex && child.endIndex === node.endIndex
           );
-          console.log(`🔍 ACTION DEBUG: "${node.text}" | Parent: ${parent.type} | Action identifiers: [${identifiers.map((id: any) => id.text).join(', ')}] | CurrentIndex: ${currentIndex}`);
           
           if (currentIndex === 0) {
             // First identifier = Service/Domain name → craft-service-name or craft-domain-name

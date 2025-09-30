@@ -121,6 +121,7 @@ const (
 	ActionTypeSync     ActionType = "sync_action"     // "domain asks domain [connector] phrase"
 	ActionTypeAsync    ActionType = "async_action"    // "domain notifies 'event'"
 	ActionTypeInternal ActionType = "internal_action" // "domain verb [connector] phrase"
+	ActionTypeReturn   ActionType = "return_action"   // "domain returns phrase [to domain]"
 )
 
 // Interaction represents domain-to-domain interactions for sequence diagrams

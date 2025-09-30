@@ -1,17 +1,16 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { TextEdit, Range, Position } from 'vscode-languageserver/node';
-import * as path from 'path';
 
-// Import web-tree-sitter (WASM-based for distribution)
-const TreeSitter = require('web-tree-sitter');
+// Import native tree-sitter with tree-sitter-craft npm package
+const Parser = require('tree-sitter');
+const Craft = require('tree-sitter-craft');
 
 /**
  * Tree-sitter based formatter for Craft DSL
- * Uses the generated WASM parser for accurate syntax tree parsing
+ * Uses the native Node.js parser for optimal performance
  */
 export class TreeSitterFormatterProvider {
   private parser: any = null;
-  private language: any = null;
   private initializationPromise: Promise<void>;
 
   constructor() {
@@ -20,28 +19,15 @@ export class TreeSitterFormatterProvider {
 
   private async initializeParser(): Promise<void> {
     try {
-      // Use the exact same pattern that works in our test
-      const { Parser } = TreeSitter;
+      // Use native Node.js tree-sitter with tree-sitter-craft npm package
+      this.parser = new Parser();
+      this.parser.setLanguage(Craft.language);
       
-      if (typeof Parser.init === 'function') {
-        await Parser.init();
-        console.log('✅ Tree-sitter WASM runtime initialized');
-        
-        // Load the Craft WASM language from resources directory
-        const wasmPath = path.join(__dirname, '../../../resources/tree-sitter-craft.wasm');
-        this.language = await TreeSitter.Language.load(wasmPath);
-        console.log('✅ Craft language loaded from WASM');
-        
-        // Create parser and set language
-        this.parser = new TreeSitter.Parser();
-        this.parser.setLanguage(this.language);
-        console.log('✅ Tree-sitter Craft formatter ready');
-      } else {
-        throw new Error('Parser.init method not found');
-      }
+      console.log('✅ TreeSitterFormatterProvider Native tree-sitter Craft formatter ready');
+      console.log('✅ TreeSitterFormatterProvider Using native Node.js performance instead of WASM');
       
     } catch (error) {
-      console.error('Failed to initialize Tree-sitter parser:', error);
+      console.error('Failed to initialize native Tree-sitter parser:', error);
       console.log('Tree-sitter formatter will be disabled');
     }
   }
@@ -50,7 +36,7 @@ export class TreeSitterFormatterProvider {
     // Wait for initialization to complete
     await this.initializationPromise;
     
-    if (!this.parser || !this.language) {
+    if (!this.parser) {
       console.warn('Tree-sitter parser not initialized - formatting disabled');
       return [];
     }

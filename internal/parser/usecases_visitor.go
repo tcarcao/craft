@@ -165,6 +165,8 @@ func (b *DSLModelBuilder) VisitAction(ctx *parser.ActionContext) interface{} {
 			b.processAsyncAction(c, &action)
 		case *parser.Internal_actionContext:
 			b.processInternalAction(c, &action)
+		case *parser.Return_actionContext:
+			b.processReturnAction(c, &action)
 		}
 	}
 
@@ -241,6 +243,29 @@ func (b *DSLModelBuilder) processInternalAction(ctx *parser.Internal_actionConte
 	}
 }
 
+// Process return action: domain returns phrase [connector_word domain]
+func (b *DSLModelBuilder) processReturnAction(ctx *parser.Return_actionContext, action *Action) {
+	action.Type = ActionTypeReturn
+
+	for i := 0; i < ctx.GetChildCount(); i++ {
+		child := ctx.GetChild(i)
+		switch c := child.(type) {
+		case *parser.DomainContext:
+			if action.Domain == "" {
+				action.Domain = c.GetText()
+			} else {
+				// Second domain is the target domain (for "returns ... to domain")
+				action.TargetDomain = c.GetText()
+			}
+		case *parser.Connector_wordContext:
+			action.Connector = c.GetText()
+		case *parser.PhraseContext:
+			words := b.extractWordsFromPhrase(c)
+			action.Phrase = strings.Join(words, " ")
+		}
+	}
+}
+
 // Generate human-readable action description
 func (b *DSLModelBuilder) generateActionDescription(action Action) string {
 	switch action.Type {
@@ -256,6 +281,13 @@ func (b *DSLModelBuilder) generateActionDescription(action Action) string {
 			return fmt.Sprintf("%s %s %s %s", action.Domain, action.Verb, action.Connector, action.Phrase)
 		}
 		return fmt.Sprintf("%s %s %s", action.Domain, action.Verb, action.Phrase)
+	case ActionTypeReturn:
+		if action.TargetDomain != "" && action.Connector != "" {
+			return fmt.Sprintf("%s returns %s %s %s", action.Domain, action.Phrase, action.Connector, action.TargetDomain)
+		} else if action.TargetDomain != "" {
+			return fmt.Sprintf("%s returns %s to %s", action.Domain, action.Phrase, action.TargetDomain)
+		}
+		return fmt.Sprintf("%s returns %s", action.Domain, action.Phrase)
 	}
 	return "unknown action"
 }
@@ -300,6 +332,10 @@ func (b *DSLModelBuilder) VisitExternal_trigger(ctx *parser.External_triggerCont
 func (b *DSLModelBuilder) VisitSync_action(ctx *parser.Sync_actionContext) interface{}   { return nil }
 func (b *DSLModelBuilder) VisitAsync_action(ctx *parser.Async_actionContext) interface{} { return nil }
 func (b *DSLModelBuilder) VisitInternal_action(ctx *parser.Internal_actionContext) interface{} {
+	return nil
+}
+
+func (b *DSLModelBuilder) VisitReturn_action(ctx *parser.Return_actionContext) interface{} {
 	return nil
 }
 func (b *DSLModelBuilder) VisitPhrase(ctx *parser.PhraseContext) interface{} { return nil }

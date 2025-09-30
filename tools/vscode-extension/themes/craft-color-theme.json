@@ -218,9 +218,10 @@
       }
     },
     {
-      "name": "Special Keywords (listens, CRON)",
+      "name": "Special Keywords (listens, returns, CRON)",
       "scope": [
         "keyword.other.listens.domain-dsl",
+        "keyword.other.returns.domain-dsl",
         "keyword.other.cron.domain-dsl"
       ],
       "settings": {

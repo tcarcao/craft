@@ -2557,7 +2557,7 @@ func TestParser_MultipleDomainDefinition(t *testing.T) {
 		}
 
 		if len(domain.SubDomains) != len(expected.subdomains) {
-			t.Errorf("Expected %d subdomains for domain '%s', got %d", 
+			t.Errorf("Expected %d subdomains for domain '%s', got %d",
 				len(expected.subdomains), expected.name, len(domain.SubDomains))
 		}
 
@@ -2854,7 +2854,7 @@ func TestParser_CompleteDSLWithDomains(t *testing.T) {
 
 	expectedECommerceSubDomains := []string{"User", "Product", "Order", "Payment"}
 	if len(ecommerce.SubDomains) != len(expectedECommerceSubDomains) {
-		t.Errorf("Expected %d subdomains for ECommerce, got %d", 
+		t.Errorf("Expected %d subdomains for ECommerce, got %d",
 			len(expectedECommerceSubDomains), len(ecommerce.SubDomains))
 	}
 
@@ -2953,7 +2953,7 @@ func TestParser_EmptyDomainScenarios(t *testing.T) {
 	}`
 
 	model, err := ParseDSLToModel(dsl)
-	
+
 	// Empty domains block should fail - grammar requires at least one domain block
 	if err == nil {
 		t.Fatalf("Expected error for empty domains block, got nil")
@@ -2998,7 +2998,7 @@ func TestParser_DomainNamingEdgeCases(t *testing.T) {
 
 	expectedDomainNames := []string{
 		"Domain_With_Underscores",
-		"Domain-With-Hyphens", 
+		"Domain-With-Hyphens",
 		"DomainWithNumbers123",
 		"SimpleA",
 	}
@@ -3385,5 +3385,263 @@ func TestParser_MixedActorDefinitions(t *testing.T) {
 		if actualType != expectedType {
 			t.Errorf("Expected actor '%s' to be type '%s', got '%s'", expectedName, expectedType, actualType)
 		}
+	}
+}
+
+func TestParser_ReturnAction(t *testing.T) {
+	dsl := `use_case "Payment Processing with Returns" {
+		when User submits payment request
+			PaymentService validates payment data
+			PaymentService asks BankGateway to process payment
+			BankGateway returns payment result to PaymentService
+			PaymentService returns confirmation status
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Validate structure
+	if len(model.UseCases) != 1 {
+		t.Errorf("Expected 1 use case, got %d", len(model.UseCases))
+	}
+
+	useCase := model.UseCases[0]
+	if useCase.Name != "Payment Processing with Returns" {
+		t.Errorf("Expected use case name 'Payment Processing with Returns', got '%s'", useCase.Name)
+	}
+
+	if len(useCase.Scenarios) != 1 {
+		t.Errorf("Expected 1 scenario, got %d", len(useCase.Scenarios))
+	}
+
+	scenario := useCase.Scenarios[0]
+
+	// Validate actions - should have 4 actions
+	if len(scenario.Actions) != 4 {
+		t.Errorf("Expected 4 actions, got %d", len(scenario.Actions))
+	}
+
+	// Third action - return action with target domain
+	action3 := scenario.Actions[2]
+	if action3.Type != ActionTypeReturn {
+		t.Errorf("Expected return action, got %s", action3.Type)
+	}
+
+	if action3.Domain != "BankGateway" {
+		t.Errorf("Expected domain 'BankGateway', got '%s'", action3.Domain)
+	}
+
+	if action3.Phrase != "payment result" {
+		t.Errorf("Expected phrase 'payment result', got '%s'", action3.Phrase)
+	}
+
+	if action3.TargetDomain != "PaymentService" {
+		t.Errorf("Expected target domain 'PaymentService', got '%s'", action3.TargetDomain)
+	}
+
+	// Fourth action - return action without target domain
+	action4 := scenario.Actions[3]
+	if action4.Type != ActionTypeReturn {
+		t.Errorf("Expected return action, got %s", action4.Type)
+	}
+
+	if action4.Domain != "PaymentService" {
+		t.Errorf("Expected domain 'PaymentService', got '%s'", action4.Domain)
+	}
+
+	if action4.Phrase != "confirmation status" {
+		t.Errorf("Expected phrase 'confirmation status', got '%s'", action4.Phrase)
+	}
+
+	if action4.TargetDomain != "" {
+		t.Errorf("Expected empty target domain, got '%s'", action4.TargetDomain)
+	}
+
+	// Test action descriptions
+	expectedDescription3 := "BankGateway returns payment result to PaymentService"
+	if action3.Description != expectedDescription3 {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription3, action3.Description)
+	}
+
+	expectedDescription4 := "PaymentService returns confirmation status"
+	if action4.Description != expectedDescription4 {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription4, action4.Description)
+	}
+
+	fmt.Printf("Test passed: TestParser_ReturnAction\n")
+}
+
+func TestParser_ReturnActionWithConnector(t *testing.T) {
+	dsl := `use_case "Return with Connector" {
+		when User requests data
+			DataService returns user information to User
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	scenario := model.UseCases[0].Scenarios[0]
+	action := scenario.Actions[0]
+
+	if action.Type != ActionTypeReturn {
+		t.Errorf("Expected return action, got %s", action.Type)
+	}
+
+	if action.Domain != "DataService" {
+		t.Errorf("Expected domain 'DataService', got '%s'", action.Domain)
+	}
+
+	if action.Phrase != "user information" {
+		t.Errorf("Expected phrase 'user information', got '%s'", action.Phrase)
+	}
+
+	if action.Connector != "to" {
+		t.Errorf("Expected connector 'to', got '%s'", action.Connector)
+	}
+
+	if action.TargetDomain != "User" {
+		t.Errorf("Expected target domain 'User', got '%s'", action.TargetDomain)
+	}
+
+	expectedDescription := "DataService returns user information to User"
+	if action.Description != expectedDescription {
+		t.Errorf("Expected description '%s', got '%s'", expectedDescription, action.Description)
+	}
+
+	fmt.Printf("Test passed: TestParser_ReturnActionWithConnector\n")
+}
+
+func TestParser_ReturnActionCallStack(t *testing.T) {
+	dsl := `use_case "Payment Flow with Call Stack" {
+		when User submits payment
+			PaymentService validates data
+			PaymentService asks BankGateway to process payment
+			BankGateway returns payment result
+			PaymentService returns confirmation
+	}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Validate that actions are parsed correctly
+	scenario := model.UseCases[0].Scenarios[0]
+	if len(scenario.Actions) != 4 {
+		t.Errorf("Expected 4 actions, got %d", len(scenario.Actions))
+	}
+
+	// Check that the third action (BankGateway returns payment result) has no explicit target
+	action3 := scenario.Actions[2]
+	if action3.Type != ActionTypeReturn {
+		t.Errorf("Expected return action, got %s", action3.Type)
+	}
+
+	if action3.Domain != "BankGateway" {
+		t.Errorf("Expected domain 'BankGateway', got '%s'", action3.Domain)
+	}
+
+	if action3.TargetDomain != "" {
+		t.Errorf("Expected empty target domain (should use call stack), got '%s'", action3.TargetDomain)
+	}
+
+	// Check that the fourth action also has no explicit target
+	action4 := scenario.Actions[3]
+	if action4.Type != ActionTypeReturn {
+		t.Errorf("Expected return action, got %s", action4.Type)
+	}
+
+	if action4.Domain != "PaymentService" {
+		t.Errorf("Expected domain 'PaymentService', got '%s'", action4.Domain)
+	}
+
+	if action4.TargetDomain != "" {
+		t.Errorf("Expected empty target domain (should use call stack), got '%s'", action4.TargetDomain)
+	}
+
+	fmt.Printf("Test passed: TestParser_ReturnActionCallStack\n")
+}
+
+func TestParser_ReturnActionDD(t *testing.T) {
+	dsl := `actors {
+    user Business_User
+    system CronA
+    service Database
+}
+
+
+
+actor user Customer_Support
+
+
+
+arch {
+    presentation:
+        WebApp[framework:react, ssl]
+        MobileApp
+
+    gateway:
+        LoadBalancer[ssl:true] > APIGateway[type:nginx]
+}
+
+
+
+exposure default {
+    to: Business_User
+    through: APIGateway
+}
+
+
+
+domain User {
+    Authentication
+    Profile
+}
+
+
+
+services {
+    UserService {
+        domains: Authentication, Profile
+        data-stores: user_db
+        language: golang
+    }
+    CommsService {
+        domains: Notifier
+    }
+}
+
+// this is a comment
+
+use_case "User Registration" {
+  when Business_User creates Account
+    Authentication validates email format
+    Authentication returns hello
+    Authentication asks Database to check email uniqueness
+    Profile creates user profile
+    Authentication notifies "User Registered"
+
+
+  when Profile listens "User Registered"
+    Profile asks Database to store profile data
+    Profile asks Notifier to send welcome email
+
+}`
+
+	parser := NewParser()
+	_, err := parser.ParseString(dsl)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
 	}
 }

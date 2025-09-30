@@ -1,0 +1,19 @@
+{
+  "grammars": [
+    {
+      "name": "craft",
+      "scope": "source.craft",
+      "file-types": ["craft"],
+      "source": {
+        "path": "."
+      }
+    }
+  ],
+  "metadata": {
+    "name": "tree-sitter-craft",
+    "version": "1.0.0",
+    "description": "Tree-sitter grammar for the Craft DSL (Domain Specific Language)",
+    "author": "Craft Language Team",
+    "repository": "https://github.com/tcarcao/tree-sitter-craft"
+  }
+}

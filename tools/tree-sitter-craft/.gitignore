@@ -1,15 +1,24 @@
 # Generated files - do not version
-src/tree_sitter
-src/parser.c
-src/grammar.json  
-src/node-types.json
-tree-sitter-craft.wasm
 docker
+
+# Grammar volatiles
+*.wasm
 
 # Build artifacts
 build/
 node_modules/
 *.log
+package-lock.json
+
+# Native addon artifacts
+*.node
+*.dylib
+*.so
+*.dll
+prebuilds/
+
+# NPM artifacts
+*.tgz
 
 # OS files
 .DS_Store
@@ -23,3 +32,11 @@ Thumbs.db
 
 # Test outputs
 test/actual/
+
+# C artifacts
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.pc

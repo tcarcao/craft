@@ -127,13 +127,14 @@ trigger: 'when' domain 'listens' quoted_event NEWLINE+
        | 'when' external_trigger NEWLINE+
        | 'when' quoted_event NEWLINE+;
 
-external_trigger: actor verb phrase?;
+external_trigger: actor verb connector_word? phrase?;
 
 action_block: action*;
 
 action: async_action NEWLINE+
       | sync_action NEWLINE+
-      | internal_action NEWLINE+;
+      | internal_action NEWLINE+
+      | return_action NEWLINE+;
 
 sync_action : domain 'asks' domain connector_word phrase
             | domain 'asks' domain phrase;
@@ -141,6 +142,9 @@ sync_action : domain 'asks' domain connector_word phrase
 async_action: domain 'notifies' quoted_event;
 
 internal_action: domain verb connector_word? phrase;
+
+return_action: domain 'returns' connector_word? phrase 'to' domain
+            | domain 'returns' connector_word? phrase;
 
 phrase: (identifier | STRING | connector_word)+;
 

@@ -168,6 +168,8 @@ func (g *C4DiagramGenerator) createServiceRelationships() {
 			for _, action := range scenario.Actions {
 				if action.Type == parser.ActionTypeSync {
 					g.handleSyncAction(action)
+				} else if action.Type == parser.ActionTypeReturn {
+					g.handleReturnAction(action)
 				}
 			}
 		}
@@ -205,6 +207,38 @@ func (g *C4DiagramGenerator) handleSyncAction(action parser.Action) {
 			g.relations = append(g.relations, relation)
 		}
 	}
+}
+
+// handleReturnAction processes return actions between domains/services
+func (g *C4DiagramGenerator) handleReturnAction(action parser.Action) {
+	if action.Domain == "" {
+		return
+	}
+
+	fromService := g.findServiceForDomain(action.Domain)
+	if fromService == "" {
+		return
+	}
+
+	if action.TargetDomain != "" {
+		// Return to specific domain
+		toService := g.findServiceForDomain(action.TargetDomain)
+		if toService != "" && fromService != toService {
+			fromContainer := g.findDomainContainer(action.Domain)
+			toContainer := g.findDomainContainer(action.TargetDomain)
+
+			relation := C4Relation{
+				From:        fromContainer,
+				To:          toContainer,
+				Description: "returns " + action.Phrase,
+				Technology:  "Return Data",
+				Type:        "returns",
+			}
+			g.relations = append(g.relations, relation)
+		}
+	}
+	// Note: If no target domain, it's a return to external trigger - 
+	// this doesn't need a service relationship in C4 diagrams
 }
 
 // createDatabaseRelationships creates relationships from services to databases

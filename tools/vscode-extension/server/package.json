@@ -9,10 +9,11 @@
 	"dependencies": {
 		"antlr4ng": "^3.0.16",
 		"glob": "^11.0.3",
+		"tree-sitter": "^0.25.0",
+		"tree-sitter-craft": "link:../resources/tree-sitter-craft",
 		"vscode-languageserver": "^9.0.1",
 		"vscode-languageserver-textdocument": "^1.0.11",
-		"vscode-uri": "^3.1.0",
-		"web-tree-sitter": "^0.25.10"
+		"vscode-uri": "^3.1.0"
 	},
 	"scripts": {
 		"generate": "antlr-ng -Dlanguage=TypeScript ../../antlr-grammar/Craft.g4 -v true -o src/parser/generated --exact-output-dir",

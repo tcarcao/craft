@@ -146,6 +146,10 @@
                 "description": "Listens action verb"
             },
             {
+                "id": "craft-returns-verb",
+                "description": "Returns action verb"
+            },
+            {
                 "id": "craft-service-name",
                 "description": "Service names"
             },
@@ -192,6 +196,10 @@
             {
                 "id": "craft-phrase-word",
                 "description": "Words in phrases"
+            },
+            {
+                "id": "craft-connector-word",
+                "description": "Connector words (a, an, the, to, from, etc.)"
             },
             {
                 "id": "craft-modifier-key",
@@ -274,6 +282,7 @@
                     "craft-asks-verb": ["keyword.other.asks.domain-dsl"],
                     "craft-notifies-verb": ["keyword.other.notifies.domain-dsl"],
                     "craft-listens-verb": ["keyword.other.listens.domain-dsl"],
+                    "craft-returns-verb": ["keyword.other.returns.domain-dsl"],
                     "craft-service-name": ["entity.name.type.service.domain-dsl"],
                     "craft-domain-name": ["entity.name.type.domain-name.domain-dsl"],
                     "craft-domain-list": ["entity.name.type.domain.list.domain-dsl"],
@@ -286,6 +295,7 @@
                     "craft-actor-definition": ["entity.name.type.actor-name.domain-dsl"],
                     "craft-regular-verb": ["entity.name.function.verb.domain-dsl"],
                     "craft-phrase-word": ["entity.name.variable.phrase.domain-dsl"],
+                    "craft-connector-word": ["keyword.other.connector.domain-dsl"],
                     "craft-modifier-key": ["entity.name.tag.modifier.key.domain-dsl"],
                     "craft-modifier-value": ["entity.name.tag.modifier.value.domain-dsl"],
                     "craft-flow-arrow": ["punctuation.separator.arrow.domain-dsl"],

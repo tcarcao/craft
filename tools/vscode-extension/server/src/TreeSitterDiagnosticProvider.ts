@@ -7,12 +7,12 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-// Import web-tree-sitter
-const TreeSitter = require('web-tree-sitter');
+// Import native tree-sitter with tree-sitter-craft npm package
+const Parser = require('tree-sitter');
+const Craft = require('tree-sitter-craft');
 
 export class TreeSitterDiagnosticProvider {
     private parser: any = null;
-    private language: any = null;
     private initializationPromise: Promise<void>;
 
     constructor() {
@@ -21,20 +21,14 @@ export class TreeSitterDiagnosticProvider {
 
     private async initializeParser(): Promise<void> {
         try {
-            // Initialize Tree-sitter WASM
-            await TreeSitter.init();
+            // Use native Node.js tree-sitter with tree-sitter-craft npm package
+            this.parser = new Parser();
+            this.parser.setLanguage(Craft.language);
             
-            // Load the Craft language
-            const wasmPath = require('path').join(__dirname, '../../resources/tree-sitter-craft.wasm');
-            this.language = await TreeSitter.Language.load(wasmPath);
-            
-            // Create parser
-            this.parser = new TreeSitter();
-            this.parser.setLanguage(this.language);
-            
-            console.log('Tree Sitter diagnostic provider initialized successfully');
+            console.log('Native Tree Sitter diagnostic provider initialized successfully');
+            console.log('Using native Node.js performance instead of WASM');
         } catch (error) {
-            console.error('Failed to initialize Tree Sitter diagnostic provider:', error);
+            console.error('Failed to initialize native Tree Sitter diagnostic provider:', error);
         }
     }
 

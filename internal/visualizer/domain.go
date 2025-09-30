@@ -209,12 +209,20 @@ func (g *PlantUMLGenerator) processUseCase(useCase parser.UseCase) {
 
 // processScenario extracts flows from a scenario
 func (g *PlantUMLGenerator) processScenario(useCaseName string, scenario parser.Scenario) {
+	// Initialize call stack for this scenario with the external trigger
+	callStack := make([]string, 0)
+	
+	// Add the triggering actor to call stack if it's an external trigger
+	if scenario.Trigger.Type == parser.TriggerTypeExternal && scenario.Trigger.Actor != "" {
+		callStack = append(callStack, scenario.Trigger.Actor)
+	}
+	
 	// Process trigger
 	g.processTrigger(useCaseName, scenario)
 
-	// Process actions
+	// Process actions with call stack tracking
 	for _, action := range scenario.Actions {
-		g.processAction(useCaseName, scenario.ID, action)
+		g.processActionWithCallStack(useCaseName, scenario.ID, action, &callStack)
 	}
 }
 
@@ -278,7 +286,70 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario parser.S
 	}
 }
 
-// processAction handles individual actions
+// processActionWithCallStack handles individual actions with call stack tracking
+func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID string, action parser.Action, callStack *[]string) {
+	switch action.Type {
+	case parser.ActionTypeSync:
+		// Synchronous call between domains - push caller to stack
+		if action.Domain != "" && action.TargetDomain != "" {
+			g.domains[action.Domain] = true
+			g.domains[action.TargetDomain] = true
+			g.stepCounter++
+
+			// Push the calling domain onto the stack
+			*callStack = append(*callStack, action.Domain)
+
+			description := g.buildActionDescription(action)
+			g.flows = append(g.flows, FlowStep{
+				StepNumber:  g.stepCounter,
+				From:        action.Domain,
+				To:          action.TargetDomain,
+				Description: description,
+				Type:        "sync",
+				UseCase:     useCaseName,
+				ScenarioID:  scenarioID,
+			})
+		}
+	case parser.ActionTypeReturn:
+		// Return action - flow back to caller
+		if action.Domain != "" {
+			g.domains[action.Domain] = true
+			g.stepCounter++
+
+			description := g.buildActionDescription(action)
+			from := action.Domain
+			var to string
+
+			// If target domain is specified, use it
+			if action.TargetDomain != "" {
+				to = action.TargetDomain
+				g.domains[to] = true
+			} else if len(*callStack) > 0 {
+				// Pop from call stack to find the caller
+				to = (*callStack)[len(*callStack)-1]
+				*callStack = (*callStack)[:len(*callStack)-1]
+			} else {
+				// No caller in stack, return to external
+				to = "External"
+			}
+
+			g.flows = append(g.flows, FlowStep{
+				StepNumber:  g.stepCounter,
+				From:        from,
+				To:          to,
+				Description: description,
+				Type:        "return",
+				UseCase:     useCaseName,
+				ScenarioID:  scenarioID,
+			})
+		}
+	default:
+		// For other action types, use the original logic without call stack
+		g.processAction(useCaseName, scenarioID, action)
+	}
+}
+
+// processAction handles individual actions (legacy method for non-call-stack actions)
 func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action parser.Action) {
 	switch action.Type {
 	case parser.ActionTypeSync:
@@ -347,6 +418,15 @@ func (g *PlantUMLGenerator) buildActionDescription(action parser.Action) string 
 			return action.Verb + " " + phrase
 		}
 		return phrase
+	case parser.ActionTypeReturn:
+		phrase := action.Phrase
+		if action.TargetDomain != "" {
+			if action.Connector != "" {
+				return "returns " + phrase + " " + action.Connector + " " + action.TargetDomain
+			}
+			return "returns " + phrase + " to " + action.TargetDomain
+		}
+		return "returns " + phrase
 	}
 	return ""
 }
@@ -492,8 +572,21 @@ func (g *PlantUMLGenerator) buildPlantUMLContent() string {
 		fromAlias := g.getElementAlias(flow.From)
 		toAlias := g.getElementAlias(flow.To)
 
-		sb.WriteString(fmt.Sprintf("%s --> %s : %d. %s\n",
-			fromAlias, toAlias, flow.StepNumber, flow.Description))
+		// Use different arrow styles based on flow type
+		var arrow string
+		switch flow.Type {
+		case "return":
+			arrow = "-->"  // Return arrow - flows back
+		case "sync":
+			arrow = "->>"   // Synchronous call - solid arrow
+		case "async":
+			arrow = "->>"   // Asynchronous - solid arrow
+		default:
+			arrow = "-->"   // Default arrow
+		}
+
+		sb.WriteString(fmt.Sprintf("%s %s %s : %d. %s\n",
+			fromAlias, arrow, toAlias, flow.StepNumber, flow.Description))
 	}
 
 	sb.WriteString("\n@enduml")
@@ -618,6 +711,18 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 			// Internal subdomain action
 			if action.Domain != "" {
 				g.subDomains[action.Domain] = true
+			}
+		case parser.ActionTypeReturn:
+			// Return action - data flowing back
+			if action.Domain != "" {
+				g.subDomains[action.Domain] = true
+				
+				if action.TargetDomain != "" {
+					g.subDomains[action.TargetDomain] = true
+					// Create return connection
+					connectionKey := action.Domain + "->" + action.TargetDomain
+					g.connections[connectionKey] = true
+				}
 			}
 		}
 	}
