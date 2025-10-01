@@ -1,0 +1,42 @@
+# Generated files - do not version
+docker
+
+# Grammar volatiles
+*.wasm
+
+# Build artifacts
+build/
+node_modules/
+*.log
+package-lock.json
+
+# Native addon artifacts
+*.node
+*.dylib
+*.so
+*.dll
+prebuilds/
+
+# NPM artifacts
+*.tgz
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+test/actual/
+
+# C artifacts
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.pc

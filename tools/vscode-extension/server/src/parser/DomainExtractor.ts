@@ -1,9 +1,9 @@
 // server/src/DomainExtractor.ts
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Parser } from './CraftParser';
-import { DslContext} from './generated/CraftParser';
-import { ExtractionResult } from '../../../shared/lib/types/domain-extraction';
-import { DomainVisitor } from './DomainVisitor';
+import { Parser } from './CraftParser.js';
+import { DslContext} from './generated/CraftParser.js';
+import { ExtractionResult } from '../../../shared/lib/types/domain-extraction.js';
+import { DomainVisitor } from './DomainVisitor.js';
 
 
 export class DomainExtractor {

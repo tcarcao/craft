@@ -101,7 +101,7 @@ Add test cases in `test/corpus/` directory.
 ### 5. Update VS Code Extension
 ```bash
 # Compile the updated extension
-cd .. && pnpm run compile
+cd .. && npm run compile
 
 # Test the formatter
 node test-craft-formatter-final.js
@@ -207,7 +207,7 @@ tree-sitter test
 ### When you modify grammar.js:
 1. **Always run tests first**: `./dev.sh`
 2. **Build WASM for VS Code**: `./dev.sh --wasm`
-3. **Recompile extension**: `cd .. && pnpm run compile`
+3. **Recompile extension**: `cd .. && npm run compile`
 4. **Test formatter**: `node test-craft-formatter-final.js`
 
 ### Git Workflow:
@@ -225,7 +225,7 @@ tree-sitter test
 4. **Update VS Code extension**: 
    ```bash
    cd ../vscode-extension
-   pnpm run compile
+   npm run compile
    ```
 5. **Test in projects** - Test both npm package and VS Code extension
 6. **Version bump**: `npm version patch|minor|major`
@@ -234,7 +234,7 @@ tree-sitter test
 ### 6 Months From Now:
 1. `cd tools/tree-sitter-craft`
 2. `npm run build` (full build - Node.js + WASM)
-3. `cd ../vscode-extension && pnpm run compile` (rebuild extension)
+3. `cd ../vscode-extension && npm run compile` (rebuild extension)
 4. Done! 🎉
 
 ### What happens when generating a new version:

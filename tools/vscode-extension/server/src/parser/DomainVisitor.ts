@@ -1,5 +1,5 @@
 // server/src/DomainExtractor.ts
-import { CraftVisitor } from './generated/CraftVisitor';
+import { CraftVisitor } from './generated/CraftVisitor.js';
 import { 
 	DslContext, 
 	Services_defContext, 
@@ -31,8 +31,8 @@ import {
 	Actor_definition_listContext,
 	ActorTypeContext,
 	Actor_nameContext
-} from './generated/CraftParser';
-import { ServiceDefinition, UseCaseInfo, DomainDefinition, ActorDefinition } from '../../../shared/lib/types/domain-extraction';
+} from './generated/CraftParser.js';
+import { ServiceDefinition, UseCaseInfo, DomainDefinition, ActorDefinition } from '../../../shared/lib/types/domain-extraction.js';
 
 
 export class DomainVisitor extends CraftVisitor<void> {

@@ -30,7 +30,7 @@
 		"webpack-cli": "^5.1.4"
 	},
 	"scripts": {
-		"compile": "tsc && mkdir -p out/styles && mkdir -p out/@vscode/codicons && cp src/ui/styles/treeStyles.css out/styles/ && cp -r ./node_modules/@vscode/codicons/dist out/@vscode/codicons && pnpm run build-webview",
+		"compile": "tsc && mkdir -p out/styles && mkdir -p out/@vscode/codicons && cp src/ui/styles/treeStyles.css out/styles/ && cp -r ./node_modules/@vscode/codicons/dist out/@vscode/codicons && npm run build-webview",
 		"build-webview": "webpack --mode production",
 		"watch-webview": "webpack --mode development --watch"
 	}

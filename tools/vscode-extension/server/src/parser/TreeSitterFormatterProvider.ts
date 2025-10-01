@@ -1,9 +1,9 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { TextEdit, Range, Position } from 'vscode-languageserver/node';
+import { TextEdit, Range, Position } from 'vscode-languageserver/node.js';
 
 // Import native tree-sitter with tree-sitter-craft npm package
-const Parser = require('tree-sitter');
-const Craft = require('tree-sitter-craft');
+import Parser from 'tree-sitter';
+import Craft from 'tree-sitter-craft';
 
 /**
  * Tree-sitter based formatter for Craft DSL

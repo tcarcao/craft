@@ -1,5 +1,5 @@
 import { ParseTree, ParserRuleContext, TerminalNode, Token } from 'antlr4ng';
-import { BlockRange } from '../../../shared/lib/types/domain-extraction';
+import { BlockRange } from '../../../shared/lib/types/domain-extraction.js';
 
 /**
  * Extracts minimal subtree from Craft AST with ancestry

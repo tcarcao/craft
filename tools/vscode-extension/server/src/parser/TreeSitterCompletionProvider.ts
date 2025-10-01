@@ -1,7 +1,7 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node';
-const Parser = require('tree-sitter');
-const Craft = require('tree-sitter-craft');
+import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node.js';
+import Parser from 'tree-sitter';
+import Craft from 'tree-sitter-craft';
 
 /**
  * Simple Tree-sitter based completion provider for Craft DSL

@@ -1,5 +1,5 @@
 // Tree-sitter grammar for Craft DSL - Hybrid of working backup + ANTLR mapping
-module.exports = grammar({
+export default grammar({
   name: 'craft',
 
   extras: $ => [

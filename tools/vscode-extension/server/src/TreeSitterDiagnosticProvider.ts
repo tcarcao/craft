@@ -4,12 +4,12 @@ import {
     DiagnosticSeverity,
     Position,
     Range
-} from 'vscode-languageserver/node';
+} from 'vscode-languageserver/node.js';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 // Import native tree-sitter with tree-sitter-craft npm package
-const Parser = require('tree-sitter');
-const Craft = require('tree-sitter-craft');
+import Parser from 'tree-sitter';
+import Craft from 'tree-sitter-craft';
 
 export class TreeSitterDiagnosticProvider {
     private parser: any = null;

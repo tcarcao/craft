@@ -1,7 +1,7 @@
 import { CharStream, CommonTokenStream, ParserRuleContext } from "antlr4ng";
 import { CraftLexer } from "./generated/CraftLexer";
 import { CraftParser } from "./generated/CraftParser";
-import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node';
+import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node.js';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 export interface CompletionContext {

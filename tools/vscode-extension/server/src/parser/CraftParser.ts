@@ -1,10 +1,10 @@
 // src/parser/CraftParser.ts
 import { CharStream, CommonTokenStream } from "antlr4ng";
-import { CraftLexer } from "./generated/CraftLexer";
-import { CraftParser } from "./generated/CraftParser";
-import { CustomErrorListener } from './ErrorListener';
-import { BlockRange } from '../../../shared/lib/types/domain-extraction';
-import { extractMinimalSubtree } from './DSLExtractor';
+import { CraftLexer } from "./generated/CraftLexer.js";
+import { CraftParser } from "./generated/CraftParser.js";
+import { CustomErrorListener } from './ErrorListener.js';
+import { BlockRange } from '../../../shared/lib/types/domain-extraction.js';
+import { extractMinimalSubtree } from './DSLExtractor.js';
 
 export class Parser {
     parse(input: string) {

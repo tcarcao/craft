@@ -25,9 +25,9 @@ fi
 echo "📝 Generating parser from grammar.js..."
 npx tree-sitter generate
 
-# 2. Build WASM using Docker/Podman
-echo "🐳 Building WASM binary..."
-PATH=".:$PATH" npx tree-sitter build --wasm
+# 2. Build WASM binary
+echo "🔧 Building WASM binary..."
+npm run build-wasm
 
 # 3. Verify WASM file was created
 if [ ! -f "tree-sitter-craft.wasm" ]; then
@@ -37,11 +37,7 @@ fi
 
 echo "✅ WASM build successful: tree-sitter-craft.wasm ($(du -h tree-sitter-craft.wasm | cut -f1))"
 
-# 4. Build native Node.js package with prebuilds
-echo "🔧 Building native Node.js package with prebuilds..."
-npx node-gyp rebuild
-echo "🔧 Creating prebuilt binaries for Electron (VS Code)..."
-npm run prebuild-electron
+# 4. Note: Native bindings will be built on-demand by node-gyp-build during installation
 
 # 5. Create npm package and copy to VS Code extension
 EXTENSION_RESOURCES="../vscode-extension/resources/"
@@ -60,7 +56,7 @@ if [ -d "$EXTENSION_RESOURCES" ]; then
     mkdir -p "$EXTENSION_RESOURCES/tree-sitter-craft"
     tar -xzf tree-sitter-craft-*.tgz -C "$EXTENSION_RESOURCES/tree-sitter-craft" --strip-components=1
     
-    # Install dependencies in the bundled package
+    # Install dependencies in the bundled package so npm can handle it properly
     echo "📦 Installing dependencies in bundled package..."
     cd "$EXTENSION_RESOURCES/tree-sitter-craft"
     npm install --omit=dev --omit=peer
@@ -69,7 +65,7 @@ if [ -d "$EXTENSION_RESOURCES" ]; then
     # Clean up the tarball
     rm tree-sitter-craft-*.tgz
     
-    echo "✅ Native Node.js package ready at: $EXTENSION_RESOURCES/tree-sitter-craft"
+    echo "✅ Node.js package ready at: $EXTENSION_RESOURCES/tree-sitter-craft"
 else
     echo "⚠️  Warning: VS Code extension resources directory not found at $EXTENSION_RESOURCES"
     echo "   You may need to manually copy files to the correct location"
@@ -88,9 +84,8 @@ echo ""
 echo "🎉 Build complete!"
 echo "   - Grammar generated: src/parser.c, src/grammar.json, src/node-types.json"
 echo "   - WASM binary: tree-sitter-craft.wasm"
-echo "   - Native Node.js package: Release/tree_sitter_craft_binding.node"
-echo "   - Copied both WASM and npm package to VS Code extension"
+echo "   - Node.js package bundled for VS Code extension"
 echo "   - All tests passed"
 echo ""
 echo "💡 Next steps:"
-echo "   - Rebuild VS Code extension: cd ../vscode-extension && pnpm run compile"
+echo "   - Rebuild VS Code extension: cd ../vscode-extension && npm run compile"

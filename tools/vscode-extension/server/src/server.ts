@@ -14,11 +14,11 @@ import {
   CompletionParams,
   CompletionItem,
   CompletionItemKind,
-} from 'vscode-languageserver/node';
+} from 'vscode-languageserver/node.js';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { TreeSitterDiagnosticProvider } from './TreeSitterDiagnosticProvider';
-import { DomainExtractor } from './parser/DomainExtractor';
-import { WorkspaceParser } from './services/documentsProcessor';
+import { TreeSitterDiagnosticProvider } from './TreeSitterDiagnosticProvider.js';
+import { DomainExtractor } from './parser/DomainExtractor.js';
+import { WorkspaceParser } from './services/documentsProcessor.js';
 import {
   FileResult,
   UseCaseInfo,
@@ -28,10 +28,10 @@ import {
   DomainDefinition,
   ActorDefinition,
   BlockRange
-} from '../../shared/lib/types/domain-extraction';
-import { Parser } from './parser/CraftParser';
-import { TreeSitterCompletionProvider } from './parser/TreeSitterCompletionProvider';
-import { TreeSitterFormatterProvider } from './parser/TreeSitterFormatterProvider';
+} from '../../shared/lib/types/domain-extraction.js';
+import { Parser } from './parser/CraftParser.js';
+import { TreeSitterCompletionProvider } from './parser/TreeSitterCompletionProvider.js';
+import { TreeSitterFormatterProvider } from './parser/TreeSitterFormatterProvider.js';
 
 // Create connection and documents manager
 const connection = createConnection(ProposedFeatures.all);
