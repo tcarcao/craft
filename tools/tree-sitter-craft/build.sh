@@ -37,9 +37,11 @@ fi
 
 echo "✅ WASM build successful: tree-sitter-craft.wasm ($(du -h tree-sitter-craft.wasm | cut -f1))"
 
-# 4. Build native Node.js package
-echo "🔧 Building native Node.js package..."
+# 4. Build native Node.js package with prebuilds
+echo "🔧 Building native Node.js package with prebuilds..."
 npx node-gyp rebuild
+echo "🔧 Creating prebuilt binaries for Electron (VS Code)..."
+npm run prebuild-electron
 
 # 5. Create npm package and copy to VS Code extension
 EXTENSION_RESOURCES="../vscode-extension/resources/"

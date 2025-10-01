@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "node-gyp": "^10.3.1",
+    "prebuildify": "^6.0.1",
     "tree-sitter-cli": "^0.25.10",
     "tree-sitter-javascript": "^0.25.0"
   },
@@ -51,7 +52,10 @@
     "test": "npx tree-sitter test",
     "setup": "./setup-docker.sh",
     "install": "node-gyp-build",
-    "prebuildify": "prebuildify --napi --strip"
+    "prebuildify": "prebuildify --napi --strip",
+    "prebuild": "prebuildify --napi --strip --target 18.0.0 --target 20.0.0 --target 22.0.0",
+    "prebuild-electron": "prebuildify --napi --strip --electron --electron-compat",
+    "prebuild-all": "prebuildify-cross --napi --strip"
   },
   "directories": {
     "test": "test"
