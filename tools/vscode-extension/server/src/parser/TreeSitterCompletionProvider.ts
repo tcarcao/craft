@@ -19,7 +19,7 @@ export class TreeSitterCompletionProvider {
     try {
       // Use native Node.js tree-sitter with tree-sitter-craft npm package
       this.parser = new Parser();
-      this.parser.setLanguage(Craft.language);
+      this.parser.setLanguage(Craft);
       
       console.log('✅ TreeSitterCompletionProvider Native tree-sitter Craft completion provider ready');
       console.log('✅ TreeSitterCompletionProvider Using native Node.js performance instead of WASM');

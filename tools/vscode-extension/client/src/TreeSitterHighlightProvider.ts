@@ -99,7 +99,7 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
         
         // Load highlights query
         try {
-          const highlightsPath = path.join(__dirname, '../../resources/tree-sitter-craft/queries/highlights.scm');
+          const highlightsPath = path.join(__dirname, '../../resources/queries/highlights.scm');
           const fs = require('fs');
           const highlightsQuery = fs.readFileSync(highlightsPath, 'utf8');
           this.query = new TreeSitter.Query(this.language, highlightsQuery);

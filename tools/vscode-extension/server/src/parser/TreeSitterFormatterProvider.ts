@@ -21,7 +21,7 @@ export class TreeSitterFormatterProvider {
     try {
       // Use native Node.js tree-sitter with tree-sitter-craft npm package
       this.parser = new Parser();
-      this.parser.setLanguage(Craft.language);
+      this.parser.setLanguage(Craft);
       
       console.log('✅ TreeSitterFormatterProvider Native tree-sitter Craft formatter ready');
       console.log('✅ TreeSitterFormatterProvider Using native Node.js performance instead of WASM');

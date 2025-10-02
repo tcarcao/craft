@@ -1,4 +1,4 @@
-.PHONY: build run test clean
+.PHONY: build run test clean fresh-setup
 
 IMAGE_NAME=craft
 IMAGE_TAG=latest
@@ -44,8 +44,21 @@ generate-grammar: docker-build-antlr-image
 test:
 	go test ./...
 
+fresh-setup:
+	@echo "Setting up Craft development environment..."
+	@echo "1. Generating ANTLR grammar..."
+	$(MAKE) generate-grammar
+	@echo "2. Installing VS Code extension dependencies..."
+	cd tools/vscode-extension && npm install
+	@echo "3. Compiling VS Code extension..."
+	cd tools/vscode-extension && npm run compile
+	@echo "✅ Fresh setup complete! You can now:"
+	@echo "   - Open the VS Code extension for development"
+	@echo "   - Use 'make docker-build && make docker-run' to start the server"
+
 help:
 	@echo "Makefile commands:"
+	@echo "  fresh-setup    			- Complete setup for new repository clones"
 	@echo "  docker-build   			- Build Docker image from Dockerfile"
 	@echo "  docker-run     			- Run Docker container"
 	@echo "  docker-clean   			- Remove Docker image"

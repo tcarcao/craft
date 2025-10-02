@@ -1,5 +1,5 @@
 {
-  "name": "Domain DSL Light",
+  "name": "Craft DSL Light",
   "type": "light",
   "colors": {
     "editor.background": "#ffffff",
@@ -11,8 +11,8 @@
     {
       "name": "Comment",
       "scope": [
-        "comment.line.double-slash.domain-dsl",
-        "comment.block.domain-dsl"
+        "comment.line.double-slash.craft",
+        "comment.block.craft"
       ],
       "settings": {
         "foreground": "#008000",
@@ -21,7 +21,7 @@
     },
     {
       "name": "Keywords (use_case, when)",
-      "scope": "keyword.control.flow.domain-dsl",
+      "scope": "keyword.control.flow.craft",
       "settings": {
         "foreground": "#800080",
         "fontStyle": "bold"
@@ -30,13 +30,13 @@
     {
       "name": "Block Keywords (services, arch, exposure, domain, domains, actor, actors)",
       "scope": [
-        "keyword.control.services.domain-dsl",
-        "keyword.control.arch.domain-dsl",
-        "keyword.control.exposure.domain-dsl",
-        "keyword.control.domain.domain-dsl",
-        "keyword.control.domains.domain-dsl",
-        "keyword.control.actor.domain-dsl",
-        "keyword.control.actors.domain-dsl"
+        "keyword.control.services.craft",
+        "keyword.control.arch.craft",
+        "keyword.control.exposure.craft",
+        "keyword.control.domain.craft",
+        "keyword.control.domains.craft",
+        "keyword.control.actor.craft",
+        "keyword.control.actors.craft"
       ],
       "settings": {
         "foreground": "#800080",
@@ -45,7 +45,7 @@
     },
     {
       "name": "Use Case Name",
-      "scope": "string.quoted.double.usecase.domain-dsl",
+      "scope": "string.quoted.double.usecase.craft",
       "settings": {
         "foreground": "#0070C1",
         "fontStyle": "bold"
@@ -53,7 +53,7 @@
     },
     {
       "name": "Service Name",
-      "scope": "entity.name.type.service.domain-dsl",
+      "scope": "entity.name.type.service.craft",
       "settings": {
         "foreground": "#0070C1",
         "fontStyle": "bold"
@@ -62,14 +62,14 @@
     {
       "name": "Property Keywords (domains, data-stores)",
       "scope": [
-        "keyword.other.property.domains.domain-dsl",
-        "keyword.other.property.datastores.domain-dsl",
-        "keyword.other.property.data-stores.domain-dsl",
-        "keyword.other.property.language.domain-dsl",
-        "keyword.other.property.deployment.domain-dsl",
-        "keyword.other.property.to.domain-dsl",
-        "keyword.other.property.of.domain-dsl",
-        "keyword.other.property.through.domain-dsl"
+        "keyword.other.property.domains.craft",
+        "keyword.other.property.datastores.craft",
+        "keyword.other.property.data-stores.craft",
+        "keyword.other.property.language.craft",
+        "keyword.other.property.deployment.craft",
+        "keyword.other.property.to.craft",
+        "keyword.other.property.of.craft",
+        "keyword.other.property.through.craft"
       ],
       "settings": {
         "foreground": "#d73a49",
@@ -78,7 +78,7 @@
     },
     {
       "name": "Event Strings",
-      "scope": "string.quoted.double.event.domain-dsl",
+      "scope": "string.quoted.double.event.craft",
       "settings": {
         "foreground": "#001080",
         "fontStyle": "italic"
@@ -87,10 +87,10 @@
     {
       "name": "Domain Names (all types)",
       "scope": [
-        "entity.name.type.domain.domain-dsl",
-        "entity.name.type.domain.source.domain-dsl",
-        "entity.name.type.domain.target.domain-dsl",
-        "entity.name.type.domain.list.domain-dsl"
+        "entity.name.type.domain.craft",
+        "entity.name.type.domain.source.craft",
+        "entity.name.type.domain.target.craft",
+        "entity.name.type.domain.list.craft"
       ],
       "settings": {
         "foreground": "#267f99",
@@ -99,7 +99,7 @@
     },
     {
       "name": "Domain Definition Names",
-      "scope": "entity.name.type.domain-name.domain-dsl",
+      "scope": "entity.name.type.domain-name.craft",
       "settings": {
         "foreground": "#0070C1",
         "fontStyle": "bold"
@@ -107,7 +107,7 @@
     },
     {
       "name": "Subdomain Names",
-      "scope": "entity.name.type.subdomain.domain-dsl",
+      "scope": "entity.name.type.subdomain.craft",
       "settings": {
         "foreground": "#22863a",
         "fontStyle": "bold"
@@ -115,7 +115,7 @@
     },
     {
       "name": "Data Store Names",
-      "scope": "entity.name.type.datastore.domain-dsl",
+      "scope": "entity.name.type.datastore.craft",
       "settings": {
         "foreground": "#e36209",
         "fontStyle": "bold"
@@ -123,7 +123,7 @@
     },
     {
       "name": "Phrase Words",
-      "scope": "entity.name.variable.phrase.domain-dsl",
+      "scope": "entity.name.variable.phrase.craft",
       "settings": {
         "foreground": "#a31515",
         "fontStyle": "italic"
@@ -131,7 +131,7 @@
     },
     {
       "name": "Modifier Keys",
-      "scope": "entity.name.tag.modifier.key.domain-dsl",
+      "scope": "entity.name.tag.modifier.key.craft",
       "settings": {
         "foreground": "#0451a5",
         "fontStyle": "bold"
@@ -139,7 +139,7 @@
     },
     {
       "name": "Modifier Values",
-      "scope": "entity.name.tag.modifier.value.domain-dsl",
+      "scope": "entity.name.tag.modifier.value.craft",
       "settings": {
         "foreground": "#0969da",
         "fontStyle": "normal"
@@ -147,7 +147,7 @@
     },
     {
       "name": "Flow Arrows",
-      "scope": "punctuation.separator.arrow.domain-dsl",
+      "scope": "punctuation.separator.arrow.craft",
       "settings": {
         "foreground": "#cf222e",
         "fontStyle": "bold"
@@ -155,7 +155,7 @@
     },
     {
       "name": "Datastore Names",
-      "scope": "entity.name.type.datastore.domain-dsl",
+      "scope": "entity.name.type.datastore.craft",
       "settings": {
         "foreground": "#6f42c1",
         "fontStyle": "bold"
@@ -163,7 +163,7 @@
     },
     {
       "name": "Language",
-      "scope": "entity.name.type.language.domain-dsl",
+      "scope": "entity.name.type.language.craft",
       "settings": {
         "foreground": "#6f42c1",
         "fontStyle": "bold"
@@ -171,7 +171,7 @@
     },
     {
       "name": "Actor Names (in use cases)",
-      "scope": "entity.name.class.actor.domain-dsl",
+      "scope": "entity.name.class.actor.craft",
       "settings": {
         "foreground": "#b8860b",
         "fontStyle": "bold"
@@ -179,7 +179,7 @@
     },
     {
       "name": "Actor Types (user, system, service)",
-      "scope": "keyword.other.actor-type.domain-dsl",
+      "scope": "keyword.other.actor-type.craft",
       "settings": {
         "foreground": "#d73a49",
         "fontStyle": "bold"
@@ -187,7 +187,7 @@
     },
     {
       "name": "Actor Definition Names",
-      "scope": "entity.name.type.actor-name.domain-dsl",
+      "scope": "entity.name.type.actor-name.craft",
       "settings": {
         "foreground": "#0070C1",
         "fontStyle": "bold"
@@ -195,7 +195,7 @@
     },
     {
       "name": "Regular Verbs",
-      "scope": "entity.name.function.verb.domain-dsl",
+      "scope": "entity.name.function.verb.craft",
       "settings": {
         "foreground": "#795e26",
         "fontStyle": "bold"
@@ -203,7 +203,7 @@
     },
     {
       "name": "Special Verb: asks (request)",
-      "scope": "keyword.other.asks.domain-dsl",
+      "scope": "keyword.other.asks.craft",
       "settings": {
         "foreground": "#e36209",
         "fontStyle": "bold"
@@ -211,7 +211,7 @@
     },
     {
       "name": "Special Verb: notifies (async)",
-      "scope": "keyword.other.notifies.domain-dsl",
+      "scope": "keyword.other.notifies.craft",
       "settings": {
         "foreground": "#22863a",
         "fontStyle": "bold"
@@ -220,9 +220,9 @@
     {
       "name": "Special Keywords (listens, returns, CRON)",
       "scope": [
-        "keyword.other.listens.domain-dsl",
-        "keyword.other.returns.domain-dsl",
-        "keyword.other.cron.domain-dsl"
+        "keyword.other.listens.craft",
+        "keyword.other.returns.craft",
+        "keyword.other.cron.craft"
       ],
       "settings": {
         "foreground": "#22863a",
@@ -231,14 +231,14 @@
     },
     {
       "name": "Connectors (a, an, the, to, from, etc.)",
-      "scope": "keyword.other.connector.domain-dsl",
+      "scope": "keyword.other.connector.craft",
       "settings": {
         "foreground": "#6a737d"
       }
     },
     {
       "name": "Phrases (action descriptions)",
-      "scope": "string.unquoted.phrase.domain-dsl",
+      "scope": "string.unquoted.phrase.craft",
       "settings": {
         "foreground": "#a31515",
         "fontStyle": "italic"
@@ -246,14 +246,14 @@
     },
     {
       "name": "Remainder (after actor verb)",
-      "scope": "string.unquoted.remainder.domain-dsl",
+      "scope": "string.unquoted.remainder.craft",
       "settings": {
         "foreground": "#a31515"
       }
     },
     {
       "name": "Regular Strings",
-      "scope": "string.quoted.double.domain-dsl",
+      "scope": "string.quoted.double.craft",
       "settings": {
         "foreground": "#a31515"
       }
@@ -261,8 +261,8 @@
     {
       "name": "Punctuation - Braces",
       "scope": [
-        "punctuation.section.braces.begin.domain-dsl",
-        "punctuation.section.braces.end.domain-dsl"
+        "punctuation.section.braces.begin.craft",
+        "punctuation.section.braces.end.craft"
       ],
       "settings": {
         "foreground": "#b8860b",
@@ -271,14 +271,14 @@
     },
     {
       "name": "Punctuation - Colons",
-      "scope": "punctuation.separator.colon.domain-dsl",
+      "scope": "punctuation.separator.colon.craft",
       "settings": {
         "foreground": "#6a737d"
       }
     },
     {
       "name": "Punctuation - Commas",
-      "scope": "punctuation.separator.comma.domain-dsl",
+      "scope": "punctuation.separator.comma.craft",
       "settings": {
         "foreground": "#6a737d"
       }
@@ -286,8 +286,8 @@
     {
       "name": "Architecture Components",
       "scope": [
-        "entity.name.type.component.domain-dsl",
-        "entity.name.type.arch.domain-dsl"
+        "entity.name.type.component.craft",
+        "entity.name.type.arch.craft"
       ],
       "settings": {
         "foreground": "#0451a5",
@@ -297,8 +297,8 @@
     {
       "name": "Architecture Sections",
       "scope": [
-        "keyword.other.section.presentation.domain-dsl",
-        "keyword.other.section.gateway.domain-dsl"
+        "keyword.other.section.presentation.craft",
+        "keyword.other.section.gateway.craft"
       ],
       "settings": {
         "foreground": "#d73a49",
@@ -308,8 +308,8 @@
     {
       "name": "Component Modifier Keys",
       "scope": [
-        "entity.name.attribute.modifier-key.domain-dsl",
-        "entity.name.attribute.modifier-flag.domain-dsl"
+        "entity.name.attribute.modifier-key.craft",
+        "entity.name.attribute.modifier-flag.craft"
       ],
       "settings": {
         "foreground": "#0451a5",
@@ -318,7 +318,7 @@
     },
     {
       "name": "Component Modifier Values",
-      "scope": "constant.other.modifier-value.domain-dsl",
+      "scope": "constant.other.modifier-value.craft",
       "settings": {
         "foreground": "#22863a",
         "fontStyle": "italic"
@@ -327,9 +327,9 @@
     {
       "name": "Exposure Elements",
       "scope": [
-        "entity.name.type.exposure.domain-dsl",
-        "entity.name.type.target.domain-dsl",
-        "entity.name.type.gateway.domain-dsl"
+        "entity.name.type.exposure.craft",
+        "entity.name.type.target.craft",
+        "entity.name.type.gateway.craft"
       ],
       "settings": {
         "foreground": "#e36209",
@@ -339,8 +339,8 @@
     {
       "name": "Deployment Configuration",
       "scope": [
-        "keyword.other.deployment-type.domain-dsl",
-        "entity.name.type.deployment-target.domain-dsl"
+        "keyword.other.deployment-type.craft",
+        "entity.name.type.deployment-target.craft"
       ],
       "settings": {
         "foreground": "#b8860b",
@@ -349,7 +349,7 @@
     },
     {
       "name": "Percentages",
-      "scope": "constant.numeric.percentage.domain-dsl",
+      "scope": "constant.numeric.percentage.craft",
       "settings": {
         "foreground": "#09885a",
         "fontStyle": "bold"
@@ -358,8 +358,8 @@
     {
       "name": "Operators and Flow",
       "scope": [
-        "keyword.operator.arrow.domain-dsl",
-        "keyword.operator.component-flow.domain-dsl"
+        "keyword.operator.arrow.craft",
+        "keyword.operator.component-flow.craft"
       ],
       "settings": {
         "foreground": "#d73a49",
@@ -369,8 +369,8 @@
     {
       "name": "Brackets",
       "scope": [
-        "punctuation.section.brackets.begin.domain-dsl",
-        "punctuation.section.brackets.end.domain-dsl"
+        "punctuation.section.brackets.begin.craft",
+        "punctuation.section.brackets.end.craft"
       ],
       "settings": {
         "foreground": "#6f42c1"
@@ -378,14 +378,14 @@
     },
     {
       "name": "Parentheses",
-      "scope": "punctuation.section.parentheses.domain-dsl",
+      "scope": "punctuation.section.parentheses.craft",
       "settings": {
         "foreground": "#795e26"
       }
     },
     {
       "name": "CRON Description",
-      "scope": "string.unquoted.cron-description.domain-dsl",
+      "scope": "string.unquoted.cron-description.craft",
       "settings": {
         "foreground": "#a31515",
         "fontStyle": "italic"
