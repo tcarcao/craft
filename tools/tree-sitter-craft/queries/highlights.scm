@@ -38,6 +38,10 @@
 "service" @craft.actor-type
 
 ; === CONNECTOR WORDS ===
+; Connector words in phrases should be colored as phrase words
+(phrase (connector_word) @craft.phrase-word)
+
+; Regular connector words (not in phrases)
 (connector_word) @craft.connector-word
 
 ; === STRINGS - CONTEXT DEPENDENT ===
