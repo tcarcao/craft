@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ServiceGroup, Service, SubDomain, UseCase } from '../../types/domain';
+import { WebviewMessages, ProviderMessages, SelectionActions } from '../../types/messages';
 
 interface ServicesViewProps {
   vscode: any;
@@ -28,25 +29,105 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
     isLoading: true
   });
 
+  // Helper function to merge new service data while preserving UI state
+  const mergeServiceData = (newServiceGroups: ServiceGroup[], existingServiceGroups: ServiceGroup[]): ServiceGroup[] => {
+    return newServiceGroups.map(newGroup => {
+      const existingGroup = existingServiceGroups.find(g => g.name === newGroup.name);
+      if (!existingGroup) {
+        return newGroup; // New group, use as-is
+      }
+
+      return {
+        ...newGroup,
+        selected: existingGroup.selected || false,
+        partiallySelected: existingGroup.partiallySelected || false,
+        expanded: existingGroup.expanded !== undefined ? existingGroup.expanded : newGroup.expanded,
+        services: newGroup.services.map(newService => {
+          const existingService = existingGroup.services.find(s => s.id === newService.id);
+          if (!existingService) {
+            return newService; // New service, use as-is
+          }
+
+          return {
+            ...newService,
+            selected: existingService.selected || false,
+            partiallySelected: existingService.partiallySelected || false,
+            expanded: existingService.expanded !== undefined ? existingService.expanded : newService.expanded,
+            subDomains: newService.subDomains.map(newSubDomain => {
+              const existingSubDomain = existingService.subDomains.find(sd => sd.id === newSubDomain.id);
+              if (!existingSubDomain) {
+                return newSubDomain; // New subdomain, use as-is
+              }
+
+              return {
+                ...newSubDomain,
+                selected: existingSubDomain.selected || false,
+                partiallySelected: existingSubDomain.partiallySelected || false,
+                expanded: existingSubDomain.expanded !== undefined ? existingSubDomain.expanded : newSubDomain.expanded,
+                useCases: newSubDomain.useCases.map(newUseCase => {
+                  const existingUseCase = existingSubDomain.useCases.find(uc => uc.id === newUseCase.id);
+                  return {
+                    ...newUseCase,
+                    selected: existingUseCase?.selected || false
+                  };
+                })
+              };
+            })
+          };
+        })
+      };
+    });
+  };
+
   // Listen for initial data from extension
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const message = event.data;
       
       switch (message.type) {
-        case 'initialData':
+        case ProviderMessages.INITIAL_DATA:
           setState(prevState => ({
             ...prevState,
             ...message.data,
             isLoading: false
           }));
           break;
-        case 'dataRefresh':
+        case ProviderMessages.DATA_REFRESH:
           setState(prevState => ({
             ...prevState,
-            serviceGroups: message.data.serviceGroups,
+            serviceGroups: mergeServiceData(message.data.serviceGroups, prevState.serviceGroups),
             viewMode: message.data.viewMode || prevState.viewMode
           }));
+          break;
+        case ProviderMessages.SELECTION_COMMAND:
+          switch (message.action) {
+            case SelectionActions.SELECT_ALL:
+              selectAll();
+              break;
+            case SelectionActions.SELECT_NONE:
+              selectNone();
+              break;
+          }
+          break;
+        case ProviderMessages.REFRESH_COMMAND:
+          refresh();
+          break;
+        case ProviderMessages.PREVIEW_COMMAND:
+          // Check if any services are selected before previewing
+          const hasSelectedServices = state.serviceGroups.some(group => 
+            group.services.some(service => service.selected || service.partiallySelected)
+          );
+          if (!hasSelectedServices) {
+            vscode.postMessage({
+              type: WebviewMessages.SHOW_INFORMATION,
+              message: 'Please select at least one service to preview the services diagram.'
+            });
+            return;
+          }
+          preview();
+          break;
+        case ProviderMessages.TOGGLE_OPTIONS_COMMAND:
+          toggleDiagramOptions();
           break;
       }
     };
@@ -54,10 +135,12 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
     window.addEventListener('message', handleMessage);
     
     // Request initial data
-    vscode.postMessage({ type: 'ready' });
+    vscode.postMessage({ type: WebviewMessages.READY });
 
     return () => window.removeEventListener('message', handleMessage);
   }, [vscode]);
+
+
 
   // ===== REACT STATE MANAGEMENT (The React Way!) =====
 
@@ -313,7 +396,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
 
   const setViewMode = (mode: 'current' | 'workspace') => {
     setState(prev => ({ ...prev, viewMode: mode }));
-    vscode.postMessage({ type: 'setViewMode', viewMode: mode });
+    vscode.postMessage({ type: WebviewMessages.SET_VIEW_MODE, viewMode: mode });
   };
 
   const setBoundariesMode = (mode: 'transparent' | 'boundaries') => {
@@ -388,7 +471,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
 
   const refresh = () => {
     setState(prev => ({ ...prev, isLoading: true }));
-    vscode.postMessage({ type: 'refresh' });
+    vscode.postMessage({ type: WebviewMessages.REFRESH });
   };
 
   const preview = () => {    
@@ -415,8 +498,17 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
       });
     });
     
+    if (selectedServices.length === 0) {
+      // Show a helpful message when no services are selected
+      vscode.postMessage({
+        type: WebviewMessages.SHOW_INFORMATION,
+        message: 'Please select at least one service to preview the services diagram.'
+      });
+      return;
+    }
+    
     vscode.postMessage({ 
-      type: 'preview', 
+      type: WebviewMessages.PREVIEW, 
       selectedServices,
       selectedUseCases,
       focusInfo
@@ -436,6 +528,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
     serviceGroups: state.serviceGroups.length
   };
 
+
   // ===== RENDER =====
 
   if (state.isLoading) {
@@ -448,30 +541,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
   }
 
   return (
-    <div>
+    <div className="services-view">
       {/* Header */}
       <div className="header">
-        <div className="header-row">
-          <h3 className="title">Services</h3>
-          <div className="header-actions">
-            {selectedCount.services > 0 && (
-              <button 
-                className="header-btn" 
-                onClick={preview}
-                title="Preview"
-              >
-                <span className="codicon codicon-preview"></span>
-              </button>
-            )}
-            <button 
-              className="header-btn" 
-              onClick={refresh}
-              title="Refresh services"
-            >
-              <span className="codicon codicon-refresh"></span>
-            </button>
-          </div>
-        </div>
         
         <div className="view-mode-toggle">
           <button 
@@ -490,100 +562,98 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
           </button>
         </div>
         
-        <div className="diagram-options">
-          <div className="options-header" onClick={toggleDiagramOptions}>
-            <span className="options-title">Diagram Options</span>
-            <span className="options-expander">{state.optionsExpanded ? '▼' : '▶'}</span>
-          </div>
-          <div className="options-content" style={{ display: state.optionsExpanded ? 'block' : 'none' }}>
-            <div className="option-group">
-              <label className="option-label">Mode:</label>
-              <div className="option-toggle">
-                <button 
-                  className={`option-btn ${state.boundariesMode === 'transparent' ? 'active' : ''}`}
-                  onClick={() => setBoundariesMode('transparent')}
-                  title="Show service-to-service connections"
-                >
-                  Transparent
-                </button>
-                <button 
-                  className={`option-btn ${state.boundariesMode === 'boundaries' ? 'active' : ''}`}
-                  onClick={() => setBoundariesMode('boundaries')}
-                  title="Show domain-to-domain connections"
-                >
-                  Boundaries
-                </button>
+        {state.optionsExpanded && (
+          <div className="diagram-options">
+            <div className="options-content">
+              <div className="option-group">
+                <label className="option-label">Mode:</label>
+                <div className="option-toggle">
+                  <button 
+                    className={`option-btn ${state.boundariesMode === 'transparent' ? 'active' : ''}`}
+                    onClick={() => setBoundariesMode('transparent')}
+                    title="Show service-to-service connections"
+                  >
+                    Transparent
+                  </button>
+                  <button 
+                    className={`option-btn ${state.boundariesMode === 'boundaries' ? 'active' : ''}`}
+                    onClick={() => setBoundariesMode('boundaries')}
+                    title="Show domain-to-domain connections"
+                  >
+                    Boundaries
+                  </button>
+                </div>
               </div>
-            </div>
-            
-            <div className="option-group">
-              <label className="option-label">Database:</label>
-              <div className="option-toggle">
-                <button 
-                  className={`option-btn ${state.showDatabases ? 'active' : ''}`}
-                  onClick={() => setDatabaseVisibility(true)}
-                  title="Show databases in diagram"
-                >
-                  Show
-                </button>
-                <button 
-                  className={`option-btn ${!state.showDatabases ? 'active' : ''}`}
-                  onClick={() => setDatabaseVisibility(false)}
-                  title="Hide databases from diagram"
-                >
-                  Hide
-                </button>
+              
+              <div className="option-group">
+                <label className="option-label">Database:</label>
+                <div className="option-toggle">
+                  <button 
+                    className={`option-btn ${state.showDatabases ? 'active' : ''}`}
+                    onClick={() => setDatabaseVisibility(true)}
+                    title="Show databases in diagram"
+                  >
+                    Show
+                  </button>
+                  <button 
+                    className={`option-btn ${!state.showDatabases ? 'active' : ''}`}
+                    onClick={() => setDatabaseVisibility(false)}
+                    title="Hide databases from diagram"
+                  >
+                    Hide
+                  </button>
+                </div>
               </div>
-            </div>
-            
-            <div className="option-group">
-              <label className="option-label">Focus:</label>
-              <div className="option-toggle">
-                <button 
-                  className={`option-btn ${state.focusLayer === 'business' ? 'active' : ''}`}
-                  onClick={() => setFocusLayer('business')}
-                  title="Focus on business logic and domains"
-                >
-                  Business
-                </button>
-                <button 
-                  className={`option-btn ${state.focusLayer === 'presentation' ? 'active' : ''}`}
-                  onClick={() => setFocusLayer('presentation')}
-                  title="Focus on presentation and UI components"
-                >
-                  Presentation
-                </button>
-                <button 
-                  className={`option-btn ${state.focusLayer === 'composition' ? 'active' : ''}`}
-                  onClick={() => setFocusLayer('composition')}
-                  title="Focus on service composition and integration"
-                >
-                  Composition
-                </button>
+              
+              <div className="option-group">
+                <label className="option-label">Focus:</label>
+                <div className="option-toggle">
+                  <button 
+                    className={`option-btn ${state.focusLayer === 'business' ? 'active' : ''}`}
+                    onClick={() => setFocusLayer('business')}
+                    title="Focus on business logic and domains"
+                  >
+                    Business
+                  </button>
+                  <button 
+                    className={`option-btn ${state.focusLayer === 'presentation' ? 'active' : ''}`}
+                    onClick={() => setFocusLayer('presentation')}
+                    title="Focus on presentation and UI components"
+                  >
+                    Presentation
+                  </button>
+                  <button 
+                    className={`option-btn ${state.focusLayer === 'composition' ? 'active' : ''}`}
+                    onClick={() => setFocusLayer('composition')}
+                    title="Focus on service composition and integration"
+                  >
+                    Composition
+                  </button>
+                </div>
               </div>
-            </div>
-            
-            <div className="option-group">
-              <label className="option-label">Infrastructure:</label>
-              <div className="option-toggle">
-                <button 
-                  className={`option-btn ${state.showInfrastructure ? 'active' : ''}`}
-                  onClick={() => setInfrastructureVisibility(true)}
-                  title="Show infrastructure components"
-                >
-                  Show
-                </button>
-                <button 
-                  className={`option-btn ${!state.showInfrastructure ? 'active' : ''}`}
-                  onClick={() => setInfrastructureVisibility(false)}
-                  title="Hide infrastructure components"
-                >
-                  Hide
-                </button>
+              
+              <div className="option-group">
+                <label className="option-label">Infrastructure:</label>
+                <div className="option-toggle">
+                  <button 
+                    className={`option-btn ${state.showInfrastructure ? 'active' : ''}`}
+                    onClick={() => setInfrastructureVisibility(true)}
+                    title="Show infrastructure components"
+                  >
+                    Show
+                  </button>
+                  <button 
+                    className={`option-btn ${!state.showInfrastructure ? 'active' : ''}`}
+                    onClick={() => setInfrastructureVisibility(false)}
+                    title="Hide infrastructure components"
+                  >
+                    Hide
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
         
         <div className="selection-info">
           <span className="selection-count">{selectedCount.services} of {totalCount.services} services selected</span>
@@ -618,17 +688,6 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <div className="action-group">
-          <button className="action-btn" onClick={selectAll}>
-            Select All
-          </button>
-          <button className="action-btn" onClick={selectNone}>
-            Select None
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -663,7 +722,7 @@ const ServiceGroupNode: React.FC<ServiceGroupNodeProps> = ({
   const greyClass = viewMode === 'workspace' && !group.inCurrentFile ? 'non-current-file' : '';
 
   return (
-    <div className={`tree-node domain-node ${greyClass}`}>
+    <div className={`tree-node service-group-node ${greyClass}`}>
       <div className="node-content" onClick={onToggleGroup}>
         <span 
           className="expander" 

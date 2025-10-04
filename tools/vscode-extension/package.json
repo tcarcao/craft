@@ -346,6 +346,61 @@
                 "command": "craft.openSettings",
                 "title": "Craft: Open Settings",
                 "category": "Craft"
+            },
+            {
+                "command": "craft.selectAllDomains",
+                "title": "Select All Domains",
+                "icon": "$(checklist)"
+            },
+            {
+                "command": "craft.selectNoneDomains",
+                "title": "Clear Domain Selection",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "craft.selectCurrentFileDomains",
+                "title": "Select Current File Domains",
+                "icon": "$(file)"
+            },
+            {
+                "command": "craft.selectAllServices",
+                "title": "Select All Services",
+                "icon": "$(checklist)"
+            },
+            {
+                "command": "craft.selectNoneServices",
+                "title": "Clear Service Selection",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "craft.refreshDomains",
+                "title": "Refresh Domains",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "craft.previewDomains",
+                "title": "Preview Domain Diagram",
+                "icon": "$(preview)"
+            },
+            {
+                "command": "craft.refreshServices",
+                "title": "Refresh Services",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "craft.previewServices",
+                "title": "Preview Services Diagram",
+                "icon": "$(preview)"
+            },
+            {
+                "command": "craft.toggleDomainOptions",
+                "title": "Toggle Domain Diagram Options",
+                "icon": "$(settings-gear)"
+            },
+            {
+                "command": "craft.toggleServiceOptions",
+                "title": "Toggle Service Diagram Options", 
+                "icon": "$(settings-gear)"
             }
         ],
         "keybindings": [
@@ -380,6 +435,65 @@
                     "name": "Services",
                     "type": "webview",
                     "icon": "resources/craft_icon.svg"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "craft.selectAllDomains",
+                    "when": "view == dslDomainView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "craft.selectNoneDomains",
+                    "when": "view == dslDomainView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "craft.selectCurrentFileDomains",
+                    "when": "view == dslDomainView",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "craft.selectAllServices",
+                    "when": "view == dslServicesView",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "craft.selectNoneServices",
+                    "when": "view == dslServicesView",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "craft.previewDomains",
+                    "when": "view == dslDomainView",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "craft.toggleDomainOptions",
+                    "when": "view == dslDomainView",
+                    "group": "navigation@5"
+                },
+                {
+                    "command": "craft.refreshDomains",
+                    "when": "view == dslDomainView",
+                    "group": "navigation@6"
+                },
+                {
+                    "command": "craft.previewServices",
+                    "when": "view == dslServicesView",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "craft.toggleServiceOptions",
+                    "when": "view == dslServicesView",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "craft.refreshServices",
+                    "when": "view == dslServicesView",
+                    "group": "navigation@5"
                 }
             ]
         }

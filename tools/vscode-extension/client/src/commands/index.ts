@@ -2,8 +2,10 @@
 import { commands, ExtensionContext } from 'vscode';
 import { handlePreviewC4, handlePreviewSelectedC4, handlePreviewPartialC4, cleanUpPreviewC4 } from './previewC4';
 import { handlePreviewDomain, handlePreviewDomainsFromSelection, handlePreviewPartialDomains, handlePreviewPartialArchitecture, cleanUpPreviewDomain } from './previewDomain';
+import { DomainsViewProvider } from '../providers/domainsViewProvider';
+import { ServicesViewProvider } from '../providers/servicesViewProvider';
 
-export function registerPreviewCommands(context: ExtensionContext) {
+export function registerPreviewCommands(context: ExtensionContext, domainsProvider?: DomainsViewProvider, servicesProvider?: ServicesViewProvider) {
     context.subscriptions.push(
         commands.registerCommand('craft.previewC4', () =>
             handlePreviewC4()
@@ -36,6 +38,39 @@ export function registerPreviewCommands(context: ExtensionContext) {
         }),
         commands.registerCommand('craft.openSettings', () => {
             commands.executeCommand('workbench.action.openSettings', 'craft.');
+        }),
+        commands.registerCommand('craft.selectAllDomains', () => {
+            domainsProvider?.sendSelectionCommand('selectAll');
+        }),
+        commands.registerCommand('craft.selectNoneDomains', () => {
+            domainsProvider?.sendSelectionCommand('selectNone');
+        }),
+        commands.registerCommand('craft.selectCurrentFileDomains', () => {
+            domainsProvider?.sendSelectionCommand('selectCurrentFile');
+        }),
+        commands.registerCommand('craft.selectAllServices', () => {
+            servicesProvider?.sendSelectionCommand('selectAll');
+        }),
+        commands.registerCommand('craft.selectNoneServices', () => {
+            servicesProvider?.sendSelectionCommand('selectNone');
+        }),
+        commands.registerCommand('craft.refreshDomains', () => {
+            domainsProvider?.sendRefreshCommand();
+        }),
+        commands.registerCommand('craft.previewDomains', () => {
+            domainsProvider?.sendPreviewCommand();
+        }),
+        commands.registerCommand('craft.refreshServices', () => {
+            servicesProvider?.sendRefreshCommand();
+        }),
+        commands.registerCommand('craft.previewServices', () => {
+            servicesProvider?.sendPreviewCommand();
+        }),
+        commands.registerCommand('craft.toggleDomainOptions', () => {
+            domainsProvider?.sendToggleOptionsCommand();
+        }),
+        commands.registerCommand('craft.toggleServiceOptions', () => {
+            servicesProvider?.sendToggleOptionsCommand();
         })
     );
 }

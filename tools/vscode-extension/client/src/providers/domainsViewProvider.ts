@@ -4,6 +4,7 @@ import { DslExtractService } from '../services/dslExtractService';
 import { Domain, DomainTreeState, UseCase, ServiceGroup, Service } from '../types/domain';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ServerCommands, BlockRange } from '../../../shared/lib/types/domain-extraction';
+import { WebviewMessages, ProviderMessages, SelectionActions } from '../types/messages';
 
 export class DomainsViewProvider implements WebviewViewProvider {
     public static readonly viewType = 'dslDomainView';
@@ -156,17 +157,20 @@ export class DomainsViewProvider implements WebviewViewProvider {
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
-                case 'preview':
+                case WebviewMessages.PREVIEW:
                     this.handlePreview(data.selectedDomains, data.selectedUseCases, data.diagramMode);
                     break;
-                case 'refresh':
+                case WebviewMessages.REFRESH:
                     this.handleRefresh();
                     break;
-                case 'setViewMode':
+                case WebviewMessages.SET_VIEW_MODE:
                     this.handleSetViewMode(data.viewMode);
                     break;
-                case 'ready':
+                case WebviewMessages.READY:
                     this.sendInitialData();
+                    break;
+                case WebviewMessages.SHOW_INFORMATION:
+                    window.showInformationMessage(data.message);
                     break;
             }
         });
@@ -380,12 +384,42 @@ export class DomainsViewProvider implements WebviewViewProvider {
         const filteredDomains = this.ensureValidDomains(this.filterDomainsChildren(visibleDomains));
 
         this._view.webview.postMessage({
-            type: 'dataRefresh',
+            type: ProviderMessages.DATA_REFRESH,
             data: {
                 domains: filteredDomains,
                 currentFile: this._state.currentFile,
                 viewMode: this._state.viewMode
             }
+        });
+    }
+
+    public sendSelectionCommand(action: 'selectAll' | 'selectNone' | 'selectCurrentFile') {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.SELECTION_COMMAND,
+            action: action
+        });
+    }
+
+    public sendRefreshCommand() {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.REFRESH_COMMAND
+        });
+    }
+
+    public sendPreviewCommand() {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.PREVIEW_COMMAND
+        });
+    }
+
+
+    public sendToggleOptionsCommand() {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.TOGGLE_OPTIONS_COMMAND
         });
     }
 
@@ -400,7 +434,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
         const filteredDomains = this.ensureValidDomains(this.filterDomainsChildren(visibleDomains));
 
         this._view.webview.postMessage({
-            type: 'initialData',
+            type: ProviderMessages.INITIAL_DATA,
             data: {
                 domains: filteredDomains,
                 currentFile: this._state.currentFile,

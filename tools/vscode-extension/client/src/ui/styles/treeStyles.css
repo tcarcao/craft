@@ -214,6 +214,16 @@ body {
     background: var(--vscode-list-hoverBackground);
 }
 
+.mode-btn:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.mode-btn:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
 /* Selection Info */
 .selection-info {
     font-size: 11px;
@@ -244,9 +254,27 @@ body {
 
 /* Tree Container */
 .tree-container {
-    max-height: 500px;
+    flex: 1;
     overflow-y: auto;
-    margin-bottom: 12px;
+    height: 100%;
+}
+
+/* Main layout containers */
+.domains-view {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Services view also needs the same layout */
+.services-view, div[data-testid="services-view"] {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.header {
+    flex-shrink: 0;
 }
 
 .no-domains {
@@ -289,6 +317,23 @@ body {
 /* Domain Nodes */
 .domain-node .node-content {
     font-weight: 500;
+    position: sticky;
+    top: 0;
+    background-color: var(--vscode-sideBar-background);
+    z-index: 999;
+    /* border-bottom: 1px solid var(--vscode-panel-border); */
+    /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); */
+}
+
+/* Service Group Nodes - also need sticky headers */
+.service-group-node .node-content {
+    position: sticky;
+    top: 0;
+    background-color: var(--vscode-sideBar-background);
+    z-index: 999;
+    /* border-bottom: 1px solid var(--vscode-panel-border); */
+    font-weight: 500;
+    /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); */
 }
 
 /* Subdomain Nodes */
@@ -296,12 +341,34 @@ body {
     margin-left: 20px;
     border-left: 1px solid var(--vscode-panel-border);
     padding-left: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Subdomain Headers - sticky positioning */
+.subdomain-node .node-content {
+    position: sticky;
+    top: 38px; /* Position just below domain/service group headers */
+    background-color: var(--vscode-sideBar-background);
+    z-index: 99; /* Lower than domain headers but higher than content */
+    padding: 4px 0;
+}
+
+/* Services within service groups should also be sticky */
+.service-group-node .subdomain-node .node-content {
+    position: sticky;
+    top: 38px; /* Position just below service group headers */
+    background-color: var(--vscode-sideBar-background);
+    z-index: 99;
+    padding: 4px 0;
 }
 
 /* Use Case Nodes */
 .usecase-node {
     margin-left: 30px;
     border-left: 1px solid var(--vscode-panel-border);
+    position: relative;
+    z-index: 1;
 }
 
 .usecase-node .node-content {
@@ -349,6 +416,48 @@ body {
 
 .expander:hover {
     background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.expander:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.expander:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Remove all focus indicators from span elements with role="button" */
+span[role="button"]:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+span[role="button"]:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Remove focus outlines from all button types */
+button:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+button:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.option-btn:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.option-btn:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 .expander-placeholder {
@@ -891,15 +1000,6 @@ body {
     }
 }
 
-/* Accessibility Improvements */
-.custom-checkbox:focus,
-.expander:focus,
-.action-btn:focus,
-.mode-btn:focus,
-.header-btn:focus {
-    outline: 2px solid var(--vscode-focusBorder);
-    outline-offset: 2px;
-}
 
 /* High Contrast Mode Support */
 @media (prefers-contrast: high) {

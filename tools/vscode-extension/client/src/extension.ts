@@ -22,7 +22,6 @@ let client: LanguageClient;
 export function activate(context: ExtensionContext) {
     startLanguageServer(context);
     registerDomainView(context, client);
-    registerPreviewCommands(context);
     registerTreeSitterHighlighting(context);
 }
 
@@ -108,6 +107,9 @@ function registerDomainView(context: ExtensionContext, client: LanguageClient) {
             serviceTreeProvider
         ),
     );
+    
+    // Register commands after providers are initialized
+    registerPreviewCommands(context, domainTreeProvider, serviceTreeProvider);
 }
 
 export function deactivate(): Thenable<void> | undefined {

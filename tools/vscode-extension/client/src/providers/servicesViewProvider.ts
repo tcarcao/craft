@@ -4,6 +4,7 @@ import { DslExtractService } from '../services/dslExtractService';
 import { ServiceTreeState, ServiceGroup, Service, UseCase, SubDomain } from '../types/domain';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ServerCommands } from '../../../shared/lib/types/domain-extraction';
+import { WebviewMessages, ProviderMessages, SelectionActions } from '../types/messages';
 
 export class ServicesViewProvider implements WebviewViewProvider {
     public static readonly viewType = 'dslServicesView';
@@ -159,17 +160,20 @@ export class ServicesViewProvider implements WebviewViewProvider {
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
-                case 'preview':
+                case WebviewMessages.PREVIEW:
                     this.handlePreview(data.selectedServices, data.selectedUseCases, data.focusInfo);
                     break;
-                case 'refresh':
+                case WebviewMessages.REFRESH:
                     this.handleRefresh();
                     break;
-                case 'setViewMode':
+                case WebviewMessages.SET_VIEW_MODE:
                     this.handleSetViewMode(data.viewMode);
                     break;
-                case 'ready':
+                case WebviewMessages.READY:
                     this.sendInitialData();
+                    break;
+                case WebviewMessages.SHOW_INFORMATION:
+                    window.showInformationMessage(data.message);
                     break;
             }
         });
@@ -345,12 +349,42 @@ export class ServicesViewProvider implements WebviewViewProvider {
         const filteredGroups = this.filterServiceGroupChildren(visibleGroups);
 
         this._view.webview.postMessage({
-            type: 'dataRefresh',
+            type: ProviderMessages.DATA_REFRESH,
             data: {
                 serviceGroups: filteredGroups,
                 currentFile: this._state.currentFile,
                 viewMode: this._state.viewMode
             }
+        });
+    }
+
+    public sendSelectionCommand(action: 'selectAll' | 'selectNone') {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.SELECTION_COMMAND,
+            action: action
+        });
+    }
+
+    public sendRefreshCommand() {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.REFRESH_COMMAND
+        });
+    }
+
+    public sendPreviewCommand() {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.PREVIEW_COMMAND
+        });
+    }
+
+
+    public sendToggleOptionsCommand() {
+        if (!this._view) return;
+        this._view.webview.postMessage({
+            type: ProviderMessages.TOGGLE_OPTIONS_COMMAND
         });
     }
 
@@ -365,7 +399,7 @@ export class ServicesViewProvider implements WebviewViewProvider {
         const filteredGroups = this.filterServiceGroupChildren(visibleGroups);
 
         this._view.webview.postMessage({
-            type: 'initialData',
+            type: ProviderMessages.INITIAL_DATA,
             data: {
                 serviceGroups: filteredGroups,
                 currentFile: this._state.currentFile,

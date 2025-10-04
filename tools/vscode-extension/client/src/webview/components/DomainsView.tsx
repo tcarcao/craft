@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Domain, SubDomain, UseCase, UseCaseReference } from '../../types/domain';
+import { WebviewMessages, ProviderMessages, SelectionActions } from '../../types/messages';
 
 interface DomainsViewProps {
   vscode: any;
@@ -22,25 +23,92 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
     isLoading: true
   });
 
+  // Helper function to merge new domain data while preserving UI state
+  const mergeDomainData = (newDomains: Domain[], existingDomains: Domain[]): Domain[] => {
+    return newDomains.map(newDomain => {
+      const existingDomain = existingDomains.find(d => d.id === newDomain.id);
+      if (!existingDomain) {
+        return newDomain; // New domain, use as-is
+      }
+
+      return {
+        ...newDomain,
+        selected: existingDomain.selected || false,
+        partiallySelected: existingDomain.partiallySelected || false,
+        expanded: existingDomain.expanded !== undefined ? existingDomain.expanded : newDomain.expanded,
+        subDomains: newDomain.subDomains.map(newSubDomain => {
+          const existingSubDomain = existingDomain.subDomains.find(sd => sd.id === newSubDomain.id);
+          if (!existingSubDomain) {
+            return newSubDomain; // New subdomain, use as-is
+          }
+
+          return {
+            ...newSubDomain,
+            selected: existingSubDomain.selected || false,
+            partiallySelected: existingSubDomain.partiallySelected || false,
+            expanded: existingSubDomain.expanded !== undefined ? existingSubDomain.expanded : newSubDomain.expanded,
+            useCases: newSubDomain.useCases.map(newUseCase => {
+              const existingUseCase = existingSubDomain.useCases.find(uc => uc.id === newUseCase.id);
+              return {
+                ...newUseCase,
+                selected: existingUseCase?.selected || false
+              };
+            })
+          };
+        })
+      };
+    });
+  };
+
   // Listen for data from extension
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const message = event.data;
       
       switch (message.type) {
-        case 'initialData':
+        case ProviderMessages.INITIAL_DATA:
           setState(prevState => ({
             ...prevState,
             ...message.data,
             isLoading: false
           }));
           break;
-        case 'dataRefresh':
+        case ProviderMessages.DATA_REFRESH:
           setState(prevState => ({
             ...prevState,
-            domains: message.data.domains,
+            domains: mergeDomainData(message.data.domains, prevState.domains),
             viewMode: message.data.viewMode || prevState.viewMode
           }));
+          break;
+        case ProviderMessages.SELECTION_COMMAND:
+          switch (message.action) {
+            case SelectionActions.SELECT_ALL:
+              selectAll();
+              break;
+            case SelectionActions.SELECT_NONE:
+              selectNone();
+              break;
+            case SelectionActions.SELECT_CURRENT_FILE:
+              selectCurrentFileOnly();
+              break;
+          }
+          break;
+        case ProviderMessages.REFRESH_COMMAND:
+          handleRefresh();
+          break;
+        case ProviderMessages.PREVIEW_COMMAND:
+          const selectedItems = getSelectedItems();
+          if (selectedItems.useCases.length === 0) {
+            vscode.postMessage({
+              type: WebviewMessages.SHOW_INFORMATION,
+              message: 'Please select at least one use case to preview the domain diagram.'
+            });
+            return;
+          }
+          handlePreview();
+          break;
+        case ProviderMessages.TOGGLE_OPTIONS_COMMAND:
+          toggleDiagramOptions();
           break;
       }
     };
@@ -48,10 +116,11 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
     window.addEventListener('message', handleMessage);
     
     // Request initial data
-    vscode.postMessage({ type: 'ready' });
+    vscode.postMessage({ type: WebviewMessages.READY });
 
     return () => window.removeEventListener('message', handleMessage);
   }, [vscode]);
+
 
   // ===== REACT STATE MANAGEMENT =====
 
@@ -221,7 +290,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
 
   const setViewMode = (mode: 'current' | 'workspace') => {
     setState(prev => ({ ...prev, viewMode: mode }));
-    vscode.postMessage({ type: 'setViewMode', viewMode: mode });
+    vscode.postMessage({ type: WebviewMessages.SET_VIEW_MODE, viewMode: mode });
   };
 
   const setDiagramMode = (mode: 'detailed' | 'architecture') => {
@@ -309,13 +378,23 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
   };
 
   const handleRefresh = () => {
-    vscode.postMessage({ type: 'refresh' });
+    vscode.postMessage({ type: WebviewMessages.REFRESH });
   };
 
   const handlePreview = () => {
     const selectedItems = getSelectedItems();
+    
+    if (selectedItems.useCases.length === 0) {
+      // Show a helpful message when no use cases are selected
+      vscode.postMessage({
+        type: WebviewMessages.SHOW_INFORMATION,
+        message: 'Please select at least one use case to preview the domain diagram.'
+      });
+      return;
+    }
+    
     vscode.postMessage({ 
-      type: 'preview', 
+      type: WebviewMessages.PREVIEW, 
       selectedDomains: selectedItems.domains,
       selectedUseCases: selectedItems.useCases,
       diagramMode: state.diagramMode
@@ -342,6 +421,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
     return { domains: selectedDomains, useCases: selectedUseCases };
   };
 
+
   // ===== CALCULATED VALUES =====
 
   const selectedCount = {
@@ -362,6 +442,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
         subAcc + subDomain.useCases.length, 0), 0)
   };
 
+
   // ===== RENDER =====
 
   if (state.isLoading) {
@@ -377,27 +458,6 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
     <div className="domains-view">
       {/* Header */}
       <div className="header">
-        <div className="header-row">
-          <h3 className="title">Domain Tree</h3>
-          <div className="header-actions">
-            {selectedCount.useCases > 0 && (
-              <button 
-                className="header-btn" 
-                onClick={handlePreview}
-                title="Preview"
-              >
-                <i className="codicon codicon-preview"></i>
-              </button>
-            )}
-            <button 
-              className="header-btn" 
-              onClick={handleRefresh}
-              title="Refresh domains"
-            >
-              <i className="codicon codicon-refresh"></i>
-            </button>
-          </div>
-        </div>
 
         <div className="view-mode-toggle">
           <button 
@@ -416,33 +476,31 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
           </button>
         </div>
         
-        <div className="diagram-options">
-          <div className="options-header" onClick={toggleDiagramOptions}>
-            <span className="options-title">Diagram Options</span>
-            <span className="options-expander">{state.optionsExpanded ? '▼' : '▶'}</span>
-          </div>
-          <div className="options-content" style={{ display: state.optionsExpanded ? 'block' : 'none' }}>
-            <div className="option-group">
-              <label className="option-label">Mode:</label>
-              <div className="option-toggle">
-                <button 
-                  className={`option-btn ${state.diagramMode === 'detailed' ? 'active' : ''}`}
-                  onClick={() => setDiagramMode('detailed')}
-                  title="Show detailed domain diagram with use cases"
-                >
-                  Detailed
-                </button>
-                <button 
-                  className={`option-btn ${state.diagramMode === 'architecture' ? 'active' : ''}`}
-                  onClick={() => setDiagramMode('architecture')}
-                  title="Show architecture view - subdomain connections only"
-                >
-                  Architecture
-                </button>
+        {state.optionsExpanded && (
+          <div className="diagram-options">
+            <div className="options-content">
+              <div className="option-group">
+                <label className="option-label">Mode:</label>
+                <div className="option-toggle">
+                  <button 
+                    className={`option-btn ${state.diagramMode === 'detailed' ? 'active' : ''}`}
+                    onClick={() => setDiagramMode('detailed')}
+                    title="Show detailed domain diagram with use cases"
+                  >
+                    Detailed
+                  </button>
+                  <button 
+                    className={`option-btn ${state.diagramMode === 'architecture' ? 'active' : ''}`}
+                    onClick={() => setDiagramMode('architecture')}
+                    title="Show architecture view - subdomain connections only"
+                  >
+                    Architecture
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
         
         <div className="selection-info">
           <div className="selection-summary">
@@ -485,20 +543,6 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
         )}
       </div>
 
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <div className="action-group">
-          <button className="action-btn" onClick={selectAll} title="Select all visible domains">
-            Select All
-          </button>
-          <button className="action-btn" onClick={selectNone} title="Deselect all domains">
-            Select None
-          </button>
-          <button className="action-btn" onClick={selectCurrentFileOnly} title="Select only domains from current file">
-            Current File Only
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
