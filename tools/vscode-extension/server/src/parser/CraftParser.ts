@@ -5,6 +5,7 @@ import { CraftParser } from "./generated/CraftParser.js";
 import { CustomErrorListener } from './ErrorListener.js';
 import { BlockRange } from '../../../shared/lib/types/domain-extraction.js';
 import { extractMinimalSubtree } from './DSLExtractor.js';
+import { Logger } from '../utils/Logger.js';
 
 export class Parser {
     parse(input: string) {
@@ -30,7 +31,7 @@ export class Parser {
             };
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
-            console.error('Parser error:', e);
+            Logger.error('Parser error:', e);
             return {
                 success: false,
                 errors: [e.message || 'Unknown parser error'],
@@ -60,7 +61,31 @@ export class Parser {
             return extractMinimalSubtree(ast, selectedRanges, originalText);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
-            console.error('Parser error:', e);
+            Logger.error('Parser error:', e);
+            return '';
+        }
+    }
+
+    extractArchitecturalBlocks(originalText: string): string {
+        try {
+            const [lexer, parser] = this.initializeParser(originalText);
+
+            // Remove default error listeners
+            parser.removeErrorListeners();
+            lexer.removeErrorListeners();
+
+            // Add custom error listener
+            const errorListener = new CustomErrorListener();
+            parser.addErrorListener(errorListener);
+            lexer.addErrorListener(errorListener);
+
+            const ast = parser.dsl();
+
+            // Extract only architectural blocks (no specific ranges)
+            return extractMinimalSubtree(ast, [], originalText);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (e: any) {
+            Logger.error('Parser error:', e);
             return '';
         }
     }

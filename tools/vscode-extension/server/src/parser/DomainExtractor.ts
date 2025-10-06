@@ -4,6 +4,7 @@ import { Parser } from './CraftParser.js';
 import { DslContext} from './generated/CraftParser.js';
 import { ExtractionResult } from '../../../shared/lib/types/domain-extraction.js';
 import { DomainVisitor } from './DomainVisitor.js';
+import { Logger } from '../utils/Logger.js';
 
 
 export class DomainExtractor {
@@ -22,7 +23,7 @@ export class DomainExtractor {
         const result = this.parser.parse(text);
 
         if (!result.success || !result.tree) {
-            console.warn('Parse failed, returning empty result');
+            Logger.warn('Parse failed, returning empty result');
             return {
                 domains: [],
                 useCases: [],

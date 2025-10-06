@@ -2,6 +2,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node.js';
 import Parser from 'tree-sitter';
 import Craft from 'tree-sitter-craft';
+import { Logger } from '../utils/Logger.js';
 
 /**
  * Simple Tree-sitter based completion provider for Craft DSL
@@ -21,12 +22,12 @@ export class TreeSitterCompletionProvider {
       this.parser = new Parser();
       this.parser.setLanguage(Craft);
       
-      console.log('✅ TreeSitterCompletionProvider Native tree-sitter Craft completion provider ready');
-      console.log('✅ TreeSitterCompletionProvider Using native Node.js performance instead of WASM');
+      Logger.info('✅ TreeSitterCompletionProvider Native tree-sitter Craft completion provider ready');
+      Logger.info('✅ TreeSitterCompletionProvider Using native Node.js performance instead of WASM');
       
     } catch (error) {
-      console.error('Failed to initialize native Tree-sitter completion provider:', error);
-      console.log('Tree-sitter completion will be disabled');
+      Logger.error('Failed to initialize native Tree-sitter completion provider:', error);
+      Logger.warn('Tree-sitter completion will be disabled');
     }
   }
 
@@ -35,7 +36,7 @@ export class TreeSitterCompletionProvider {
     await this.initializationPromise;
     
     if (!this.parser) {
-      console.warn('Tree-sitter parser not initialized - completion disabled');
+      Logger.warn('Tree-sitter parser not initialized - completion disabled');
       return [];
     }
 
@@ -48,14 +49,14 @@ export class TreeSitterCompletionProvider {
       
       // Only suggest at document root when line is empty or starts with whitespace
       if (textBeforeCursor.trim().length === 0) {
-        console.log('TreeSitter: Providing root-level completions');
+        Logger.debug('TreeSitter: Providing root-level completions');
         return this.getRootCompletions();
       }
       
       // No completions in other contexts for now
       return [];
     } catch (error) {
-      console.error('Error getting Tree-sitter completions:', error);
+      Logger.error('Error getting Tree-sitter completions:', error);
       return [];
     }
   }

@@ -58,6 +58,12 @@
                     "type": "string",
                     "default": "",
                     "description": "Default path for downloading diagram files. If empty, user will be prompted to choose location for each download."
+                },
+                "craft.logging.level": {
+                    "type": "string",
+                    "enum": ["off", "error", "warn", "info", "debug", "trace"],
+                    "default": "warn",
+                    "description": "Logging verbosity level. Use 'debug' or 'trace' for development and troubleshooting."
                 }
             }
         },

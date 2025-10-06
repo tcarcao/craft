@@ -10,6 +10,7 @@ import {
 } from '../../../shared/lib/types/domain-extraction';
 import { Domain, DomainC, DSLDiscoveryOptions, DSLDiscoveryResult, Service, ServiceGroup, SubDomain, UseCase, UseCaseReference } from '../types/domain';
 import { ServicesViewService } from './servicesViewService';
+import { Logger } from '../utils/Logger';
 
 export class DslExtractService {
     private readonly servicesViewService = new ServicesViewService();
@@ -34,7 +35,7 @@ export class DslExtractService {
                 arguments: []
             });
 
-            console.log('workspaceResult', workspaceResult);
+            Logger.debug('workspaceResult', workspaceResult);
 
             // Convert the results to Domain structure
             const domains = this.convertToDomainStructure(workspaceResult, currentFileResult);
@@ -42,7 +43,7 @@ export class DslExtractService {
 
             return { domains, serviceGroups };
         } catch (error) {
-            console.error('Error discovering domains:', error);
+            Logger.error('Error discovering domains:', error);
             throw error;
         }
     }
@@ -51,7 +52,7 @@ export class DslExtractService {
         workspaceResult: ExtractionResult,
         currentFileResult: ExtractionResult | null
     ): Domain[] {
-        console.log('convertToDomainStructure, workspaceResult', workspaceResult);
+        Logger.debug('convertToDomainStructure, workspaceResult', workspaceResult);
         if (workspaceResult.error) {
             throw new Error(workspaceResult.error);
         }

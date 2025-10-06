@@ -39,8 +39,8 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
 
       return {
         ...newGroup,
-        selected: existingGroup.selected || false,
-        partiallySelected: existingGroup.partiallySelected || false,
+        selected: existingGroup.selected !== undefined ? existingGroup.selected : newGroup.selected,
+        partiallySelected: existingGroup.partiallySelected !== undefined ? existingGroup.partiallySelected : newGroup.partiallySelected,
         expanded: existingGroup.expanded !== undefined ? existingGroup.expanded : newGroup.expanded,
         services: newGroup.services.map(newService => {
           const existingService = existingGroup.services.find(s => s.id === newService.id);
@@ -50,8 +50,8 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
 
           return {
             ...newService,
-            selected: existingService.selected || false,
-            partiallySelected: existingService.partiallySelected || false,
+            selected: existingService.selected !== undefined ? existingService.selected : newService.selected,
+            partiallySelected: existingService.partiallySelected !== undefined ? existingService.partiallySelected : newService.partiallySelected,
             expanded: existingService.expanded !== undefined ? existingService.expanded : newService.expanded,
             subDomains: newService.subDomains.map(newSubDomain => {
               const existingSubDomain = existingService.subDomains.find(sd => sd.id === newSubDomain.id);
@@ -61,14 +61,14 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
 
               return {
                 ...newSubDomain,
-                selected: existingSubDomain.selected || false,
-                partiallySelected: existingSubDomain.partiallySelected || false,
+                selected: existingSubDomain.selected !== undefined ? existingSubDomain.selected : newSubDomain.selected,
+                partiallySelected: existingSubDomain.partiallySelected !== undefined ? existingSubDomain.partiallySelected : newSubDomain.partiallySelected,
                 expanded: existingSubDomain.expanded !== undefined ? existingSubDomain.expanded : newSubDomain.expanded,
                 useCases: newSubDomain.useCases.map(newUseCase => {
                   const existingUseCase = existingSubDomain.useCases.find(uc => uc.id === newUseCase.id);
                   return {
                     ...newUseCase,
-                    selected: existingUseCase?.selected || false
+                    selected: existingUseCase?.selected !== undefined ? existingUseCase.selected : newUseCase.selected
                   };
                 })
               };
@@ -93,11 +93,14 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
           }));
           break;
         case ProviderMessages.DATA_REFRESH:
-          setState(prevState => ({
-            ...prevState,
-            serviceGroups: mergeServiceData(message.data.serviceGroups, prevState.serviceGroups),
-            viewMode: message.data.viewMode || prevState.viewMode
-          }));
+          setState(prevState => {
+            const mergedData = mergeServiceData(message.data.serviceGroups, prevState.serviceGroups);
+            return {
+              ...prevState,
+              serviceGroups: mergedData,
+              viewMode: message.data.viewMode || prevState.viewMode
+            };
+          });
           break;
         case ProviderMessages.SELECTION_COMMAND:
           switch (message.action) {
@@ -114,17 +117,20 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
           break;
         case ProviderMessages.PREVIEW_COMMAND:
           // Check if any services are selected before previewing
-          const hasSelectedServices = state.serviceGroups.some(group => 
-            group.services.some(service => service.selected || service.partiallySelected)
-          );
-          if (!hasSelectedServices) {
-            vscode.postMessage({
-              type: WebviewMessages.SHOW_INFORMATION,
-              message: 'Please select at least one service to preview the services diagram.'
-            });
-            return;
-          }
-          preview();
+          // const hasSelectedServices = state.serviceGroups.some(group => 
+          //   group.services.some(service => service.selected || service.partiallySelected)
+          // );
+          // if (!hasSelectedServices) {
+          //   vscode.postMessage({
+          //     type: WebviewMessages.SHOW_INFORMATION,
+          //     message: 'Please select at least one service to preview the services diagram.'
+          //   });
+          //   return;
+          // }
+          setState(currentState => {
+            previewWithState(currentState);
+            return currentState;
+          });
           break;
         case ProviderMessages.TOGGLE_OPTIONS_COMMAND:
           toggleDiagramOptions();
@@ -150,7 +156,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
       serviceGroups: prev.serviceGroups.map(group => {
         if (group.name === groupId) {
           const newSelected = !group.selected && !group.partiallySelected;
-          const updatedGroup = {
+          return {
             ...group,
             selected: newSelected,
             partiallySelected: false,
@@ -169,7 +175,6 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
               }))
             }))
           };
-          return updatedGroup;
         }
         return group;
       })
@@ -474,16 +479,16 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
     vscode.postMessage({ type: WebviewMessages.REFRESH });
   };
 
-  const preview = () => {    
+  const previewWithState = (currentState: ViewState) => {    
     // Extract services and use cases for the preview
     const selectedServices: any[] = [];
     const selectedUseCases: any[] = [];
     const focusInfo = {
-      boundariesMode: state.boundariesMode,
-      showDatabases: state.showDatabases
+      boundariesMode: currentState.boundariesMode,
+      showDatabases: currentState.showDatabases
     };
     
-    state.serviceGroups.forEach(group => {
+    currentState.serviceGroups.forEach(group => {
       group.services.forEach(service => {
         if (service.selected || service.partiallySelected) {
           selectedServices.push(service);
@@ -498,14 +503,15 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
       });
     });
     
-    if (selectedServices.length === 0) {
-      // Show a helpful message when no services are selected
+    if (selectedServices.length === 0 && selectedUseCases.length === 0) {
+      // Show a helpful message when nothing is selected
       vscode.postMessage({
         type: WebviewMessages.SHOW_INFORMATION,
-        message: 'Please select at least one service to preview the services diagram.'
+        message: 'Please select at least one service or use case to preview the services diagram.'
       });
       return;
     }
+
     
     vscode.postMessage({ 
       type: WebviewMessages.PREVIEW, 
@@ -514,6 +520,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
       focusInfo
     });
   };
+
 
   // ===== CALCULATED VALUES =====
 
@@ -539,6 +546,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({ vscode }) => {
       </div>
     );
   }
+
 
   return (
     <div className="services-view">

@@ -18,10 +18,17 @@
 	},
 	"scripts": {
 		"generate": "antlr-ng -Dlanguage=TypeScript ../../antlr-grammar/Craft.g4 -v true -o src/parser/generated --exact-output-dir",
-		"postinstall": "npm run generate"
+		"postinstall": "npm run generate",
+		"test": "jest",
+		"test:watch": "jest --watch"
 	},
 	"devDependencies": {
 		"antlr-ng": "^1.0.10",
-		"node-gyp": "^11.4.2"
+		"node-gyp": "^11.4.2",
+		"@types/jest": "^29.5.5",
+		"@types/node": "20.19.19",
+		"jest": "^29.7.0",
+		"ts-jest": "^29.1.1",
+		"typescript": "^5.2.2"
 	}
 }

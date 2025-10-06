@@ -5,6 +5,7 @@ import { Domain, DomainTreeState, UseCase, ServiceGroup, Service } from '../type
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ServerCommands, BlockRange } from '../../../shared/lib/types/domain-extraction';
 import { WebviewMessages, ProviderMessages, SelectionActions } from '../types/messages';
+import { Logger } from '../utils/Logger';
 
 export class DomainsViewProvider implements WebviewViewProvider {
     public static readonly viewType = 'dslDomainView';
@@ -183,23 +184,23 @@ export class DomainsViewProvider implements WebviewViewProvider {
         if (activeEditor && this.isCraftDocument(activeEditor.document)) {
             // We switched to a DSL file - update current file
             this._state.currentFile = activeEditor.document.fileName;
-            console.log('Current file updated to:', this._state.currentFile);
+            Logger.debug('Current file updated to:', this._state.currentFile);
             
             // Only refresh if file actually changed and we're in current file mode
             if (this._isInitialized && 
                 this._state.currentFile !== previousFile && 
                 this._state.viewMode === 'current') {
-                console.log('File changed from', previousFile, 'to', this._state.currentFile, '- refresh needed');
+                Logger.debug('File changed from', previousFile, 'to', this._state.currentFile, '- refresh needed');
                 return true; // Refresh needed
             } else {
-                console.log('No refresh needed - same file or not in current mode');
+                Logger.debug('No refresh needed - same file or not in current mode');
                 return false; // No refresh needed
             }
         } else {
             // We switched to a non-DSL file or panel (like preview)
             // Keep the current file state - don't set it to undefined
             // This maintains the trees showing the last DSL file's content
-            console.log('Switched to non-DSL file/panel, maintaining current file state:', this._state.currentFile);
+            Logger.debug('Switched to non-DSL file/panel, maintaining current file state:', this._state.currentFile);
             
             // Don't refresh or clear the trees when switching to non-DSL files
             return false; // No refresh needed
@@ -249,7 +250,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
                 this.refreshDomains();
             } catch (error) {
                 // If validation fails, don't refresh to avoid flickering
-                console.warn('Skipping refresh due to invalid DSL content during editing');
+                Logger.warn('Skipping refresh due to invalid DSL content during editing');
             }
         }, delay);
     }
@@ -305,7 +306,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
                 this.sendDataRefresh();
             }
         } catch (error) {
-            console.error('Error refreshing domains:', error);
+            Logger.error('Error refreshing domains:', error);
             window.showErrorMessage(`Failed to refresh domains: ${error}`);
         }
     }
@@ -322,7 +323,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
             command: ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES,
             arguments: [blockRanges]
         });
-        console.log(partialDsl);
+        Logger.debug('Partial DSL extracted:', partialDsl);
         
         // Choose diagram type based on mode
         const diagramType = diagramMode === 'architecture' ? 'Architecture' : 'Domain';

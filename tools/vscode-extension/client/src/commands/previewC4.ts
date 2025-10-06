@@ -1,5 +1,6 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
 import { previewC4Diagram, handlePreviewError, handleDownload, C4PreviewOptions } from './previewCommon';
+import { Logger } from '../utils/Logger';
 
 const viewType = 'c4Preview';
 const panelTitle = 'C4 Preview';
@@ -50,7 +51,7 @@ async function updateC4Preview(
     options?: C4PreviewOptions
 ): Promise<void> {
     if (!previewPanel) {
-        console.log('Preview panel not available');
+        Logger.debug('Preview panel not available');
         return;
     }
 

@@ -4,6 +4,7 @@ import { TextEdit, Range, Position } from 'vscode-languageserver/node.js';
 // Import native tree-sitter with tree-sitter-craft npm package
 import Parser from 'tree-sitter';
 import Craft from 'tree-sitter-craft';
+import { Logger } from '../utils/Logger.js';
 
 /**
  * Tree-sitter based formatter for Craft DSL
@@ -23,12 +24,12 @@ export class TreeSitterFormatterProvider {
       this.parser = new Parser();
       this.parser.setLanguage(Craft);
       
-      console.log('✅ TreeSitterFormatterProvider Native tree-sitter Craft formatter ready');
-      console.log('✅ TreeSitterFormatterProvider Using native Node.js performance instead of WASM');
+      Logger.info('✅ TreeSitterFormatterProvider Native tree-sitter Craft formatter ready');
+      Logger.info('✅ TreeSitterFormatterProvider Using native Node.js performance instead of WASM');
       
     } catch (error) {
-      console.error('Failed to initialize native Tree-sitter parser:', error);
-      console.log('Tree-sitter formatter will be disabled');
+      Logger.error('Failed to initialize native Tree-sitter parser:', error);
+      Logger.warn('Tree-sitter formatter will be disabled');
     }
   }
 
@@ -37,7 +38,7 @@ export class TreeSitterFormatterProvider {
     await this.initializationPromise;
     
     if (!this.parser) {
-      console.warn('Tree-sitter parser not initialized - formatting disabled');
+      Logger.warn('Tree-sitter parser not initialized - formatting disabled');
       return [];
     }
     

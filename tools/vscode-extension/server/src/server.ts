@@ -32,6 +32,7 @@ import {
 import { Parser } from './parser/CraftParser.js';
 import { TreeSitterCompletionProvider } from './parser/TreeSitterCompletionProvider.js';
 import { TreeSitterFormatterProvider } from './parser/TreeSitterFormatterProvider.js';
+import { Logger } from './utils/Logger.js';
 
 // Create connection and documents manager
 const connection = createConnection(ProposedFeatures.all);
@@ -54,6 +55,10 @@ connection.onInitialize((params: InitializeParams) => {
 
   treeSitterDiagnosticProvider = new TreeSitterDiagnosticProvider();
   domainExtractor = new DomainExtractor();
+  
+  // Initialize logger with default level
+  const logLevel = params.initializationOptions?.logLevel || 'warn';
+  Logger.setLevel(logLevel);
 
   const result: InitializeResult = {
     capabilities: {
@@ -77,8 +82,18 @@ connection.onInitialize((params: InitializeParams) => {
   return result;
 });
 
+// Handle configuration changes
+connection.onDidChangeConfiguration(change => {
+  if (change.settings.craft?.logging?.level) {
+    Logger.setLevel(change.settings.craft.logging.level);
+    Logger.info('Log level updated to:', change.settings.craft.logging.level);
+  }
+});
+
 // Handle custom commands
 connection.onExecuteCommand((params: ExecuteCommandParams) => {
+  Logger.debugServerRequest(params.command, params.arguments);
+  
   switch (params.command) {
     case ServerCommands.EXTRACT_DOMAINS_FROM_CURRENT:
       return handleExtractDomains(params.arguments);
@@ -87,6 +102,7 @@ connection.onExecuteCommand((params: ExecuteCommandParams) => {
     case ServerCommands.EXTRACT_PARTIAL_DSL_FROM_BLOCK_RANGES:
       return handleExtractPartialDslFromBlockRanges(params.arguments, workspaceParser);
     default:
+      Logger.warn('Unknown command:', params.command);
       return { error: 'Unknown command' };
   }
 });
@@ -108,7 +124,7 @@ connection.onDocumentFormatting(async (params: DocumentFormattingParams): Promis
       newText: formattedContent
     }];
   } catch (error) {
-    connection.console.error(`Error formatting document: ${error}`);
+    Logger.error('Error formatting document:', error);
     return [];
   }
 });
@@ -117,20 +133,20 @@ connection.onDocumentFormatting(async (params: DocumentFormattingParams): Promis
 connection.onCompletion(async (params: CompletionParams): Promise<CompletionItem[]> => {
   const document = documents.get(params.textDocument.uri);
   if (!document) {
-    connection.console.log('No document found for completion');
+    Logger.debug('No document found for completion');
     return [];
   }
 
-  connection.console.log(`Completion requested at ${params.position.line}:${params.position.character}, context: ${JSON.stringify(params.context)}`);
+  Logger.debug(`Completion requested at ${params.position.line}:${params.position.character}, context: ${JSON.stringify(params.context)}`);
 
   try {
     // Use only Tree-sitter completion provider
     const completions = await treeSitterCompletionProvider.getCompletions(document, params.position);
-    connection.console.log(`Tree-sitter completions: ${completions.length} items`);
+    Logger.debug(`Tree-sitter completions: ${completions.length} items`);
     
     // If no completions from tree-sitter, provide basic fallback
     if (completions.length === 0) {
-      connection.console.log('Providing fallback completions');
+      Logger.debug('Providing fallback completions');
       return [
         {
           label: 'actors',
@@ -158,7 +174,7 @@ connection.onCompletion(async (params: CompletionParams): Promise<CompletionItem
     
     return completions;
   } catch (error) {
-    connection.console.error(`Error providing completions: ${error}`);
+    Logger.error('Error providing completions:', error);
     return [];
   }
 });
@@ -181,7 +197,7 @@ async function formatCraftDocument(content: string): Promise<string> {
     
     return content; // No changes needed
   } catch (error) {
-    connection.console.error(`Error in formatting: ${error}`);
+    Logger.error('Error in formatting:', error);
     return content; // Return original content on any error
   }
 }
@@ -369,11 +385,20 @@ async function handleExtractPartialDslFromBlockRanges(args: any[] | undefined, w
       (content, info) => {
         const fileRanges = rangesByFile[info.uri] || [];
         
-        // Sort ranges by line number for this file
-        fileRanges.sort((a, b) => a.startLine - b.startLine);
-
-        const extractedDSL: string = parser.extractSelectedDSL(content, fileRanges);
-        combinedParts.push(extractedDSL);
+        if (fileRanges.length > 0) {
+          // File has specific selections - extract selected ranges + architectural blocks
+          fileRanges.sort((a, b) => a.startLine - b.startLine);
+          const extractedDSL: string = parser.extractSelectedDSL(content, fileRanges);
+          if (extractedDSL.trim()) {
+            combinedParts.push(extractedDSL);
+          }
+        } else {
+          // File has no selections - extract only architectural blocks (actors, arch, exposure)
+          const architecturalDSL: string = parser.extractArchitecturalBlocks(content);
+          if (architecturalDSL.trim()) {
+            combinedParts.push(architecturalDSL);
+          }
+        }
       },
       {
         include: ['**/*.craft'],
@@ -398,7 +423,7 @@ async function validateDocument(document: TextDocument): Promise<void> {
     connection.sendDiagnostics({ uri: document.uri, diagnostics: treeSitterDiagnostics });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
-    connection.console.error(`Error validating document: ${error.message}`);
+    Logger.error('Error validating document:', error.message);
   }
 }
 

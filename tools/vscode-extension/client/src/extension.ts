@@ -14,6 +14,7 @@ import { ServicesViewProvider } from './providers/servicesViewProvider';
 import { DslExtractService } from './services/dslExtractService';
 import { ServicesViewService } from './services/servicesViewService';
 import { TreeSitterHighlightProvider } from './TreeSitterHighlightProvider';
+import { Logger } from './utils/Logger';
 
 let domainTreeProvider: DomainsViewProvider;
 let serviceTreeProvider: ServicesViewProvider;
@@ -26,7 +27,7 @@ export function activate(context: ExtensionContext) {
 }
 
 function registerTreeSitterHighlighting(context: ExtensionContext) {
-    console.log('🔄 Registering Tree-sitter semantic highlighting for Craft...');
+    Logger.info('🔄 Registering Tree-sitter semantic highlighting for Craft...');
     
     // Register Tree-sitter semantic highlighting for Craft files
     const highlightProvider = new TreeSitterHighlightProvider();
@@ -38,8 +39,8 @@ function registerTreeSitterHighlighting(context: ExtensionContext) {
     );
     
     context.subscriptions.push(disposable);
-    console.log('✅ Tree-sitter syntax highlighting registered for Craft language');
-    console.log('📋 Token legend:', highlightProvider.legend);
+    Logger.info('✅ Tree-sitter syntax highlighting registered for Craft language');
+    Logger.debug('📋 Token legend:', highlightProvider.legend);
 }
 
 function startLanguageServer(context: ExtensionContext) {
@@ -60,7 +61,11 @@ function startLanguageServer(context: ExtensionContext) {
         documentSelector: [{ scheme: 'file', language: 'craft' }],
         synchronize: {
             // Notify the server about file changes to '.clientrc files contained in the workspace
-            fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
+            fileEvents: workspace.createFileSystemWatcher('**/.clientrc'),
+            configurationSection: 'craft'
+        },
+        initializationOptions: {
+            logLevel: workspace.getConfiguration('craft').get('logging.level', 'warn')
         }
     };
 

@@ -17,15 +17,47 @@ export function extractMinimalSubtree(
   const selectedNodes = findNodesInRanges(ast, selectedRanges);
   const requiredNodes = new Set<ParserRuleContext>();
   
-  // Collect all required nodes (selected + their ancestry)
-  selectedNodes.forEach(node => {
-    collectAncestryPath(node, requiredNodes);
-  });
+  
+  
+  
+  // Check if this is architectural-only extraction (no specific ranges)
+  const isArchitecturalOnly = selectedRanges.length === 0;
+  
+  if (!isArchitecturalOnly) {
+    // Collect all required nodes (selected + their ancestry)
+    selectedNodes.forEach(node => {
+      collectAncestryPath(node, requiredNodes);
+    });
+  }
 
-  // NEW: Auto-include arch, domains, and exposure blocks when services/domains are selected
+  // Always include architectural context (actors, arch, exposure, domains)
+  
   const architecturalNodes = findArchitecturalNodes(ast);
+  
   architecturalNodes.forEach(node => {
-    collectAncestryPath(node, requiredNodes);
+    const nodeType = node.constructor.name;
+    
+    if (isArchitecturalOnly) {
+      // For architectural-only extraction, include all architectural blocks
+      if (nodeType === 'ArchContext' || 
+          nodeType === 'Actors_defContext' || 
+          nodeType === 'Actor_defContext' ||
+          nodeType === 'ExposureContext' ||
+          nodeType === 'Domain_defContext' ||
+          nodeType === 'Domains_defContext') {
+        collectAncestryPath(node, requiredNodes);
+      }
+    } else {
+      // For normal extraction, always include all architectural context
+      if (nodeType === 'ArchContext' || 
+          nodeType === 'Actors_defContext' || 
+          nodeType === 'Actor_defContext' ||
+          nodeType === 'ExposureContext' ||
+          nodeType === 'Domain_defContext' ||
+          nodeType === 'Domains_defContext') {
+        collectAncestryPath(node, requiredNodes);
+      }
+    }
   });
   
   // Generate the minimal DSL text
@@ -114,11 +146,10 @@ function collectAncestryPath(node: ParserRuleContext, requiredNodes: Set<ParserR
   
   addAllDescendants(node);
   
-  // Add ancestry path to root
-  let current: ParserRuleContext | undefined = node;
+  // Add minimal ancestry path to root (only structural parents, not siblings)
+  let current: ParserRuleContext | undefined = node.parent instanceof ParserRuleContext ? node.parent : undefined;
   while (current) {
     requiredNodes.add(current);
-    // Use the parent property from ParserRuleContext
     current = current.parent instanceof ParserRuleContext ? current.parent : undefined;
   }
 }
@@ -187,12 +218,14 @@ function generateMinimalDSL(
     switch (nodeType) {
       case 'DslContext':
         return generateDsl(node, depth);
-      case 'ServicesContext':
+      case 'Services_defContext':
         return generateServices(node, depth);
       case 'Use_caseContext':
         return generateUseCase(node, depth);
       case 'Service_definitionContext':
         return generateServiceDefinition(node, depth);
+      case 'Service_blockContext':
+        return generateServiceBlock(node, depth);
       case 'ScenarioContext':
         return generateScenario(node, depth);
       case 'ArchContext':
@@ -203,6 +236,7 @@ function generateMinimalDSL(
       case 'ExposureContext':
         return generateExposure(node, depth);
       case 'Actor_defContext':
+        return generateActorDef(node, depth);
       case 'Actors_defContext':
         return generateActorDefs(node, depth);
       default:
@@ -239,24 +273,49 @@ function generateMinimalDSL(
     
     let result = 'services {\n';
     
-    // Find service_definition_list
+    // Find service_block_list (not service_definition_list)
     let serviceList: ParseTree | null = null;
     for (let i = 0; i < node.getChildCount(); i++) {
       const child = node.getChild(i)!;
-      if (child.constructor.name === 'Service_definition_listContext') {
+      if (child.constructor.name === 'Service_block_listContext') {
         serviceList = child;
         break;
       }
     }
     
     if (serviceList && hasRequiredDescendant(serviceList)) {
-      result += generateServiceDefinitionList(serviceList, depth + 1);
+      result += generateServiceBlockList(serviceList, depth + 1);
     }
     
     result += '\n}\n\n';
     return result;
   }
   
+  function generateServiceBlockList(node: ParseTree, depth: number): string {
+    let result = '';
+    const serviceBlocks: ParseTree[] = [];
+    
+    for (let i = 0; i < node.getChildCount(); i++) {
+      const child = node.getChild(i)!;
+      if (child.constructor.name === 'Service_blockContext') {
+        serviceBlocks.push(child);
+      }
+    }
+    
+    const requiredServices = serviceBlocks.filter(service => 
+      service instanceof ParserRuleContext && shouldIncludeNode(service)
+    );
+    
+    requiredServices.forEach((service, index) => {
+      result += generateServiceBlock(service, depth);
+      if (index < requiredServices.length - 1) {
+        result += ',\n';
+      }
+    });
+    
+    return result;
+  }
+
   function generateServiceDefinitionList(node: ParseTree, depth: number): string {
     let result = '';
     const serviceDefinitions: ParseTree[] = [];
@@ -269,7 +328,7 @@ function generateMinimalDSL(
     }
     
     const requiredServices = serviceDefinitions.filter(service => 
-      service instanceof ParserRuleContext && (shouldIncludeNode(service) || hasRequiredDescendant(service))
+      service instanceof ParserRuleContext && shouldIncludeNode(service)
     );
     
     requiredServices.forEach((service, index) => {
@@ -282,6 +341,40 @@ function generateMinimalDSL(
     return result;
   }
   
+  function generateServiceBlock(node: ParseTree, depth: number): string {
+    const indent = '  '.repeat(depth);
+    
+    // Get service name
+    let nameNode: ParseTree | null = null;
+    for (let i = 0; i < node.getChildCount(); i++) {
+      const child = node.getChild(i)!;
+      if (child.constructor.name === 'Service_nameContext') {
+        nameNode = child;
+        break;
+      }
+    }
+    const serviceName = nameNode ? getNodeText(nameNode as ParserRuleContext, lines) : '';
+    
+    let result = `${indent}${serviceName} {\n`;
+    
+    // Get properties
+    let propertiesNode: ParseTree | null = null;
+    for (let i = 0; i < node.getChildCount(); i++) {
+      const child = node.getChild(i)!;
+      if (child.constructor.name === 'Service_propertiesContext') {
+        propertiesNode = child;
+        break;
+      }
+    }
+    
+    if (propertiesNode) {
+      result += generateServiceProperties(propertiesNode, depth + 1);
+    }
+    
+    result += `${indent}}`;
+    return result;
+  }
+
   function generateServiceDefinition(node: ParseTree, depth: number): string {
     const indent = '  '.repeat(depth);
     
@@ -436,8 +529,14 @@ function generateMinimalDSL(
     return exposureText + '\n\n';
   }
 
+  function generateActorDef(node: ParseTree, depth: number): string {
+    // For single actor definition, include as-is
+    const actorText = getNodeText(node as ParserRuleContext, lines);
+    return actorText + '\n\n';
+  }
+
   function generateActorDefs(node: ParseTree, depth: number): string {
-    // For actor definitions, include the entire block as-is
+    // For actor definitions block, include the entire block as-is
     const actorText = getNodeText(node as ParserRuleContext, lines);
     return actorText + '\n\n';
   }
@@ -472,4 +571,5 @@ function generateMinimalDSL(
   
   return generateNode(rootNode);
 }
+
 

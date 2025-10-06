@@ -3,6 +3,7 @@ import { CraftLexer } from "./generated/CraftLexer";
 import { CraftParser } from "./generated/CraftParser";
 import { CompletionItem, CompletionItemKind, Position } from 'vscode-languageserver/node.js';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { Logger } from '../utils/Logger.js';
 
 export interface CompletionContext {
   ruleStack: string[];
@@ -20,7 +21,7 @@ export class CraftCompletionProvider {
       const context = this.analyzeCompletionContext(document, position);
       return this.getCompletionsForContext(context);
     } catch (error) {
-      console.error('Error getting completions:', error);
+      Logger.error('Error getting completions:', error);
       return [];
     }
   }

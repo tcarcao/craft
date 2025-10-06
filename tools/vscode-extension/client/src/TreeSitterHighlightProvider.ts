@@ -1,5 +1,6 @@
 import { DocumentSemanticTokensProvider, SemanticTokensLegend, SemanticTokens, CancellationToken, TextDocument } from 'vscode';
 import * as path from 'path';
+import { Logger } from './utils/Logger';
 
 // Import web-tree-sitter (WASM-based for distribution)
 const TreeSitter = require('web-tree-sitter');
@@ -77,21 +78,21 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
 
   private async initializeParser(): Promise<void> {
     try {
-      console.log('🔄 Initializing Tree-sitter for Craft highlighting...');
+      Logger.info('🔄 Initializing Tree-sitter for Craft highlighting...');
       
       // Use the same pattern as the formatter that works
       const { Parser } = TreeSitter;
       
       if (typeof Parser.init === 'function') {
         await Parser.init();
-        console.log('✅ Tree-sitter WASM runtime initialized');
+        Logger.info('✅ Tree-sitter WASM runtime initialized');
         
         // Load the Craft WASM language from extension resources
         const wasmPath = path.join(__dirname, '../../resources/tree-sitter-craft.wasm');
-        console.log(`📁 Loading WASM from: ${wasmPath}`);
+        Logger.debug(`📁 Loading WASM from: ${wasmPath}`);
         
         this.language = await TreeSitter.Language.load(wasmPath);
-        console.log('✅ Craft language loaded for highlighting');
+        Logger.info('✅ Craft language loaded for highlighting');
         
         // Create parser and set language
         this.parser = new TreeSitter.Parser();
@@ -103,20 +104,20 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
           const fs = require('fs');
           const highlightsQuery = fs.readFileSync(highlightsPath, 'utf8');
           this.query = new TreeSitter.Query(this.language, highlightsQuery);
-          console.log('✅ Tree-sitter highlights query loaded');
+          Logger.info('✅ Tree-sitter highlights query loaded');
         } catch (queryError) {
-          console.warn('⚠️ Could not load highlights query, falling back to manual traversal:', queryError);
+          Logger.warn('⚠️ Could not load highlights query, falling back to manual traversal:', queryError);
         }
         
-        console.log('✅ Tree-sitter Craft highlighter ready');
+        Logger.info('✅ Tree-sitter Craft highlighter ready');
       } else {
         throw new Error('Parser.init method not found');
       }
       
     } catch (error) {
-      console.error('❌ Failed to initialize Tree-sitter highlighter:', error);
-      console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
-      console.log('Tree-sitter highlighting will be disabled');
+      Logger.error('❌ Failed to initialize Tree-sitter highlighter:', error);
+      Logger.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+      Logger.warn('Tree-sitter highlighting will be disabled');
     }
   }
 
@@ -128,22 +129,22 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
     await this.initializationPromise;
     
     if (!this.parser || !this.language) {
-      console.warn('Tree-sitter parser not initialized - highlighting disabled');
+      Logger.warn('Tree-sitter parser not initialized - highlighting disabled');
       return new SemanticTokens(new Uint32Array(0));
     }
 
     try {
       const text = document.getText();
-      console.log(`🔍 Parsing document: ${document.fileName}, length: ${text.length}`);
+      Logger.debug(`🔍 Parsing document: ${document.fileName}, length: ${text.length}`);
       
       const tree = this.parser.parse(text);
-      console.log(`📊 Parse tree root: ${tree.rootNode.type}, children: ${tree.rootNode.children?.length || 0}`);
+      Logger.debug(`📊 Parse tree root: ${tree.rootNode.type}, children: ${tree.rootNode.children?.length || 0}`);
       
       const tokens = this.extractSemanticTokens(tree.rootNode, document);
       
-      console.log(`🎨 Generated ${tokens.length} semantic tokens for ${document.fileName}`);
+      Logger.debug(`🎨 Generated ${tokens.length} semantic tokens for ${document.fileName}`);
       if (tokens.length > 0) {
-        console.log('First few tokens:', tokens.slice(0, 3).map(t => ({
+        Logger.trace('First few tokens:', tokens.slice(0, 3).map(t => ({
           line: t.line,
           char: t.startChar,
           length: t.length,
@@ -154,7 +155,7 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
       
       return new SemanticTokens(this.encodeTokens(tokens));
     } catch (error) {
-      console.error('Error providing semantic tokens:', error);
+      Logger.error('Error providing semantic tokens:', error);
       return new SemanticTokens(new Uint32Array(0));
     }
   }
@@ -177,7 +178,7 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
     // Use query-based approach only
     if (this.query) {
       const captures = this.query.captures(node);
-      console.log(`🔍 Query-based highlighting found ${captures.length} captures`);
+      Logger.debug(`🔍 Query-based highlighting found ${captures.length} captures`);
       
       for (const capture of captures) {
         const captureNode = capture.node;
@@ -205,9 +206,9 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
         }
       }
       
-      console.log(`🎨 Query-based highlighting generated ${tokens.length} tokens`);
+      Logger.debug(`🎨 Query-based highlighting generated ${tokens.length} tokens`);
     } else {
-      console.warn('⚠️ Tree-sitter query not available - no highlighting');
+      Logger.warn('⚠️ Tree-sitter query not available - no highlighting');
     }
     
     // Sort tokens by position

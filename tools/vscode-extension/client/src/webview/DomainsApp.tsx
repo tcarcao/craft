@@ -19,5 +19,5 @@ if (container) {
   const root = createRoot(container);
   root.render(<App />);
 } else {
-  console.error('Root container not found');
+  // Root container not found - webview initialization error
 }

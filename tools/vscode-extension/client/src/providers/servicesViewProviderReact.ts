@@ -3,6 +3,7 @@ import { LanguageClient } from 'vscode-languageclient/node';
 import { ServiceTreeState, ServiceGroup } from '../types/domain';
 import { ServicesViewService } from '../services/servicesViewService';
 import { DslExtractService } from '../services/dslExtractService';
+import { Logger } from '../utils/Logger';
 
 export class ServicesViewProviderReact implements WebviewViewProvider {
     public static readonly viewType = 'dslServicesViewReact';
@@ -220,7 +221,7 @@ export class ServicesViewProviderReact implements WebviewViewProvider {
 
             this.sendFullState();
         } catch (error) {
-            console.error('Failed to initialize services view:', error);
+            Logger.error('Failed to initialize services view:', error);
             this._state.isLoading = false;
             this.sendFullState();
         }

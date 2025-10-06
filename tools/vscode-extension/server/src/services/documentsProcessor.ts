@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { URI } from 'vscode-uri';
 import { glob } from 'glob';
+import { Logger } from '../utils/Logger.js';
 
 interface DocumentInfo {
     uri: string;
@@ -108,7 +109,7 @@ export class WorkspaceParser {
                 processedUris.add(doc.uri);
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : String(error);
-                console.error(`Error processing open document ${doc.uri}:`, errorMsg);
+                Logger.error(`Error processing open document ${doc.uri}:`, errorMsg);
                 
                 if (continueOnError) {
                     results.push({
@@ -179,7 +180,7 @@ export class WorkspaceParser {
 
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : String(error);
-                console.error(`Error processing file ${filePath}:`, errorMsg);
+                Logger.error(`Error processing file ${filePath}:`, errorMsg);
                 
                 if (continueOnError) {
                     results.push({
@@ -293,7 +294,7 @@ export class WorkspaceParser {
                 onResult?.(processedDoc);
                 processed++;
             } catch (error) {
-                console.error(`Error processing ${doc.uri}:`, error);
+                Logger.error(`Error processing ${doc.uri}:`, error);
             }
         }
         
@@ -328,7 +329,7 @@ export class WorkspaceParser {
                 
                 onResult?.(processedDoc);
             } catch (error) {
-                console.error(`Error processing ${filePath}:`, error);
+                Logger.error(`Error processing ${filePath}:`, error);
             }
             
             processed++;
@@ -442,7 +443,7 @@ export class WorkspaceParser {
                     allFiles.push(...files);
                 }
             } catch (error) {
-                console.error(`Error scanning workspace folder ${folderPath}:`, error);
+                Logger.error(`Error scanning workspace folder ${folderPath}:`, error);
             }
         }
 
@@ -534,7 +535,7 @@ export function setupWorkspaceParser(
         if (params.processor) {
             // Note: In real implementation, you'd need to safely evaluate the processor
             // This is just a placeholder - serializing functions is complex
-            console.warn('Custom processor from client not supported in this example');
+            Logger.warn('Custom processor from client not supported in this example');
         }
         return await parser.processAllDocuments(
             (content, info) => ({ length: content.length, ...info }),
@@ -590,7 +591,7 @@ export const ExampleUsages = {
             }
         );
         
-        console.debug(`Processed ${results.length} files`);
+        Logger.debug(`Processed ${results.length} files`);
         return results;
     },
 
@@ -625,12 +626,12 @@ export const ExampleUsages = {
             {
                 include: ['**/*.ts'],
                 onProgress: (processed, total, current) => {
-                    console.debug(`[${processed}/${total}] Processing: ${path.basename(current)}`);
+                    Logger.debug(`[${processed}/${total}] Processing: ${path.basename(current)}`);
                 },
                 onResult: (result) => {
                     results.push(result);
                     // if (result.result.complexity > 20) {
-                    //     console.warn(`High complexity detected in ${result.uri}`);
+                    //     Logger.warn(`High complexity detected in ${result.uri}`);
                     // }
                 }
             }

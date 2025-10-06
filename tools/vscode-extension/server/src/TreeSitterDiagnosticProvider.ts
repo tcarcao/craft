@@ -10,6 +10,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 // Import native tree-sitter with tree-sitter-craft npm package
 import Parser from 'tree-sitter';
 import Craft from 'tree-sitter-craft';
+import { Logger } from './utils/Logger.js';
 
 export class TreeSitterDiagnosticProvider {
     private parser: any = null;
@@ -25,10 +26,10 @@ export class TreeSitterDiagnosticProvider {
             this.parser = new Parser();
             this.parser.setLanguage(Craft);
             
-            console.log('Native Tree Sitter diagnostic provider initialized successfully');
-            console.log('Using native Node.js performance instead of WASM');
+            Logger.info('Native Tree Sitter diagnostic provider initialized successfully');
+            Logger.info('Using native Node.js performance instead of WASM');
         } catch (error) {
-            console.error('Failed to initialize native Tree Sitter diagnostic provider:', error);
+            Logger.error('Failed to initialize native Tree Sitter diagnostic provider:', error);
         }
     }
 

@@ -33,8 +33,8 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
 
       return {
         ...newDomain,
-        selected: existingDomain.selected || false,
-        partiallySelected: existingDomain.partiallySelected || false,
+        selected: existingDomain.selected !== undefined ? existingDomain.selected : newDomain.selected,
+        partiallySelected: existingDomain.partiallySelected !== undefined ? existingDomain.partiallySelected : newDomain.partiallySelected,
         expanded: existingDomain.expanded !== undefined ? existingDomain.expanded : newDomain.expanded,
         subDomains: newDomain.subDomains.map(newSubDomain => {
           const existingSubDomain = existingDomain.subDomains.find(sd => sd.id === newSubDomain.id);
@@ -44,14 +44,14 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
 
           return {
             ...newSubDomain,
-            selected: existingSubDomain.selected || false,
-            partiallySelected: existingSubDomain.partiallySelected || false,
+            selected: existingSubDomain.selected !== undefined ? existingSubDomain.selected : newSubDomain.selected,
+            partiallySelected: existingSubDomain.partiallySelected !== undefined ? existingSubDomain.partiallySelected : newSubDomain.partiallySelected,
             expanded: existingSubDomain.expanded !== undefined ? existingSubDomain.expanded : newSubDomain.expanded,
             useCases: newSubDomain.useCases.map(newUseCase => {
               const existingUseCase = existingSubDomain.useCases.find(uc => uc.id === newUseCase.id);
               return {
                 ...newUseCase,
-                selected: existingUseCase?.selected || false
+                selected: existingUseCase?.selected !== undefined ? existingUseCase.selected : newUseCase.selected
               };
             })
           };
@@ -97,15 +97,10 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
           handleRefresh();
           break;
         case ProviderMessages.PREVIEW_COMMAND:
-          const selectedItems = getSelectedItems();
-          if (selectedItems.useCases.length === 0) {
-            vscode.postMessage({
-              type: WebviewMessages.SHOW_INFORMATION,
-              message: 'Please select at least one use case to preview the domain diagram.'
-            });
-            return;
-          }
-          handlePreview();
+          setState(currentState => {
+            handlePreviewWithState(currentState);
+            return currentState;
+          });
           break;
         case ProviderMessages.TOGGLE_OPTIONS_COMMAND:
           toggleDiagramOptions();
@@ -381,31 +376,31 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
     vscode.postMessage({ type: WebviewMessages.REFRESH });
   };
 
-  const handlePreview = () => {
-    const selectedItems = getSelectedItems();
+  const handlePreviewWithState = (currentState: ViewState) => {
+    const selectedItems = getSelectedItemsFromState(currentState);
     
-    if (selectedItems.useCases.length === 0) {
-      // Show a helpful message when no use cases are selected
-      vscode.postMessage({
-        type: WebviewMessages.SHOW_INFORMATION,
-        message: 'Please select at least one use case to preview the domain diagram.'
-      });
-      return;
-    }
+    // if (selectedItems.useCases.length === 0) {
+    //   // Show a helpful message when no use cases are selected
+    //   vscode.postMessage({
+    //     type: WebviewMessages.SHOW_INFORMATION,
+    //     message: 'Please select at least one use case to preview the domain diagram.'
+    //   });
+    //   return;
+    // }
     
     vscode.postMessage({ 
       type: WebviewMessages.PREVIEW, 
       selectedDomains: selectedItems.domains,
       selectedUseCases: selectedItems.useCases,
-      diagramMode: state.diagramMode
+      diagramMode: currentState.diagramMode
     });
   };
 
-  const getSelectedItems = () => {
+  const getSelectedItemsFromState = (currentState: ViewState) => {
     const selectedDomains: Domain[] = [];
     const selectedUseCases: UseCase[] = [];
     
-    state.domains.forEach(domain => {
+    currentState.domains.forEach(domain => {
       if (domain.selected || domain.partiallySelected) {
         selectedDomains.push(domain);
       }
@@ -431,15 +426,6 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ vscode }) => {
     useCases: state.domains.reduce((acc, domain) => 
       acc + domain.subDomains.reduce((subAcc, subDomain) => 
         subAcc + subDomain.useCases.filter(uc => uc.selected).length, 0), 0)
-  };
-  
-  const totalCount = {
-    domains: state.domains.length,
-    subDomains: state.domains.reduce((acc, domain) => 
-      acc + domain.subDomains.length, 0),
-    useCases: state.domains.reduce((acc, domain) => 
-      acc + domain.subDomains.reduce((subAcc, subDomain) => 
-        subAcc + subDomain.useCases.length, 0), 0)
   };
 
 
@@ -819,9 +805,8 @@ const CrossReferencesList: React.FC<CrossReferencesListProps> = ({ references })
     return icons[role];
   };
 
-  const navigateToUseCase = (useCaseId: string) => {
+  const navigateToUseCase = (_useCaseId: string) => {
     // TODO: Implement navigation to use case
-    console.debug('Navigate to use case:', useCaseId);
   };
 
   return (

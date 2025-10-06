@@ -1,5 +1,6 @@
 import { window, ViewColumn, WebviewPanel } from 'vscode';
 import { previewDomainDiagram, handlePreviewError, handleDownload, DomainPreviewOptions } from './previewCommon';
+import { Logger } from '../utils/Logger';
 
 const viewType = 'domainPreview';
 const panelTitle = 'Domain Preview';
@@ -54,7 +55,7 @@ export async function updateDomainPreview(
     options?: DomainPreviewOptions
 ): Promise<void> {
     if (!previewPanel) {
-        console.log('Preview panel not available');
+        Logger.debug('Preview panel not available');
         return;
     }
 
