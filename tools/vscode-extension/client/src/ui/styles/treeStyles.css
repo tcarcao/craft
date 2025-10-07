@@ -49,9 +49,9 @@ body {
 
 /* Header Section */
 .header {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     padding-bottom: 12px;
-    border-bottom: 1px solid var(--vscode-panel-border);
+    background-color: var(--vscode-sideBarSectionHeader-background);
 }
 
 .header-row {
@@ -233,13 +233,18 @@ body {
 .selection-summary {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+    min-width: 0; /* Prevent overflow */
 }
 
 .count-item {
     display: flex;
     align-items: center;
     gap: 2px;
+    white-space: nowrap; /* Keep count + label together */
+    flex-shrink: 0; /* Prevent shrinking */
 }
 
 .count-number {
@@ -988,11 +993,6 @@ button:focus-visible {
     .header-row {
         flex-direction: column;
         gap: 8px;
-    }
-    
-    .selection-summary {
-        flex-direction: column;
-        gap: 4px;
     }
     
     .quick-actions {

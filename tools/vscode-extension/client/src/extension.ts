@@ -21,9 +21,10 @@ let serviceTreeProvider: ServicesViewProvider;
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
-    startLanguageServer(context);
-    registerDomainView(context, client);
     registerTreeSitterHighlighting(context);
+    startLanguageServer(context).then(() => {
+        registerDomainView(context, client);
+    });
 }
 
 function registerTreeSitterHighlighting(context: ExtensionContext) {
@@ -43,9 +44,9 @@ function registerTreeSitterHighlighting(context: ExtensionContext) {
     Logger.debug('📋 Token legend:', highlightProvider.legend);
 }
 
-function startLanguageServer(context: ExtensionContext) {
+async function startLanguageServer(context: ExtensionContext) {
     const serverModule = context.asAbsolutePath(
-		path.join('server', 'out', 'server.js')
+		path.join('dist', 'server.js')
 	);
 
     const serverOptions: ServerOptions = {
@@ -76,7 +77,7 @@ function startLanguageServer(context: ExtensionContext) {
         clientOptions
     );
 
-    client.start();
+    await client.start();
 }
 
 function registerDomainView(context: ExtensionContext, client: LanguageClient) {

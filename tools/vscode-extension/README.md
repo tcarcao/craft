@@ -1,93 +1,139 @@
 # Craft Language Extension
 
-This extension provides syntax highlighting and language support for Craft Language files.
+This extension provides comprehensive language support for Craft DSL files including syntax highlighting, language server features, and interactive domain/service visualization.
+
+## Features
+
+- **Syntax Highlighting**: Tree-sitter based semantic highlighting for Craft DSL
+- **Language Server**: Real-time validation, completion, and formatting
+- **Domain Visualization**: Interactive tree views for domains and use cases
+- **Service Visualization**: Explore services, boundaries, and architectural relationships
+- **Live Preview**: Generate C4, context map, sequence, and domain diagrams
+- **Real-time Updates**: Views update automatically as you edit DSL files
 
 ## Structure
 
 ```
 .
-├── client // Language Client
-│   ├── src
-│   │   ├── test // End to End tests for Language Client / Server
-│   │   └── extension.ts // Language Client entry point
-├── package.json // The extension manifest.
-└── server // Language Server
-    └── src
-        └── server.ts // Language Server entry point
+├── client/                 # Language Client & UI
+│   ├── src/
+│   │   ├── extension.ts    # Main extension entry point
+│   │   ├── providers/      # Webview providers for domain/service views
+│   │   ├── services/       # DSL extraction and processing services
+│   │   ├── webview/        # React components for tree views
+│   │   └── TreeSitterHighlightProvider.ts
+├── server/                 # Language Server
+│   └── src/
+│       └── server.ts       # Language server implementation
+├── resources/              # Tree-sitter grammar and queries
+├── dist/                   # Bundled extension files
+└── package.json           # Extension manifest and build scripts
 ```
 
-## Features
+## Installation & Packaging
 
-- Syntax highlighting for:
-  - System definitions
-  - Bounded contexts
-  - Aggregates and components
-  - Services and events
-  - DDD patterns
-  - Technology stacks
-  - AWS services
-- Code folding
-- Comment toggling
-- Bracket matching
+### For Users
+1. Download the latest `.vsix` from releases
+2. Install: `code --install-extension craft-0.0.1.vsix`
 
-## Installation
+### For Developers - Building from Source
 
-1. Clone this repository
-2. Copy the `vscode-extension` folder
-3. Run:
+#### Prerequisites
 ```bash
-cd vscode-extension
+# Install dependencies
 npm install
-vsce package
+```
+
+#### Development Workflow
+```bash
+# Development mode (watch files, rebuild on changes)
+npm run dev
+
+# Debug in VS Code
+# Press F5 to launch Extension Development Host
+# Uses debug configuration for sourcemaps
+```
+
+#### Production Packaging
+```bash
+# Build optimized bundle
+npm run bundle
+
+# Package extension
+npx @vscode/vsce package
+
+# Install locally
 code --install-extension craft-0.0.1.vsix
 ```
 
+## Build Scripts
+
+- `npm run bundle` - Production build (minified, optimized)
+- `npm run dev` - Development build with watch mode  
+- `npm run debug` - Debug build with sourcemaps
+- `npm run bundle-client` - Bundle main extension code
+- `npm run bundle-server` - Bundle language server
+- `npm run bundle-webviews` - Bundle React webview components
+- `npm run copy-static-assets` - Copy CSS and icon assets
+
+## Extension Architecture
+
+### Bundled Structure (`dist/`)
+- `client.js` - Main extension bundle (~711KB)
+- `server.js` - Language server bundle (~1.4MB) 
+- `webview/domains.js` - Domain tree React app (~158KB)
+- `webview/services.js` - Services tree React app (~161KB)
+- `styles/treeStyles.css` - UI styles
+- `@vscode/codicons/` - VS Code icons
+- `tree-sitter-XXXXX.wasm` - Tree-sitter grammar (~206KB)
+
+### Key Components
+- **TreeSitterHighlightProvider**: Semantic syntax highlighting
+- **DomainsViewProvider**: Interactive domain exploration
+- **ServicesViewProvider**: Service architecture visualization  
+- **Language Server**: Validation, completion, formatting via tree-sitter
+
 ## Development
 
-- Run `npm install` in this folder. This installs all necessary npm modules in both the client and server folder
-- Open VS Code on this folder.
-- Press Ctrl+Shift+B to start compiling the client and server in [watch mode](https://code.visualstudio.com/docs/editor/tasks#:~:text=The%20first%20entry%20executes,the%20HelloWorld.js%20file.).
-- Switch to the Run and Debug View in the Sidebar (Ctrl+Shift+D).
-- Click to `Create a launch.json file`
+### Debug Configuration
+The extension includes two debug configurations:
 
-Example of its contents:
-```
-// A launch configuration that compiles the extension and then opens it inside a new window
-{
-	"version": "0.2.0",
-	"configurations": [
-		{
-			"type": "extensionHost",
-			"request": "launch",
-			"name": "Launch Client",
-			"runtimeExecutable": "${execPath}",
-			"args": ["--extensionDevelopmentPath=${workspaceRoot}"],
-			"outFiles": [
-				"${workspaceRoot}/client/out/**/*.js",
-				"${workspaceRoot}/server/out/**/*.js"
-			],
-			"autoAttachChildProcesses": true,
-			"preLaunchTask": {
-				"type": "npm",
-				"script": "watch"
-			}
-		}
-	]
-}
+1. **Launch Client (TypeScript)** - Debug uncompiled TypeScript source
+2. **Launch Client (Bundled)** - Debug bundled production code
+
+### File Watching
+```bash
+# Watch and rebuild everything
+npm run dev
+
+# Watch individual components
+npm run dev-client      # Main extension
+npm run dev-server      # Language server  
+npm run dev-webviews    # React webviews
 ```
 
-- Select `Launch Client` from the drop down (if it is not already).
-- Press ▷ to run the launch config (F5).
-- In the [Extension Development Host](https://code.visualstudio.com/api/get-started/your-first-extension#:~:text=Then%2C%20inside%20the%20editor%2C%20press%20F5.%20This%20will%20compile%20and%20run%20the%20extension%20in%20a%20new%20Extension%20Development%20Host%20window.) instance of VSCode, open a document in 'plain text' language mode.
-  - Type `j` or `t` to see `Javascript` and `TypeScript` completion.
-  - Enter text content such as `AAA aaa BBB`. The extension will emit diagnostics for all words in all-uppercase.
-
-1. Open the extension in VS Code
-2. Press F5 to run the extension in debug mode
-3. Open a `.craft` file to test syntax highlighting
+### Testing
+1. Press F5 in VS Code to launch Extension Development Host
+2. Open a `.craft` file to test:
+   - Syntax highlighting
+   - Domain/Service tree views (sidebar)
+   - Preview commands (Ctrl+Shift+C/M/S/D)
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Submit a pull request
+3. Make changes and test thoroughly
+4. Run `npm run bundle` to ensure production build works
+5. Submit a pull request
+
+## Publishing
+
+```bash
+# Build and package
+npm run bundle
+npx @vscode/vsce package
+
+# Publish to marketplace (requires publisher account)
+npx @vscode/vsce publish
+```

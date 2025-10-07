@@ -40,15 +40,15 @@ export class DomainsViewProvider implements WebviewViewProvider {
         if (!this._view) return '';
 
         const scriptUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'out', 'webview', 'domains.js')
+            Uri.joinPath(this._extensionUri, 'dist', 'webview', 'domains.js')
         );
 
         const codiconsUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'out', '@vscode/codicons', 'dist', 'codicon.css')
+            Uri.joinPath(this._extensionUri, 'dist', '@vscode/codicons', 'dist', 'codicon.css')
         );
 
         const stylesUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'out', 'styles', 'treeStyles.css')
+            Uri.joinPath(this._extensionUri, 'dist', 'styles', 'treeStyles.css')
         );
 
         // Generate a nonce for security
@@ -137,7 +137,7 @@ export class DomainsViewProvider implements WebviewViewProvider {
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [
-                Uri.joinPath(this._extensionUri, 'client', 'out')
+                Uri.joinPath(this._extensionUri, 'dist')
             ]
         };
 

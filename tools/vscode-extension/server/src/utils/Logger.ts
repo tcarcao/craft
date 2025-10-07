@@ -41,31 +41,31 @@ export class Logger {
     }
 
     public static error(...args: any[]): void {
-        if (this.currentLevel >= LogLevel.ERROR) {
+        if ((this.currentLevel ?? LogLevel.WARN) >= LogLevel.ERROR) {
             console.error(this.prefix, '[ERROR]', ...args);
         }
     }
 
     public static warn(...args: any[]): void {
-        if (this.currentLevel >= LogLevel.WARN) {
+        if ((this.currentLevel ?? LogLevel.WARN) >= LogLevel.WARN) {
             console.warn(this.prefix, '[WARN]', ...args);
         }
     }
 
     public static info(...args: any[]): void {
-        if (this.currentLevel >= LogLevel.INFO) {
+        if ((this.currentLevel ?? LogLevel.WARN) >= LogLevel.INFO) {
             console.info(this.prefix, '[INFO]', ...args);
         }
     }
 
     public static debug(...args: any[]): void {
-        if (this.currentLevel >= LogLevel.DEBUG) {
+        if ((this.currentLevel ?? LogLevel.WARN) >= LogLevel.DEBUG) {
             console.log(this.prefix, '[DEBUG]', ...args);
         }
     }
 
     public static trace(...args: any[]): void {
-        if (this.currentLevel >= LogLevel.TRACE) {
+        if ((this.currentLevel ?? LogLevel.WARN) >= LogLevel.TRACE) {
             console.log(this.prefix, '[TRACE]', ...args);
         }
     }
@@ -76,7 +76,7 @@ export class Logger {
     }
 
     public static traceNodes(operation: string, nodes: any[]): void {
-        if (this.currentLevel >= LogLevel.TRACE) {
+        if ((this.currentLevel ?? LogLevel.WARN) >= LogLevel.TRACE) {
             this.trace(`[AST Nodes] ${operation}:`);
             nodes.forEach((node, index) => {
                 if (node && node.constructor && node.start && node.stop) {

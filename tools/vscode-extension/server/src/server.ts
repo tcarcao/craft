@@ -35,26 +35,68 @@ import { TreeSitterFormatterProvider } from './parser/TreeSitterFormatterProvide
 import { Logger } from './utils/Logger.js';
 
 // Create connection and documents manager
-const connection = createConnection(ProposedFeatures.all);
-const documents = new TextDocuments<TextDocument>(TextDocument);
+console.log('SERVER: Starting Craft Language Server...');
+console.log('SERVER: Environment info:');
+console.log('SERVER: __dirname:', __dirname);
+console.log('SERVER: process.cwd():', process.cwd());
+console.log('SERVER: Node version:', process.version);
+console.log('SERVER: Process argv:', process.argv.join(' '));
+
+let connection: any;
+let documents: any;
+try {
+  connection = createConnection(ProposedFeatures.all);
+  console.log('SERVER: Connection created');
+  documents = new TextDocuments<TextDocument>(TextDocument);
+  console.log('SERVER: Document manager created');
+} catch (error) {
+  console.error('SERVER: Error creating connection or documents:', error);
+  console.error('SERVER: Error stack:', error.stack);
+  process.exit(1);
+}
 let treeSitterDiagnosticProvider: TreeSitterDiagnosticProvider;
 let domainExtractor: DomainExtractor;
-const workspaceParser = new WorkspaceParser(documents);
-const parser = new Parser();
+console.log('SERVER: Creating core components...');
+let workspaceParser: WorkspaceParser;
+let parser: Parser;
+let treeSitterCompletionProvider: TreeSitterCompletionProvider;
+let treeSitterFormatter: TreeSitterFormatterProvider;
 
-// Tree-sitter providers for language features
+try {
+  workspaceParser = new WorkspaceParser(documents);
+  console.log('SERVER: WorkspaceParser created');
+  parser = new Parser();
+  console.log('SERVER: Parser created');
 
-const treeSitterCompletionProvider = new TreeSitterCompletionProvider();
-const treeSitterFormatter = new TreeSitterFormatterProvider();
+  // Tree-sitter providers for language features
+  treeSitterCompletionProvider = new TreeSitterCompletionProvider();
+  console.log('SERVER: TreeSitterCompletionProvider created');
+  treeSitterFormatter = new TreeSitterFormatterProvider();
+  console.log('SERVER: TreeSitterFormatterProvider created');
+} catch (error) {
+  console.error('SERVER: Error creating core components:', error);
+  process.exit(1);
+}
 
 
 connection.onInitialize((params: InitializeParams) => {
+  console.log('SERVER: onInitialize called');
   if (params.workspaceFolders) {
+    console.log('SERVER: Setting workspace folders:', params.workspaceFolders.length);
     workspaceParser.setWorkspaceFolders(params.workspaceFolders);
   }
 
-  treeSitterDiagnosticProvider = new TreeSitterDiagnosticProvider();
-  domainExtractor = new DomainExtractor();
+  console.log('SERVER: Creating providers...');
+  try {
+    treeSitterDiagnosticProvider = new TreeSitterDiagnosticProvider();
+    console.log('SERVER: TreeSitterDiagnosticProvider created');
+    domainExtractor = new DomainExtractor();
+    console.log('SERVER: DomainExtractor created');
+    console.log('SERVER: All providers created successfully');
+  } catch (error) {
+    console.error('SERVER: Error creating providers:', error);
+    throw error;
+  }
   
   // Initialize logger with default level
   const logLevel = params.initializationOptions?.logLevel || 'warn';
@@ -428,5 +470,8 @@ async function validateDocument(document: TextDocument): Promise<void> {
 }
 
 // Start the language server
+console.log('SERVER: Setting up document listeners...');
 documents.listen(connection);
+console.log('SERVER: Starting connection listener...');
 connection.listen();
+console.log('SERVER: Language server started and listening');

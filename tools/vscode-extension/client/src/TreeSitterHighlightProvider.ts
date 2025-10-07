@@ -4,6 +4,8 @@ import { Logger } from './utils/Logger';
 
 // Import web-tree-sitter (WASM-based for distribution)
 const TreeSitter = require('web-tree-sitter');
+// Import the WASM file URL for esbuild
+const TreeSitterWasmUrl = require('web-tree-sitter/tree-sitter.wasm');
 
 /**
  * Tree-sitter based syntax highlighting provider for Craft DSL
@@ -84,11 +86,21 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
       const { Parser } = TreeSitter;
       
       if (typeof Parser.init === 'function') {
-        await Parser.init();
+        await Parser.init({
+          locateFile(scriptName: string, scriptDirectory: string) {
+            if (scriptName === 'tree-sitter.wasm') {
+              // Return absolute path to the bundled WASM file
+              return path.join(__dirname, TreeSitterWasmUrl);
+            }
+            return scriptName;
+          }
+        });
         Logger.info('✅ Tree-sitter WASM runtime initialized');
         
         // Load the Craft WASM language from extension resources
-        const wasmPath = path.join(__dirname, '../../resources/tree-sitter-craft.wasm');
+        // For bundled extensions, __dirname points to dist/, so go up to extension root
+        const extensionRoot = path.join(__dirname, '..');
+        const wasmPath = path.join(extensionRoot, 'resources/tree-sitter-craft.wasm');
         Logger.debug(`📁 Loading WASM from: ${wasmPath}`);
         
         this.language = await TreeSitter.Language.load(wasmPath);
@@ -100,7 +112,8 @@ export class TreeSitterHighlightProvider implements DocumentSemanticTokensProvid
         
         // Load highlights query
         try {
-          const highlightsPath = path.join(__dirname, '../../resources/queries/highlights.scm');
+          const extensionRoot = path.join(__dirname, '..');
+          const highlightsPath = path.join(extensionRoot, 'resources/queries/highlights.scm');
           const fs = require('fs');
           const highlightsQuery = fs.readFileSync(highlightsPath, 'utf8');
           this.query = new TreeSitter.Query(this.language, highlightsQuery);

@@ -5,7 +5,7 @@
 		{
 			"type": "extensionHost",
 			"request": "launch",
-			"name": "Launch Client",
+			"name": "Launch Client (TypeScript)",
 			"runtimeExecutable": "${execPath}",
 			"args": ["--extensionDevelopmentPath=${workspaceRoot}"],
 			"outFiles": [
@@ -18,5 +18,20 @@
 				"script": "watch"
 			}
 		},
+		{
+			"type": "extensionHost",
+			"request": "launch",
+			"name": "Launch Client (Bundled)",
+			"runtimeExecutable": "${execPath}",
+			"args": ["--extensionDevelopmentPath=${workspaceRoot}"],
+			"outFiles": [
+				"${workspaceRoot}/dist/**/*.js"
+			],
+			"autoAttachChildProcesses": true,
+			"preLaunchTask": {
+				"type": "npm",
+				"script": "debug"
+			}
+		}
 	]
 }

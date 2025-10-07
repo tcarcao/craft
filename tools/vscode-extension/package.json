@@ -3,38 +3,61 @@
     "displayName": "Craft Language",
     "description": "Syntax highlighting for Craft architecture language",
     "version": "0.0.1",
-    "main": "./client/out/extension",
+    "publisher": "tcarcao",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tcarcao/craft-vscode-extension"
+    },
+    "main": "./dist/client.js",
     "engines": {
-        "vscode": "^1.60.0"
+        "vscode": "^1.75.0"
     },
     "dependencies": {
+        "antlr4ng": "^3.0.16",
         "axios": "^1.0.0",
-        "tree-sitter-craft": "^0.1.0",
+        "glob": "^11.0.3", 
+        "tree-sitter": "^0.25.0",
+        "tree-sitter-craft": "^0.1.3",
         "vscode-languageclient": "^9.0.1",
         "vscode-languageserver": "^9.0.1",
-        "vscode-languageserver-textdocument": "^1.0.12"
+        "vscode-languageserver-textdocument": "^1.0.12",
+        "vscode-uri": "^3.1.0"
     },
     "scripts": {
-        "vscode:prepublish": "npm run compile",
+        "vscode:prepublish": "npm run bundle",
         "compile": "npm run copy-tree-sitter && tsc -b && cd client && npm run compile",
         "copy-tree-sitter": "cp node_modules/tree-sitter-craft/tree-sitter-craft.wasm resources/ && cp -r node_modules/tree-sitter-craft/queries/* resources/queries/",
         "watch": "tsc -b -w",
         "lint": "eslint",
-        "postinstall": "cd client && npm install && cd ../server && npm install && cd .. && npm run copy-tree-sitter"
+        "postinstall": "cd client && npm install && cd ../server && npm install && cd .. && npm run copy-tree-sitter",
+        "bundle": "npm run copy-tree-sitter && npm run bundle-client && npm run bundle-server && npm run bundle-webviews && npm run copy-static-assets",
+        "bundle-client": "esbuild ./client/src/extension.ts --bundle --outfile=dist/client.js --external:vscode --format=cjs --platform=node --minify --loader:.wasm=file",
+        "bundle-webviews": "mkdir -p dist/webview && esbuild ./client/src/webview/DomainsApp.tsx --bundle --outfile=dist/webview/domains.js --format=iife --platform=browser --minify && esbuild ./client/src/webview/ServicesApp.tsx --bundle --outfile=dist/webview/services.js --format=iife --platform=browser --minify",
+        "copy-static-assets": "mkdir -p dist/styles dist/@vscode/codicons/dist && cp client/src/ui/styles/treeStyles.css dist/styles/ && cp -r client/node_modules/@vscode/codicons/dist/* dist/@vscode/codicons/dist/",
+        "bundle-server": "esbuild ./server/src/server.ts --bundle --outfile=dist/server.js --external:vscode --external:tree-sitter --external:tree-sitter-craft --format=cjs --platform=node",
+        "dev": "npm run copy-tree-sitter && npm run copy-static-assets && npm run dev-client & npm run dev-server & npm run dev-webviews",
+        "dev-client": "esbuild ./client/src/extension.ts --bundle --outfile=dist/client.js --external:vscode --format=cjs --platform=node --sourcemap --watch --loader:.wasm=file",
+        "dev-webviews": "mkdir -p dist/webview && esbuild ./client/src/webview/DomainsApp.tsx --bundle --outfile=dist/webview/domains.js --format=iife --platform=browser --sourcemap --watch & esbuild ./client/src/webview/ServicesApp.tsx --bundle --outfile=dist/webview/services.js --format=iife --platform=browser --sourcemap --watch",
+        "dev-server": "esbuild ./server/src/server.ts --bundle --outfile=dist/server.js --external:vscode --external:tree-sitter --external:tree-sitter-craft --format=cjs --platform=node --sourcemap --watch",
+        "debug": "npm run copy-tree-sitter && npm run copy-static-assets && npm run debug-webviews && npm run debug-client && npm run debug-server",
+        "debug-client": "esbuild ./client/src/extension.ts --bundle --outfile=dist/client.js --external:vscode --format=cjs --platform=node --sourcemap --loader:.wasm=file",
+        "debug-webviews": "mkdir -p dist/webview && esbuild ./client/src/webview/DomainsApp.tsx --bundle --outfile=dist/webview/domains.js --format=iife --platform=browser --sourcemap && esbuild ./client/src/webview/ServicesApp.tsx --bundle --outfile=dist/webview/services.js --format=iife --platform=browser --sourcemap",
+        "debug-server": "esbuild ./server/src/server.ts --bundle --outfile=dist/server.js --external:vscode --external:tree-sitter --external:tree-sitter-craft --format=cjs --platform=node --sourcemap"
     },
     "devDependencies": {
         "@eslint/js": "^9.13.0",
         "@stylistic/eslint-plugin": "^2.9.0",
         "@types/mocha": "^10.0.6",
         "@types/node": "^20",
+        "@vscode/vsce": "^3.6.2",
+        "esbuild": "^0.25.10",
         "eslint": "^9.13.0",
         "mocha": "^10.3.0",
         "typescript": "^5.6.2",
         "typescript-eslint": "^8.11.0"
     },
     "categories": [
-        "Programming Languages",
-        "Themes"
+        "Programming Languages"
     ],
     "contributes": {
         "configuration": {
@@ -61,7 +84,14 @@
                 },
                 "craft.logging.level": {
                     "type": "string",
-                    "enum": ["off", "error", "warn", "info", "debug", "trace"],
+                    "enum": [
+                        "off",
+                        "error",
+                        "warn",
+                        "info",
+                        "debug",
+                        "trace"
+                    ],
                     "default": "warn",
                     "description": "Logging verbosity level. Use 'debug' or 'trace' for development and troubleshooting."
                 }
@@ -272,60 +302,285 @@
             {
                 "language": "craft",
                 "scopes": {
-                    "craft-flow-keyword": ["keyword.control.flow.craft"],
-                    "craft-services-keyword": ["keyword.control.services.craft"],
-                    "craft-arch-keyword": ["keyword.control.arch.craft"],
-                    "craft-exposure-keyword": ["keyword.control.exposure.craft"],
-                    "craft-domain-keyword": ["keyword.control.domain.craft"],
-                    "craft-actor-keyword": ["keyword.control.actor.craft"],
-                    "craft-actors-keyword": ["keyword.control.actors.craft"],
-                    "craft-actor-type": ["keyword.other.actor-type.craft"],
-                    "craft-domains-property": ["keyword.other.property.domains.craft"],
-                    "craft-language-property": ["keyword.other.property.language.craft"],
-                    "craft-data-stores-property": ["keyword.other.property.data-stores.craft"],
-                    "craft-to-property": ["keyword.other.property.to.craft"],
-                    "craft-through-property": ["keyword.other.property.through.craft"],
-                    "craft-presentation-section": ["keyword.other.section.presentation.craft"],
-                    "craft-gateway-section": ["keyword.other.section.gateway.craft"],
-                    "craft-asks-verb": ["keyword.other.asks.craft"],
-                    "craft-notifies-verb": ["keyword.other.notifies.craft"],
-                    "craft-listens-verb": ["keyword.other.listens.craft"],
-                    "craft-returns-verb": ["keyword.other.returns.craft"],
-                    "craft-service-name": ["entity.name.type.service.craft"],
-                    "craft-domain-name": ["entity.name.type.domain-name.craft"],
-                    "craft-domain-list": ["entity.name.type.domain.list.craft"],
-                    "craft-data-store-name": ["entity.name.type.datastore.craft"],
-                    "craft-subdomain-name": ["entity.name.type.subdomain.craft"],
-                    "craft-component-name": ["entity.name.type.component.craft"],
-                    "craft-exposure-name": ["entity.name.type.exposure.craft"],
-                    "craft-language-value": ["entity.name.type.language.craft"],
-                    "craft-actor-name": ["entity.name.class.actor.craft"],
-                    "craft-actor-definition": ["entity.name.type.actor-name.craft"],
-                    "craft-regular-verb": ["entity.name.function.verb.craft"],
-                    "craft-phrase-word": ["entity.name.variable.phrase.craft"],
-                    "craft-connector-word": ["keyword.other.connector.craft"],
-                    "craft-modifier-key": ["entity.name.tag.modifier.key.craft"],
-                    "craft-modifier-value": ["entity.name.tag.modifier.value.craft"],
-                    "craft-flow-arrow": ["punctuation.separator.arrow.craft"],
-                    "craft-usecase-string": ["string.quoted.double.usecase.craft"],
-                    "craft-event-string": ["string.quoted.double.event.craft"],
-                    "craft-regular-string": ["string.quoted.double.craft"],
-                    "craft-comment": ["comment.line.double-slash.craft"],
-                    "craft-braces": ["punctuation.section.braces.begin.craft"],
-                    "craft-colon": ["punctuation.separator.colon.craft"],
-                    "craft-comma": ["punctuation.separator.comma.craft"]
+                    "craft-flow-keyword": [
+                        "keyword.control.flow.craft"
+                    ],
+                    "craft-services-keyword": [
+                        "keyword.control.services.craft"
+                    ],
+                    "craft-arch-keyword": [
+                        "keyword.control.arch.craft"
+                    ],
+                    "craft-exposure-keyword": [
+                        "keyword.control.exposure.craft"
+                    ],
+                    "craft-domain-keyword": [
+                        "keyword.control.domain.craft"
+                    ],
+                    "craft-actor-keyword": [
+                        "keyword.control.actor.craft"
+                    ],
+                    "craft-actors-keyword": [
+                        "keyword.control.actors.craft"
+                    ],
+                    "craft-actor-type": [
+                        "keyword.other.actor-type.craft"
+                    ],
+                    "craft-domains-property": [
+                        "keyword.other.property.domains.craft"
+                    ],
+                    "craft-language-property": [
+                        "keyword.other.property.language.craft"
+                    ],
+                    "craft-data-stores-property": [
+                        "keyword.other.property.data-stores.craft"
+                    ],
+                    "craft-to-property": [
+                        "keyword.other.property.to.craft"
+                    ],
+                    "craft-through-property": [
+                        "keyword.other.property.through.craft"
+                    ],
+                    "craft-presentation-section": [
+                        "keyword.other.section.presentation.craft"
+                    ],
+                    "craft-gateway-section": [
+                        "keyword.other.section.gateway.craft"
+                    ],
+                    "craft-asks-verb": [
+                        "keyword.other.asks.craft"
+                    ],
+                    "craft-notifies-verb": [
+                        "keyword.other.notifies.craft"
+                    ],
+                    "craft-listens-verb": [
+                        "keyword.other.listens.craft"
+                    ],
+                    "craft-returns-verb": [
+                        "keyword.other.returns.craft"
+                    ],
+                    "craft-service-name": [
+                        "entity.name.type.service.craft"
+                    ],
+                    "craft-domain-name": [
+                        "entity.name.type.domain-name.craft"
+                    ],
+                    "craft-domain-list": [
+                        "entity.name.type.domain.list.craft"
+                    ],
+                    "craft-data-store-name": [
+                        "entity.name.type.datastore.craft"
+                    ],
+                    "craft-subdomain-name": [
+                        "entity.name.type.subdomain.craft"
+                    ],
+                    "craft-component-name": [
+                        "entity.name.type.component.craft"
+                    ],
+                    "craft-exposure-name": [
+                        "entity.name.type.exposure.craft"
+                    ],
+                    "craft-language-value": [
+                        "entity.name.type.language.craft"
+                    ],
+                    "craft-actor-name": [
+                        "entity.name.class.actor.craft"
+                    ],
+                    "craft-actor-definition": [
+                        "entity.name.type.actor-name.craft"
+                    ],
+                    "craft-regular-verb": [
+                        "entity.name.function.verb.craft"
+                    ],
+                    "craft-phrase-word": [
+                        "entity.name.variable.phrase.craft"
+                    ],
+                    "craft-connector-word": [
+                        "keyword.other.connector.craft"
+                    ],
+                    "craft-modifier-key": [
+                        "entity.name.tag.modifier.key.craft"
+                    ],
+                    "craft-modifier-value": [
+                        "entity.name.tag.modifier.value.craft"
+                    ],
+                    "craft-flow-arrow": [
+                        "punctuation.separator.arrow.craft"
+                    ],
+                    "craft-usecase-string": [
+                        "string.quoted.double.usecase.craft"
+                    ],
+                    "craft-event-string": [
+                        "string.quoted.double.event.craft"
+                    ],
+                    "craft-regular-string": [
+                        "string.quoted.double.craft"
+                    ],
+                    "craft-comment": [
+                        "comment.line.double-slash.craft"
+                    ],
+                    "craft-braces": [
+                        "punctuation.section.braces.begin.craft"
+                    ],
+                    "craft-colon": [
+                        "punctuation.separator.colon.craft"
+                    ],
+                    "craft-comma": [
+                        "punctuation.separator.comma.craft"
+                    ]
                 }
             }
         ],
-        "themes": [
-            {
-                "label": "Craft Language Theme",
-                "uiTheme": "vs",
-                "path": "./themes/craft-color-theme.json"
-            }
-        ],
         "configurationDefaults": {
-            "editor.semanticHighlighting.enabled": true
+            "editor.semanticHighlighting.enabled": true,
+            "editor.semanticTokenColorCustomizations": {
+                "rules": {
+                    "craft-flow-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-services-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-arch-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-exposure-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-domain-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-actors-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-actor-keyword": {
+                        "foreground": "#800080",
+                        "bold": true
+                    },
+                    "craft-domains-property": {
+                        "foreground": "#d73a49",
+                        "bold": true
+                    },
+                    "craft-language-property": {
+                        "foreground": "#d73a49",
+                        "bold": true
+                    },
+                    "craft-data-stores-property": {
+                        "foreground": "#d73a49",
+                        "bold": true
+                    },
+                    "craft-to-property": {
+                        "foreground": "#d73a49",
+                        "bold": true
+                    },
+                    "craft-through-property": {
+                        "foreground": "#d73a49",
+                        "bold": true
+                    },
+                    "craft-asks-verb": {
+                        "foreground": "#e36209",
+                        "bold": true
+                    },
+                    "craft-notifies-verb": {
+                        "foreground": "#22863a",
+                        "bold": true
+                    },
+                    "craft-listens-verb": {
+                        "foreground": "#22863a",
+                        "bold": true
+                    },
+                    "craft-returns-verb": {
+                        "foreground": "#22863a",
+                        "bold": true
+                    },
+                    "craft-regular-verb": {
+                        "foreground": "#795e26",
+                        "bold": true
+                    },
+                    "craft-actor-type": {
+                        "foreground": "#d73a49",
+                        "bold": true
+                    },
+                    "craft-connector-word": {
+                        "foreground": "#6a737d"
+                    },
+                    "craft-usecase-string": {
+                        "foreground": "#0070C1",
+                        "bold": true
+                    },
+                    "craft-event-string": {
+                        "foreground": "#001080",
+                        "italic": true
+                    },
+                    "craft-regular-string": {
+                        "foreground": "#a31515"
+                    },
+                    "craft-service-name": {
+                        "foreground": "#0070C1",
+                        "bold": true
+                    },
+                    "craft-domain-name": {
+                        "foreground": "#0070C1",
+                        "bold": true
+                    },
+                    "craft-exposure-name": {
+                        "foreground": "#e36209",
+                        "bold": true
+                    },
+                    "craft-subdomain-name": {
+                        "foreground": "#22863a",
+                        "bold": true
+                    },
+                    "craft-actor-definition": {
+                        "foreground": "#0070C1",
+                        "bold": true
+                    },
+                    "craft-domain-list": {
+                        "foreground": "#267f99",
+                        "bold": true
+                    },
+                    "craft-data-store-name": {
+                        "foreground": "#6f42c1",
+                        "bold": true
+                    },
+                    "craft-actor-name": {
+                        "foreground": "#b8860b",
+                        "bold": true
+                    },
+                    "craft-language-value": {
+                        "foreground": "#6f42c1",
+                        "bold": true
+                    },
+                    "craft-phrase-word": {
+                        "foreground": "#a31515",
+                        "italic": true
+                    },
+                    "craft-braces": {
+                        "foreground": "#b8860b",
+                        "bold": true
+                    },
+                    "craft-colon": {
+                        "foreground": "#6a737d"
+                    },
+                    "craft-comma": {
+                        "foreground": "#6a737d"
+                    },
+                    "craft-flow-arrow": {
+                        "foreground": "#cf222e",
+                        "bold": true
+                    },
+                    "craft-comment": {
+                        "foreground": "#008000",
+                        "italic": true
+                    }
+                }
+            }
         },
         "commands": [
             {
@@ -405,7 +660,7 @@
             },
             {
                 "command": "craft.toggleServiceOptions",
-                "title": "Toggle Service Diagram Options", 
+                "title": "Toggle Service Diagram Options",
                 "icon": "$(settings-gear)"
             }
         ],

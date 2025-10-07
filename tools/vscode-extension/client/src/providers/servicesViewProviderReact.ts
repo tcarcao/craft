@@ -36,7 +36,7 @@ export class ServicesViewProviderReact implements WebviewViewProvider {
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [
-                Uri.joinPath(this._extensionUri, 'client', 'out')
+                Uri.joinPath(this._extensionUri, 'dist')
             ]
         };
 
@@ -56,11 +56,11 @@ export class ServicesViewProviderReact implements WebviewViewProvider {
         if (!this._view) return '';
 
         const scriptUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'out', 'webview', 'services.js')
+            Uri.joinPath(this._extensionUri, 'dist', 'webview', 'services.js')
         );
 
         const codiconsUri = this._view.webview.asWebviewUri(
-            Uri.joinPath(this._extensionUri, 'client', 'out', '@vscode/codicons', 'dist', 'codicon.css')
+            Uri.joinPath(this._extensionUri, 'dist', '@vscode/codicons', 'dist', 'codicon.css')
         );
 
         // Generate a nonce for security

@@ -1,15 +1,23 @@
-.vscode/**
-**/*.ts
-**/*.map
-.gitignore
-**/tsconfig.json
-**/tsconfig.base.json
-contributing.md
-.travis.yml
-client/node_modules/**
-!client/node_modules/vscode-jsonrpc/**
-!client/node_modules/vscode-languageclient/**
-!client/node_modules/vscode-languageserver-protocol/**
-!client/node_modules/vscode-languageserver-types/**
-!client/node_modules/{minimatch,brace-expansion,concat-map,balanced-match}/**
-!client/node_modules/{semver,lru-cache,yallist}/**
+# Everything except what we explicitly include
+**/*
+
+# Include only bundled distribution files
+!dist/**
+
+# Include resources (WASM, queries, icons)
+!resources/**
+
+# Include essential config files
+!package.json
+!language-configuration.json
+!LICENSE
+!readme.md
+
+# Include external dependencies needed by bundled server
+!node_modules/tree-sitter/**
+!node_modules/tree-sitter-craft/**
+!node_modules/node-gyp-build/**
+!node_modules/node-addon-api/**
+
+# Exclude source maps from dist
+dist/**/*.map
