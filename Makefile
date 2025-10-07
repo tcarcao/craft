@@ -8,7 +8,6 @@ ANTLR_IMAGE_TAG=4.13.2
 ANTLR_GRAMMAR_PATH=tools/antlr-grammar
 ANTLR_GRAMMAR_FILENAME=Craft.g4
 GOLANG_GRAMMAR_PATH=pkg/parser/
-VSCODE_EXTENSION=tools/vscode-extension/server
 
 docker-build:
 	@echo "Building Docker image..."
@@ -39,7 +38,6 @@ generate-grammar: docker-build-antlr-image
 	mkdir -p $(shell pwd)/$(ANTLR_GRAMMAR_PATH)
 	mkdir -p $(shell pwd)/$(GOLANG_GRAMMAR_PATH)
 	podman run --platform linux/amd64 --rm -v $(shell pwd)/$(ANTLR_GRAMMAR_PATH):/work -v $(shell pwd)/$(GOLANG_GRAMMAR_PATH):/output -w /work $(ANTLR_IMAGE_NAME):$(ANTLR_IMAGE_TAG) -Dlanguage=Go -visitor -o /output $(ANTLR_GRAMMAR_FILENAME)
-	cd $(shell pwd)/$(VSCODE_EXTENSION) && npm run generate
 
 test:
 	go test ./...
@@ -48,13 +46,9 @@ fresh-setup:
 	@echo "Setting up Craft development environment..."
 	@echo "1. Generating ANTLR grammar..."
 	$(MAKE) generate-grammar
-	@echo "2. Installing VS Code extension dependencies..."
-	cd tools/vscode-extension && npm install
-	@echo "3. Compiling VS Code extension..."
-	cd tools/vscode-extension && npm run compile
 	@echo "✅ Fresh setup complete! You can now:"
-	@echo "   - Open the VS Code extension for development"
 	@echo "   - Use 'make docker-build && make docker-run' to start the server"
+	@echo "   - Visit the standalone VS Code extension at: https://github.com/tcarcao/craft-vscode-extension"
 
 help:
 	@echo "Makefile commands:"
@@ -64,6 +58,6 @@ help:
 	@echo "  docker-clean   			- Remove Docker image"
 	@echo "  docker-build-antlr-image	- Generate the ANTLR Docker image to generate the grammar"
 	@echo "  docker-clean-antlr-image	- Remove the ANTLR Docker image"
-	@echo "  generate-grammar			- Generate the golang and javascript versions of the grammar"
+	@echo "  generate-grammar			- Generate the golang version of the grammar"
 	@echo "  test   					- Run the tests"
 

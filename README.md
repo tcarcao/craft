@@ -120,37 +120,18 @@ Notification sends welcome email
 ```
 
 ## VS Code Extension
-Install the Craft extension for VS Code to get:
+The Craft VS Code extension is now available as a standalone project:
 
-- **Syntax highlighting** and auto-completion
-- **Hierarchical domain view** with real-time discovery
-- **Services tree view** for C4 modeling
-- **Live diagram preview** as you type
-- **Domain reference tracking** across files
+🔗 **[Craft Language VS Code Extension](https://github.com/tcarcao/craft-vscode-extension)**
+
+Features include:
+- **Syntax highlighting** and language server support
+- **Domain & Services tree views** with real-time discovery
+- **Live diagram previews** (C4, domain, sequence diagrams)
 - **Use case selection and filtering**
+- **Cross-file domain reference tracking**
 
-### Extension Features
-**Domain Explorer:**
-
-- Hierarchical view of domains and use cases
-- Real-time extraction from DSL files
-- Cross-file domain reference tracking
-- Current file vs. workspace modes
-- Smart domain grouping and organization
-
-**Services Explorer:**
-
-- Service-centric view for C4 modeling
-- Service-to-domain relationship mapping
-- Technology and data store tracking
-- Preview generation for selected services
-
-**Live Preview:**
-
-- Real-time diagram generation
-- Multiple diagram type support
-- Selected use case preview
-- Error highlighting and validation
+Install from [GitHub releases](https://github.com/tcarcao/craft-vscode-extension/releases) by downloading the `.vsix` file.
 
 ## Examples
 See the [./examples](examples) directory for some DSL examples:
