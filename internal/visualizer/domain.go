@@ -390,10 +390,21 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 			})
 		}
 	case parser.ActionTypeInternal:
-		// Internal domain action - might generate events or trigger other flows
+		// Internal domain action - shown as self-loops
 		if action.Domain != "" {
 			g.domains[action.Domain] = true
-			// Internal actions might be shown as self-loops or annotations
+			g.stepCounter++
+
+			description := g.buildActionDescription(action)
+			g.flows = append(g.flows, FlowStep{
+				StepNumber:  g.stepCounter,
+				From:        action.Domain,
+				To:          action.Domain,
+				Description: description,
+				Type:        "internal",
+				UseCase:     useCaseName,
+				ScenarioID:  scenarioID,
+			})
 		}
 	}
 }
@@ -581,6 +592,8 @@ func (g *PlantUMLGenerator) buildPlantUMLContent() string {
 			arrow = "->>"   // Synchronous call - solid arrow
 		case "async":
 			arrow = "->>"   // Asynchronous - solid arrow
+		case "internal":
+			arrow = "->"    // Internal action - self-loop
 		default:
 			arrow = "-->"   // Default arrow
 		}
@@ -708,9 +721,12 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 				g.connections[connectionKey] = true
 			}
 		case parser.ActionTypeInternal:
-			// Internal subdomain action
+			// Internal subdomain action - self-connection
 			if action.Domain != "" {
 				g.subDomains[action.Domain] = true
+				// Create self-connection for internal actions
+				connectionKey := action.Domain + "->" + action.Domain
+				g.connections[connectionKey] = true
 			}
 		case parser.ActionTypeReturn:
 			// Return action - data flowing back
