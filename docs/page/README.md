@@ -14,7 +14,7 @@ npm install
 npm run docs:dev
 ```
 
-Visit http://localhost:5173
+Visit `http://localhost:5173`
 
 ### Build
 
