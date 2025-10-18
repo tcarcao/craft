@@ -16,7 +16,7 @@ const craftTheme = JSON.parse(craftThemeRaw)
 export default defineConfig({
   title: "Craft Language",
   description: "A DSL for modeling business use cases and domain interactions",
-  base: '/craft-vscode-extension/',
+  base: '/craft/',
 
   themeConfig: {
     logo: '/logo.svg',
@@ -70,6 +70,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
+      { icon: 'github', link: 'https://github.com/tcarcao/craft' },
       { icon: 'github', link: 'https://github.com/tcarcao/craft-vscode-extension' }
     ],
 
