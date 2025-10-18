@@ -1,5 +1,6 @@
-![Icon](assets/craft_logo.svg)
-# Craft
+ 
+
+# <img src="assets/logo.svg" width="30" height="30" /> Craft
 
 A domain-specific language for modeling business use cases and domain interactions, with powerful visualization capabilities for domain-driven design and C4 architecture diagrams.
 
