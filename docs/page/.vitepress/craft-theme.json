@@ -1,0 +1,84 @@
+{
+  "name": "Craft VSCode Colors",
+  "type": "light",
+  "colors": {
+    "editor.background": "#ffffff",
+    "editor.foreground": "#24292e"
+  },
+  "tokenColors": [
+    {
+      "scope": ["comment", "comment.line", "comment.block"],
+      "settings": {
+        "foreground": "#008000",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "scope": ["keyword.control"],
+      "settings": {
+        "foreground": "#800080",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["keyword.other"],
+      "settings": {
+        "foreground": "#22863a",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["storage.type"],
+      "settings": {
+        "foreground": "#d73a49",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["entity.name.tag"],
+      "settings": {
+        "foreground": "#d73a49",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["support.type"],
+      "settings": {
+        "foreground": "#0070C1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["entity.name.type"],
+      "settings": {
+        "foreground": "#0070C1",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["string.quoted", "string.quoted.double"],
+      "settings": {
+        "foreground": "#a31515"
+      }
+    },
+    {
+      "scope": ["support.function"],
+      "settings": {
+        "foreground": "#795e26",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "scope": ["constant.numeric"],
+      "settings": {
+        "foreground": "#0070C1"
+      }
+    },
+    {
+      "scope": ["constant.character.escape"],
+      "settings": {
+        "foreground": "#ee9900"
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+:root {
+  --vp-c-brand-1: #C678DD;
+  --vp-c-brand-2: #AB69C6;
+  --vp-c-brand-3: #9B59B6;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #C678DD 0%, #61AFEF 100%);
+}
+
+.dark {
+  --vp-c-brand-1: #C678DD;
+  --vp-c-brand-2: #AB69C6;
+  --vp-c-brand-3: #9B59B6;
+}
+
+/* Code block styling */
+.vp-code-group .tabs label {
+  font-size: 14px;
+}
+
+/* Custom containers */
+.custom-block.tip {
+  border-color: var(--vp-c-brand-1);
+}
+
+/* Better code block spacing */
+div[class*='language-'] {
+  margin: 1.5rem 0;
+}
+
+/* Improve inline code */
+.vp-doc :not(pre) > code {
+  font-size: 0.9em;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+}

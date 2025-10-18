@@ -1,0 +1,88 @@
+{
+  "name": "craft",
+  "scopeName": "source.craft",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.craft",
+          "match": "\\b(use_case|when|services|service|domain|domains|actors|actor|arch|exposure)\\b"
+        },
+        {
+          "name": "keyword.other.craft",
+          "match": "\\b(asks|notifies|listens|returns)\\b"
+        },
+        {
+          "name": "storage.type.craft",
+          "match": "\\b(user|system|service)\\b"
+        },
+        {
+          "name": "entity.name.tag.craft",
+          "match": "\\b(domains|language|data-stores|deployment|to|through|of):"
+        },
+        {
+          "name": "support.type.craft",
+          "match": "\\b(canary|blue_green|rolling|CRON)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.craft",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.craft",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.craft",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.craft",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "entity.name.type.craft",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        },
+        {
+          "name": "support.function.craft",
+          "match": "\\b[a-z][a-z]+\\b"
+        },
+        {
+          "name": "constant.numeric.craft",
+          "match": "\\b\\d+%?\\b"
+        }
+      ]
+    }
+  }
+}

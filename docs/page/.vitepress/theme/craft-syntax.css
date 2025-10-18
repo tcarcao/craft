@@ -1,0 +1,82 @@
+/* Craft Language Syntax Highlighting - VSCode Extension Colors */
+/* Override Shiki's inline styles - target span elements directly */
+
+/* === LIGHT THEME (default) === */
+html:not(.dark) .vp-code span.keyword.control,
+html:not(.dark) span.keyword.control { color: #800080 !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.keyword.other,
+html:not(.dark) span.keyword.other { color: #22863a !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.storage.type,
+html:not(.dark) span.storage.type { color: #d73a49 !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.entity.name.tag,
+html:not(.dark) span.entity.name.tag { color: #d73a49 !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.support.type,
+html:not(.dark) span.support.type { color: #0070C1 !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.entity.name.type,
+html:not(.dark) span.entity.name.type { color: #0070C1 !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.string.quoted,
+html:not(.dark) .vp-code span.string.quoted.double,
+html:not(.dark) span.string.quoted,
+html:not(.dark) span.string.quoted.double { color: #a31515 !important; }
+
+html:not(.dark) .vp-code span.support.function,
+html:not(.dark) span.support.function { color: #795e26 !important; font-weight: bold; }
+
+html:not(.dark) .vp-code span.constant.numeric,
+html:not(.dark) span.constant.numeric { color: #0070C1 !important; }
+
+html:not(.dark) .vp-code span.constant.character.escape,
+html:not(.dark) span.constant.character.escape { color: #ee9900 !important; }
+
+html:not(.dark) .vp-code span.comment,
+html:not(.dark) .vp-code span.comment.line,
+html:not(.dark) .vp-code span.comment.block,
+html:not(.dark) span.comment,
+html:not(.dark) span.comment.line,
+html:not(.dark) span.comment.block { color: #008000 !important; font-style: italic; }
+
+/* === DARK THEME === */
+.dark .vp-code span.keyword.control,
+.dark span.keyword.control { color: #C586C0 !important; font-weight: bold; }
+
+.dark .vp-code span.keyword.other,
+.dark span.keyword.other { color: #4EC9B0 !important; font-weight: bold; }
+
+.dark .vp-code span.storage.type,
+.dark span.storage.type { color: #F44747 !important; font-weight: bold; }
+
+.dark .vp-code span.entity.name.tag,
+.dark span.entity.name.tag { color: #F44747 !important; font-weight: bold; }
+
+.dark .vp-code span.support.type,
+.dark span.support.type { color: #4FC1FF !important; font-weight: bold; }
+
+.dark .vp-code span.entity.name.type,
+.dark span.entity.name.type { color: #4FC1FF !important; font-weight: bold; }
+
+.dark .vp-code span.string.quoted,
+.dark .vp-code span.string.quoted.double,
+.dark span.string.quoted,
+.dark span.string.quoted.double { color: #CE9178 !important; }
+
+.dark .vp-code span.support.function,
+.dark span.support.function { color: #DCDCAA !important; font-weight: bold; }
+
+.dark .vp-code span.constant.numeric,
+.dark span.constant.numeric { color: #4FC1FF !important; }
+
+.dark .vp-code span.constant.character.escape,
+.dark span.constant.character.escape { color: #D7BA7D !important; }
+
+.dark .vp-code span.comment,
+.dark .vp-code span.comment.line,
+.dark .vp-code span.comment.block,
+.dark span.comment,
+.dark span.comment.line,
+.dark span.comment.block { color: #6A9955 !important; font-style: italic; }

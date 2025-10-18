@@ -1,0 +1,19 @@
+{
+  "name": "craft-docs",
+  "version": "1.0.0",
+  "description": "Craft Language Documentation",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.0.0",
+    "vue": "^3.3.4"
+  },
+  "dependencies": {
+    "rehype-tree-sitter-highlight": "^1.0.2",
+    "shiki": "^3.13.0",
+    "web-tree-sitter": "^0.25.10"
+  }
+}
