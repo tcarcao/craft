@@ -211,12 +211,12 @@ func (g *PlantUMLGenerator) processUseCase(useCase parser.UseCase) {
 func (g *PlantUMLGenerator) processScenario(useCaseName string, scenario parser.Scenario) {
 	// Initialize call stack for this scenario with the external trigger
 	callStack := make([]string, 0)
-	
+
 	// Add the triggering actor to call stack if it's an external trigger
 	if scenario.Trigger.Type == parser.TriggerTypeExternal && scenario.Trigger.Actor != "" {
 		callStack = append(callStack, scenario.Trigger.Actor)
 	}
-	
+
 	// Process trigger
 	g.processTrigger(useCaseName, scenario)
 
@@ -513,6 +513,7 @@ func (g *PlantUMLGenerator) buildPlantUMLContent() string {
 
 	// Header and styling
 	sb.WriteString("@startuml\n")
+	sb.WriteString("left to right direction\n")
 	sb.WriteString("skinparam backgroundColor white\n")
 	sb.WriteString("skinparam handwritten false\n\n")
 
@@ -587,15 +588,15 @@ func (g *PlantUMLGenerator) buildPlantUMLContent() string {
 		var arrow string
 		switch flow.Type {
 		case "return":
-			arrow = "-->"  // Return arrow - flows back
+			arrow = "-->" // Return arrow - flows back
 		case "sync":
-			arrow = "->>"   // Synchronous call - solid arrow
+			arrow = "->>" // Synchronous call - solid arrow
 		case "async":
-			arrow = "->>"   // Asynchronous - solid arrow
+			arrow = "->>" // Asynchronous - solid arrow
 		case "internal":
-			arrow = "->"    // Internal action - self-loop
+			arrow = "->" // Internal action - self-loop
 		default:
-			arrow = "-->"   // Default arrow
+			arrow = "-->" // Default arrow
 		}
 
 		sb.WriteString(fmt.Sprintf("%s %s %s : %d. %s\n",
@@ -732,7 +733,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 			// Return action - data flowing back
 			if action.Domain != "" {
 				g.subDomains[action.Domain] = true
-				
+
 				if action.TargetDomain != "" {
 					g.subDomains[action.TargetDomain] = true
 					// Create return connection
@@ -872,6 +873,7 @@ func (g *PlantUMLArchitectureGenerator) buildArchitecturePlantUMLContent() strin
 
 	// Header and styling
 	sb.WriteString("@startuml\n")
+	sb.WriteString("left to right direction\n")
 	sb.WriteString("skinparam backgroundColor white\n")
 	sb.WriteString("skinparam handwritten false\n\n")
 
