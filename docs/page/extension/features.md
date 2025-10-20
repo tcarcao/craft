@@ -307,4 +307,3 @@ All diagram generation features require the Craft diagram server running on `htt
 
 - [Learn all available commands](/extension/commands)
 - [Configure extension settings](/extension/configuration)
-- [See example workflows](/extension/workflows)

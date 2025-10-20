@@ -203,7 +203,6 @@ Now that you have the extension installed:
 - [Explore all features](/extension/features) - Learn about syntax highlighting, sidebar views, and diagram generation
 - [Learn keyboard shortcuts](/extension/commands) - Master the command palette and shortcuts
 - [Configure settings](/extension/configuration) - Customize server URL, timeouts, and more
-- [See example workflows](/extension/workflows) - Learn best practices for different scenarios
 
 ::: tip First Time Users
 Start with the [Quick Start Guide](/guide/quickstart) to learn the Craft language basics and create your first architecture diagram!

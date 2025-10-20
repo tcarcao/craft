@@ -382,4 +382,3 @@ Sidebar views auto-refresh on file save, but if they seem out of sync:
 
 - [Explore all features](/extension/features) - Deep dive into sidebar views and diagram options
 - [Configure settings](/extension/configuration) - Customize server URL, timeouts, paths
-- [See real examples](/extension/workflows) - More workflow scenarios and use cases
