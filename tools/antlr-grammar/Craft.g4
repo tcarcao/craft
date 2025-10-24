@@ -133,8 +133,8 @@ action_block: action*;
 
 action: async_action NEWLINE+
       | sync_action NEWLINE+
-      | internal_action NEWLINE+
-      | return_action NEWLINE+;
+      | return_action NEWLINE+
+      | internal_action NEWLINE+;
 
 sync_action : domain 'asks' domain connector_word phrase
             | domain 'asks' domain phrase;
@@ -143,10 +143,16 @@ async_action: domain 'notifies' quoted_event;
 
 internal_action: domain verb connector_word? phrase;
 
-return_action: domain 'returns' connector_word? phrase 'to' domain
+return_action: domain 'returns' 'to' domain connector_word? phrase
             | domain 'returns' connector_word? phrase;
 
-phrase: (identifier | STRING | connector_word)+;
+phrase: (phrase_word | STRING)+;
+
+phrase_word: identifier
+           | connector_word
+           | 'when'
+           | 'use_case'
+           ;
 
 connector_word: 'a' | 'an' | 'the' | 'as' | 'to' | 'from' | 'in' | 'on' | 'at' | 'for' | 'with' | 'by';
 
@@ -158,7 +164,7 @@ verb: identifier;
 
 
 
-identifier: IDENTIFIER 
+identifier: IDENTIFIER
           | 'actor'
           | 'user'
           | 'system'
@@ -180,6 +186,7 @@ identifier: IDENTIFIER
           | 'listens'
           | 'asks'
           | 'notifies'
+          | 'returns'
           | 'a'
           | 'an'
           | 'the'
@@ -192,7 +199,7 @@ identifier: IDENTIFIER
           | 'with'
           | 'by'
           | DOMAINS      // 'domains' token
-          | DATA_STORES  // 'data-stores' token  
+          | DATA_STORES  // 'data-stores' token
           | LANGUAGE     // 'language' token
           | DEPLOYMENT   // 'deployment' token
           ;

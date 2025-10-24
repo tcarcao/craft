@@ -72,7 +72,7 @@ use_case "Order Placement" {
 
 ## Get Started in 3 Steps
 
-1. **Install the VSCode extension** from the marketplace
+1. **[Install the VSCode extension](https://marketplace.visualstudio.com/items?itemName=tcarcao.craft-arch-diagrams)** from the marketplace
 2. **Create a `.craft` file** and start modeling your domains
 3. **Press `Ctrl+Shift+C`** to preview your architecture diagram
 

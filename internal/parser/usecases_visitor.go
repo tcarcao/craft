@@ -125,7 +125,6 @@ func (b *DSLModelBuilder) processExternalTrigger(ctx *parser.External_triggerCon
 	}
 }
 
-
 // Generate human-readable trigger description
 func (b *DSLModelBuilder) generateTriggerDescription(trigger Trigger) string {
 	switch trigger.Type {
@@ -300,8 +299,11 @@ func (b *DSLModelBuilder) extractWordsFromPhrase(ctx *parser.PhraseContext) []st
 		child := ctx.GetChild(i)
 
 		switch c := child.(type) {
+		case *parser.Phrase_wordContext:
+			// Handle the phrase_word rule context
+			words = append(words, c.GetText())
 		case *parser.IdentifierContext:
-			// Handle the new identifier rule context
+			// Handle the identifier rule context
 			words = append(words, c.GetText())
 		case *parser.StringContext:
 			// Handle string context

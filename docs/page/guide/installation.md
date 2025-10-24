@@ -11,7 +11,7 @@
 
 1. Open VSCode
 2. Press `Ctrl+Shift+X` (or `Cmd+Shift+X` on Mac) to open Extensions
-3. Search for "**Craft**"
+3. Search for "**Craft**" or visit the [marketplace page](https://marketplace.visualstudio.com/items?itemName=tcarcao.craft-arch-diagrams)
 4. Click **Install**
 
 ### Option 2: Command Line
