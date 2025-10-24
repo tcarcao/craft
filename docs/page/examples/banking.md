@@ -59,7 +59,7 @@ use_case "Transfer Money" {
   when FraudDetection listens "Transaction Initiated"
     RiskAssessment analyzes transaction pattern
     RiskAssessment asks FraudDetectionService for risk score
-    FraudDetectionService returns risk score to RiskAssessment
+    FraudDetectionService returns to RiskAssessment the risk score
     RiskAssessment evaluates risk threshold
 
   when RiskAssessment notifies "High Risk Detected"
@@ -82,7 +82,7 @@ use_case "Fraud Investigation" {
   when Admin reviews flagged transaction
     FraudDetection retrieves transaction details
     FraudDetection asks CreditBureauAPI for customer history
-    CreditBureauAPI returns credit history to FraudDetection
+    CreditBureauAPI returns to FraudDetection the credit history
 
   when Admin approves transaction
     TransactionProcessing unfreezes transaction

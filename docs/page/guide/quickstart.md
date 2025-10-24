@@ -162,7 +162,7 @@ Four types of actions:
 1. **Sync** - `Domain asks Domain to do something`
 2. **Async** - `Domain notifies "Event Name"`
 3. **Internal** - `Domain does something`
-4. **Return** - `Domain returns result to Domain`
+4. **Return** - `Domain returns to Domain the result`
 
 ## Next Steps
 

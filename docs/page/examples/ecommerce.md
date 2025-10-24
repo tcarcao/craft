@@ -95,8 +95,8 @@ use_case "Product Browsing" {
   when Customer searches for products
     Search processes search query
     Search asks ProductManagement for matching products
-    ProductManagement returns product list to Search
-    Search returns ranked results to Customer
+    ProductManagement returns to Search the product list
+    Search returns to Customer the ranked results
 }
 
 // Use case: Complete order flow
@@ -108,16 +108,16 @@ use_case "Order Placement" {
   when Customer proceeds to checkout
     OrderManagement validates cart items
     OrderManagement asks StockManagement to check availability
-    StockManagement returns availability status to OrderManagement
+    StockManagement returns to OrderManagement the availability status 
     OrderManagement asks ShippingCalculation for shipping cost
-    ShippingCalculation returns shipping cost to OrderManagement
+    ShippingCalculation returns to OrderManagement the shipping cost 
     OrderManagement calculates total amount
     OrderManagement creates order
 
   when Customer submits payment
     PaymentProcessing validates payment details
     PaymentProcessing asks PaymentGateway to process transaction
-    PaymentGateway returns transaction result to PaymentProcessing
+    PaymentGateway returns to PaymentProcessing the transaction result
     PaymentProcessing updates payment status
     PaymentProcessing notifies "Payment Processed"
 
@@ -133,7 +133,7 @@ use_case "Order Placement" {
   when ShippingService listens "Order Confirmed"
     LabelGeneration creates shipping label
     LabelGeneration asks ShippingProvider to register shipment
-    ShippingProvider returns tracking number to LabelGeneration
+    ShippingProvider returns to LabelGeneration the tracking number
     LabelGeneration notifies "Shipment Ready"
 
   when EmailNotification listens "Order Confirmed"
@@ -151,7 +151,7 @@ use_case "Order Cancellation" {
   when PaymentProcessing listens "Order Cancelled"
     PaymentProcessing initiates refund
     PaymentProcessing asks PaymentGateway to refund transaction
-    PaymentGateway returns refund confirmation to PaymentProcessing
+    PaymentGateway returns to PaymentProcessing the refund confirmation
     PaymentProcessing notifies "Refund Processed"
 
   when StockManagement listens "Order Cancelled"

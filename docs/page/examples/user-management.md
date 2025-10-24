@@ -51,7 +51,7 @@ use_case "User Registration" {
     Registration validates email format
     Registration validates password strength
     Registration asks Database to check email uniqueness
-    Database returns uniqueness result to Registration
+    Database returns to Registration the uniqueness result
     Registration creates user account
     Registration notifies "User Registered"
 
@@ -68,7 +68,7 @@ use_case "User Login" {
   when Customer submits credentials
     Login validates credentials format
     Login asks Database to verify credentials
-    Database returns user data to Login
+    Database returns to Login the user data
     Login generates session token
     Login notifies "Login Successful"
 

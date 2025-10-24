@@ -156,15 +156,15 @@ Inventory updates stock levels
 Return responses:
 
 ```craft
-Database returns user record to Authentication
+Database returns to Authentication the user record
 Payment returns confirmation
-API returns error message to Client
-Gateway returns transaction result to Payment
+API returns to Client the error message
+Gateway returns to Payment the transaction result
 ```
 
 **Syntax:**
 ```craft
-<domain> returns [connector] <phrase> [to <domain>]
+<domain> returns [to <domain>] [connector] <phrase>
 ```
 
 **Use when:** A domain returns data, especially in response to an `asks` action.
@@ -184,7 +184,7 @@ use_case "Order Processing" {
   // Domain listener: Payment reacts to Order Created
   when Payment listens "Order Created"
     Payment asks PaymentGateway to process transaction
-    PaymentGateway returns transaction result to Payment
+    PaymentGateway returns to Payment the transaction result
     Payment updates payment status
     Payment notifies "Payment Processed"
 
@@ -231,9 +231,9 @@ use_case "Get User Profile" {
     API validates authentication token
     API asks Profile for user data
     Profile asks Database to fetch profile
-    Database returns profile data to Profile
-    Profile returns formatted profile to API
-    API returns profile to Customer
+    Database returns to Profile the profile data
+    Profile returns to API the formatted profile
+    API returns to Customer the profile
 }
 ```
 
@@ -244,7 +244,7 @@ use_case "Process Payment" {
   when Customer submits payment
     Payment validates payment details
     Payment asks Gateway to charge card
-    Gateway returns transaction result to Payment
+    Gateway returns to Payment the transaction result
 
   when Payment listens "Transaction Failed"
     Payment creates retry attempt
