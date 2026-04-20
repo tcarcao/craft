@@ -141,6 +141,67 @@ func TestParser_MultipleExposures(t *testing.T) {
 	}
 }
 
+func TestParser_MultiLineExposureContextList(t *testing.T) {
+	dsl := `exposure AccountAPI {
+	to: Customer, Business_User
+	contexts: AccountManagement, AccountManagementProcess,
+		MemberInvitation, MemberRecommendation,
+		AdAssignment, AdContact
+	through: APIGateway
+}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error for multi-line exposure contexts list, got: %v", err)
+	}
+
+	if len(model.Exposures) != 1 {
+		t.Fatalf("Expected 1 exposure, got %d", len(model.Exposures))
+	}
+
+	expected := []string{
+		"AccountManagement", "AccountManagementProcess",
+		"MemberInvitation", "MemberRecommendation",
+		"AdAssignment", "AdContact",
+	}
+	exp := model.Exposures[0]
+	if len(exp.Contexts) != len(expected) {
+		t.Fatalf("Expected %d contexts, got %d: %v", len(expected), len(exp.Contexts), exp.Contexts)
+	}
+	for i, ctx := range exp.Contexts {
+		if ctx != expected[i] {
+			t.Errorf("contexts[%d]: expected %q, got %q", i, expected[i], ctx)
+		}
+	}
+}
+
+func TestParser_MultiLineExposureToList(t *testing.T) {
+	dsl := `exposure PartnerAPI {
+	to: PartnerA, PartnerB,
+		PartnerC, PartnerD
+	contexts: SharedService
+	through: PartnerGateway
+}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error for multi-line exposure to list, got: %v", err)
+	}
+
+	expected := []string{"PartnerA", "PartnerB", "PartnerC", "PartnerD"}
+	exp := model.Exposures[0]
+	if len(exp.To) != len(expected) {
+		t.Fatalf("Expected %d targets, got %d: %v", len(expected), len(exp.To), exp.To)
+	}
+	for i, target := range exp.To {
+		if target != expected[i] {
+			t.Errorf("to[%d]: expected %q, got %q", i, expected[i], target)
+		}
+	}
+}
+
 func BenchmarkParser_ExposureDefinition(b *testing.B) {
 	dsl := `exposure BenchmarkAPI {
 		to: external_clients, mobile_apps, third_party_services

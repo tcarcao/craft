@@ -716,6 +716,99 @@ func BenchmarkParser_ServiceWithDeployment(b *testing.B) {
 	}
 }
 
+func TestMultiLineContextList(t *testing.T) {
+	dsl := `services {
+  AccountService {
+    contexts: RegistrationApplication, AccountManagement, AccountManagementProcess,
+        AccountSettings, AccountNote, KYBC,
+        MemberInvitation, MemberRecommendation
+    language: golang
+  }
+}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error for multi-line context list, got: %v", err)
+	}
+
+	if len(model.Services) != 1 {
+		t.Fatalf("Expected 1 service, got %d", len(model.Services))
+	}
+
+	expected := []string{
+		"RegistrationApplication", "AccountManagement", "AccountManagementProcess",
+		"AccountSettings", "AccountNote", "KYBC",
+		"MemberInvitation", "MemberRecommendation",
+	}
+	svc := model.Services[0]
+	if len(svc.Contexts) != len(expected) {
+		t.Fatalf("Expected %d contexts, got %d: %v", len(expected), len(svc.Contexts), svc.Contexts)
+	}
+	for i, ctx := range svc.Contexts {
+		if ctx != expected[i] {
+			t.Errorf("contexts[%d]: expected %q, got %q", i, expected[i], ctx)
+		}
+	}
+}
+
+func TestMultiLineDataStoreList(t *testing.T) {
+	dsl := `services {
+  DataService {
+    contexts: Payments
+    data-stores: primary_db, replica_db,
+        cache, event_store,
+        search_index
+    language: golang
+  }
+}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error for multi-line data-stores list, got: %v", err)
+	}
+
+	expected := []string{"primary_db", "replica_db", "cache", "event_store", "search_index"}
+	svc := model.Services[0]
+	if len(svc.DataStores) != len(expected) {
+		t.Fatalf("Expected %d data-stores, got %d: %v", len(expected), len(svc.DataStores), svc.DataStores)
+	}
+	for i, ds := range svc.DataStores {
+		if ds != expected[i] {
+			t.Errorf("data-stores[%d]: expected %q, got %q", i, expected[i], ds)
+		}
+	}
+}
+
+func TestMultiLineContextListWithTrailingComma(t *testing.T) {
+	dsl := `services {
+  OrderService {
+    contexts: OrderManagement,
+        OrderFulfillment,
+        OrderNotification
+    language: java
+  }
+}`
+
+	parser := NewParser()
+	model, err := parser.ParseString(dsl)
+	if err != nil {
+		t.Fatalf("Expected no error for trailing-comma continuation, got: %v", err)
+	}
+
+	expected := []string{"OrderManagement", "OrderFulfillment", "OrderNotification"}
+	svc := model.Services[0]
+	if len(svc.Contexts) != len(expected) {
+		t.Fatalf("Expected %d contexts, got %d: %v", len(expected), len(svc.Contexts), svc.Contexts)
+	}
+	for i, ctx := range svc.Contexts {
+		if ctx != expected[i] {
+			t.Errorf("contexts[%d]: expected %q, got %q", i, expected[i], ctx)
+		}
+	}
+}
+
 // Helper function
 func findServiceByName(services []Service, name string) *Service {
 	for _, service := range services {

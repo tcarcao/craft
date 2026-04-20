@@ -72,11 +72,11 @@ exposure_property: 'to' ':' target_list
                  | CONTEXTS ':' context_list
                  | 'through' ':' gateway_list;
 
-target_list: target (',' target)* ','?;
+target_list: target (',' NEWLINE* target)* ','?;
 
 target: identifier;
 
-gateway_list: gateway (',' gateway)* ','?;
+gateway_list: gateway (',' NEWLINE* gateway)* ','?;
 
 gateway: identifier;
 
@@ -110,11 +110,11 @@ deployment_rule: PERCENTAGE '->' deployment_target;
 
 deployment_target: identifier;
 
-context_list: context_ref (',' context_ref)* ','?;
+context_list: context_ref (',' NEWLINE* context_ref)* ','?;
 
 context_ref: identifier;
 
-datastore_list: datastore (',' datastore)* ','?;
+datastore_list: datastore (',' NEWLINE* datastore)* ','?;
 
 datastore: identifier;
 
