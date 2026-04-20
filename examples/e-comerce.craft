@@ -1,6 +1,6 @@
 services {
   WalletService {
-    contexts: Wallet, WalletItemPurchase, WalletItemAddition,
+    contexts: Wallet, WalletItemPurchase, WalletItemAddition
     data-stores: posgres, redis
     language: golang
   }
@@ -12,6 +12,15 @@ services {
     contexts: VASScheduling
     data-stores: posgres, dynamodb
   }
+}
+
+domain Monetization {
+  Wallet
+  WalletItemPurchase
+  WalletItemAddition
+  OrderManagement
+  OrderFulfilment
+  VASScheduling
 }
 
 use_case "Purchase VAS to Wallet" {

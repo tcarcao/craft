@@ -7,17 +7,31 @@ import (
 	"github.com/tcarcao/craft/pkg/parser"
 )
 
+// SyntaxError is a structured parse error with position information.
+type SyntaxError struct {
+	Line    int
+	Column  int
+	Message string
+}
+
 type Parser struct {
 	errorListener *errorListener
 }
 
 type errorListener struct {
 	*antlr.DefaultErrorListener
-	Errors []string
+	Errors       []string
+	syntaxErrors []SyntaxError
 }
 
-func (e *errorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e2 antlr.RecognitionException) {
+func (e *errorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol any, line, column int, msg string, e2 antlr.RecognitionException) {
 	e.Errors = append(e.Errors, fmt.Sprintf("line %d:%d %s", line, column, msg))
+	e.syntaxErrors = append(e.syntaxErrors, SyntaxError{Line: line, Column: column, Message: msg})
+}
+
+// SyntaxErrors returns structured parse errors after a ParseString call.
+func (p *Parser) SyntaxErrors() []SyntaxError {
+	return p.errorListener.syntaxErrors
 }
 
 func NewParser() *Parser {

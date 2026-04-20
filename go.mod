@@ -7,7 +7,13 @@ toolchain go1.23.1
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/gorilla/mux v1.8.1
+	github.com/spf13/cobra v1.10.2
 )
 
-require golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f // indirect
+require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f // indirect
+)
