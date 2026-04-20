@@ -23,7 +23,7 @@ func (sm *ServiceMerger) AddService(service Service) {
 	} else {
 		// Create a copy to avoid modifying original
 		merged := service
-		merged.Domains = slices.Clone(service.Domains)
+		merged.Contexts = slices.Clone(service.Contexts)
 		merged.DataStores = slices.Clone(service.DataStores)
 		merged.Deployment.Rules = slices.Clone(service.Deployment.Rules)
 		sm.services[service.Name] = &merged
@@ -41,8 +41,8 @@ func (sm *ServiceMerger) GetMergedServices() []Service {
 
 // mergeService merges a new service into an existing one
 func (sm *ServiceMerger) mergeService(existing *Service, new Service) {
-	// Merge domains (deduplicate)
-	existing.Domains = mergeStringSlices(existing.Domains, new.Domains)
+	// Merge contexts (deduplicate)
+	existing.Contexts = mergeStringSlices(existing.Contexts, new.Contexts)
 	
 	// Merge data stores (deduplicate)
 	existing.DataStores = mergeStringSlices(existing.DataStores, new.DataStores)

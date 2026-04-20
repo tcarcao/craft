@@ -849,8 +849,8 @@ func TestParser_DomainsWithUseCases(t *testing.T) {
 	}
 
 	expectedSubDomains := []string{"User", "Product", "Order"}
-	if len(domain.SubDomains) != len(expectedSubDomains) {
-		t.Errorf("Expected %d subdomains, got %d", len(expectedSubDomains), len(domain.SubDomains))
+	if len(domain.BoundedContexts) != len(expectedSubDomains) {
+		t.Errorf("Expected %d subdomains, got %d", len(expectedSubDomains), len(domain.BoundedContexts))
 	}
 
 	// Validate use case
@@ -1097,12 +1097,12 @@ domain User {
 
 services {
     UserService {
-        domains: Authentication, Profile
+        contexts: Authentication, Profile
         data-stores: user_db
         language: golang
     }
     CommsService {
-        domains: Notifier
+        contexts: Notifier
     }
 }
 

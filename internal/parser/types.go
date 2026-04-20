@@ -41,16 +41,16 @@ type ComponentModifier struct {
 
 // Exposure represents an exposure definition
 type Exposure struct {
-	Name    string   `json:"name"`
-	To      []string `json:"to,omitempty"`      // Targets
-	Of      []string `json:"of,omitempty"`      // Domains
-	Through []string `json:"through,omitempty"` // Gateways
+	Name     string   `json:"name"`
+	To       []string `json:"to,omitempty"`       // Targets
+	Contexts []string `json:"contexts,omitempty"` // Bounded contexts
+	Through  []string `json:"through,omitempty"`  // Gateways
 }
 
 // Service represents a service definition with enhanced deployment support
 type Service struct {
 	Name       string             `json:"name"`
-	Domains    []string           `json:"domains,omitempty"`
+	Contexts   []string           `json:"contexts,omitempty"`
 	DataStores []string           `json:"dataStores,omitempty"`
 	Language   string             `json:"language,omitempty"`
 	Deployment DeploymentStrategy `json:"deployment,omitempty"`
@@ -134,10 +134,10 @@ type Interaction struct {
 	ScenarioID  string `json:"scenarioId"`
 }
 
-// Domain represents a domain definition with its subdomains
+// Domain represents a domain definition with its bounded contexts
 type Domain struct {
-	Name       string   `json:"name"`
-	SubDomains []string `json:"subDomains"`
+	Name            string   `json:"name"`
+	BoundedContexts []string `json:"boundedContexts"`
 }
 
 // Actor represents an actor definition with its type

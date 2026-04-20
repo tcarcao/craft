@@ -296,7 +296,7 @@ func TestParser_InvalidArchitecture(t *testing.T) {
 			name: "Invalid deployment strategy",
 			dsl: `services {
 				TestService {
-					domains: Test
+					contexts: Test
 					deployment: invalid_strategy
 				}
 			}`,
@@ -305,7 +305,7 @@ func TestParser_InvalidArchitecture(t *testing.T) {
 			name: "Malformed deployment config",
 			dsl: `services {
 				TestService {
-					domains: Test
+					contexts: Test
 					deployment: canary(invalid config)
 				}
 			}`,
@@ -314,7 +314,7 @@ func TestParser_InvalidArchitecture(t *testing.T) {
 			name: "Invalid percentage in deployment",
 			dsl: `services {
 				TestService {
-					domains: Test
+					contexts: Test
 					deployment: canary(invalid% -> target)
 				}
 			}`,

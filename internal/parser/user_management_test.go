@@ -35,12 +35,12 @@ domain User {
 
 services {
     UserService {
-        domains: Authentication, Profile
+        contexts: Authentication, Profile
         data-stores: user_db
         language: golang
     }
     CommsService {
-        domains: Notifier
+        contexts: Notifier
     }
 }
 
@@ -161,12 +161,12 @@ use_case "User Registration" {
 		}
 
 		expectedSubdomains := []string{"Authentication", "Profile"}
-		if len(domain.SubDomains) != len(expectedSubdomains) {
-			t.Errorf("Expected %d subdomains, got %d", len(expectedSubdomains), len(domain.SubDomains))
+		if len(domain.BoundedContexts) != len(expectedSubdomains) {
+			t.Errorf("Expected %d subdomains, got %d", len(expectedSubdomains), len(domain.BoundedContexts))
 		}
 
 		subdomainMap := make(map[string]bool)
-		for _, subdomain := range domain.SubDomains {
+		for _, subdomain := range domain.BoundedContexts {
 			subdomainMap[subdomain] = true
 		}
 
@@ -194,8 +194,8 @@ use_case "User Registration" {
 			t.Error("Expected UserService not found")
 		} else {
 			expectedDomains := []string{"Authentication", "Profile"}
-			if len(userService.Domains) != len(expectedDomains) {
-				t.Errorf("Expected UserService to have %d domains, got %d", len(expectedDomains), len(userService.Domains))
+			if len(userService.Contexts) != len(expectedDomains) {
+				t.Errorf("Expected UserService to have %d domains, got %d", len(expectedDomains), len(userService.Contexts))
 			}
 
 			if userService.Language != "golang" {
@@ -214,8 +214,8 @@ use_case "User Registration" {
 			t.Error("Expected CommsService not found")
 		} else {
 			expectedDomains := []string{"Notifier"}
-			if len(commsService.Domains) != len(expectedDomains) {
-				t.Errorf("Expected CommsService to have %d domains, got %d", len(expectedDomains), len(commsService.Domains))
+			if len(commsService.Contexts) != len(expectedDomains) {
+				t.Errorf("Expected CommsService to have %d contexts, got %d", len(expectedDomains), len(commsService.Contexts))
 			}
 		}
 	})

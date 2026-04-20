@@ -6,7 +6,7 @@ import (	"testing"
 func TestParser_BasicExposureDefinition(t *testing.T) {
 	dsl := `exposure PublicAPI {
 		to: external_clients, mobile_apps
-		of: UserService, OrderService
+		contexts: UserService, OrderService
 		through: APIGateway, LoadBalancer
 	}`
 
@@ -40,11 +40,11 @@ func TestParser_BasicExposureDefinition(t *testing.T) {
 
 	// Validate 'of' domains
 	expectedDomains := []string{"UserService", "OrderService"}
-	if len(exposure.Of) != len(expectedDomains) {
-		t.Errorf("Expected %d domains, got %d", len(expectedDomains), len(exposure.Of))
+	if len(exposure.Contexts) != len(expectedDomains) {
+		t.Errorf("Expected %d domains, got %d", len(expectedDomains), len(exposure.Contexts))
 	}
 
-	for i, domain := range exposure.Of {
+	for i, domain := range exposure.Contexts {
 		if domain != expectedDomains[i] {
 			t.Errorf("Expected domain '%s', got '%s'", expectedDomains[i], domain)
 		}
@@ -66,7 +66,7 @@ func TestParser_BasicExposureDefinition(t *testing.T) {
 func TestParser_PartialExposureDefinition(t *testing.T) {
 	dsl := `exposure InternalAPI {
 		to: internal_services
-		of: PaymentService
+		contexts: PaymentService
 	}`
 
 	parser := NewParser()
@@ -85,8 +85,8 @@ func TestParser_PartialExposureDefinition(t *testing.T) {
 		t.Errorf("Expected 'to' target 'internal_services', got %v", exposure.To)
 	}
 
-	if len(exposure.Of) != 1 || exposure.Of[0] != "PaymentService" {
-		t.Errorf("Expected 'of' domain 'PaymentService', got %v", exposure.Of)
+	if len(exposure.Contexts) != 1 || exposure.Contexts[0] != "PaymentService" {
+		t.Errorf("Expected 'of' domain 'PaymentService', got %v", exposure.Contexts)
 	}
 
 	if len(exposure.Through) != 0 {
@@ -97,18 +97,18 @@ func TestParser_PartialExposureDefinition(t *testing.T) {
 func TestParser_MultipleExposures(t *testing.T) {
 	dsl := `exposure PublicAPI {
 		to: external_clients
-		of: UserService
+		contexts: UserService
 		through: APIGateway
 	}
 
 	exposure InternalAPI {
 		to: internal_services
-		of: PaymentService, OrderService
+		contexts: PaymentService, OrderService
 	}
 
 	exposure PartnerAPI {
 		to: trusted_partners
-		of: DataService
+		contexts: DataService
 		through: PartnerGateway
 	}`
 
@@ -132,8 +132,8 @@ func TestParser_MultipleExposures(t *testing.T) {
 
 	// Validate specific exposure properties
 	internalAPI := model.Exposures[1]
-	if len(internalAPI.Of) != 2 {
-		t.Errorf("Expected 2 domains for InternalAPI, got %d", len(internalAPI.Of))
+	if len(internalAPI.Contexts) != 2 {
+		t.Errorf("Expected 2 domains for InternalAPI, got %d", len(internalAPI.Contexts))
 	}
 
 	if len(internalAPI.Through) != 0 {
@@ -144,7 +144,7 @@ func TestParser_MultipleExposures(t *testing.T) {
 func BenchmarkParser_ExposureDefinition(b *testing.B) {
 	dsl := `exposure BenchmarkAPI {
 		to: external_clients, mobile_apps, third_party_services
-		of: UserService, OrderService, PaymentService, NotificationService
+		contexts: UserService, OrderService, PaymentService, NotificationService
 		through: APIGateway, LoadBalancer, CDN, AuthProxy
 	}`
 

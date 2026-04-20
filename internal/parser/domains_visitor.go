@@ -8,19 +8,19 @@ import (
 // Domains Visitors
 // =============================================================================
 
-// Visit single domain definition - "domain domain_name { subdomain_list }"
+// Visit single domain definition - "domain domain_name { bounded_context_list }"
 func (b *DSLModelBuilder) VisitDomain_def(ctx *parser.Domain_defContext) interface{} {
 	domain := Domain{
-		SubDomains: make([]string, 0),
+		BoundedContexts: make([]string, 0),
 	}
 
-	// Extract domain name and subdomain list
+	// Extract domain name and bounded context list
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if domainName, ok := child.(*parser.Domain_nameContext); ok {
 			domain.Name = b.extractIdentifier(&domainName.BaseParserRuleContext)
-		} else if subdomainList, ok := child.(*parser.Subdomain_listContext); ok {
-			domain.SubDomains = b.extractSubdomainList(subdomainList)
+		} else if contextList, ok := child.(*parser.Bounded_context_listContext); ok {
+			domain.BoundedContexts = b.extractBoundedContextList(contextList)
 		}
 	}
 
@@ -53,16 +53,16 @@ func (b *DSLModelBuilder) VisitDomain_block_list(ctx *parser.Domain_block_listCo
 // Visit individual domain block
 func (b *DSLModelBuilder) VisitDomain_block(ctx *parser.Domain_blockContext) interface{} {
 	domain := Domain{
-		SubDomains: make([]string, 0),
+		BoundedContexts: make([]string, 0),
 	}
 
-	// Extract domain name and subdomain list
+	// Extract domain name and bounded context list
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if domainName, ok := child.(*parser.Domain_nameContext); ok {
 			domain.Name = b.extractIdentifier(&domainName.BaseParserRuleContext)
-		} else if subdomainList, ok := child.(*parser.Subdomain_listContext); ok {
-			domain.SubDomains = b.extractSubdomainList(subdomainList)
+		} else if contextList, ok := child.(*parser.Bounded_context_listContext); ok {
+			domain.BoundedContexts = b.extractBoundedContextList(contextList)
 		}
 	}
 
@@ -70,36 +70,35 @@ func (b *DSLModelBuilder) VisitDomain_block(ctx *parser.Domain_blockContext) int
 	return nil
 }
 
-// Extract subdomain list from subdomain_list context
-func (b *DSLModelBuilder) extractSubdomainList(ctx *parser.Subdomain_listContext) []string {
-	subdomainSet := make(map[string]bool)
+// extractBoundedContextList extracts bounded context names from bounded_context_list context
+func (b *DSLModelBuilder) extractBoundedContextList(ctx *parser.Bounded_context_listContext) []string {
+	contextSet := make(map[string]bool)
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if subdomain, ok := child.(*parser.SubdomainContext); ok {
-			subdomainName := b.extractIdentifier(&subdomain.BaseParserRuleContext)
-			if subdomainName != "" {
-				subdomainSet[subdomainName] = true
+		if bc, ok := child.(*parser.Bounded_contextContext); ok {
+			name := b.extractIdentifier(&bc.BaseParserRuleContext)
+			if name != "" {
+				contextSet[name] = true
 			}
 		}
 	}
 
-	// Convert set to slice
-	subdomains := make([]string, 0, len(subdomainSet))
-	for subdomain := range subdomainSet {
-		subdomains = append(subdomains, subdomain)
+	contexts := make([]string, 0, len(contextSet))
+	for name := range contextSet {
+		contexts = append(contexts, name)
 	}
 
-	return subdomains
+	return contexts
 }
 
-// addOrMergeDomain adds a domain to the model or merges subdomains if domain already exists
+// addOrMergeDomain adds a domain to the model or merges bounded contexts if domain already exists
 func (b *DSLModelBuilder) addOrMergeDomain(newDomain Domain) {
 	// Check if domain already exists
 	for i := range b.model.Domains {
 		if b.model.Domains[i].Name == newDomain.Name {
-			// Domain exists, merge subdomains
-			b.model.Domains[i].SubDomains = b.mergeSubdomains(b.model.Domains[i].SubDomains, newDomain.SubDomains)
+			// Domain exists, merge bounded contexts
+			b.model.Domains[i].BoundedContexts = b.mergeBoundedContexts(b.model.Domains[i].BoundedContexts, newDomain.BoundedContexts)
 			return
 		}
 	}
@@ -107,32 +106,31 @@ func (b *DSLModelBuilder) addOrMergeDomain(newDomain Domain) {
 	b.model.Domains = append(b.model.Domains, newDomain)
 }
 
-// mergeSubdomains merges two subdomain slices, avoiding duplicates
-func (b *DSLModelBuilder) mergeSubdomains(existing, new []string) []string {
-	subdomainSet := make(map[string]bool)
-	
-	// Add existing subdomains to set
-	for _, subdomain := range existing {
-		subdomainSet[subdomain] = true
+// mergeBoundedContexts merges two bounded context slices, avoiding duplicates
+func (b *DSLModelBuilder) mergeBoundedContexts(existing, new []string) []string {
+	contextSet := make(map[string]bool)
+
+	for _, name := range existing {
+		contextSet[name] = true
 	}
-	
-	// Add new subdomains to set
-	for _, subdomain := range new {
-		subdomainSet[subdomain] = true
+
+	for _, name := range new {
+		contextSet[name] = true
 	}
-	
-	// Convert set back to slice
-	merged := make([]string, 0, len(subdomainSet))
-	for subdomain := range subdomainSet {
-		merged = append(merged, subdomain)
+
+	merged := make([]string, 0, len(contextSet))
+	for name := range contextSet {
+		merged = append(merged, name)
 	}
-	
+
 	return merged
 }
 
 // Domain visitor stubs for completeness
 func (b *DSLModelBuilder) VisitDomain_name(ctx *parser.Domain_nameContext) interface{} { return nil }
-func (b *DSLModelBuilder) VisitSubdomain_list(ctx *parser.Subdomain_listContext) interface{} {
+func (b *DSLModelBuilder) VisitBounded_context_list(ctx *parser.Bounded_context_listContext) interface{} {
 	return nil
 }
-func (b *DSLModelBuilder) VisitSubdomain(ctx *parser.SubdomainContext) interface{} { return nil }
+func (b *DSLModelBuilder) VisitBounded_context(ctx *parser.Bounded_contextContext) interface{} {
+	return nil
+}

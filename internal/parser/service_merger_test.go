@@ -9,18 +9,18 @@ func TestServiceMerging(t *testing.T) {
 	dslContent := `
 services {
   UserService {
-    domains: User, Authentication
+    contexts: User, Authentication
     language: go
   }
 }
 
 services {
   UserService {
-    domains: Profile, Settings
+    contexts: Profile, Settings
     data-stores: user_db, cache
   }
   PaymentService {
-    domains: Payment
+    contexts: Payment
     language: java
   }
 }
@@ -38,7 +38,7 @@ services {
 		len(model.Architectures), len(model.Exposures), len(model.Services), len(model.UseCases), len(model.Domains))
 
 	for i, service := range model.Services {
-		t.Logf("Service %d: Name='%s', Domains=%v, Language='%s'", i, service.Name, service.Domains, service.Language)
+		t.Logf("Service %d: Name='%s', Domains=%v, Language='%s'", i, service.Name, service.Contexts, service.Language)
 	}
 
 	// Verify we have 2 services (UserService merged + PaymentService)
@@ -68,13 +68,13 @@ services {
 
 	// Verify UserService has merged domains
 	expectedDomains := []string{"User", "Authentication", "Profile", "Settings"}
-	if len(userService.Domains) != len(expectedDomains) {
-		t.Errorf("Expected %d domains for UserService, got %d", len(expectedDomains), len(userService.Domains))
+	if len(userService.Contexts) != len(expectedDomains) {
+		t.Errorf("Expected %d domains for UserService, got %d", len(expectedDomains), len(userService.Contexts))
 	}
 
 	// Check that all expected domains are present (order doesn't matter)
 	domainMap := make(map[string]bool)
-	for _, domain := range userService.Domains {
+	for _, domain := range userService.Contexts {
 		domainMap[domain] = true
 	}
 	for _, expected := range expectedDomains {
@@ -108,7 +108,7 @@ services {
 		t.Errorf("Expected language 'java' for PaymentService, got '%s'", paymentService.Language)
 	}
 
-	if len(paymentService.Domains) != 1 || paymentService.Domains[0] != "Payment" {
+	if len(paymentService.Contexts) != 1 || paymentService.Contexts[0] != "Payment" {
 		t.Errorf("PaymentService domains were incorrectly modified")
 	}
 }
@@ -120,7 +120,7 @@ func TestServiceMergerDirectly(t *testing.T) {
 	// Add first service definition
 	service1 := Service{
 		Name:     "TestService",
-		Domains:  []string{"Domain1", "Domain2"},
+		Contexts: []string{"Domain1", "Domain2"},
 		Language: "go",
 	}
 	merger.AddService(service1)
@@ -128,7 +128,7 @@ func TestServiceMergerDirectly(t *testing.T) {
 	// Add second service definition with same name
 	service2 := Service{
 		Name:       "TestService",
-		Domains:    []string{"Domain2", "Domain3"}, // Domain2 should be deduplicated
+		Contexts:   []string{"Domain2", "Domain3"}, // Domain2 should be deduplicated
 		DataStores: []string{"db1", "cache1"},
 	}
 	merger.AddService(service2)
@@ -143,8 +143,8 @@ func TestServiceMergerDirectly(t *testing.T) {
 	service := merged[0]
 
 	// Check merged domains (should be 3: Domain1, Domain2, Domain3)
-	if len(service.Domains) != 3 {
-		t.Errorf("Expected 3 domains, got %d", len(service.Domains))
+	if len(service.Contexts) != 3 {
+		t.Errorf("Expected 3 domains, got %d", len(service.Contexts))
 	}
 
 	// Check language is preserved from first definition

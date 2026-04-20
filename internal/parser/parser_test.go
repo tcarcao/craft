@@ -115,19 +115,19 @@ func TestParser_ComplexMixedDSL(t *testing.T) {
 
 	exposure PublicAPI {
 		to: external_clients
-		of: UserService, OrderService
+		contexts: UserService, OrderService
 		through: APIGateway
 	}
 
 	services {
 		UserService {
-			domains: User, Profile
+			contexts: User, Profile
 			data-stores: user_db
 			language: golang
 			deployment: canary(20% -> staging, 80% -> production)
 		}
 		OrderService {
-			domains: Order, Payment
+			contexts: Order, Payment
 			data-stores: order_db, payment_db
 			language: java
 			deployment: blue_green
@@ -252,7 +252,7 @@ func TestParser_OrderIndependence(t *testing.T) {
 
 	services {
 		AuthService {
-			domains: Auth, User
+			contexts: Auth, User
 			deployment: blue_green
 		}
 	}
@@ -266,7 +266,7 @@ func TestParser_OrderIndependence(t *testing.T) {
 
 	exposure PublicAPI {
 		to: clients
-		of: AuthService
+		contexts: AuthService
 	}
 
 	use_case "Second Use Case" {
@@ -317,13 +317,13 @@ func BenchmarkParser_ComplexMixedDSL(b *testing.B) {
 
 	exposure ComplexAPI {
 		to: external_clients, mobile_apps
-		of: UserService, OrderService
+		contexts: UserService, OrderService
 		through: APIGateway, LoadBalancer
 	}
 
 	services {
 		UserService {
-			domains: User, Profile, Authentication
+			contexts: User, Profile, Authentication
 			data-stores: user_db, profile_cache
 			language: golang
 			deployment: canary(10% -> staging, 90% -> production)
