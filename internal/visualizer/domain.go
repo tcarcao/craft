@@ -16,6 +16,14 @@ const (
 	DomainModeArchitecture DomainMode = "architecture"
 )
 
+// DiagramType represents different types of diagrams
+type DiagramType string
+
+const (
+	DiagramTypeDomain   DiagramType = "domain"
+	DiagramTypeSequence DiagramType = "sequence"
+)
+
 func (v *Visualizer) GenerateDomainDiagram(model *parser.DSLModel) ([]byte, error) {
 	return v.GenerateDomainDiagramWithMode(model, DomainModeDetailed)
 }
@@ -26,18 +34,42 @@ func (v *Visualizer) GenerateDomainDiagramWithMode(model *parser.DSLModel, mode 
 }
 
 func (v *Visualizer) GenerateDomainDiagramWithModeAndFormat(model *parser.DSLModel, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
+	return v.GenerateDomainDiagramWithTypeAndModeAndFormat(model, DiagramTypeDomain, mode, format)
+}
+
+// GenerateDomainDiagramWithTypeAndModeAndFormat generates a diagram with specified type, mode, and format
+func (v *Visualizer) GenerateDomainDiagramWithTypeAndModeAndFormat(model *parser.DSLModel, diagramType DiagramType, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
 	var diagramTxt string
 
-	switch mode {
-	case DomainModeArchitecture:
-		generator := NewPlantUMLArchitectureGenerator()
-		diagramTxt = generator.GenerateArchitecturePlantUML(model)
-	case DomainModeDetailed:
-		generator := NewPlantUMLGenerator()
-		diagramTxt = generator.GeneratePlantUML(model)
+	switch diagramType {
+	case DiagramTypeSequence:
+		generator := NewPlantUMLSequenceGenerator()
+		diagramTxt = generator.GenerateSequenceDiagram(model)
+	case DiagramTypeDomain:
+		switch mode {
+		case DomainModeArchitecture:
+			generator := NewPlantUMLArchitectureGenerator()
+			diagramTxt = generator.GenerateArchitecturePlantUML(model)
+		case DomainModeDetailed:
+			generator := NewPlantUMLGenerator()
+			diagramTxt = generator.GeneratePlantUML(model)
+		default:
+			generator := NewPlantUMLGenerator()
+			diagramTxt = generator.GeneratePlantUML(model)
+		}
 	default:
-		generator := NewPlantUMLGenerator()
-		diagramTxt = generator.GeneratePlantUML(model)
+		// Default to domain diagram
+		switch mode {
+		case DomainModeArchitecture:
+			generator := NewPlantUMLArchitectureGenerator()
+			diagramTxt = generator.GenerateArchitecturePlantUML(model)
+		case DomainModeDetailed:
+			generator := NewPlantUMLGenerator()
+			diagramTxt = generator.GeneratePlantUML(model)
+		default:
+			generator := NewPlantUMLGenerator()
+			diagramTxt = generator.GeneratePlantUML(model)
+		}
 	}
 
 	fmt.Println(diagramTxt)

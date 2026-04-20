@@ -157,8 +157,9 @@ func (s *Server) respondWithError(w http.ResponseWriter, err error, input string
 
 // Domain-specific preview request
 type DomainPreviewRequest struct {
-	DSL        string `json:"dsl"`
-	DomainMode string `json:"domainMode,omitempty"` // detailed, architecture
+	DSL         string `json:"dsl"`
+	DiagramType string `json:"diagramType,omitempty"` // domain, sequence
+	DomainMode  string `json:"domainMode,omitempty"`  // detailed, architecture (only applies when diagramType is "domain")
 }
 
 // C4-specific preview request
@@ -184,10 +185,11 @@ type PreviewResponse struct {
 
 // Domain-specific download request
 type DomainDownloadRequest struct {
-	DSL        string `json:"dsl"`
-	DomainMode string `json:"domainMode,omitempty"` // detailed, architecture
-	Format     string `json:"format"`               // png, svg, pdf, puml
-	Filename   string `json:"filename,omitempty"`
+	DSL         string `json:"dsl"`
+	DiagramType string `json:"diagramType,omitempty"` // domain, sequence
+	DomainMode  string `json:"domainMode,omitempty"`  // detailed, architecture (only applies when diagramType is "domain")
+	Format      string `json:"format"`                // png, svg, pdf, puml
+	Filename    string `json:"filename,omitempty"`
 }
 
 // C4-specific download request
@@ -217,14 +219,20 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 			return
 		}
 
+		// Parse diagram type, default to "domain" if not provided or invalid
+		diagramType := visualizer.DiagramTypeDomain
+		if req.DiagramType == string(visualizer.DiagramTypeSequence) {
+			diagramType = visualizer.DiagramTypeSequence
+		}
+
 		// Parse domain mode, default to "detailed" if not provided or invalid
 		domainMode := visualizer.DomainModeDetailed
 		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
 			domainMode = visualizer.DomainModeArchitecture
 		}
 
-		// Generate Model diagram with mode
-		diagram, err := s.viz.GenerateDomainDiagramWithMode(model, domainMode)
+		// Generate diagram with type and mode
+		diagram, _, err := s.viz.GenerateDomainDiagramWithTypeAndModeAndFormat(model, diagramType, domainMode, visualizer.FormatPNG)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
 			return
@@ -338,21 +346,29 @@ func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 			format = visualizer.FormatPNG
 		}
 
+		// Parse diagram type, default to "domain" if not provided or invalid
+		diagramType := visualizer.DiagramTypeDomain
+		if req.DiagramType == string(visualizer.DiagramTypeSequence) {
+			diagramType = visualizer.DiagramTypeSequence
+		}
+
 		// Parse domain mode, default to "detailed" if not provided or invalid
 		domainMode := visualizer.DomainModeDetailed
 		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
 			domainMode = visualizer.DomainModeArchitecture
 		}
 
-		diagram, contentType, err := s.viz.GenerateDomainDiagramWithModeAndFormat(model, domainMode, format)
+		diagram, contentType, err := s.viz.GenerateDomainDiagramWithTypeAndModeAndFormat(model, diagramType, domainMode, format)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
 			return
 		}
 
-		// Set filename based on mode
+		// Set filename based on diagram type and mode
 		var defaultFilename string
-		if domainMode == visualizer.DomainModeArchitecture {
+		if diagramType == visualizer.DiagramTypeSequence {
+			defaultFilename = "sequence-diagram"
+		} else if domainMode == visualizer.DomainModeArchitecture {
 			defaultFilename = "architecture-diagram"
 		} else {
 			defaultFilename = "domain-diagram"

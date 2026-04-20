@@ -1,0 +1,20 @@
+use_case "Payment Processing with Proper Return Flow" {
+    when User submits payment request
+        PaymentService validates payment data
+        PaymentService asks BankGateway to process payment
+        BankGateway returns payment result
+        PaymentService asks NotificationService to send confirmation
+        NotificationService returns delivery status
+        PaymentService returns to User final confirmation
+}
+
+use_case "Nested Call Chain" {
+    when Admin requests report
+        ReportService asks DatabaseService for data  
+        DatabaseService asks CacheService to check cache
+        CacheService returns cache miss
+        DatabaseService queries main database
+        DatabaseService returns report data
+        ReportService formats the data
+        ReportService returns formatted report
+}

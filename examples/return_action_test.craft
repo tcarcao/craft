@@ -1,0 +1,16 @@
+use_case "Process Payment with Return Values" {
+    when User submits payment request
+        PaymentService validates payment data
+        PaymentService asks BankGateway to process payment
+        BankGateway returns to PaymentService payment result
+        PaymentService returns to User confirmation status
+        PaymentService notifies "payment_processed"
+}
+
+use_case "User Registration with Validation" {
+    when User submits registration form
+        UserService validates user data
+        UserService asks EmailService to send verification
+        EmailService returns email status
+        UserService returns to User registration result
+}

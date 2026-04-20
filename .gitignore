@@ -28,6 +28,9 @@ Thumbs.db
 /build/
 /dist/
 
+# Environment files
+.env
+
 # ANTLR generated files
 /pkg/parser/
 tools/antlr-*.jar

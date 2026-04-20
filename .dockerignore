@@ -1,7 +1,9 @@
 # Build artifacts
-build/
 output/
 *.vsix
+
+# Allow build/package directory for Docker builds
+!build/package/
 
 # Dependencies
 node_modules/
