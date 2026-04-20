@@ -11,9 +11,9 @@ import (
 // Visit exposure definition
 func (b *DSLModelBuilder) VisitExposure(ctx *parser.ExposureContext) interface{} {
 	exposure := Exposure{
-		To:      make([]string, 0),
-		Of:      make([]string, 0),
-		Through: make([]string, 0),
+		To:       make([]string, 0),
+		Contexts: make([]string, 0),
+		Through:  make([]string, 0),
 	}
 
 	// Extract exposure name and properties
@@ -53,8 +53,8 @@ func (b *DSLModelBuilder) VisitExposure_property(ctx *parser.Exposure_propertyCo
 		child := ctx.GetChild(i)
 		if targetList, ok := child.(*parser.Target_listContext); ok {
 			b.currentExposure.To = b.extractTargetList(targetList)
-		} else if domainList, ok := child.(*parser.Domain_listContext); ok {
-			b.currentExposure.Of = b.extractDomainListFromExposure(domainList)
+		} else if contextList, ok := child.(*parser.Context_listContext); ok {
+			b.currentExposure.Contexts = b.extractContextList(contextList)
 		} else if gatewayList, ok := child.(*parser.Gateway_listContext); ok {
 			b.currentExposure.Through = b.extractGatewayList(gatewayList)
 		}
@@ -76,20 +76,20 @@ func (b *DSLModelBuilder) extractTargetList(ctx *parser.Target_listContext) []st
 	return targets
 }
 
-// Extract domain list for exposure
-func (b *DSLModelBuilder) extractDomainListFromExposure(ctx *parser.Domain_listContext) []string {
-	domains := make([]string, 0)
+// extractContextList extracts bounded context names from context_list
+func (b *DSLModelBuilder) extractContextList(ctx *parser.Context_listContext) []string {
+	contexts := make([]string, 0)
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if domainRef, ok := ctx.GetChild(i).(*parser.Domain_refContext); ok {
-			domainName := b.extractIdentifier(&domainRef.BaseParserRuleContext)
-			if domainName != "" {
-				domains = append(domains, domainName)
+		if contextRef, ok := ctx.GetChild(i).(*parser.Context_refContext); ok {
+			name := b.extractIdentifier(&contextRef.BaseParserRuleContext)
+			if name != "" {
+				contexts = append(contexts, name)
 			}
 		}
 	}
 
-	return domains
+	return contexts
 }
 
 // Extract gateway list

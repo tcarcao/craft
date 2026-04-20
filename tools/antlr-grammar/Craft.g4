@@ -3,19 +3,19 @@ grammar Craft;
 dsl: NEWLINE* (arch | services_def | service_def | exposure | use_case | domain_def | domains_def | actors_def | actor_def)* ;
 
 // Domain hierarchy definitions
-domain_def: 'domain' domain_name '{' NEWLINE* subdomain_list '}' NEWLINE*;
+domain_def: 'domain' domain_name '{' NEWLINE* bounded_context_list '}' NEWLINE*;
 
 domains_def: 'domains' '{' NEWLINE* domain_block_list '}' NEWLINE*;
 
 domain_block_list: domain_block (NEWLINE+ domain_block)* NEWLINE*;
 
-domain_block: domain_name '{' NEWLINE* subdomain_list '}';
+domain_block: domain_name '{' NEWLINE* bounded_context_list '}';
 
 domain_name: identifier;
 
-subdomain_list: subdomain (NEWLINE+ subdomain)* NEWLINE*;
+bounded_context_list: bounded_context (NEWLINE+ bounded_context)* NEWLINE*;
 
-subdomain: identifier;
+bounded_context: identifier;
 
 // Actor definitions - similar pattern to domains
 actor_def: 'actor' actorType actor_name NEWLINE*;
@@ -69,7 +69,7 @@ exposure_name: identifier;
 exposure_properties: exposure_property (NEWLINE+ exposure_property)* NEWLINE+;
 
 exposure_property: 'to' ':' target_list
-                 | 'of' ':' domain_list
+                 | CONTEXTS ':' context_list
                  | 'through' ':' gateway_list;
 
 target_list: target (',' target)* ','?;
@@ -94,7 +94,7 @@ service_name: identifier | STRING;
 
 service_properties: service_property (NEWLINE+ service_property)* NEWLINE*;
 
-service_property: DOMAINS ':' domain_list
+service_property: CONTEXTS ':' context_list
                 | DATA_STORES ':' datastore_list
                 | LANGUAGE ':' identifier
                 | DEPLOYMENT ':' deployment_strategy
@@ -110,9 +110,9 @@ deployment_rule: PERCENTAGE '->' deployment_target;
 
 deployment_target: identifier;
 
-domain_list: domain_ref (',' domain_ref)* ','?;
+context_list: context_ref (',' context_ref)* ','?;
 
-domain_ref: identifier;
+context_ref: identifier;
 
 datastore_list: datastore (',' datastore)* ','?;
 
@@ -173,7 +173,7 @@ identifier: IDENTIFIER
           | 'presentation'
           | 'gateway'
           | 'domain'
-          | 'domains'
+          | 'contexts'
           | 'actors'
           | 'exposure'
           | 'to'
@@ -198,7 +198,7 @@ identifier: IDENTIFIER
           | 'for'
           | 'with'
           | 'by'
-          | DOMAINS      // 'domains' token
+          | CONTEXTS     // 'contexts' token
           | DATA_STORES  // 'data-stores' token
           | LANGUAGE     // 'language' token
           | DEPLOYMENT   // 'deployment' token
@@ -209,7 +209,7 @@ quoted_event: STRING;
 string: STRING;
 
 // Lexer Rules
-DOMAINS: 'domains';
+CONTEXTS: 'contexts';
 DATA_STORES: 'data-stores';
 LANGUAGE: 'language';
 DEPLOYMENT: 'deployment';

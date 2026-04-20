@@ -49,9 +49,13 @@ If you just want to write Craft code with syntax highlighting, you can skip this
 
 ### Using Docker (Recommended)
 
+Run the latest Craft server directly from Docker Hub — no build needed:
+
 ```bash
-docker run -p 8080:8080 tcarcao/craft-server
+docker run --rm -p 8080:8080 tiagocarcao/craft:latest
 ```
+
+The server will start on `http://localhost:8080`.
 
 ### From Source
 
@@ -60,11 +64,11 @@ docker run -p 8080:8080 tcarcao/craft-server
 git clone https://github.com/tcarcao/craft.git
 cd craft
 
-# Install dependencies
-npm install
+# Generate ANTLR parser (pulls tiagocarcao/antlr4-craft:4.13.2 from Docker Hub automatically)
+make generate-grammar
 
-# Start the server
-npm start
+# Build and run the server container
+make docker-build && make docker-run
 ```
 
 The server will start on `http://localhost:8080`.
@@ -88,7 +92,7 @@ Open VSCode settings (`Ctrl+,`) and search for "craft":
    ```craft
    services {
      UserService {
-       domains: Authentication
+       contexts: Authentication
      }
    }
    ```

@@ -68,23 +68,23 @@ domain Notification {
 
 services {
     UserService {
-        domains: Authentication, Profile, Preferences
+        contexts: Authentication, Profile, Preferences
         data-stores: postgresql
         language: golang
         deployment: canary
     }
     ProductService {
-        domains: Catalog, Inventory, Pricing
+        contexts: Catalog, Inventory, Pricing
         data-stores: postgresql, redis
         language: java
     }
     OrderService {
-        domains: OrderManagement, Payment, Shipping
+        contexts: OrderManagement, Payment, Shipping
         data-stores: postgresql, kafka
         language: typescript
     }
     NotificationService {
-        domains: EmailNotifier, SMSNotifier, PushNotifier
+        contexts: EmailNotifier, SMSNotifier, PushNotifier
         data-stores: rabbitmq
         language: python
     }

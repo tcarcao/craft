@@ -86,7 +86,7 @@ Generates a C4 diagram from only the selected text in your editor.
 // Select just this service definition
 services {
     UserService {
-        domains: Authentication, Profile
+        contexts: Authentication, Profile
         data-stores: user_db
         language: golang
     }
@@ -138,7 +138,7 @@ Manually refreshes the domain tree view.
 
 **Command:** `Craft: Select All Domains`
 
-Selects all domains, subdomains, and use cases in the current view.
+Selects all domains, bounded contexts, and use cases in the current view.
 
 **When to use:**
 - Generating a complete architecture diagram using sidebar selections

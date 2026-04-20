@@ -27,13 +27,13 @@ func TestParser_SingleDomainDefinition(t *testing.T) {
 	}
 
 	expectedSubDomains := []string{"User", "Product", "Order", "Payment"}
-	if len(domain.SubDomains) != len(expectedSubDomains) {
-		t.Errorf("Expected %d subdomains, got %d", len(expectedSubDomains), len(domain.SubDomains))
+	if len(domain.BoundedContexts) != len(expectedSubDomains) {
+		t.Errorf("Expected %d subdomains, got %d", len(expectedSubDomains), len(domain.BoundedContexts))
 	}
 
 	// Check that all expected subdomains are present (order may vary due to map iteration)
 	subdomainMap := make(map[string]bool)
-	for _, subDomain := range domain.SubDomains {
+	for _, subDomain := range domain.BoundedContexts {
 		subdomainMap[subDomain] = true
 	}
 	for _, expectedSubDomain := range expectedSubDomains {
@@ -88,14 +88,14 @@ func TestParser_MultipleDomainDefinition(t *testing.T) {
 			t.Errorf("Expected domain name '%s', got '%s'", expected.name, domain.Name)
 		}
 
-		if len(domain.SubDomains) != len(expected.subdomains) {
+		if len(domain.BoundedContexts) != len(expected.subdomains) {
 			t.Errorf("Expected %d subdomains for domain '%s', got %d",
-				len(expected.subdomains), expected.name, len(domain.SubDomains))
+				len(expected.subdomains), expected.name, len(domain.BoundedContexts))
 		}
 
 		// Check that all expected subdomains are present (order may vary due to map iteration)
 		subdomainMap := make(map[string]bool)
-		for _, subDomain := range domain.SubDomains {
+		for _, subDomain := range domain.BoundedContexts {
 			subdomainMap[subDomain] = true
 		}
 		for _, expectedSubdomain := range expected.subdomains {
@@ -151,18 +151,18 @@ func TestParser_MixedDomainDefinitions(t *testing.T) {
 
 	// Validate specific domains
 	singleDomain := model.Domains[0]
-	if len(singleDomain.SubDomains) != 2 {
-		t.Errorf("Expected 2 subdomains for SingleDomain, got %d", len(singleDomain.SubDomains))
+	if len(singleDomain.BoundedContexts) != 2 {
+		t.Errorf("Expected 2 subdomains for SingleDomain, got %d", len(singleDomain.BoundedContexts))
 	}
 
 	multipleDomain1 := model.Domains[1]
-	if len(multipleDomain1.SubDomains) != 3 {
-		t.Errorf("Expected 3 subdomains for MultipleDomain1, got %d", len(multipleDomain1.SubDomains))
+	if len(multipleDomain1.BoundedContexts) != 3 {
+		t.Errorf("Expected 3 subdomains for MultipleDomain1, got %d", len(multipleDomain1.BoundedContexts))
 	}
 
 	anotherSingle := model.Domains[3]
-	if len(anotherSingle.SubDomains) != 1 || anotherSingle.SubDomains[0] != "OnlyOne" {
-		t.Errorf("Expected 1 subdomain 'OnlyOne' for AnotherSingleDomain, got %v", anotherSingle.SubDomains)
+	if len(anotherSingle.BoundedContexts) != 1 || anotherSingle.BoundedContexts[0] != "OnlyOne" {
+		t.Errorf("Expected 1 subdomain 'OnlyOne' for AnotherSingleDomain, got %v", anotherSingle.BoundedContexts)
 	}
 }
 
@@ -190,13 +190,13 @@ func TestParser_CompleteDSLWithDomains(t *testing.T) {
 
 	services {
 		UserService {
-			domains: User
+			contexts: User
 			data-stores: user_db
 			language: golang
 			deployment: canary(20% -> staging, 80% -> production)
 		}
 		ProductService {
-			domains: Product
+			contexts: Product
 			data-stores: product_db, product_cache
 			language: java
 		}
@@ -204,7 +204,7 @@ func TestParser_CompleteDSLWithDomains(t *testing.T) {
 
 	exposure PublicAPI {
 		to: external_clients
-		of: UserService, ProductService
+		contexts: UserService, ProductService
 		through: APIGateway
 	}
 
@@ -253,9 +253,9 @@ func TestParser_CompleteDSLWithDomains(t *testing.T) {
 	}
 
 	expectedECommerceSubDomains := []string{"User", "Product", "Order", "Payment"}
-	if len(ecommerce.SubDomains) != len(expectedECommerceSubDomains) {
+	if len(ecommerce.BoundedContexts) != len(expectedECommerceSubDomains) {
 		t.Errorf("Expected %d subdomains for ECommerce, got %d",
-			len(expectedECommerceSubDomains), len(ecommerce.SubDomains))
+			len(expectedECommerceSubDomains), len(ecommerce.BoundedContexts))
 	}
 
 	// Validate use case references domains correctly
@@ -426,7 +426,7 @@ func TestParser_DomainNamingEdgeCases(t *testing.T) {
 	}
 	expectedUnderscoreSubs := []string{"SubDomain_1", "SubDomain_2"}
 	underscoreSubMap := make(map[string]bool)
-	for _, sub := range underscoreDomain.SubDomains {
+	for _, sub := range underscoreDomain.BoundedContexts {
 		underscoreSubMap[sub] = true
 	}
 	for _, expectedSub := range expectedUnderscoreSubs {
@@ -440,7 +440,7 @@ func TestParser_DomainNamingEdgeCases(t *testing.T) {
 	}
 	expectedHyphenSubs := []string{"Sub-Domain-A", "Sub-Domain-B"}
 	hyphenSubMap := make(map[string]bool)
-	for _, sub := range hyphenDomain.SubDomains {
+	for _, sub := range hyphenDomain.BoundedContexts {
 		hyphenSubMap[sub] = true
 	}
 	for _, expectedSub := range expectedHyphenSubs {
@@ -502,13 +502,13 @@ func TestParser_DuplicateDomainMerging(t *testing.T) {
 
 	// Payment domain should have all subdomains merged (5 total)
 	expectedPaymentSubs := []string{"ProcessPayment", "ValidateCard", "RefundPayment", "CancelPayment", "ChargeFee"}
-	if len(paymentDomain.SubDomains) != len(expectedPaymentSubs) {
-		t.Errorf("Expected %d Payment subdomains, got %d", len(expectedPaymentSubs), len(paymentDomain.SubDomains))
+	if len(paymentDomain.BoundedContexts) != len(expectedPaymentSubs) {
+		t.Errorf("Expected %d Payment subdomains, got %d", len(expectedPaymentSubs), len(paymentDomain.BoundedContexts))
 	}
 
 	// Check that all expected subdomains are present (order may vary due to map iteration)
 	subdomainMap := make(map[string]bool)
-	for _, sub := range paymentDomain.SubDomains {
+	for _, sub := range paymentDomain.BoundedContexts {
 		subdomainMap[sub] = true
 	}
 	for _, expectedSub := range expectedPaymentSubs {
@@ -519,8 +519,8 @@ func TestParser_DuplicateDomainMerging(t *testing.T) {
 
 	// User domain should have 2 subdomains
 	expectedUserSubs := []string{"CreateAccount", "UpdateProfile"}
-	if len(userDomain.SubDomains) != len(expectedUserSubs) {
-		t.Errorf("Expected %d User subdomains, got %d", len(expectedUserSubs), len(userDomain.SubDomains))
+	if len(userDomain.BoundedContexts) != len(expectedUserSubs) {
+		t.Errorf("Expected %d User subdomains, got %d", len(expectedUserSubs), len(userDomain.BoundedContexts))
 	}
 }
 
@@ -549,13 +549,13 @@ func TestParser_DuplicateSubdomainMerging(t *testing.T) {
 
 	// Should have 3 unique subdomains (duplicates removed)
 	expectedSubs := []string{"AddItem", "RemoveItem", "UpdateItem"}
-	if len(domain.SubDomains) != len(expectedSubs) {
-		t.Errorf("Expected %d unique subdomains, got %d", len(expectedSubs), len(domain.SubDomains))
+	if len(domain.BoundedContexts) != len(expectedSubs) {
+		t.Errorf("Expected %d unique subdomains, got %d", len(expectedSubs), len(domain.BoundedContexts))
 	}
 
 	// Check that all expected subdomains are present
 	subdomainMap := make(map[string]bool)
-	for _, sub := range domain.SubDomains {
+	for _, sub := range domain.BoundedContexts {
 		subdomainMap[sub] = true
 	}
 	for _, expectedSub := range expectedSubs {
@@ -639,13 +639,13 @@ func BenchmarkParser_ComplexDSLWithDomains(b *testing.B) {
 
 	services {
 		UserService {
-			domains: User, Product
+			contexts: User, Product
 			data-stores: user_db, user_cache
 			language: golang
 			deployment: canary(10% -> staging, 90% -> production)
 		},
 		OrderService {
-			domains: Order, Payment, Inventory
+			contexts: Order, Payment, Inventory
 			data-stores: order_db, payment_db
 			language: java
 			deployment: blue_green

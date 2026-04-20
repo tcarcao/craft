@@ -172,9 +172,9 @@ type C4PreviewRequest struct {
 
 type FocusInfo struct {
 	FocusedServiceNames   []string `json:"focusedServiceNames"`
-	FocusedSubDomainNames []string `json:"focusedSubDomainNames"`
+	FocusedContextNames []string `json:"focusedContextNames"`
 	HasFocusedServices    bool     `json:"hasFocusedServices"`
-	HasFocusedSubDomains  bool     `json:"hasFocusedSubDomains"`
+	HasFocusedContexts  bool     `json:"hasFocusedContexts"`
 }
 
 type PreviewResponse struct {
@@ -282,8 +282,8 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 
 		// Generate C4 diagram with focus information, boundaries mode, and database visibility
 		var diagram []byte
-		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
-			diagram, err = s.viz.GenerateC4WithFocusAndSubDomains(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, showDatabases)
+		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedContexts) {
+			diagram, err = s.viz.GenerateC4WithFocusAndContexts(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames, boundariesMode, showDatabases)
 		} else {
 			diagram, err = s.viz.GenerateC4(arch, boundariesMode, showDatabases)
 		}
@@ -437,8 +437,8 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 		// Generate C4 diagram with focus and format
 		var diagram []byte
 		var contentType string
-		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedSubDomains) {
-			diagram, contentType, err = s.viz.GenerateC4WithFocusSubDomainsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedSubDomainNames, boundariesMode, showDatabases, format)
+		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedContexts) {
+			diagram, contentType, err = s.viz.GenerateC4WithFocusContextsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames, boundariesMode, showDatabases, format)
 		} else {
 			diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, showDatabases, format)
 		}

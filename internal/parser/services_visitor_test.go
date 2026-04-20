@@ -8,7 +8,7 @@ import (
 func TestSimpleServiceParsing(t *testing.T) {
 	dslContent := `services {
   TestService {
-    domains: TestDomain
+    contexts: TestDomain
   }
 }`
 
@@ -37,12 +37,12 @@ func TestSimpleServiceParsing(t *testing.T) {
 		t.Errorf("Expected service name 'TestService', got '%s'", service.Name)
 	}
 
-	if len(service.Domains) != 1 {
-		t.Errorf("Expected 1 domain, got %d", len(service.Domains))
+	if len(service.Contexts) != 1 {
+		t.Errorf("Expected 1 domain, got %d", len(service.Contexts))
 	}
 
-	if len(service.Domains) > 0 && service.Domains[0] != "TestDomain" {
-		t.Errorf("Expected domain 'TestDomain', got '%s'", service.Domains[0])
+	if len(service.Contexts) > 0 && service.Contexts[0] != "TestDomain" {
+		t.Errorf("Expected domain 'TestDomain', got '%s'", service.Contexts[0])
 	}
 }
 
@@ -50,23 +50,23 @@ func TestServiceNameParsing(t *testing.T) {
 	// Test DSL with all supported service name formats
 	dslContent := `services {
   WalletService {
-    domains: Wallet, WalletItemPurchase
+    contexts: Wallet, WalletItemPurchase
     data-stores: wallet_db
   }
   "Order Service" {
-    domains: OrderManagement
+    contexts: OrderManagement
     data-stores: order_db
   }
   service-re-go-vas {
-    domains: VASScheduling, VASProcessing
+    contexts: VASScheduling, VASProcessing
     data-stores: vas_db, vas_cache
   }
   "complex-service name" {
-    domains: ComplexDomain
+    contexts: ComplexDomain
     data-stores: complex_db
   }
   simple_underscore_service {
-    domains: UnderscoreDomain
+    contexts: UnderscoreDomain
     data-stores: underscore_db
   }
 }
@@ -141,14 +141,14 @@ use_case "Test Case" {
 			}
 
 			// Verify domains
-			if len(service.Domains) != len(expected.domains) {
+			if len(service.Contexts) != len(expected.domains) {
 				t.Errorf("Expected %d domains for service '%s', got %d",
-					len(expected.domains), expected.name, len(service.Domains))
+					len(expected.domains), expected.name, len(service.Contexts))
 			} else {
 				for i, expectedDomain := range expected.domains {
-					if service.Domains[i] != expectedDomain {
+					if service.Contexts[i] != expectedDomain {
 						t.Errorf("Expected domain '%s' at index %d for service '%s', got '%s'",
-							expectedDomain, i, expected.name, service.Domains[i])
+							expectedDomain, i, expected.name, service.Contexts[i])
 					}
 				}
 			}
@@ -189,7 +189,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 			name: "Service with hyphens and numbers",
 			dslContent: `services {
   service-123-test {
-    domains: TestDomain,
+    contexts: TestDomain,
     data-stores: test_db
   }
 }`,
@@ -200,7 +200,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 			name: "Service with underscores",
 			dslContent: `services {
   service_test_123 {
-    domains: TestDomain,
+    contexts: TestDomain,
     data-stores: test_db
   }
 }`,
@@ -211,7 +211,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 			name: "Quoted service with special characters",
 			dslContent: `services {
   "Service with spaces & symbols" {
-    domains: TestDomain,
+    contexts: TestDomain,
     data-stores: test_db
   }
 }`,
@@ -222,7 +222,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 			name: "Single character service name",
 			dslContent: `services {
   A {
-    domains: TestDomain,
+    contexts: TestDomain,
     data-stores: test_db
   }
 }`,
@@ -260,7 +260,7 @@ func TestServiceNameEdgeCases(t *testing.T) {
 func TestServiceLanguageParsing(t *testing.T) {
 	dslContent := `services {
   TestService {
-    domains: TestDomain
+    contexts: TestDomain
 	language: golang
   }
 }`
@@ -337,7 +337,7 @@ func TestDSLWithoutServices(t *testing.T) {
 
 func TestParser_SingleServiceDefinition(t *testing.T) {
 	dsl := `service PaymentService {
-		domains: ProcessPayment, ValidateCard
+		contexts: ProcessPayment, ValidateCard
 		data-stores: payment_db, audit_db
 		language: java
 	}`
@@ -360,12 +360,12 @@ func TestParser_SingleServiceDefinition(t *testing.T) {
 
 	// Verify domains
 	expectedDomains := []string{"ProcessPayment", "ValidateCard"}
-	if len(service.Domains) != len(expectedDomains) {
-		t.Errorf("Expected %d domains, got %d", len(expectedDomains), len(service.Domains))
+	if len(service.Contexts) != len(expectedDomains) {
+		t.Errorf("Expected %d domains, got %d", len(expectedDomains), len(service.Contexts))
 	}
 	for i, expectedDomain := range expectedDomains {
-		if service.Domains[i] != expectedDomain {
-			t.Errorf("Expected domain '%s' at index %d, got '%s'", expectedDomain, i, service.Domains[i])
+		if service.Contexts[i] != expectedDomain {
+			t.Errorf("Expected domain '%s' at index %d, got '%s'", expectedDomain, i, service.Contexts[i])
 		}
 	}
 
@@ -388,17 +388,17 @@ func TestParser_SingleServiceDefinition(t *testing.T) {
 
 func TestParser_MixedServiceDefinitions(t *testing.T) {
 	dsl := `service PaymentService {
-		domains: ProcessPayment
+		contexts: ProcessPayment
 		language: java
 	}
 
 	services {
 		UserService {
-			domains: CreateAccount, UpdateProfile
+			contexts: CreateAccount, UpdateProfile
 			language: golang
 		}
 		InventoryService {
-			domains: AddItem, RemoveItem
+			contexts: AddItem, RemoveItem
 			language: nodejs
 		}
 	}`
@@ -425,8 +425,8 @@ func TestParser_MixedServiceDefinitions(t *testing.T) {
 		if paymentService.Language != "java" {
 			t.Errorf("Expected PaymentService language 'java', got '%s'", paymentService.Language)
 		}
-		if len(paymentService.Domains) != 1 || paymentService.Domains[0] != "ProcessPayment" {
-			t.Errorf("Expected PaymentService domains [ProcessPayment], got %v", paymentService.Domains)
+		if len(paymentService.Contexts) != 1 || paymentService.Contexts[0] != "ProcessPayment" {
+			t.Errorf("Expected PaymentService domains [ProcessPayment], got %v", paymentService.Contexts)
 		}
 	}
 
@@ -450,7 +450,7 @@ func TestParser_MixedServiceDefinitions(t *testing.T) {
 func TestParser_ServiceWithCanaryDeployment(t *testing.T) {
 	dsl := `services {
 		PaymentService {
-			domains: Payment, Billing
+			contexts: Payment, Billing
 			data-stores: payment_db, audit_log
 			language: golang
 			deployment: canary(10% -> staging, 90% -> production)
@@ -506,7 +506,7 @@ func TestParser_ServiceWithCanaryDeployment(t *testing.T) {
 func TestParser_ServiceWithBlueGreenDeployment(t *testing.T) {
 	dsl := `services {
 		OrderService {
-			domains: Order, Inventory
+			contexts: Order, Inventory
 			deployment: blue_green
 		}
 	}`
@@ -531,7 +531,7 @@ func TestParser_ServiceWithBlueGreenDeployment(t *testing.T) {
 func TestParser_ServiceWithRollingDeployment(t *testing.T) {
 	dsl := `services {
 		UserService {
-			domains: User, Profile
+			contexts: User, Profile
 			deployment: rolling(25% -> batch1, 25% -> batch2, 25% -> batch3, 25% -> batch4)
 		}
 	}`
@@ -567,15 +567,15 @@ func TestParser_ServiceWithRollingDeployment(t *testing.T) {
 func TestParser_DeploymentEdgeCases(t *testing.T) {
 	dsl := `services {
 		Service1 {
-			domains: Domain1
+			contexts: Domain1
 			deployment: canary(100% -> production)
 		}
 		Service2 {
-			domains: Domain2
+			contexts: Domain2
 			deployment: rolling(50% -> half1, 50% -> half2)
 		}
 		Service3 {
-			domains: Domain3
+			contexts: Domain3
 			deployment: blue_green
 		}
 	}`
@@ -642,11 +642,11 @@ func TestParser_DomainsWithServices(t *testing.T) {
 
 	services {
 		UserService {
-			domains: User, Product
+			contexts: User, Product
 			data-stores: user_db
 		}
 		AnalyticsService {
-			domains: Reporting, Metrics
+			contexts: Reporting, Metrics
 			data-stores: analytics_db, metrics_cache
 			language: python
 		}
@@ -684,11 +684,11 @@ func TestParser_DomainsWithServices(t *testing.T) {
 	}
 
 	expectedUserDomains := []string{"User", "Product"}
-	if len(userService.Domains) != len(expectedUserDomains) {
-		t.Errorf("Expected %d domains for UserService, got %d", len(expectedUserDomains), len(userService.Domains))
+	if len(userService.Contexts) != len(expectedUserDomains) {
+		t.Errorf("Expected %d domains for UserService, got %d", len(expectedUserDomains), len(userService.Contexts))
 	}
 
-	for i, domain := range userService.Domains {
+	for i, domain := range userService.Contexts {
 		if domain != expectedUserDomains[i] {
 			t.Errorf("Expected domain '%s' for UserService, got '%s'", expectedUserDomains[i], domain)
 		}
@@ -698,7 +698,7 @@ func TestParser_DomainsWithServices(t *testing.T) {
 func BenchmarkParser_ServiceWithDeployment(b *testing.B) {
 	dsl := `services {
 		BenchmarkService {
-			domains: Domain1, Domain2, Domain3
+			contexts: Domain1, Domain2, Domain3
 			data-stores: db1, db2, cache1, cache2
 			language: golang
 			deployment: canary(5% -> canary, 20% -> staging, 75% -> production)

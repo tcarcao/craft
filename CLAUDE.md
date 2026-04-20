@@ -1,90 +1,166 @@
-# CLAUDE.md
+# Craft — CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> Agent instructions for the **Craft** repository (`github.com/tcarcao/craft`).
 
 ## Project Overview
 
-Craft is a domain-specific language for modeling business use cases and domain interactions with powerful visualization capabilities for domain-driven design and C4 architecture diagrams. The project is currently in v2.0 development, representing a transformation from static architecture description to dynamic use case modeling.
+Craft is a domain-specific language (DSL) for modeling business use cases and domain interactions. It generates visual diagrams (C4, domain-flow, sequence) from `.craft` source files.
 
-## Core Architecture
+**Tech Stack:** Go 1.22, ANTLR4 4.13.2, Docker / Podman, GitHub Actions.
 
-### Language Components
-- **Grammar**: ANTLR4 grammar located in `tools/antlr-grammar/Craft.g4` defines the DSL syntax
-- **Parser**: Go parser implementation in `pkg/parser/` and `internal/parser/` generated from ANTLR grammar
-- **Visualizer**: Diagram generation engine in `internal/visualizer/` that produces C4, context map, sequence, and domain diagrams
-- **Processor**: Core processing logic in `internal/processor/` that orchestrates parsing and visualization
+---
 
-### Project Structure
-- `cmd/craft/` - CLI tool for batch processing DSL files into diagrams
-- `cmd/server/` - HTTP server providing web interface and API endpoints for real-time diagram generation
-- `internal/` - Core business logic (parser, visualizer, processor)
-- `pkg/` - Public APIs and shared components
-- `tools/antlr-grammar/` - ANTLR4 grammar definition
-- `tools/vscode-extension/` - VS Code extension with language server, syntax highlighting, and live preview
-- `examples/` - DSL example files demonstrating language features
+## Repository Layout
 
-## Essential Commands
-
-### Grammar Generation (Required before building)
-```bash
-# Pull ANTLR builder image and generate parser code
-make docker-pull-antlr-image generate-grammar
+```
+cmd/
+  server/       HTTP server (diagram generation API)
+  craft/        CLI entry point
+internal/
+  parser/       ANTLR visitor + Go types (Services, Domains, Exposures, UseCases)
+  visualizer/   PlantUML / C4 diagram generators
+  processor/    .craft file processing pipeline
+pkg/
+  parser/       ANTLR-generated Go parser (auto-generated — do not edit manually)
+tools/
+  antlr-grammar/  Craft.g4 — the ANTLR grammar source
+build/
+  package/
+    Dockerfile          Multi-stage server image
+    antlr.Dockerfile    ANTLR builder image (tiagocarcao/antlr4-craft)
+.github/
+  workflows/
+    deploy.yml    Deploy VitePress docs to GitHub Pages
+    publish.yml   Build & push tiagocarcao/craft to Docker Hub on v* tags
+docs/
+  page/         VitePress documentation site
+  superpowers/  Agent plans and specs
+examples/       Example .craft files
 ```
 
-### Building and Running
-```bash
-# Build Docker image
-make docker-build
-
-# Run web server (http://localhost:8080)
-make docker-run
-
-# Run tests
-make test
-```
-
-### VS Code Extension Development
-```bash
-cd tools/vscode-extension
-pnpm install
-pnpm run compile    # Compile TypeScript
-pnpm run watch      # Watch mode for development
-```
+---
 
 ## DSL Language Features
 
-The Craft language supports:
-- **Services**: Group domains into deployable units with technology stack specifications
-- **Use Cases**: Model business scenarios through triggers (external, events, listeners, scheduled) and actions (sync, async, internal)
-- **Exposures**: Define external access points and their relationships
-- **Domains**: Core business domains that interact within use cases
+| Keyword       | Description |
+|---------------|-------------|
+| `services`    | Groups related bounded contexts into deployable service units |
+| `contexts:`   | Bounded contexts — solution-space units grouped within a service |
+| `data-stores:` | Data stores associated with a service |
+| `language:`   | Implementation language of a service |
+| `use_case`    | Business scenario with triggers and domain actions |
+| `when`        | Scenario trigger (actor, event, domain listener, CRON) |
+| `asks … to`   | Synchronous domain-to-domain action |
+| `notifies`    | Asynchronous event publication |
+| `domain`      | A top-level domain grouping bounded contexts |
+| `expose`      | API exposure definition |
 
-## Development Dependencies
+### Key DSL Example
 
-### External Tools Required
-- **plantuml**: For generating PNG diagrams from PlantUML files
-- **dot (Graphviz)**: For generating PNG diagrams from DOT files
-- Both are required by the CLI tool (`cmd/craft/main.go`) for diagram generation
+```craft
+services {
+  UserService: {
+    contexts: Authentication, Profile
+    data-stores: user_db
+    language: golang
+  }
+}
 
-### Container Requirements
-- **Docker or Podman**: The Makefile auto-detects the available runtime
-- **ANTLR4 Docker Image**: Pulled from `tiagocarcao/antlr4-craft:4.13.2` on Docker Hub (no local build needed)
+use_case "User Registration" {
+  when Business_User creates Account
+    Authentication validates email format
+    Authentication asks Database to check email uniqueness
+    Profile creates user profile
+    Authentication notifies "User Registered"
+}
+```
 
-## VS Code Extension Integration
+> **Breaking change (v2.0):** `domains:` was renamed to `contexts:` in service blocks.
+> `of:` was renamed to `contexts:` in exposure blocks.
 
-The extension provides:
-- Syntax highlighting for `.craft` files
-- Language server with real-time validation
-- Domain and services tree views
-- Live diagram preview commands:
-  - `Ctrl+Shift+C`: Preview C4 diagram
-  - `Ctrl+Shift+M`: Preview context map
-  - `Ctrl+Shift+S`: Preview sequence diagram
-  - `Ctrl+Shift+D`: Preview domain diagram
+---
 
-## Key Technical Notes
+## Container Requirements
 
-- Grammar changes require regeneration via `make generate-grammar`
-- The web server at `:8080` provides API endpoints for VS Code extension integration
-- All diagram generation happens server-side and returns base64-encoded PNGs
-- The parser supports multi-file DSL projects with cross-file domain references
+- **Docker or Podman**: Auto-detected — whichever is available is used (`CONTAINER_RUNTIME` in Makefile)
+- **ANTLR4 Docker Image**: Pulled from `tiagocarcao/antlr4-craft:4.13.2` (no local build required)
+
+---
+
+## Common Commands
+
+```bash
+# First-time setup — pulls ANTLR image and regenerates parser
+make fresh-setup
+
+# Grammar generation only (pulls ANTLR image automatically)
+make generate-grammar
+
+# Build and run the server container (Server Only)
+make docker-build && make docker-run
+
+# Run web IDE and server using Docker Compose (Recommended)
+make compose-build && make compose-up-detached
+# Access Web IDE at http://localhost:3000 and Server at http://localhost:8080
+
+# Run tests
+make test
+
+# Multi-arch publish to Docker Hub (maintainers only, requires Docker + Buildx)
+make docker-publish IMAGE_TAG=v2.0.0
+
+# Publish ANTLR builder image (manual, rarely needed)
+make docker-publish-antlr
+```
+
+---
+
+## Grammar Generation
+
+The ANTLR grammar lives in `tools/antlr-grammar/Craft.g4`. Generated Go parser code lives in `pkg/parser/` (gitignored — regenerated on demand).
+
+To regenerate after grammar changes:
+
+```bash
+make generate-grammar
+# (automatically pulls tiagocarcao/antlr4-craft:4.13.2 from Docker Hub)
+```
+
+Do **not** edit files in `pkg/parser/` manually.
+
+---
+
+## GitHub Actions
+
+| Workflow       | Trigger                | Purpose |
+|----------------|------------------------|---------|
+| `deploy.yml`   | Push to `main` (docs/) | Deploy VitePress docs to GitHub Pages |
+| `publish.yml`  | Push `v*` tag          | Run tests → build multi-arch Docker image → push to Docker Hub |
+
+### Required GitHub Secrets (for `publish.yml`)
+
+| Secret              | Value |
+|---------------------|-------|
+| `DOCKERHUB_USERNAME` | `tiagocarcao` |
+| `DOCKERHUB_TOKEN`    | Docker Hub access token |
+
+Set these at: GitHub repo → Settings → Secrets and variables → Actions.
+
+---
+
+## Testing
+
+```bash
+go test ./...
+```
+
+Parser tests live in `internal/parser/`. After grammar changes, run tests to confirm visitors handle new types correctly.
+
+---
+
+## VS Code Extension
+
+The Craft VS Code extension is a separate repository:
+🔗 **[craft-vscode-extension](https://github.com/tcarcao/craft-vscode-extension)**
+
+It uses `tree-sitter-craft` for syntax highlighting and communicates with the Craft HTTP server for diagram generation.

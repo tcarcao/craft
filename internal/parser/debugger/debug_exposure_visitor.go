@@ -110,8 +110,8 @@ func (d *DebugVisitor) VisitExposure_property(ctx *parser.Exposure_propertyConte
 		switch c := child.(type) {
 		case *parser.Target_listContext:
 			d.VisitTarget_list(c)
-		case *parser.Domain_listContext:
-			d.VisitDomain_list(c)
+		case *parser.Context_listContext:
+			d.VisitContext_list(c)
 		case *parser.Gateway_listContext:
 			d.VisitGateway_list(c)
 		default:

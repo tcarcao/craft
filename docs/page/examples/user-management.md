@@ -32,14 +32,14 @@ domains {
 
 services {
   AuthService {
-    domains: Authentication, Authorization
+    contexts: Authentication, Authorization
     language: nodejs
     data-stores: auth_db, token_cache
     deployment: rolling
   }
 
   ProfileService {
-    domains: Profile
+    contexts: Profile
     language: python
     data-stores: profile_db
     deployment: rolling

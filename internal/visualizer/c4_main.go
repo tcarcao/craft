@@ -14,9 +14,9 @@ func (v *Visualizer) GenerateC4(arch *parser.DSLModel, boundariesMode C4Generati
 	return generatePlantUML(diagram)
 }
 
-func (v *Visualizer) GenerateC4WithFocusAndSubDomains(arch *parser.DSLModel, focusedServiceNames []string, focusedSubDomainNames []string, boundariesMode C4GenerationMode, showDatabases bool) ([]byte, error) {
+func (v *Visualizer) GenerateC4WithFocusAndContexts(arch *parser.DSLModel, focusedServiceNames []string, focusedContextNames []string, boundariesMode C4GenerationMode, showDatabases bool) ([]byte, error) {
 	fmt.Println(boundariesMode)
-	diagram := GenerateC4ContainerDiagramWithFocusAndSubDomains(arch, boundariesMode, focusedServiceNames, focusedSubDomainNames, showDatabases)
+	diagram := GenerateC4ContainerDiagramWithFocusAndContexts(arch, boundariesMode, focusedServiceNames, focusedContextNames, showDatabases)
 
 	fmt.Println(diagram)
 	return generatePlantUML(diagram)
@@ -31,9 +31,9 @@ func (v *Visualizer) GenerateC4WithFormat(arch *parser.DSLModel, boundariesMode 
 	return generatePlantUMLWithFormat(diagram, format)
 }
 
-func (v *Visualizer) GenerateC4WithFocusSubDomainsAndFormat(arch *parser.DSLModel, focusedServiceNames []string, focusedSubDomainNames []string, boundariesMode C4GenerationMode, showDatabases bool, format SupportedFormat) ([]byte, string, error) {
+func (v *Visualizer) GenerateC4WithFocusContextsAndFormat(arch *parser.DSLModel, focusedServiceNames []string, focusedContextNames []string, boundariesMode C4GenerationMode, showDatabases bool, format SupportedFormat) ([]byte, string, error) {
 	fmt.Println(boundariesMode)
-	diagram := GenerateC4ContainerDiagramWithFocusAndSubDomains(arch, boundariesMode, focusedServiceNames, focusedSubDomainNames, showDatabases)
+	diagram := GenerateC4ContainerDiagramWithFocusAndContexts(arch, boundariesMode, focusedServiceNames, focusedContextNames, showDatabases)
 
 	fmt.Println(diagram)
 	return generatePlantUMLWithFormat(diagram, format)

@@ -7,7 +7,7 @@ Craft is a **domain-specific language (DSL)** for modeling business use cases an
 ## Key Features
 
 ### 🎯 Domain-Driven Design
-Model your business domains, subdomains, and bounded contexts using clear, declarative syntax.
+Model your business domains, bounded contexts, and bounded contexts using clear, declarative syntax.
 
 ### 📊 Automatic Diagram Generation
 Generate C4 architecture diagrams, domain flow diagrams, and sequence diagrams from your code.
@@ -28,7 +28,7 @@ Define services with technology stacks, deployment strategies, and data stores.
 
 Craft allows you to define:
 
-- **Domains** - Core business domains and subdomains
+- **Domains** - Core business domains and bounded contexts
 - **Actors** - Users, systems, and services that interact with your system
 - **Services** - Deployable units with technology specifications
 - **Use Cases** - Business scenarios with triggers and domain actions

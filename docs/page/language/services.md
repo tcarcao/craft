@@ -6,7 +6,7 @@ Services group related domains into deployable units with technology specificati
 
 ```craft
 service UserService {
-  domains: Authentication, Profile
+  contexts: Authentication, Profile
   language: nodejs
   data-stores: user_db
   deployment: rolling
@@ -18,14 +18,14 @@ service UserService {
 ```craft
 services {
   UserService {
-    domains: Authentication, Profile
+    contexts: Authentication, Profile
     language: nodejs
     data-stores: user_db, cache
     deployment: rolling
   }
 
   OrderService {
-    domains: Order, Payment
+    contexts: Order, Payment
     language: java
     data-stores: order_db, payment_db
     deployment: canary(50% -> staging, 100% -> production)
@@ -39,7 +39,7 @@ services {
 Comma-separated list of domains this service handles:
 
 ```craft
-domains: Authentication, Profile, Settings
+contexts: Authentication, Profile, Settings
 ```
 
 ### language
@@ -104,28 +104,28 @@ deployment: canary(
 ```craft
 services {
   APIGateway {
-    domains: Routing, Authentication
+    contexts: Routing, Authentication
     language: nodejs
     data-stores: gateway_cache
     deployment: rolling
   }
 
   UserService {
-    domains: Profile, Settings, Preferences
+    contexts: Profile, Settings, Preferences
     language: golang
     data-stores: user_db, user_cache
     deployment: canary(50% -> staging, 100% -> production)
   }
 
   OrderService {
-    domains: Order, Cart, Checkout
+    contexts: Order, Cart, Checkout
     language: java
     data-stores: order_db, order_event_store
     deployment: blue_green
   }
 
   InventoryService {
-    domains: Inventory, Warehouse
+    contexts: Inventory, Warehouse
     language: rust
     data-stores: inventory_db
     deployment: rolling
@@ -138,11 +138,11 @@ services {
 ### Group Related Domains
 ```craft
 ✅ UserService {
-  domains: Authentication, Profile, Settings
+  contexts: Authentication, Profile, Settings
 }
 
 ❌ MixedService {
-  domains: Authentication, Order, Inventory
+  contexts: Authentication, Order, Inventory
 }
 ```
 
