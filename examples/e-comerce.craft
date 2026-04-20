@@ -1,15 +1,15 @@
 services {
   WalletService {
-    domains: Wallet, WalletItemPurchase, WalletItemAddition,
+    contexts: Wallet, WalletItemPurchase, WalletItemAddition,
     data-stores: posgres, redis
     language: golang
   }
   "Order Service" {
-    domains: OrderManagement, OrderFulfilment
+    contexts: OrderManagement, OrderFulfilment
     data-stores: posgres
   }
   service-re-go-vas { 
-    domains: VASScheduling
+    contexts: VASScheduling
     data-stores: posgres, dynamodb
   }
 }
