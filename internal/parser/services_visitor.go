@@ -30,6 +30,7 @@ func (b *DSLModelBuilder) VisitService_def(ctx *parser.Service_defContext) inter
 		Deployment: DeploymentStrategy{
 			Rules: make([]DeploymentRule, 0),
 		},
+		Line: ctx.GetStart().GetLine(),
 	}
 
 	// Extract service name and properties
@@ -67,6 +68,7 @@ func (b *DSLModelBuilder) VisitService_block(ctx *parser.Service_blockContext) i
 		Deployment: DeploymentStrategy{
 			Rules: make([]DeploymentRule, 0),
 		},
+		Line: ctx.GetStart().GetLine(),
 	}
 
 	// Extract service name and properties

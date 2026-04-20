@@ -54,6 +54,7 @@ type Service struct {
 	DataStores []string           `json:"dataStores,omitempty"`
 	Language   string             `json:"language,omitempty"`
 	Deployment DeploymentStrategy `json:"deployment,omitempty"`
+	Line       int                `json:"line,omitempty"`
 }
 
 // DeploymentStrategy represents deployment configuration
@@ -112,6 +113,7 @@ type Action struct {
 	Connector    string     `json:"connector,omitempty"`    // "to", "as", "the", etc.
 	Phrase       string     `json:"phrase,omitempty"`       // The action phrase
 	Description  string     `json:"description"`            // Full human readable action
+	Line         int        `json:"line,omitempty"`
 }
 
 // ActionType defines the different types of actions
@@ -144,6 +146,7 @@ type Domain struct {
 type Actor struct {
 	Name string    `json:"name"`
 	Type ActorType `json:"type"`
+	Line int       `json:"line,omitempty"`
 }
 
 // ActorType defines the different types of actors

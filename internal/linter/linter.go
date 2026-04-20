@@ -23,21 +23,45 @@ type LintResult struct {
 	Message  string
 }
 
-// Lint runs all lint rules against a merged model and returns findings.
-// The files slice is used to attribute cross-file results; pass the ordered list of parsed files.
+// Rule is the interface all lint rules implement.
+type Rule interface {
+	// Name returns the rule identifier (e.g. "dead-event").
+	Name() string
+	// Check runs the rule against a merged model and returns findings.
+	Check(model *parser.DSLModel) []LintResult
+}
+
+var rules []Rule
+
+func init() {
+	rules = []Rule{
+		deadEventRule{},
+		unusedActorRule{},
+		undefinedContextRule{},
+		undefinedServiceContextRule{},
+		orphanedActionRule{},
+		eventPastTenseRule{},
+	}
+}
+
+// Lint runs all registered rules against the merged model.
 func Lint(files []string, model *parser.DSLModel) []LintResult {
 	var results []LintResult
-	results = append(results, checkDeadEvents(model)...)
-	results = append(results, checkUnusedActors(model)...)
-	results = append(results, checkUndefinedContexts(model)...)
-	results = append(results, checkUndefinedServiceContexts(model)...)
-	results = append(results, checkEventPastTense(model)...)
+	for _, r := range rules {
+		results = append(results, r.Check(model)...)
+	}
 	return results
 }
 
-// checkDeadEvents warns when an event is published (notifies) but never consumed (listens).
-func checkDeadEvents(model *parser.DSLModel) []LintResult {
-	published := map[string]bool{}
+// ── dead-event ────────────────────────────────────────────────────────────────
+
+type deadEventRule struct{}
+
+func (deadEventRule) Name() string { return "dead-event" }
+
+func (deadEventRule) Check(model *parser.DSLModel) []LintResult {
+	type pub struct{ line int }
+	published := map[string]pub{}
 	consumed := map[string]bool{}
 
 	for _, uc := range model.UseCases {
@@ -47,16 +71,19 @@ func checkDeadEvents(model *parser.DSLModel) []LintResult {
 			}
 			for _, a := range sc.Actions {
 				if a.Type == parser.ActionTypeAsync {
-					published[a.Event] = true
+					if _, seen := published[a.Event]; !seen {
+						published[a.Event] = pub{line: a.Line}
+					}
 				}
 			}
 		}
 	}
 
 	var results []LintResult
-	for event := range published {
+	for event, p := range published {
 		if !consumed[event] {
 			results = append(results, LintResult{
+				Line:     p.line,
 				Severity: SeverityWarning,
 				Message:  fmt.Sprintf("event %q is published but never consumed", event),
 			})
@@ -65,8 +92,13 @@ func checkDeadEvents(model *parser.DSLModel) []LintResult {
 	return results
 }
 
-// checkUnusedActors warns when an actor is defined but never appears as a trigger.
-func checkUnusedActors(model *parser.DSLModel) []LintResult {
+// ── unused-actor ──────────────────────────────────────────────────────────────
+
+type unusedActorRule struct{}
+
+func (unusedActorRule) Name() string { return "unused-actor" }
+
+func (unusedActorRule) Check(model *parser.DSLModel) []LintResult {
 	used := map[string]bool{}
 	for _, uc := range model.UseCases {
 		for _, sc := range uc.Scenarios {
@@ -80,6 +112,7 @@ func checkUnusedActors(model *parser.DSLModel) []LintResult {
 	for _, actor := range model.Actors {
 		if !used[actor.Name] {
 			results = append(results, LintResult{
+				Line:     actor.Line,
 				Severity: SeverityWarning,
 				Message:  fmt.Sprintf("actor %q is defined but never used as a trigger", actor.Name),
 			})
@@ -88,56 +121,53 @@ func checkUnusedActors(model *parser.DSLModel) []LintResult {
 	return results
 }
 
-// definedContextSet builds the set of all bounded contexts declared in domain blocks.
-func definedContextSet(model *parser.DSLModel) map[string]bool {
-	set := map[string]bool{}
-	for _, d := range model.Domains {
-		for _, bc := range d.BoundedContexts {
-			set[bc] = true
-		}
-	}
-	return set
-}
+// ── undefined-context ─────────────────────────────────────────────────────────
 
-// checkUndefinedContexts errors when a bounded context referenced in a use case is not defined.
-func checkUndefinedContexts(model *parser.DSLModel) []LintResult {
+type undefinedContextRule struct{}
+
+func (undefinedContextRule) Name() string { return "undefined-context" }
+
+func (undefinedContextRule) Check(model *parser.DSLModel) []LintResult {
 	if len(model.Domains) == 0 {
 		return nil
 	}
 	defined := definedContextSet(model)
-
 	reported := map[string]bool{}
 	var results []LintResult
 
-	report := func(name string) {
-		if name == "" || reported[name] {
+	report := func(name string, line int) {
+		if name == "" || reported[name] || defined[name] {
 			return
 		}
-		if !defined[name] {
-			reported[name] = true
-			results = append(results, LintResult{
-				Severity: SeverityError,
-				Message:  fmt.Sprintf("bounded context %q is referenced in a use case but not defined in any domain block", name),
-			})
-		}
+		reported[name] = true
+		results = append(results, LintResult{
+			Line:     line,
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("bounded context %q is referenced in a use case but not defined in any domain block", name),
+		})
 	}
 
 	for _, uc := range model.UseCases {
 		for _, sc := range uc.Scenarios {
 			if sc.Trigger.Type == parser.TriggerTypeDomainListen {
-				report(sc.Trigger.Domain)
+				report(sc.Trigger.Domain, 0)
 			}
 			for _, a := range sc.Actions {
-				report(a.Domain)
-				report(a.TargetDomain)
+				report(a.Domain, a.Line)
+				report(a.TargetDomain, a.Line)
 			}
 		}
 	}
 	return results
 }
 
-// checkUndefinedServiceContexts errors when a service lists a context not defined in any domain.
-func checkUndefinedServiceContexts(model *parser.DSLModel) []LintResult {
+// ── undefined-service-context ─────────────────────────────────────────────────
+
+type undefinedServiceContextRule struct{}
+
+func (undefinedServiceContextRule) Name() string { return "undefined-service-context" }
+
+func (undefinedServiceContextRule) Check(model *parser.DSLModel) []LintResult {
 	if len(model.Domains) == 0 {
 		return nil
 	}
@@ -148,6 +178,7 @@ func checkUndefinedServiceContexts(model *parser.DSLModel) []LintResult {
 		for _, ctx := range svc.Contexts {
 			if !defined[ctx] {
 				results = append(results, LintResult{
+					Line:     svc.Line,
 					Severity: SeverityError,
 					Message:  fmt.Sprintf("service %q references context %q which is not defined in any domain block", svc.Name, ctx),
 				})
@@ -157,21 +188,50 @@ func checkUndefinedServiceContexts(model *parser.DSLModel) []LintResult {
 	return results
 }
 
-// pastTenseRe matches a word ending in common past-tense suffixes.
+// ── orphaned-action ───────────────────────────────────────────────────────────
+
+type orphanedActionRule struct{}
+
+func (orphanedActionRule) Name() string { return "orphaned-action" }
+
+func (orphanedActionRule) Check(model *parser.DSLModel) []LintResult {
+	var results []LintResult
+	for _, uc := range model.UseCases {
+		for _, sc := range uc.Scenarios {
+			for _, a := range sc.Actions {
+				if a.Type == "" {
+					results = append(results, LintResult{
+						Line:     a.Line,
+						Severity: SeverityError,
+						Message:  fmt.Sprintf("action on line %d has no type — it may be outside a 'when' block", a.Line),
+					})
+				}
+			}
+		}
+	}
+	return results
+}
+
+// ── event-past-tense ──────────────────────────────────────────────────────────
+
+type eventPastTenseRule struct{}
+
+func (eventPastTenseRule) Name() string { return "event-past-tense" }
+
 var pastTenseRe = regexp.MustCompile(`(?i)\b\w+(ed|en)\b`)
 
-// checkEventPastTense warns when an event name doesn't appear to use past tense.
-func checkEventPastTense(model *parser.DSLModel) []LintResult {
+func (eventPastTenseRule) Check(model *parser.DSLModel) []LintResult {
 	reported := map[string]bool{}
 	var results []LintResult
 
-	check := func(event string) {
+	check := func(event string, line int) {
 		if event == "" || reported[event] {
 			return
 		}
 		reported[event] = true
 		if !pastTenseRe.MatchString(strings.ToLower(event)) {
 			results = append(results, LintResult{
+				Line:     line,
 				Severity: SeverityWarning,
 				Message:  fmt.Sprintf("event %q does not appear to use past tense", event),
 			})
@@ -181,14 +241,26 @@ func checkEventPastTense(model *parser.DSLModel) []LintResult {
 	for _, uc := range model.UseCases {
 		for _, sc := range uc.Scenarios {
 			if sc.Trigger.Type == parser.TriggerTypeEvent || sc.Trigger.Type == parser.TriggerTypeDomainListen {
-				check(sc.Trigger.Event)
+				check(sc.Trigger.Event, 0)
 			}
 			for _, a := range sc.Actions {
 				if a.Type == parser.ActionTypeAsync {
-					check(a.Event)
+					check(a.Event, a.Line)
 				}
 			}
 		}
 	}
 	return results
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+func definedContextSet(model *parser.DSLModel) map[string]bool {
+	set := map[string]bool{}
+	for _, d := range model.Domains {
+		for _, bc := range d.BoundedContexts {
+			set[bc] = true
+		}
+	}
+	return set
 }

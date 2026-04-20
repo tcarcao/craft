@@ -151,7 +151,8 @@ func (b *DSLModelBuilder) VisitAction_block(ctx *parser.Action_blockContext) int
 // Visit action
 func (b *DSLModelBuilder) VisitAction(ctx *parser.ActionContext) interface{} {
 	action := Action{
-		ID: b.generateID("action"),
+		ID:   b.generateID("action"),
+		Line: ctx.GetStart().GetLine(),
 	}
 
 	// Determine action type and extract data

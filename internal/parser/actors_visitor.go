@@ -42,6 +42,7 @@ func (b *DSLModelBuilder) VisitActor_definition(ctx *parser.Actor_definitionCont
 	actor := Actor{
 		Name: actorName,
 		Type: actorType,
+		Line: ctx.GetStart().GetLine(),
 	}
 
 	b.model.Actors = append(b.model.Actors, actor)
