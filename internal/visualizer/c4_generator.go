@@ -29,7 +29,7 @@ type C4DiagramGenerator struct {
 	presentationSystem *C4System
 	gatewaySystem      *C4System
 	focusedServices    map[string]bool // Services to show as internal
-	focusedSubDomains  map[string]bool // SubDomains to show as internal
+	focusedContexts  map[string]bool // Contexts to show as internal
 	hasFocus           bool            // Whether focus mode is enabled
 	showDatabases      bool            // Whether to show database containers
 }
@@ -45,7 +45,7 @@ func NewC4DiagramGenerator(mode C4GenerationMode, showDatabases bool) *C4Diagram
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
 		focusedServices:    make(map[string]bool),
-		focusedSubDomains:  make(map[string]bool),
+		focusedContexts:  make(map[string]bool),
 		hasFocus:           false,
 		showDatabases:      showDatabases,
 	}
@@ -67,22 +67,22 @@ func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames [
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
 		focusedServices:    focusedServices,
-		focusedSubDomains:  make(map[string]bool),
+		focusedContexts:  make(map[string]bool),
 		hasFocus:           len(focusedServiceNames) > 0,
 		showDatabases:      showDatabases,
 	}
 }
 
-// NewC4DiagramGeneratorWithFocusAndSubDomains creates a generator with service and subdomain focus
-func NewC4DiagramGeneratorWithFocusAndSubDomains(mode C4GenerationMode, focusedServiceNames []string, focusedSubDomainNames []string, showDatabases bool) *C4DiagramGenerator {
+// NewC4DiagramGeneratorWithFocusAndContexts creates a generator with service and context focus
+func NewC4DiagramGeneratorWithFocusAndContexts(mode C4GenerationMode, focusedServiceNames []string, focusedContextNames []string, showDatabases bool) *C4DiagramGenerator {
 	focusedServices := make(map[string]bool)
 	for _, serviceName := range focusedServiceNames {
 		focusedServices[serviceName] = true
 	}
 
-	focusedSubDomains := make(map[string]bool)
-	for _, subDomainName := range focusedSubDomainNames {
-		focusedSubDomains[subDomainName] = true
+	focusedContexts := make(map[string]bool)
+	for _, contextName := range focusedContextNames {
+		focusedContexts[contextName] = true
 	}
 
 	return &C4DiagramGenerator{
@@ -94,8 +94,8 @@ func NewC4DiagramGeneratorWithFocusAndSubDomains(mode C4GenerationMode, focusedS
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
 		focusedServices:    focusedServices,
-		focusedSubDomains:  focusedSubDomains,
-		hasFocus:           len(focusedServiceNames) > 0 || len(focusedSubDomainNames) > 0,
+		focusedContexts:  focusedContexts,
+		hasFocus:           len(focusedServiceNames) > 0 || len(focusedContextNames) > 0,
 		showDatabases:      showDatabases,
 	}
 }
@@ -221,13 +221,13 @@ func (g *C4DiagramGenerator) createServiceSystems() {
 
 // createDomainContainers creates separate containers for each domain (boundaries mode)
 func (g *C4DiagramGenerator) createDomainContainers(service parser.Service, system *C4System) {
-	for _, domain := range service.Domains {
+	for _, domain := range service.Contexts {
 		// containerName := fmt.Sprintf("%s_%s", service.Name, domain)
 		container := &C4Container{
 			Name:        domain,
 			System:      service.Name,
 			Technology:  g.getServiceTechnology(service.Language),
-			Description: fmt.Sprintf("%s domain logic", domain),
+			Description: fmt.Sprintf("%s [Context]", domain),
 			Domains:     []string{domain},
 			DataStores:  make([]string, 0),
 		}
@@ -238,15 +238,15 @@ func (g *C4DiagramGenerator) createDomainContainers(service parser.Service, syst
 
 // createApplicationContainer creates single application container (transparent mode)
 func (g *C4DiagramGenerator) createApplicationContainer(service parser.Service, system *C4System) {
-	if len(service.Domains) > 0 {
+	if len(service.Contexts) > 0 {
 		containerName := fmt.Sprintf("%s Application", service.Name)
 		container := &C4Container{
 			Name:       containerName,
 			System:     service.Name,
 			Technology: g.getServiceTechnology(service.Language),
 			Description: fmt.Sprintf("Core business logic for %s domains: %s",
-				service.Name, strings.Join(service.Domains, ", ")),
-			Domains:    service.Domains,
+				service.Name, strings.Join(service.Contexts, ", ")),
+			Domains:    service.Contexts,
 			DataStores: make([]string, 0),
 		}
 		g.containers[containerName] = container
@@ -531,7 +531,7 @@ func (g *C4DiagramGenerator) containsString(slice []string, item string) bool {
 
 func (g *C4DiagramGenerator) findServiceForDomain(domain string) string {
 	for _, service := range g.model.Services {
-		if slices.Contains(service.Domains, domain) {
+		if slices.Contains(service.Contexts, domain) {
 			return service.Name
 		}
 	}
@@ -571,8 +571,8 @@ func GenerateC4ContainerDiagram(model *parser.DSLModel, mode C4GenerationMode, s
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 
-func GenerateC4ContainerDiagramWithFocusAndSubDomains(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string, focusedSubDomainNames []string, showDatabases bool) string {
-	generator := NewC4DiagramGeneratorWithFocusAndSubDomains(mode, focusedServiceNames, focusedSubDomainNames, showDatabases)
+func GenerateC4ContainerDiagramWithFocusAndContexts(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string, focusedContextNames []string, showDatabases bool) string {
+	generator := NewC4DiagramGeneratorWithFocusAndContexts(mode, focusedServiceNames, focusedContextNames, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 

@@ -702,7 +702,7 @@ func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *pa
 		g.services[service.Name] = true
 
 		// Map each domain in this service to the service
-		for _, domain := range service.Domains {
+		for _, domain := range service.Contexts {
 			g.domainToService[domain] = service.Name
 		}
 	}

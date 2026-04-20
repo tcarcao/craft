@@ -872,15 +872,15 @@ func (g *C4DiagramGenerator) buildComponentDiagram(sb *strings.Builder) {
 	sb.WriteString(fmt.Sprintf("Container_Boundary(%s_boundary, \"%s Service\") {\n",
 		g.sanitizeIdentifier(mainService), mainService))
 
-	for _, domain := range service.Domains {
-		sb.WriteString(fmt.Sprintf("    Component(%s, \"%s\", \"Domain Component\", \"Handles %s business logic\")\n",
+	for _, domain := range service.Contexts {
+		sb.WriteString(fmt.Sprintf("    Component(%s, \"%s\", \"[Context]\", \"Handles %s business logic\")\n",
 			g.sanitizeIdentifier(domain), domain, domain))
 	}
 
 	sb.WriteString("}\n\n")
 
 	// Add component relationships (domain to domain within service)
-	g.addComponentRelationships(sb, service.Domains)
+	g.addComponentRelationships(sb, service.Contexts)
 }
 
 // addAllRelationships adds all container relationships
