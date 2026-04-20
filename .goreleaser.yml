@@ -41,13 +41,18 @@ changelog:
       - "^chore:"
       - "^test:"
 
-homebrew_casks:
+brews:
   - name: craft-cli
     ids: [craft]
     repository:
       owner: tcarcao
       name: homebrew-craft
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
     homepage: "https://github.com/tcarcao/craft"
     description: "DDD modeling CLI — parse, lint, inspect, and generate diagrams from .craft files"
     license: "MIT"
+    install: |
+      bin.install "craft"
+    test: |
+      system "#{bin}/craft", "--help"
