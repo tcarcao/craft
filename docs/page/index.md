@@ -19,7 +19,7 @@ hero:
 features:
   - icon: 🎯
     title: Domain-Driven Design
-    details: Model your business domains, subdomains, and their interactions using clear, declarative syntax
+    details: Model your business domains, bounded contexts, and their interactions using clear, declarative syntax
   - icon: 📊
     title: Visual Diagrams
     details: Generate C4, domain flow, and sequence diagrams automatically from your code
@@ -43,7 +43,7 @@ features:
 // Define your services
 services {
   OrderService {
-    domains: Order, Payment
+    contexts: Order, Payment
     language: nodejs
     data-stores: order_db
     deployment: canary(50% -> staging, 100% -> production)

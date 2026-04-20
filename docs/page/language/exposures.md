@@ -7,7 +7,7 @@ Define external access points and API gateways.
 ```craft
 exposure APIName {
   to: Actor1, Actor2
-  of: Domain1, Domain2
+  contexts: Domain1, Domain2
   through: Gateway1, Gateway2
 }
 ```
@@ -25,7 +25,7 @@ to: Customer, Partner, Admin
 Which domains are exposed:
 
 ```craft
-of: Order, Product, Inventory
+contexts: Order, Product, Inventory
 ```
 
 ### through
@@ -40,19 +40,19 @@ through: APIGateway, LoadBalancer
 ```craft
 exposure PublicAPI {
   to: Customer
-  of: Catalog, Order, Payment
+  contexts: Catalog, Order, Payment
   through: APIGateway, LoadBalancer
 }
 
 exposure PartnerAPI {
   to: Partner
-  of: Inventory, Order
+  contexts: Inventory, Order
   through: PartnerGateway
 }
 
 exposure AdminAPI {
   to: Admin
-  of: Catalog, Order, Payment, Inventory, Analytics
+  contexts: Catalog, Order, Payment, Inventory, Analytics
   through: AdminGateway
 }
 ```

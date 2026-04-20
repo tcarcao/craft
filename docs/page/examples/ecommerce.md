@@ -55,35 +55,35 @@ domains {
 // Define microservices
 services {
   CatalogService {
-    domains: Catalog
+    contexts: Catalog
     language: python
     data-stores: product_db, search_index
     deployment: rolling
   }
 
   OrderService {
-    domains: Order, Payment
+    contexts: Order, Payment
     language: nodejs
     data-stores: order_db, payment_db
     deployment: canary(50% -> staging, 100% -> production)
   }
 
   InventoryService {
-    domains: Inventory
+    contexts: Inventory
     language: java
     data-stores: inventory_db
     deployment: blue_green
   }
 
   ShippingService {
-    domains: Shipping
+    contexts: Shipping
     language: golang
     data-stores: shipping_db
     deployment: rolling
   }
 
   NotificationService {
-    domains: Notification
+    contexts: Notification
     language: nodejs
     data-stores: notification_queue
     deployment: rolling
@@ -198,13 +198,13 @@ arch EcommerceSystem {
 // External API exposure
 exposure PublicAPI {
   to: Customer
-  of: Catalog, Order, Payment
+  contexts: Catalog, Order, Payment
   through: APIGateway, LoadBalancer
 }
 
 exposure AdminAPI {
   to: Admin
-  of: Catalog, Inventory, Order
+  contexts: Catalog, Inventory, Order
   through: APIGateway
 }
 ```

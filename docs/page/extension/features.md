@@ -82,18 +82,18 @@ Toggle between two view modes using the buttons at the top:
 The Domain Manager uses a sophisticated checkbox system for selecting elements:
 
 **Domain Level:**
-- Click a domain checkbox to select/deselect all subdomains and use cases within it
+- Click a domain checkbox to select/deselect all bounded contexts and use cases within it
 - ✓ (checkmark) = all items selected
 - ▣ (filled square) = partial selection (some items selected)
 - ○ (empty) = nothing selected
 
-**Subdomain Level:**
-- Select/deselect all use cases within a subdomain
+**bounded context Level:**
+- Select/deselect all use cases within a bounded context
 - Selection automatically updates parent domain state
 
 **Use Case Level:**
 - Select individual use cases to include in diagrams
-- Selections cascade up to update subdomain and domain states
+- Selections cascade up to update bounded context and domain states
 
 **[SCREENSHOT NEEDED: Hierarchical selection states]**
 *Show domains with full selection (✓), partial selection (▣), and no selection (○)*
@@ -105,18 +105,18 @@ The Domain Manager uses a sophisticated checkbox system for selecting elements:
 
 Rapid selection controls:
 
-- **Select All** (checklist icon): Select all domains, subdomains, and use cases
+- **Select All** (checklist icon): Select all domains, bounded contexts, and use cases
 - **Clear Selection** (clear icon): Deselect everything
 - **Select Current File** (file icon): Select only items from the active file
 
 ### Selection Counter
 
 **[SCREENSHOT NEEDED: Selection counter display]**
-*Show counter displaying "12 use cases • 5 subdomains • 2 domains"*
+*Show counter displaying "12 use cases • 5 bounded contexts • 2 domains"*
 
 The header displays your current selection count, helping you track what will be included in your diagram:
 - Number of use cases selected
-- Number of subdomains selected
+- Number of bounded contexts selected
 - Number of domains selected
 
 ### Diagram Options
@@ -128,7 +128,7 @@ Click the **gear icon** to configure diagram visualization:
 
 **Mode Options:**
 - **Detailed**: Shows complete domain diagram with all use cases and their interactions
-- **Architecture**: Shows only subdomain-to-subdomain connections without use case details
+- **Architecture**: Shows only bounded context-to-bounded context connections without use case details
 
 ### Generating Domain Diagrams
 
@@ -136,7 +136,7 @@ Click the **gear icon** to configure diagram visualization:
 
 To generate a domain diagram:
 
-1. Select the domains, subdomains, or use cases you want to visualize
+1. Select the domains, bounded contexts, or use cases you want to visualize
 2. Configure the diagram mode (Detailed or Architecture)
 3. Click the **Preview** button (eye icon) in the toolbar
 4. The diagram opens in a new panel beside your code
@@ -150,13 +150,13 @@ The Services view provides comprehensive control over service architecture visua
 ### Service Hierarchy
 
 **[SCREENSHOT NEEDED: Fully expanded service tree]**
-*Show all four levels: service groups, services, subdomains, use cases*
+*Show all four levels: service groups, services, bounded contexts, use cases*
 
 Services are organized in a four-level hierarchy:
 
 1. **Service Groups**: Logical grouping (e.g., "Core Services", "External Services")
 2. **Services**: Individual microservices or components
-3. **Subdomains**: Domain boundaries within services
+3. **bounded contexts**: Domain boundaries within services
 4. **Use Cases**: Specific functionality
 
 ### Service Selection
@@ -164,7 +164,7 @@ Services are organized in a four-level hierarchy:
 Similar to the Domain Manager, use checkboxes to select:
 - Entire service groups
 - Individual services
-- Specific subdomains within services
+- Specific bounded contexts within services
 - Individual use cases
 
 Selection state cascades automatically up and down the hierarchy.
@@ -174,7 +174,7 @@ Selection state cascades automatically up and down the hierarchy.
 **[SCREENSHOT NEEDED: Focus buttons on services]**
 *Close-up showing services with both focused (◉) and unfocused (◎) states*
 
-Each service and subdomain has a **focus button** that controls visualization detail:
+Each service and bounded context has a **focus button** that controls visualization detail:
 
 - **Focused (◉)**: Service shown as internal component in C4 diagrams with full detail
 - **Unfocused (◎)**: Service shown as external system with simplified view
@@ -267,14 +267,14 @@ Downloaded diagrams preserve all your configuration settings (boundaries mode, d
 
 ## Cross-References
 
-**[SCREENSHOT NEEDED: Subdomain with cross-references expanded]**
-*Show subdomain with "Also Involved In" section showing reference links*
+**[SCREENSHOT NEEDED: bounded context with cross-references expanded]**
+*Show bounded context with "Also Involved In" section showing reference links*
 
-The Domain Manager shows when subdomains participate in multiple use cases:
+The Domain Manager shows when bounded contexts participate in multiple use cases:
 
 - Link indicator (🔗) displays the number of cross-references
-- Expand to see where the subdomain is referenced
-- View whether the subdomain is an entry point or supporting participant
+- Expand to see where the bounded context is referenced
+- View whether the bounded context is an entry point or supporting participant
 
 This helps you understand coupling and dependencies across your architecture.
 

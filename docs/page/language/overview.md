@@ -22,7 +22,7 @@ Craft files use the `.craft` extension.
 A Craft file can contain any combination of these blocks:
 
 - **Actors** - Define users, systems, and services
-- **Domains** - Define business domains and subdomains
+- **Domains** - Define business domains and bounded contexts
 - **Services** - Define deployable services with tech stacks
 - **Use Cases** - Model business scenarios and flows
 - **Architecture** - Define component flows and system design
@@ -63,8 +63,8 @@ auth_service_v2
 Comma-separated, with optional trailing comma:
 
 ```craft
-domains: Authentication, Profile, Order
-domains: Authentication, Profile, Order,
+contexts: Authentication, Profile, Order
+contexts: Authentication, Profile, Order,
 ```
 
 ## Minimal Example

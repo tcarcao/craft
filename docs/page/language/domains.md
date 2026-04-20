@@ -17,7 +17,7 @@ domain Authentication {
 **Syntax:**
 ```craft
 domain <Name> {
-  <Subdomain>*
+  <bounded context>*
 }
 ```
 
@@ -51,14 +51,14 @@ domains {
 ```craft
 domains {
   <Name> {
-    <Subdomain>*
+    <bounded context>*
   }*
 }
 ```
 
-## Subdomains
+## bounded contexts
 
-Subdomains are capabilities within a domain:
+bounded contexts are capabilities within a domain:
 
 ```craft
 domain Payment {
@@ -70,7 +70,7 @@ domain Payment {
 ```
 
 ::: tip
-Subdomains help you organize related capabilities and identify bounded contexts.
+bounded contexts help you organize related capabilities and identify bounded contexts.
 :::
 
 ## Domain Naming
@@ -248,9 +248,9 @@ domain OrderAndShipping {
 }
 ```
 
-### Limit Subdomains
+### Limit bounded contexts
 
-Keep 3-7 subdomains per domain for clarity.
+Keep 3-7 bounded contexts per domain for clarity.
 
 ✅ Good:
 ```craft
@@ -265,7 +265,7 @@ domain Payment {
 ❌ Bad:
 ```craft
 domain Payment {
-  // 20+ subdomains...
+  // 20+ bounded contexts...
 }
 ```
 

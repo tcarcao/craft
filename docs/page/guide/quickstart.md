@@ -39,8 +39,8 @@ domains {
 ```
 
 **What this means:**
-- `Authentication` domain with `Registration` and `Login` subdomains
-- `Profile` domain with `UserProfile` and `Settings` subdomains
+- `Authentication` domain with `Registration` and `Login` bounded contexts
+- `Profile` domain with `UserProfile` and `Settings` bounded contexts
 
 ## Step 4: Define Services
 
@@ -49,7 +49,7 @@ Group domains into deployable services:
 ```craft
 services {
   UserService {
-    domains: Authentication, Profile
+    contexts: Authentication, Profile
     language: nodejs
     data-stores: user_db
   }
@@ -114,7 +114,7 @@ domains {
 // Define services
 services {
   UserService {
-    domains: Authentication, Profile
+    contexts: Authentication, Profile
     language: nodejs
     data-stores: user_db
   }

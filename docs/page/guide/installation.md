@@ -88,7 +88,7 @@ Open VSCode settings (`Ctrl+,`) and search for "craft":
    ```craft
    services {
      UserService {
-       domains: Authentication
+       contexts: Authentication
      }
    }
    ```

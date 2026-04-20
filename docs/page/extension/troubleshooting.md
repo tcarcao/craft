@@ -192,15 +192,15 @@ Common issues and solutions for the Craft VSCode Extension. If you encounter a p
 **Solutions:**
 
 1. **Verify use cases are defined:**
-   - Subdomains must be referenced in multiple use cases
-   - Check that your use cases actually reference the subdomain
+   - bounded contexts must be referenced in multiple use cases
+   - Check that your use cases actually reference the bounded context
 
 2. **Refresh the domain tree:**
    - Click refresh icon
    - Save file to trigger update
 
-3. **Expand the subdomain:**
-   - Click the arrow/chevron next to the subdomain
+3. **Expand the bounded context:**
+   - Click the arrow/chevron next to the bounded context
    - Cross-references appear as child items
 
 ## Language Server Issues

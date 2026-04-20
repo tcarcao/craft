@@ -34,14 +34,14 @@ domains {
 
 services {
   AccountService {
-    domains: Account
+    contexts: Account
     language: java
     data-stores: account_db
     deployment: blue_green
   }
 
   TransactionService {
-    domains: Transaction, Fraud
+    contexts: Transaction, Fraud
     language: golang
     data-stores: transaction_db, fraud_cache
     deployment: canary(30% -> staging, 100% -> production)
