@@ -7,7 +7,7 @@ before:
 builds:
   - id: craft
     main: ./cmd/craft
-    binary: craft
+    binary: craft-cli
     env:
       - CGO_ENABLED=0
     goos:
@@ -53,6 +53,6 @@ brews:
     description: "DDD modeling CLI — parse, lint, inspect, and generate diagrams from .craft files"
     license: "MIT"
     install: |
-      bin.install "craft"
+      bin.install "craft-cli"
     test: |
-      system "#{bin}/craft", "--help"
+      system "#{bin}/craft-cli", "--help"
