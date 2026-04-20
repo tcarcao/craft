@@ -37,4 +37,4 @@ tools/antlr-*.jar
 tools/vscode-extension/server/src/parser/generated
 
 # LLMs
-CLAUDE.md
+CLAUDE.md.worktrees/
