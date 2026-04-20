@@ -96,12 +96,8 @@ make fresh-setup
 # Grammar generation only (pulls ANTLR image automatically)
 make generate-grammar
 
-# Build and run the server container (Server Only)
+# Build and run the server container
 make docker-build && make docker-run
-
-# Run web IDE and server using Docker Compose (Recommended)
-make compose-build && make compose-up-detached
-# Access Web IDE at http://localhost:3000 and Server at http://localhost:8080
 
 # Run tests
 make test
