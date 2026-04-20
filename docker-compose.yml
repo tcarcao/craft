@@ -1,0 +1,54 @@
+# Craft Web IDE Docker Compose Configuration
+# Works with both podman-compose and docker-compose
+#
+# Usage:
+#   podman-compose up -d    OR    docker-compose up -d
+#
+# Configuration:
+#   Copy .env.example to .env and customize as needed
+#
+# For more information, see WEB_IDE.md
+
+services:
+  craft-server:
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile
+    container_name: craft-server
+    ports:
+      - "8080:8080"
+    networks:
+      - craft-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  craft-ide:
+    build:
+      context: .
+      dockerfile: build/package/Dockerfile.openvscode
+      args:
+        # Set CRAFT_VERSION to pin a specific version (e.g., v0.1.0)
+        # Leave as 'latest' to always get the newest release
+        CRAFT_VERSION: ${CRAFT_VERSION:-latest}
+    container_name: craft-ide
+    ports:
+      - "3000:3000"
+    networks:
+      - craft-network
+    depends_on:
+      craft-server:
+        condition: service_healthy
+    volumes:
+      # Persist workspace data
+      - craft-workspace:/workspace
+
+networks:
+  craft-network:
+    driver: bridge
+
+volumes:
+  craft-workspace:

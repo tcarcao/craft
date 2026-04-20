@@ -1,4 +1,4 @@
-.PHONY: build run test clean fresh-setup
+.PHONY: build run test clean fresh-setup compose-build compose-up compose-down compose-logs
 
 IMAGE_NAME=craft
 IMAGE_TAG=latest
@@ -8,6 +8,7 @@ ANTLR_IMAGE_TAG=4.13.2
 ANTLR_GRAMMAR_PATH=tools/antlr-grammar
 ANTLR_GRAMMAR_FILENAME=Craft.g4
 GOLANG_GRAMMAR_PATH=pkg/parser/
+COMPOSE_FILE=docker-compose.yml
 
 docker-build:
 	@echo "Building Docker image..."
@@ -42,22 +43,79 @@ generate-grammar: docker-build-antlr-image
 test:
 	go test ./...
 
+# Docker Compose commands for running Craft with web IDE
+compose-build:
+	@echo "Building services with Docker Compose..."
+	podman compose -f $(COMPOSE_FILE) build
+
+compose-up:
+	@echo "Starting Craft server and IDE..."
+	@echo "Server will be available at: http://localhost:8080"
+	@echo "Web IDE will be available at: http://localhost:3000"
+	podman compose -f $(COMPOSE_FILE) up
+
+compose-up-detached:
+	@echo "Starting Craft server and IDE in detached mode..."
+	podman compose -f $(COMPOSE_FILE) up -d
+	@echo "✅ Services started!"
+	@echo "   - Server: http://localhost:8080"
+	@echo "   - Web IDE: http://localhost:3000"
+
+compose-down:
+	@echo "Stopping all services..."
+	podman compose -f $(COMPOSE_FILE) down
+
+compose-logs:
+	podman compose -f $(COMPOSE_FILE) logs -f
+
+compose-restart:
+	@echo "Restarting services..."
+	podman compose -f $(COMPOSE_FILE) restart
+
 fresh-setup:
 	@echo "Setting up Craft development environment..."
 	@echo "1. Generating ANTLR grammar..."
 	$(MAKE) generate-grammar
+	@echo ""
 	@echo "✅ Fresh setup complete! You can now:"
-	@echo "   - Use 'make docker-build && make docker-run' to start the server"
-	@echo "   - Visit the standalone VS Code extension at: https://github.com/tcarcao/craft-vscode-extension"
+	@echo ""
+	@echo "Option 1: Run with Web IDE (Recommended)"
+	@echo "   make compose-build && make compose-up-detached"
+	@echo "   Then visit: http://localhost:3000"
+	@echo ""
+	@echo "Option 2: Run server only"
+	@echo "   make docker-build && make docker-run"
+	@echo "   Then visit: http://localhost:8080"
+	@echo ""
+	@echo "For more info:"
+	@echo "   - Quick start guide: QUICKSTART_WEB_IDE.md"
+	@echo "   - Web IDE docs: WEB_IDE.md"
+	@echo "   - VS Code extension: https://github.com/tcarcao/craft-vscode-extension"
 
 help:
 	@echo "Makefile commands:"
-	@echo "  fresh-setup    			- Complete setup for new repository clones"
-	@echo "  docker-build   			- Build Docker image from Dockerfile"
-	@echo "  docker-run     			- Run Docker container"
-	@echo "  docker-clean   			- Remove Docker image"
-	@echo "  docker-build-antlr-image	- Generate the ANTLR Docker image to generate the grammar"
-	@echo "  docker-clean-antlr-image	- Remove the ANTLR Docker image"
-	@echo "  generate-grammar			- Generate the golang version of the grammar"
-	@echo "  test   					- Run the tests"
+	@echo ""
+	@echo "Setup:"
+	@echo "  fresh-setup              - Complete setup for new repository clones"
+	@echo ""
+	@echo "Docker (single service):"
+	@echo "  docker-build             - Build Docker image from Dockerfile"
+	@echo "  docker-run               - Run Docker container"
+	@echo "  docker-clean             - Remove Docker image"
+	@echo ""
+	@echo "Docker Compose (with Web IDE):"
+	@echo "  compose-build            - Build all services (server + IDE)"
+	@echo "  compose-up               - Start all services (foreground)"
+	@echo "  compose-up-detached      - Start all services (background)"
+	@echo "  compose-down             - Stop all services"
+	@echo "  compose-logs             - View logs from all services"
+	@echo "  compose-restart          - Restart all services"
+	@echo ""
+	@echo "Grammar:"
+	@echo "  docker-build-antlr-image - Generate the ANTLR Docker image"
+	@echo "  docker-clean-antlr-image - Remove the ANTLR Docker image"
+	@echo "  generate-grammar         - Generate the golang version of the grammar"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test                     - Run the tests"
 
