@@ -25,6 +25,7 @@ export default defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Language', link: '/language/overview' },
+      { text: 'Tooling', link: '/tooling/cli' },
       { text: 'Extension', link: '/extension/installation' },
       { text: 'Examples', link: '/examples/ecommerce' }
     ],
@@ -48,6 +49,13 @@ export default defineConfig({
           { text: 'Use Cases', link: '/language/use-cases' },
           { text: 'Architecture', link: '/language/architecture' },
           { text: 'Exposures', link: '/language/exposures' }
+        ]
+      },
+      {
+        text: 'Tooling',
+        items: [
+          { text: 'CLI (craft-cli)', link: '/tooling/cli' },
+          { text: 'Claude Code Skill', link: '/tooling/skill' }
         ]
       },
       {
