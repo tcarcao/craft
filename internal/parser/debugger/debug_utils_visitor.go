@@ -102,7 +102,7 @@ func (d *DebugVisitor) VisitUse_case(ctx *parser.Use_caseContext) interface{} {
 	return nil
 }
 
-func (d *DebugVisitor) VisitContext_list(ctx *parser.Context_listContext) interface{} {
-	fmt.Printf("%sContext_list: %d children\n", d.indent(), ctx.GetChildCount())
+func (d *DebugVisitor) VisitDomain_list(ctx *parser.Domain_listContext) interface{} {
+	fmt.Printf("%sDomain_list: %d children\n", d.indent(), ctx.GetChildCount())
 	return nil
 }

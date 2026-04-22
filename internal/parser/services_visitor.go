@@ -135,11 +135,11 @@ func (b *DSLModelBuilder) VisitService_property(ctx *parser.Service_propertyCont
 		if terminalNode, ok := child.(antlr.TerminalNode); ok {
 			tokenType := terminalNode.GetSymbol().GetTokenType()
 			switch tokenType {
-			case parser.CraftLexerCONTEXTS:
-				// Find the context_list after this token
+			case parser.CraftLexerDOMAINS:
+				// Find the domain_list after this token
 				for j := i + 1; j < ctx.GetChildCount(); j++ {
-					if contextList, ok := ctx.GetChild(j).(*parser.Context_listContext); ok {
-						b.VisitContext_list(contextList)
+					if domainList, ok := ctx.GetChild(j).(*parser.Domain_listContext); ok {
+						b.VisitDomain_list(domainList)
 						break
 					}
 				}
@@ -241,15 +241,15 @@ func (b *DSLModelBuilder) extractDeploymentRule(ctx *parser.Deployment_ruleConte
 	return rule
 }
 
-// Visit context list - works with context_ref
-func (b *DSLModelBuilder) VisitContext_list(ctx *parser.Context_listContext) interface{} {
+// Visit domain list - works with domain_ref (formerly context_list/context_ref)
+func (b *DSLModelBuilder) VisitDomain_list(ctx *parser.Domain_listContext) interface{} {
 	if b.currentService == nil {
 		return nil
 	}
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if contextRef, ok := ctx.GetChild(i).(*parser.Context_refContext); ok {
-			name := b.extractIdentifier(&contextRef.BaseParserRuleContext)
+		if domainRef, ok := ctx.GetChild(i).(*parser.Domain_refContext); ok {
+			name := b.extractIdentifier(&domainRef.BaseParserRuleContext)
 			if name != "" {
 				b.currentService.Contexts = append(b.currentService.Contexts, name)
 			}
@@ -289,6 +289,6 @@ func (b *DSLModelBuilder) VisitDeployment_rule(ctx *parser.Deployment_ruleContex
 func (b *DSLModelBuilder) VisitDeployment_target(ctx *parser.Deployment_targetContext) interface{} {
 	return nil
 }
-func (b *DSLModelBuilder) VisitContext_ref(ctx *parser.Context_refContext) interface{} { return nil }
+func (b *DSLModelBuilder) VisitDomain_ref(ctx *parser.Domain_refContext) interface{} { return nil }
 func (b *DSLModelBuilder) VisitDomain(ctx *parser.DomainContext) interface{}           { return nil }
 func (b *DSLModelBuilder) VisitDatastore(ctx *parser.DatastoreContext) interface{}   { return nil }

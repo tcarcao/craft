@@ -53,8 +53,8 @@ func (b *DSLModelBuilder) VisitExposure_property(ctx *parser.Exposure_propertyCo
 		child := ctx.GetChild(i)
 		if targetList, ok := child.(*parser.Target_listContext); ok {
 			b.currentExposure.To = b.extractTargetList(targetList)
-		} else if contextList, ok := child.(*parser.Context_listContext); ok {
-			b.currentExposure.Contexts = b.extractContextList(contextList)
+		} else if domainList, ok := child.(*parser.Domain_listContext); ok {
+			b.currentExposure.Contexts = b.extractDomainList(domainList)
 		} else if gatewayList, ok := child.(*parser.Gateway_listContext); ok {
 			b.currentExposure.Through = b.extractGatewayList(gatewayList)
 		}
@@ -76,13 +76,13 @@ func (b *DSLModelBuilder) extractTargetList(ctx *parser.Target_listContext) []st
 	return targets
 }
 
-// extractContextList extracts bounded context names from context_list
-func (b *DSLModelBuilder) extractContextList(ctx *parser.Context_listContext) []string {
+// extractDomainList extracts domain/context names from domain_list
+func (b *DSLModelBuilder) extractDomainList(ctx *parser.Domain_listContext) []string {
 	contexts := make([]string, 0)
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
-		if contextRef, ok := ctx.GetChild(i).(*parser.Context_refContext); ok {
-			name := b.extractIdentifier(&contextRef.BaseParserRuleContext)
+		if domainRef, ok := ctx.GetChild(i).(*parser.Domain_refContext); ok {
+			name := b.extractIdentifier(&domainRef.BaseParserRuleContext)
 			if name != "" {
 				contexts = append(contexts, name)
 			}
