@@ -38,4 +38,3 @@ tools/vscode-extension/server/src/parser/generated
 
 # LLMs
 CLAUDE.md.worktrees/
-craft
