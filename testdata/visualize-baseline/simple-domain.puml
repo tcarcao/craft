@@ -1,0 +1,128 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam handwritten false
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "Offering" as offe
+frame "Order" as orde
+frame "OrderFulfilment" as orde2
+frame "OrderManagement" as orde1
+frame "OrderMgmt" as orde3
+frame "PaymentProvider" as paym
+frame "Subscription" as subs
+frame "Susbscription" as susb
+frame "VASMgmt" as vasm
+frame "VASScheduling" as vass
+frame "Wallet" as wall1
+frame "WalletItemAddition" as wall
+
+' Actors
+actor Business_User
+actor CRON
+actor Customer
+actor VASMgmt
+
+' Domain queues
+queue "OrderMgmt events" as ordermgmt_queue
+queue "OrderManagement events" as ordermanagement_queue
+queue "Wallet events" as wallet_queue
+queue "VASMgmt events" as vasmgmt_queue
+queue "Susbscription events" as susbscription_queue
+queue "PaymentProvider events" as paymentprovider_queue
+
+' Workflow flows
+Customer --> offe : 1. decides purchase a VAS
+offe --> Customer : 2. returns available offering
+Customer --> orde : 3. asks Order to create an order
+orde -> orde : 4. creates a draft Order
+orde --> Customer : 5. returns url of the payment providers
+Customer --> paym : 6. pays the order
+paym -> paym : 7. confirms payment
+paym ->> paymentprovider_queue : 8. PaymentCompleted
+paymentprovider_queue --> orde : 9. PaymentCompleted
+orde -> orde : 10. marks the Order as Paid
+Business_User --> vass : 11. schedules VAS
+vass ->> wall1 : 12. to reserve a VAS
+wall1 -> wall1 : 13. creates an unconfirmed VAS reservation
+wall1 ->> wallet_queue : 14. VAS Addition Request Approved
+vass -> vass : 15. drafts a VAS schedule
+wallet_queue --> vass : 16. VAS Addition Request Approved
+vass ->> orde1 : 17. to create an Order
+orde1 ->> ordermanagement_queue : 18. Order Created
+orde1 -> orde1 : 19. marks the Order as payment deferred
+orde1 ->> ordermanagement_queue : 20. Order payment deferred
+ordermgmt_queue --> orde2 : 21. Order payment deferred
+orde2 ->> wall : 22. to fulfil the addition request
+wall ->> wall1 : 23. to add VAS
+wall1 ->> wallet_queue : 24. VAS added
+wallet_queue --> orde2 : 25. VAS added
+orde2 ->> orde1 : 26. to mark the Order as fulfiled
+orde1 ->> ordermanagement_queue : 27. Order completed
+Business_User --> vass : 28. schedules VAS
+vass ->> wall1 : 29. to reserve a VAS
+wall1 -> wall1 : 30. reserves a VAS
+wall1 ->> wallet_queue : 31. VAS Reserved
+vass -> vass : 32. creates a VAS schedule
+Business_User --> vass : 33. unschedules VAS scheduling
+vass ->> wall1 : 34. to cancel the VAS reservation
+wall1 -> wall1 : 35. cancels VAS reservation
+wall1 ->> wallet_queue : 36. VAS Reservation Canceled
+vass -> vass : 37. cancels the VAS schedule
+CRON --> wall1 : 38. identifies VAS expiring
+wall1 -> wall1 : 39. removes VAS
+wall1 ->> wallet_queue : 40. VAS Expired
+Business_User --> orde3 : 41. schedules VAS
+orde3 -> orde3 : 42. creates an Order with two items to fulfil: VAS and VAS Subscription
+orde3 ->> ordermgmt_queue : 43. Order Created
+orde3 -> orde3 : 44. marks the Order as payment deferred
+orde3 ->> ordermgmt_queue : 45. Order payment deferred
+ordermgmt_queue --> orde2 : 46. Order payment deferred
+orde2 ->> vasm : 47. to schedule the VAS
+vasm -> vasm : 48. schedules the VAS for future application
+vasm ->> vasmgmt_queue : 49. VAS scheduled
+vasmgmt_queue --> orde2 : 50. VAS scheduled
+orde2 ->> subs : 51. to create a VAS Subscription
+subs -> subs : 52. creates a VAS Subscription with the details
+orde2 -> orde2 : 53. marks the vas subscription item as Fulfiled
+Business_User --> vasm : 54. schedules VAS
+vasm -> vasm : 55. schedules a VAS for future application
+vasm ->> vasmgmt_queue : 56. VAS scheduled with subscription included
+vasmgmt_queue --> subs : 57. VAS scheduled with subscription included
+subs -> subs : 58. creates a VAS Subscription with the details
+vasm --> vasm : 59. identifies scheduled VAS to apply
+vasm -> vasm : 60. applies a VAS and stores details until when its valid
+vasm ->> vasmgmt_queue : 61. VAS Applied
+vasm --> vasm : 62. identifies VAS expired
+vasm -> vasm : 63. marks the VAS as expired
+vasm ->> vasmgmt_queue : 64. VAS expired
+vasmgmt_queue --> subs : 65. VAS expired
+subs -> subs : 66. checks if VAS has active associated subscription
+subs ->> vasm : 67. to schedule/apply a new VAS
+subs -> subs : 68. renews the VAS Subscription with the VAS
+susb ->> susbscription_queue : 69. VAS Subscription Renewed
+Business_User --> subs : 70. stops VAS Auto-Renewal
+subs -> subs : 71. cancels the subscription
+
+@enduml

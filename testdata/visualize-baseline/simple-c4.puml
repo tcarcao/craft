@@ -1,0 +1,39 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/java>
+!include <tupadr3/devicons2/python>
+!include <tupadr3/devicons2/nodejs>
+!include <tupadr3/devicons2/javascript>
+!include <tupadr3/devicons2/rust>
+!include <tupadr3/devicons2/dot_net>
+!include <tupadr3/devicons2/php>
+!include <tupadr3/devicons2/ruby>
+!include <tupadr3/devicons2/kotlin>
+!include <tupadr3/devicons2/ruby>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+Person(Business_User, "Business_User", "External user")
+Person(Customer, "Customer", "External user")
+Person(VASMgmt, "VASMgmt", "External user")
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+
+@enduml

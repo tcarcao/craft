@@ -1,0 +1,117 @@
+@startuml
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam sequenceMessageAlign center
+
+== C2C user purchases ==
+
+Customer -> Offering : decides purchase a VAS
+Offering --> Customer : returns available offering
+
+Customer -> Order : asks Order to create an order
+Order -> Order : a draft Order
+Order --> Customer : returns url of the payment providers
+
+Customer -> PaymentProvider : pays the order
+PaymentProvider -> PaymentProvider : confirms payment
+PaymentProvider ->> PaymentProvider : notifies "PaymentCompleted"
+
+[-> Order : PaymentCompleted
+Order -> Order : the Order as Paid
+
+== VAS scheduled and no VAS in Wallet ==
+
+Business_User -> VASScheduling : schedules VAS
+VASScheduling -> Wallet : to reserve a VAS
+Wallet -> Wallet : an unconfirmed VAS reservation
+Wallet ->> Wallet : notifies "VAS Addition Request Approved"
+VASScheduling -> VASScheduling : a VAS schedule
+
+[-> VASScheduling : VAS Addition Request Approved
+VASScheduling -> OrderManagement : to create an Order
+OrderManagement ->> OrderManagement : notifies "Order Created"
+OrderManagement -> OrderManagement : the Order as payment deferred
+OrderManagement ->> OrderManagement : notifies "Order payment deferred"
+
+[-> OrderFulfilment : Order payment deferred
+OrderFulfilment -> WalletItemAddition : to fulfil the addition request
+WalletItemAddition -> Wallet : to add VAS
+Wallet ->> Wallet : notifies "VAS added"
+
+[-> OrderFulfilment : VAS added
+OrderFulfilment -> OrderManagement : to mark the Order as fulfiled
+OrderManagement ->> OrderManagement : notifies "Order completed"
+
+== VAS scheduled and VAS in Wallet ==
+
+Business_User -> VASScheduling : schedules VAS
+VASScheduling -> Wallet : to reserve a VAS
+Wallet -> Wallet : a VAS
+Wallet ->> Wallet : notifies "VAS Reserved"
+VASScheduling -> VASScheduling : a VAS schedule
+
+== VAS unscheduled ==
+
+Business_User -> VASScheduling : unschedules VAS scheduling
+VASScheduling -> Wallet : to cancel the VAS reservation
+Wallet -> Wallet : cancels VAS reservation
+Wallet ->> Wallet : notifies "VAS Reservation Canceled"
+VASScheduling -> VASScheduling : the VAS schedule
+
+== VAS expires ==
+
+CRON -> Wallet : identifies VAS expiring
+Wallet -> Wallet : removes VAS
+Wallet ->> Wallet : notifies "VAS Expired"
+
+== Purchase VAS schedule and its renewal (ideal scenario) ==
+
+Business_User -> OrderMgmt : schedules VAS
+OrderMgmt -> OrderMgmt : an Order with two items to fulfil: VAS and VAS Subscription
+OrderMgmt ->> OrderMgmt : notifies "Order Created"
+OrderMgmt -> OrderMgmt : the Order as payment deferred
+OrderMgmt ->> OrderMgmt : notifies "Order payment deferred"
+
+[-> OrderFulfilment : Order payment deferred
+OrderFulfilment -> VASMgmt : to schedule the VAS
+VASMgmt -> VASMgmt : the VAS for future application
+VASMgmt ->> VASMgmt : notifies "VAS scheduled"
+
+[-> OrderFulfilment : VAS scheduled
+OrderFulfilment -> Subscription : to create a VAS Subscription
+Subscription -> Subscription : a VAS Subscription with the details
+OrderFulfilment -> OrderFulfilment : the vas subscription item as Fulfiled
+
+== Purchase VAS schedule and its renewal (current possible scenario) ==
+
+Business_User -> VASMgmt : schedules VAS
+VASMgmt -> VASMgmt : a VAS for future application
+VASMgmt ->> VASMgmt : notifies "VAS scheduled with subscription included"
+
+[-> Subscription : VAS scheduled with subscription included
+Subscription -> Subscription : a VAS Subscription with the details
+
+== Scheduled VAS Applied ==
+
+VASMgmt -> VASMgmt : identifies scheduled VAS to apply
+VASMgmt -> VASMgmt : a VAS and stores details until when its valid
+VASMgmt ->> VASMgmt : notifies "VAS Applied"
+
+== VAS Renewal Flow ==
+
+VASMgmt -> VASMgmt : identifies VAS expired
+VASMgmt -> VASMgmt : the VAS as expired
+VASMgmt ->> VASMgmt : notifies "VAS expired"
+
+[-> Subscription : VAS expired
+Subscription -> Subscription : checks if VAS has active associated subscription
+Subscription -> VASMgmt : to schedule/apply a new VAS
+Subscription -> Subscription : the VAS Subscription with the VAS
+Susbscription ->> Susbscription : notifies "VAS Subscription Renewed"
+
+== Stop Auto-Renewal ==
+
+Business_User -> Subscription : stops VAS Auto-Renewal
+Subscription -> Subscription : the subscription
+
+@enduml
