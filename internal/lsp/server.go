@@ -1,15 +1,20 @@
 // Package lsp implements the Craft Language Server Protocol server.
 // S3: workspace + diagnostics + documentSymbol + hover handlers.
 // S4: semanticTokens (actor vs domain distinct colouring).
+// S5: definition (go-to-definition for service contexts→domain); service
+//     symbols in documentSymbol/hover/semanticTokens; workspace/executeCommand
+//     for EXTRACT_DOMAINS_FROM_CURRENT and EXTRACT_DOMAINS_FROM_WORKSPACE (Q16).
 // ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -94,13 +99,22 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 		Capabilities: protocol.ServerCapabilities{
 			// Q20: declare only capabilities we actually serve.
 			// S3: documentSymbol, hover.
-			// S4: semanticTokens (full) with actor/domain token types.
+			// S4: semanticTokens (full) with actor/domain/service token types.
+			// S5: definition (go-to-definition), executeCommand (custom LSP commands).
 			TextDocumentSync:       protocol.TextDocumentSyncKindFull,
 			DocumentSymbolProvider: true,
 			HoverProvider:          true,
+			DefinitionProvider:     true,
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
+			// ExecuteCommandProvider lists the custom LSP commands we handle (Q16).
+			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
+				Commands: []string{
+					"EXTRACT_DOMAINS_FROM_CURRENT",
+					"EXTRACT_DOMAINS_FROM_WORKSPACE",
+				},
+			},
 		},
 		ServerInfo: &protocol.ServerInfo{
 			Name:    "craft-lsp",
@@ -174,7 +188,47 @@ func (s *Server) Declaration(_ context.Context, _ *protocol.DeclarationParams) (
 	return nil, nil
 }
 
-func (s *Server) Definition(_ context.Context, _ *protocol.DefinitionParams) ([]protocol.Location, error) {
+func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams) ([]protocol.Location, error) {
+	if params == nil {
+		return nil, nil
+	}
+	uri := string(params.TextDocument.URI)
+	f := s.ws.Get(uri)
+	if f == nil || f.AST == nil {
+		return nil, nil
+	}
+
+	cursorLine := int(params.Position.Line) + 1 // convert to 1-based
+	rm := s.ws.ResolutionMap()
+
+	// Walk services: match cursor against each context reference line so that
+	// go-to-definition fires when the cursor is on a `contexts:` entry.
+	for _, svc := range f.AST.Services {
+		for i, ctxName := range svc.Contexts {
+			// Match by context token line when available; fall back to the
+			// service name line for services parsed without line tracking
+			// (e.g. from the ANTLR adapter path).
+			ctxLine := svc.Line
+			if i < len(svc.ContextLines) {
+				ctxLine = svc.ContextLines[i]
+			}
+			if ctxLine != cursorLine {
+				continue
+			}
+			domSym, ok := sema.ResolveServiceContext(rm, uri, svc.Name, ctxName)
+			if !ok {
+				continue
+			}
+			return []protocol.Location{{
+				URI: protocol.DocumentURI(domSym.URI),
+				Range: protocol.Range{
+					Start: protocol.Position{Line: uint32(domSym.Line - 1)},
+					End:   protocol.Position{Line: uint32(domSym.Line - 1), Character: uint32(len(domSym.Name))},
+				},
+			}}, nil
+		}
+	}
+
 	return nil, nil
 }
 
@@ -201,11 +255,16 @@ func (s *Server) DidChangeWorkspaceFolders(_ context.Context, _ *protocol.DidCha
 	return nil
 }
 
-func (s *Server) DidClose(_ context.Context, params *protocol.DidCloseTextDocumentParams) error {
+func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocumentParams) error {
 	if params == nil {
 		return nil
 	}
 	s.ws.Close(string(params.TextDocument.URI))
+	// Re-publish diagnostics for all remaining files: closing a domain file
+	// can resolve or create unresolved-reference diagnostics in service files.
+	for _, f := range s.ws.AllFiles() {
+		s.scheduleDiagnostics(ctx, f.URI)
+	}
 	return nil
 }
 
@@ -249,6 +308,19 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 	}
 
 	var syms []interface{}
+	for _, svc := range f.AST.Services {
+		line := 0
+		if svc.Line > 0 {
+			line = svc.Line - 1
+		}
+		syms = append(syms, protocol.DocumentSymbol{
+			Name:           svc.Name,
+			Kind:           protocol.SymbolKindModule,
+			Detail:         "service",
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+		})
+	}
 	for _, a := range f.AST.Actors {
 		line := 0
 		if a.Line > 0 {
@@ -278,8 +350,101 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 	return syms, nil
 }
 
-func (s *Server) ExecuteCommand(_ context.Context, _ *protocol.ExecuteCommandParams) (interface{}, error) {
+// ExecuteCommand handles workspace/executeCommand for custom Craft LSP commands.
+// EXTRACT_DOMAINS_FROM_CURRENT and EXTRACT_DOMAINS_FROM_WORKSPACE are ported
+// here from the old TS server (Q16). They return a domain extraction payload
+// that the VSCode sidebar views consume.
+func (s *Server) ExecuteCommand(_ context.Context, params *protocol.ExecuteCommandParams) (interface{}, error) {
+	if params == nil {
+		return nil, nil
+	}
+	switch params.Command {
+	case "EXTRACT_DOMAINS_FROM_CURRENT":
+		return s.extractDomainsFromCurrent(params.Arguments), nil
+	case "EXTRACT_DOMAINS_FROM_WORKSPACE":
+		return s.extractDomainsFromWorkspace(), nil
+	}
 	return nil, nil
+}
+
+// extractDomainsFromCurrent returns domain/service data for the active file.
+// The first argument (if present) should be the current file URI.
+func (s *Server) extractDomainsFromCurrent(args []interface{}) interface{} {
+	if len(args) == 0 {
+		return domainExtractionResult{}
+	}
+	uriArg, ok := args[0].(string)
+	if !ok {
+		// args may be json.RawMessage; attempt decode
+		if raw, ok2 := args[0].(json.RawMessage); ok2 {
+			var s string
+			if err := json.Unmarshal(raw, &s); err == nil {
+				uriArg = s
+			}
+		}
+	}
+	f := s.ws.Get(uriArg)
+	if f == nil || f.AST == nil {
+		return domainExtractionResult{}
+	}
+
+	result := domainExtractionResult{}
+	rm := s.ws.ResolutionMap()
+
+	for _, svc := range f.AST.Services {
+		entry := serviceEntry{Name: svc.Name}
+		for _, ctx := range svc.Contexts {
+			if domSym, ok := sema.ResolveServiceContext(rm, uriArg, svc.Name, ctx); ok {
+				entry.Domains = append(entry.Domains, domainRef{
+					Name:   domSym.Name,
+					URI:    domSym.URI,
+					Line:   domSym.Line,
+					BCName: ctx,
+				})
+			}
+		}
+		result.Services = append(result.Services, entry)
+	}
+	return result
+}
+
+// extractDomainsFromWorkspace returns domain/service data across all workspace files.
+func (s *Server) extractDomainsFromWorkspace() interface{} {
+	wsSym := s.ws.WorkspaceSymbols()
+	result := domainExtractionResult{}
+
+	for _, svc := range wsSym.Services {
+		entry := serviceEntry{Name: svc.Name}
+		for _, ctx := range svc.Contexts {
+			if domSym, ok := wsSym.BoundedContexts[ctx]; ok {
+				entry.Domains = append(entry.Domains, domainRef{
+					Name:   domSym.Name,
+					URI:    domSym.URI,
+					Line:   domSym.Line,
+					BCName: ctx,
+				})
+			}
+		}
+		result.Services = append(result.Services, entry)
+	}
+	return result
+}
+
+// domainExtractionResult is the payload shape consumed by the VSCode sidebar.
+type domainExtractionResult struct {
+	Services []serviceEntry `json:"services,omitempty"`
+}
+
+type serviceEntry struct {
+	Name    string      `json:"name"`
+	Domains []domainRef `json:"domains,omitempty"`
+}
+
+type domainRef struct {
+	Name   string `json:"name"`
+	URI    string `json:"uri"`
+	Line   int    `json:"line,omitempty"`
+	BCName string `json:"bcName"`
 }
 
 func (s *Server) FoldingRanges(_ context.Context, _ *protocol.FoldingRangeParams) ([]protocol.FoldingRange, error) {
@@ -327,6 +492,24 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
 					Value: "domain: " + d.Name,
+				},
+			}, nil
+		}
+	}
+
+	for _, svc := range f.AST.Services {
+		if svc.Line == 0 {
+			continue
+		}
+		if svc.Line == cursorLine {
+			detail := "service: " + svc.Name
+			if svc.Language != "" {
+				detail += " (" + svc.Language + ")"
+			}
+			return &protocol.Hover{
+				Contents: protocol.MarkupContent{
+					Kind:  protocol.PlainText,
+					Value: detail,
 				},
 			}, nil
 		}
@@ -423,12 +606,12 @@ func (s *Server) OutgoingCalls(_ context.Context, _ *protocol.CallHierarchyOutgo
 	return nil, nil
 }
 
-// semanticTokenTypeActor and semanticTokenTypeDomain are the two custom token
-// types advertised in the legend. Their index in the legend slice is their
-// numeric encoding in the data stream.
+// Semantic token type constants for the three kinds in scope through S5.
+// Their index in the legend slice is their numeric encoding in the data stream.
 const (
-	semanticTokenTypeActor  protocol.SemanticTokenTypes = "class"     // index 0
-	semanticTokenTypeDomain protocol.SemanticTokenTypes = "namespace" // index 1
+	semanticTokenTypeActor   protocol.SemanticTokenTypes = "class"     // index 0
+	semanticTokenTypeDomain  protocol.SemanticTokenTypes = "namespace" // index 1
+	semanticTokenTypeService protocol.SemanticTokenTypes = "interface" // index 2
 )
 
 // semanticTokensOptions returns the capability descriptor for semantic tokens.
@@ -447,7 +630,7 @@ func semanticTokensOptions() interface{} {
 			TokenTypes     []string `json:"tokenTypes"`
 			TokenModifiers []string `json:"tokenModifiers"`
 		}{
-			TokenTypes:     []string{string(semanticTokenTypeActor), string(semanticTokenTypeDomain)},
+			TokenTypes:     []string{string(semanticTokenTypeActor), string(semanticTokenTypeDomain), string(semanticTokenTypeService)},
 			TokenModifiers: []string{string(protocol.SemanticTokenModifierDeclaration)},
 		},
 		Full: true,
@@ -461,6 +644,8 @@ func semanticTokenTypeIndex(t protocol.SemanticTokenTypes) uint32 {
 		return 0
 	case semanticTokenTypeDomain:
 		return 1
+	case semanticTokenTypeService:
+		return 2
 	default:
 		return 0
 	}
@@ -511,7 +696,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		}
 		tokens = append(tokens, semanticToken{
 			line:      uint32(a.Line - 1),
-			startChar: 0, // actor name position — approximate until full position tracking
+			startChar: 0, // TODO(S6+): use actual column once position tracking lands
 			length:    uint32(len([]rune(a.Name))),
 			tokenType: semanticTokenTypeIndex(semanticTokenTypeActor),
 			modifiers: 1, // declaration
@@ -525,9 +710,23 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		}
 		tokens = append(tokens, semanticToken{
 			line:      uint32(d.Line - 1),
-			startChar: 0,
+			startChar: 0, // TODO(S6+): use actual column once position tracking lands
 			length:    uint32(len([]rune(d.Name))),
 			tokenType: semanticTokenTypeIndex(semanticTokenTypeDomain),
+			modifiers: 1, // declaration
+		})
+	}
+
+	// Services: token type index 2 ("interface"), modifier 1 (declaration).
+	for _, svc := range f.AST.Services {
+		if svc.Line <= 0 {
+			continue
+		}
+		tokens = append(tokens, semanticToken{
+			line:      uint32(svc.Line - 1),
+			startChar: 0, // TODO(S6+): use actual column once position tracking lands
+			length:    uint32(len([]rune(svc.Name))),
+			tokenType: semanticTokenTypeIndex(semanticTokenTypeService),
 			modifiers: 1, // declaration
 		})
 	}
@@ -542,16 +741,13 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 
 // sortSemanticTokens sorts tokens ascending by (line, startChar).
 func sortSemanticTokens(tokens []semanticToken) {
-	for i := 1; i < len(tokens); i++ {
-		for j := i; j > 0; j-- {
-			a, b := tokens[j-1], tokens[j]
-			if a.line > b.line || (a.line == b.line && a.startChar > b.startChar) {
-				tokens[j-1], tokens[j] = tokens[j], tokens[j-1]
-			} else {
-				break
-			}
+	sort.Slice(tokens, func(i, j int) bool {
+		a, b := tokens[i], tokens[j]
+		if a.line != b.line {
+			return a.line < b.line
 		}
-	}
+		return a.startChar < b.startChar
+	})
 }
 
 func (s *Server) SemanticTokensFullDelta(_ context.Context, _ *protocol.SemanticTokensDeltaParams) (interface{}, error) {
@@ -591,16 +787,19 @@ func (s *Server) scheduleDiagnostics(ctx context.Context, uri string) {
 	})
 }
 
-// publishDiagnostics runs sema on the cached parse result and pushes
-// textDocument/publishDiagnostics to the client.
+// publishDiagnostics pushes textDocument/publishDiagnostics to the client.
+// Diagnostics (parse + sema) are already stored on the workspace File since S5.
+// We also include any workspace-level cross-file diagnostics for this URI.
 func (s *Server) publishDiagnostics(ctx context.Context, uri string) {
 	f := s.ws.Get(uri)
 	if f == nil {
 		return
 	}
 
-	_, semaDiags := sema.AnalyzeFile(uri, f.AST)
-	allDiags := append(f.Diagnostics, semaDiags...)
+	// f.Diagnostics contains parse + per-file sema diagnostics (set during
+	// workspace.parseAndStore). Append workspace-level cross-file diagnostics
+	// (e.g. unresolved-reference from AnalyzeWorkspace) for this URI.
+	allDiags := append(f.Diagnostics, s.ws.WorkspaceDiagnostics(uri)...)
 
 	var lspDiags []protocol.Diagnostic
 	for _, d := range allDiags {

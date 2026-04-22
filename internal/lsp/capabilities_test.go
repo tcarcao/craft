@@ -17,9 +17,9 @@ import (
 	"github.com/tcarcao/craft/internal/lsp"
 )
 
-// TestServerCapabilities_S4 asserts exactly the capabilities declared after S4.
-// Slices S5+ extend this list alongside their handlers (Q20).
-func TestServerCapabilities_S4(t *testing.T) {
+// TestServerCapabilities_S5 asserts exactly the capabilities declared after S5.
+// Slices S6+ extend this list alongside their handlers (Q20).
+func TestServerCapabilities_S5(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
 
@@ -53,11 +53,12 @@ func TestServerCapabilities_S4(t *testing.T) {
 			TextDocumentSync       interface{} `json:"textDocumentSync"`
 			DocumentSymbolProvider interface{} `json:"documentSymbolProvider"`
 			HoverProvider          interface{} `json:"hoverProvider"`
-			// Capabilities that MUST NOT be declared yet (not yet implemented).
-			CompletionProvider     interface{} `json:"completionProvider"`
-			DefinitionProvider     interface{} `json:"definitionProvider"`
 			SemanticTokensProvider interface{} `json:"semanticTokensProvider"`
-			FoldingRangeProvider   interface{} `json:"foldingRangeProvider"`
+			DefinitionProvider     interface{} `json:"definitionProvider"`
+			ExecuteCommandProvider interface{} `json:"executeCommandProvider"`
+			// Capabilities that MUST NOT be declared yet (not yet implemented).
+			CompletionProvider   interface{} `json:"completionProvider"`
+			FoldingRangeProvider interface{} `json:"foldingRangeProvider"`
 		} `json:"capabilities"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
@@ -79,12 +80,16 @@ func TestServerCapabilities_S4(t *testing.T) {
 	if result.Capabilities.SemanticTokensProvider == nil {
 		t.Error("semanticTokensProvider must be declared (S4, Q20)")
 	}
+	// S5 capabilities — added alongside definition and executeCommand handlers.
+	if result.Capabilities.DefinitionProvider == nil {
+		t.Error("definitionProvider must be declared (S5, Q20)")
+	}
+	if result.Capabilities.ExecuteCommandProvider == nil {
+		t.Error("executeCommandProvider must be declared (S5, Q20)")
+	}
 	// Future capabilities — must not be declared yet.
 	if result.Capabilities.CompletionProvider != nil {
 		t.Error("completionProvider must not be declared yet (Q20)")
-	}
-	if result.Capabilities.DefinitionProvider != nil {
-		t.Error("definitionProvider must not be declared yet (Q20); add in S5")
 	}
 	if result.Capabilities.FoldingRangeProvider != nil {
 		t.Error("foldingRangeProvider must not be declared yet (Q20); add in S7")
