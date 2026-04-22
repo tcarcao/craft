@@ -19,8 +19,8 @@ func (b *DSLModelBuilder) VisitDomain_def(ctx *parser.Domain_defContext) interfa
 		child := ctx.GetChild(i)
 		if domainName, ok := child.(*parser.Domain_nameContext); ok {
 			domain.Name = b.extractIdentifier(&domainName.BaseParserRuleContext)
-		} else if subdomainList, ok := child.(*parser.Subdomain_listContext); ok {
-			domain.BoundedContexts = b.extractSubdomainList(subdomainList)
+		} else if contextList, ok := child.(*parser.Bounded_context_listContext); ok {
+			domain.BoundedContexts = b.extractBoundedContextList(contextList)
 		}
 	}
 
@@ -61,8 +61,8 @@ func (b *DSLModelBuilder) VisitDomain_block(ctx *parser.Domain_blockContext) int
 		child := ctx.GetChild(i)
 		if domainName, ok := child.(*parser.Domain_nameContext); ok {
 			domain.Name = b.extractIdentifier(&domainName.BaseParserRuleContext)
-		} else if subdomainList, ok := child.(*parser.Subdomain_listContext); ok {
-			domain.BoundedContexts = b.extractSubdomainList(subdomainList)
+		} else if contextList, ok := child.(*parser.Bounded_context_listContext); ok {
+			domain.BoundedContexts = b.extractBoundedContextList(contextList)
 		}
 	}
 
@@ -70,13 +70,13 @@ func (b *DSLModelBuilder) VisitDomain_block(ctx *parser.Domain_blockContext) int
 	return nil
 }
 
-// extractSubdomainList extracts bounded context names from subdomain_list context
-func (b *DSLModelBuilder) extractSubdomainList(ctx *parser.Subdomain_listContext) []string {
+// extractBoundedContextList extracts bounded context names from subdomain_list context
+func (b *DSLModelBuilder) extractBoundedContextList(ctx *parser.Bounded_context_listContext) []string {
 	contextSet := make(map[string]bool)
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if sd, ok := child.(*parser.SubdomainContext); ok {
+		if sd, ok := child.(*parser.Bounded_contextContext); ok {
 			name := b.extractIdentifier(&sd.BaseParserRuleContext)
 			if name != "" {
 				contextSet[name] = true
@@ -128,9 +128,9 @@ func (b *DSLModelBuilder) mergeBoundedContexts(existing, new []string) []string 
 
 // Domain visitor stubs for completeness
 func (b *DSLModelBuilder) VisitDomain_name(ctx *parser.Domain_nameContext) interface{} { return nil }
-func (b *DSLModelBuilder) VisitSubdomain_list(ctx *parser.Subdomain_listContext) interface{} {
+func (b *DSLModelBuilder) VisitBounded_context_list(ctx *parser.Bounded_context_listContext) interface{} {
 	return nil
 }
-func (b *DSLModelBuilder) VisitSubdomain(ctx *parser.SubdomainContext) interface{} {
+func (b *DSLModelBuilder) VisitBounded_context(ctx *parser.Bounded_contextContext) interface{} {
 	return nil
 }

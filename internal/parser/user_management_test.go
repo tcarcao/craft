@@ -35,12 +35,12 @@ domain User {
 
 services {
     UserService {
-        domains: Authentication, Profile
+        contexts: Authentication, Profile
         data-stores: user_db
         language: golang
     }
     CommsService {
-        domains: Notifier
+        contexts: Notifier
     }
 }
 
