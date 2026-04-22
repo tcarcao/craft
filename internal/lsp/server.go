@@ -436,9 +436,9 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			line = uc.Line - 1
 		}
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           uc.Name,
-			Kind:           protocol.SymbolKindEvent,
-			Detail:         "use_case",
+			Name:   uc.Name,
+			Kind:   protocol.SymbolKindEvent, // closest match for use-case-level interactions
+			Detail: "use_case",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})

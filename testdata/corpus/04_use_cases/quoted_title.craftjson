@@ -1,0 +1,30 @@
+{
+  "useCases": [
+    {
+      "name": "User's registration",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "submits",
+            "phrase": "registration form",
+            "description": "when Customer submits registration form"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "UserService",
+              "verb": "creates",
+              "phrase": "account",
+              "description": "UserService creates account",
+              "line": 3
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

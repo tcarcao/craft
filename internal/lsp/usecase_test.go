@@ -96,7 +96,7 @@ func TestUseCaseHover(t *testing.T) {
 		t.Fatalf("hover returned error: %s", hoverResp.Error)
 	}
 	if hoverResp.Result == nil {
-		t.Skip("hover result is nil (workspace resolution may not have run yet)")
+		t.Fatalf("hover result is nil — workspace resolution should have run synchronously on didOpen")
 	}
 
 	var hoverResult struct {
@@ -107,14 +107,12 @@ func TestUseCaseHover(t *testing.T) {
 	if err := json.Unmarshal(hoverResp.Result, &hoverResult); err != nil {
 		t.Fatalf("unmarshaling hover result: %v", err)
 	}
-	// The result should mention "domain: Auth" since Auth is declared as a domain.
+	// Auth is declared as a domain in the same file; hover must return "domain: Auth".
 	if hoverResult.Contents.Value == "" {
-		t.Log("hover returned empty contents (resolution may have not run); accepting as soft pass")
-		return
+		t.Fatalf("hover returned empty contents; expected 'domain: Auth'")
 	}
 	if hoverResult.Contents.Value != "domain: Auth" {
-		// Soft check: Auth may not be resolved if workspace sema hasn't run
-		t.Logf("hover contents: %q (expected 'domain: Auth')", hoverResult.Contents.Value)
+		t.Errorf("hover contents: got %q, want %q", hoverResult.Contents.Value, "domain: Auth")
 	}
 
 	// Shutdown.

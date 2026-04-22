@@ -9,6 +9,7 @@ package syntax
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/lexer"
@@ -608,6 +609,18 @@ func (p *Parser) parseScenario(counter *int) (*ast.ScenarioDecl, []craft.Diagnos
 func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic) {
 	var diags []craft.Diagnostic
 
+	// event trigger: when "<EventName>"  (no subject identifier)
+	if p.peek().Type == lexer.TokenString {
+		eventTok := p.consume()
+		desc := fmt.Sprintf("when %q", eventTok.Value)
+		return ast.TriggerDecl{
+			TriggerType: "event",
+			Event:       eventTok.Value,
+			Description: desc,
+			Line:        whenLine,
+		}, diags
+	}
+
 	// The first token is the actor/domain subject.
 	subjectTok := p.peek()
 	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
@@ -851,67 +864,29 @@ func (p *Parser) collectPhrase() string {
 		tok := p.peek()
 		switch tok.Type {
 		case lexer.TokenRBrace, lexer.TokenEOF:
-			return joinPhrase(parts)
+			return strings.Join(parts, " ")
 		case lexer.TokenIdent:
 			if tok.Value == "when" {
-				return joinPhrase(parts)
+				return strings.Join(parts, " ")
 			}
 			// Stop when we've moved to a different source line.
 			if tok.Line != startLine {
-				return joinPhrase(parts)
+				return strings.Join(parts, " ")
 			}
 			parts = append(parts, tok.Value)
 			p.consume()
 		case lexer.TokenString:
 			if tok.Line != startLine {
-				return joinPhrase(parts)
+				return strings.Join(parts, " ")
 			}
 			parts = append(parts, fmt.Sprintf("%q", tok.Value))
 			p.consume()
 		default:
-			return joinPhrase(parts)
+			return strings.Join(parts, " ")
 		}
 	}
 }
 
-// isActionSubjectAhead returns true when the current token looks like the subject of
-// a new action or scenario, i.e. it is an ident and the token after it is an action
-// verb ("asks", "notifies", "returns") or "when".
-func (p *Parser) isActionSubjectAhead() bool {
-	// Look at positions pos (current) and pos+1 (next).
-	curr := p.peekAt(0)
-	if curr.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(curr.Type) {
-		return false
-	}
-	next := p.peekAt(1)
-	if next.Type == lexer.TokenIdent {
-		switch next.Value {
-		case "asks", "notifies", "returns", "when":
-			return true
-		}
-	}
-	return false
-}
-
-// peekAt returns the token at pos+offset without consuming.
-func (p *Parser) peekAt(offset int) lexer.Token {
-	idx := p.pos + offset
-	if idx < len(p.tokens) {
-		return p.tokens[idx]
-	}
-	return lexer.Token{Type: lexer.TokenEOF}
-}
-
-func joinPhrase(parts []string) string {
-	result := ""
-	for i, p := range parts {
-		if i > 0 {
-			result += " "
-		}
-		result += p
-	}
-	return result
-}
 
 // isAnyKeywordAsIdent returns true for keyword token types that can appear as
 // identifiers in use-case bodies (e.g. service names that happen to be keywords).

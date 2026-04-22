@@ -1,0 +1,5 @@
+use_case "Event Triggered Flow" {
+    when "Order Placed"
+        notification sends confirmation email
+        analytics tracks order event
+}

@@ -1,0 +1,4 @@
+use_case "User's registration" {
+    when Customer submits registration form
+        UserService creates account
+}

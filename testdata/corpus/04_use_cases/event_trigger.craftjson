@@ -1,0 +1,37 @@
+{
+  "useCases": [
+    {
+      "name": "Event Triggered Flow",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "event",
+            "event": "Order Placed",
+            "description": "when \"Order Placed\""
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "notification",
+              "verb": "sends",
+              "phrase": "confirmation email",
+              "description": "notification sends confirmation email",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "internal_action",
+              "domain": "analytics",
+              "verb": "tracks",
+              "phrase": "order event",
+              "description": "analytics tracks order event",
+              "line": 4
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
