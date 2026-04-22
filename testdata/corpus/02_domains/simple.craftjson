@@ -1,0 +1,14 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "ECommerce",
+      "boundedContexts": [
+        "User",
+        "Product",
+        "Order",
+        "Payment"
+      ]
+    }
+  ]
+}

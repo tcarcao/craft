@@ -1,0 +1,32 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "Domain_With_Underscores",
+      "boundedContexts": [
+        "SubDomain_1",
+        "SubDomain_2"
+      ]
+    },
+    {
+      "name": "Domain-With-Hyphens",
+      "boundedContexts": [
+        "Sub-Domain-A",
+        "Sub-Domain-B"
+      ]
+    },
+    {
+      "name": "DomainWithNumbers123",
+      "boundedContexts": [
+        "SubDomain456",
+        "Another789Sub"
+      ]
+    },
+    {
+      "name": "SimpleA",
+      "boundedContexts": [
+        "B"
+      ]
+    }
+  ]
+}

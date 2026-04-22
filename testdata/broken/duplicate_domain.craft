@@ -1,0 +1,7 @@
+domain Payments {
+    ProcessPayment
+}
+
+domain Payments {
+    RefundPayment
+}

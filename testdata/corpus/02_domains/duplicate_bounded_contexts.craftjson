@@ -1,0 +1,13 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "Inventory",
+      "boundedContexts": [
+        "AddItem",
+        "RemoveItem",
+        "UpdateItem"
+      ]
+    }
+  ]
+}

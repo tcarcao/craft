@@ -1,0 +1,33 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "SingleDomain",
+      "boundedContexts": [
+        "SubDomain1",
+        "SubDomain2"
+      ]
+    },
+    {
+      "name": "MultipleDomain1",
+      "boundedContexts": [
+        "Sub1",
+        "Sub2",
+        "Sub3"
+      ]
+    },
+    {
+      "name": "MultipleDomain2",
+      "boundedContexts": [
+        "SubA",
+        "SubB"
+      ]
+    },
+    {
+      "name": "AnotherSingleDomain",
+      "boundedContexts": [
+        "OnlyOne"
+      ]
+    }
+  ]
+}

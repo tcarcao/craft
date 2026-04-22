@@ -1,0 +1,11 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "Payments",
+      "boundedContexts": [
+        "PaymentProcessing"
+      ]
+    }
+  ]
+}

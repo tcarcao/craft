@@ -1,0 +1,18 @@
+domains {
+    ECommerce {
+        User
+        Product
+        Order
+    }
+
+    Analytics {
+        Reporting
+        Metrics
+        Dashboard
+    }
+
+    Security {
+        Authentication
+        Authorization
+    }
+}

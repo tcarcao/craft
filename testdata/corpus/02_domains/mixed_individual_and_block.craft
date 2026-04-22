@@ -1,0 +1,21 @@
+domain SingleDomain {
+    SubDomain1
+    SubDomain2
+}
+
+domains {
+    MultipleDomain1 {
+        Sub1
+        Sub2
+        Sub3
+    }
+
+    MultipleDomain2 {
+        SubA
+        SubB
+    }
+}
+
+domain AnotherSingleDomain {
+    OnlyOne
+}

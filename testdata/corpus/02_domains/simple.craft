@@ -1,0 +1,6 @@
+domain ECommerce {
+    User
+    Product
+    Order
+    Payment
+}

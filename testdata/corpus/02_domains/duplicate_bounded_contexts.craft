@@ -1,0 +1,7 @@
+domain Inventory {
+    AddItem
+    RemoveItem
+    AddItem
+    UpdateItem
+    RemoveItem
+}

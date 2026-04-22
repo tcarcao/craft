@@ -1,0 +1,20 @@
+domains {
+    Domain_With_Underscores {
+        SubDomain_1
+        SubDomain_2
+    }
+
+    Domain-With-Hyphens {
+        Sub-Domain-A
+        Sub-Domain-B
+    }
+
+    DomainWithNumbers123 {
+        SubDomain456
+        Another789Sub
+    }
+
+    SimpleA {
+        B
+    }
+}
