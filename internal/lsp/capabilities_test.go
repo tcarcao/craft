@@ -17,9 +17,9 @@ import (
 	"github.com/tcarcao/craft/internal/lsp"
 )
 
-// TestServerCapabilities_S3 asserts exactly the capabilities declared after S3.
-// Slices S4+ extend this list alongside their handlers (Q20).
-func TestServerCapabilities_S3(t *testing.T) {
+// TestServerCapabilities_S4 asserts exactly the capabilities declared after S4.
+// Slices S5+ extend this list alongside their handlers (Q20).
+func TestServerCapabilities_S4(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
 
@@ -75,15 +75,16 @@ func TestServerCapabilities_S3(t *testing.T) {
 	if result.Capabilities.HoverProvider == nil {
 		t.Error("hoverProvider must be declared (S3, Q20)")
 	}
+	// S4 capability — added alongside SemanticTokensFull handler.
+	if result.Capabilities.SemanticTokensProvider == nil {
+		t.Error("semanticTokensProvider must be declared (S4, Q20)")
+	}
 	// Future capabilities — must not be declared yet.
 	if result.Capabilities.CompletionProvider != nil {
 		t.Error("completionProvider must not be declared yet (Q20)")
 	}
 	if result.Capabilities.DefinitionProvider != nil {
 		t.Error("definitionProvider must not be declared yet (Q20); add in S5")
-	}
-	if result.Capabilities.SemanticTokensProvider != nil {
-		t.Error("semanticTokensProvider must not be declared yet (Q20); add in S4")
 	}
 	if result.Capabilities.FoldingRangeProvider != nil {
 		t.Error("foldingRangeProvider must not be declared yet (Q20); add in S7")

@@ -1,5 +1,6 @@
 // Package lsp implements the Craft Language Server Protocol server.
-// S3: adds workspace + diagnostics + documentSymbol + hover handlers.
+// S3: workspace + diagnostics + documentSymbol + hover handlers.
+// S4: semanticTokens (actor vs domain distinct colouring).
 // ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
 
@@ -92,10 +93,14 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 	return &protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			// Q20: declare only capabilities we actually serve.
-			// S3 adds documentSymbol and hover alongside their handlers.
+			// S3: documentSymbol, hover.
+			// S4: semanticTokens (full) with actor/domain token types.
 			TextDocumentSync:       protocol.TextDocumentSyncKindFull,
 			DocumentSymbolProvider: true,
 			HoverProvider:          true,
+			// SemanticTokensProvider is interface{} in this protocol version;
+			// use an inline struct so it serialises with Legend + Full fields.
+			SemanticTokensProvider: semanticTokensOptions(),
 		},
 		ServerInfo: &protocol.ServerInfo{
 			Name:    "craft-lsp",
@@ -257,6 +262,19 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
+	for _, d := range f.AST.Domains {
+		line := 0
+		if d.Line > 0 {
+			line = d.Line - 1
+		}
+		syms = append(syms, protocol.DocumentSymbol{
+			Name:           d.Name,
+			Kind:           protocol.SymbolKindNamespace,
+			Detail:         "domain",
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+		})
+	}
 	return syms, nil
 }
 
@@ -287,7 +305,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		declLine := a.Line
 		if declLine == 0 {
 			// Individual `actor` statements don't have a line recorded in AST;
-			// hover will not resolve them in S3 (improves with position tracking in S4+).
+			// hover will not resolve them until full position tracking lands.
 			continue
 		}
 		if declLine == cursorLine {
@@ -299,6 +317,21 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			}, nil
 		}
 	}
+
+	for _, d := range f.AST.Domains {
+		if d.Line == 0 {
+			continue
+		}
+		if d.Line == cursorLine {
+			return &protocol.Hover{
+				Contents: protocol.MarkupContent{
+					Kind:  protocol.PlainText,
+					Value: "domain: " + d.Name,
+				},
+			}, nil
+		}
+	}
+
 	return nil, nil
 }
 
@@ -390,8 +423,135 @@ func (s *Server) OutgoingCalls(_ context.Context, _ *protocol.CallHierarchyOutgo
 	return nil, nil
 }
 
-func (s *Server) SemanticTokensFull(_ context.Context, _ *protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
-	return nil, nil
+// semanticTokenTypeActor and semanticTokenTypeDomain are the two custom token
+// types advertised in the legend. Their index in the legend slice is their
+// numeric encoding in the data stream.
+const (
+	semanticTokenTypeActor  protocol.SemanticTokenTypes = "class"     // index 0
+	semanticTokenTypeDomain protocol.SemanticTokenTypes = "namespace" // index 1
+)
+
+// semanticTokensOptions returns the capability descriptor for semantic tokens.
+// The go.lsp.dev/protocol version we use has an incomplete SemanticTokensOptions
+// struct (missing Legend/Full), so we use an inline anonymous struct that
+// marshals to the correct JSON shape.
+func semanticTokensOptions() interface{} {
+	return struct {
+		Legend struct {
+			TokenTypes     []string `json:"tokenTypes"`
+			TokenModifiers []string `json:"tokenModifiers"`
+		} `json:"legend"`
+		Full bool `json:"full"`
+	}{
+		Legend: struct {
+			TokenTypes     []string `json:"tokenTypes"`
+			TokenModifiers []string `json:"tokenModifiers"`
+		}{
+			TokenTypes:     []string{string(semanticTokenTypeActor), string(semanticTokenTypeDomain)},
+			TokenModifiers: []string{string(protocol.SemanticTokenModifierDeclaration)},
+		},
+		Full: true,
+	}
+}
+
+// semanticTokenTypeIndex returns the legend index for a token type.
+func semanticTokenTypeIndex(t protocol.SemanticTokenTypes) uint32 {
+	switch t {
+	case semanticTokenTypeActor:
+		return 0
+	case semanticTokenTypeDomain:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// semanticToken records one token before encoding.
+type semanticToken struct {
+	line      uint32 // 0-based LSP line
+	startChar uint32 // 0-based character offset
+	length    uint32
+	tokenType uint32
+	modifiers uint32
+}
+
+// encodeSemanticTokens converts a slice of semanticToken (already sorted by
+// line, then startChar) into the LSP relative-encoding uint32 stream.
+func encodeSemanticTokens(tokens []semanticToken) []uint32 {
+	data := make([]uint32, 0, len(tokens)*5)
+	var prevLine, prevChar uint32
+	for _, t := range tokens {
+		deltaLine := t.line - prevLine
+		deltaChar := t.startChar
+		if deltaLine == 0 {
+			deltaChar = t.startChar - prevChar
+		}
+		data = append(data, deltaLine, deltaChar, t.length, t.tokenType, t.modifiers)
+		prevLine = t.line
+		prevChar = t.startChar
+	}
+	return data
+}
+
+func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
+	if params == nil {
+		return nil, nil
+	}
+	f := s.ws.Get(string(params.TextDocument.URI))
+	if f == nil || f.AST == nil {
+		return &protocol.SemanticTokens{Data: []uint32{}}, nil
+	}
+
+	var tokens []semanticToken
+
+	// Actors: token type index 0 ("class"), modifier 1 (declaration).
+	for _, a := range f.AST.Actors {
+		if a.Line <= 0 {
+			continue // individual `actor` stmts without position — skip for now
+		}
+		tokens = append(tokens, semanticToken{
+			line:      uint32(a.Line - 1),
+			startChar: 0, // actor name position — approximate until full position tracking
+			length:    uint32(len([]rune(a.Name))),
+			tokenType: semanticTokenTypeIndex(semanticTokenTypeActor),
+			modifiers: 1, // declaration
+		})
+	}
+
+	// Domains: token type index 1 ("namespace"), modifier 1 (declaration).
+	for _, d := range f.AST.Domains {
+		if d.Line <= 0 {
+			continue
+		}
+		tokens = append(tokens, semanticToken{
+			line:      uint32(d.Line - 1),
+			startChar: 0,
+			length:    uint32(len([]rune(d.Name))),
+			tokenType: semanticTokenTypeIndex(semanticTokenTypeDomain),
+			modifiers: 1, // declaration
+		})
+	}
+
+	// Sort tokens by line, then character (required for relative encoding).
+	sortSemanticTokens(tokens)
+
+	return &protocol.SemanticTokens{
+		Data: encodeSemanticTokens(tokens),
+	}, nil
+}
+
+// sortSemanticTokens sorts tokens ascending by (line, startChar).
+func sortSemanticTokens(tokens []semanticToken) {
+	for i := 1; i < len(tokens); i++ {
+		for j := i; j > 0; j-- {
+			a, b := tokens[j-1], tokens[j]
+			if a.line > b.line || (a.line == b.line && a.startChar > b.startChar) {
+				tokens[j-1], tokens[j] = tokens[j], tokens[j-1]
+			} else {
+				break
+			}
+		}
+	}
 }
 
 func (s *Server) SemanticTokensFullDelta(_ context.Context, _ *protocol.SemanticTokensDeltaParams) (interface{}, error) {
