@@ -27,6 +27,8 @@ Each entry lists:
 | Code | Severity | Meaning | Example message | Origin |
 |------|----------|---------|-----------------|--------|
 | `craft/sema/duplicate-name` | error | Two declarations in the same namespace share a name | `actor "Alice" already declared (first seen at line 1)` | S3 |
+| `craft/sema/cross-kind-name-reuse` | warning | The same identifier is declared in two different kind-namespaces (e.g. actor and domain) | `"Customer" is declared as both an actor (line 0) and a domain (line 3); consider renaming to avoid confusion` | S4 |
+| `craft/sema/sema-panic` | error | Unexpected panic recovered in the sema tier; analysis results may be incomplete | `internal sema error: <panic value>` | S4 |
 
 ---
 
