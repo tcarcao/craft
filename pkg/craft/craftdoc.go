@@ -128,7 +128,9 @@ const (
 	ActionTypeReturn   ActionType = "return_action"
 )
 
-// Interaction is a derived type that represents a directed communication between two parties.
+// Interaction is a derived type computed from scenario actions; it represents a directed
+// communication between two parties in a sequence diagram. Not a top-level CraftDoc field —
+// produced by the visualizer layer from CraftDoc.UseCases.
 type Interaction struct {
 	From        string `json:"from"`
 	To          string `json:"to"`
