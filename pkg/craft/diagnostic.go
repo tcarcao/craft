@@ -14,6 +14,10 @@ type Diagnostic struct {
 	Severity Severity `json:"severity"`
 	// Range is the source location the diagnostic points to.
 	Range Range `json:"range"`
+	// SourceURI identifies the file this diagnostic belongs to when a diagnostic
+	// is produced by a cross-file analysis pass (e.g. AnalyzeWorkspace). Empty
+	// for diagnostics already scoped to a single file.
+	SourceURI string `json:"sourceUri,omitempty"`
 }
 
 // Severity classifies the urgency of a diagnostic.

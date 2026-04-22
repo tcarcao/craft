@@ -15,8 +15,22 @@ func LineToLSP(line int) int {
 
 // File is the root AST node for a parsed .craft file.
 type File struct {
-	Actors  []*ActorDecl  `json:"actors,omitempty"`
-	Domains []*DomainDecl `json:"domains,omitempty"`
+	Actors   []*ActorDecl   `json:"actors,omitempty"`
+	Domains  []*DomainDecl  `json:"domains,omitempty"`
+	Services []*ServiceDecl `json:"services,omitempty"`
+}
+
+// ServiceDecl represents a service declaration inside a services { ... } block.
+type ServiceDecl struct {
+	Name       string   `json:"name"`
+	Contexts   []string `json:"contexts,omitempty"`
+	DataStores []string `json:"dataStores,omitempty"`
+	Language   string   `json:"language,omitempty"`
+	// Line is the 1-based source line where the service name appears.
+	Line int `json:"line,omitempty"`
+	// ContextLines holds the 1-based source line for each entry in Contexts
+	// (parallel slice). Used for go-to-definition cursor matching.
+	ContextLines []int `json:"contextLines,omitempty"`
 }
 
 // DomainDecl represents either an individual domain declaration

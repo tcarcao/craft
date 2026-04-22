@@ -1,5 +1,8 @@
 // Package lexer implements the hand-written scanner for the Craft DSL.
 // S3: actor-related tokens. S4: adds domain/domains keywords.
+// S5: adds service/services keywords, colon, comma, string literals for
+// service names; contextual field keywords (contexts, data-stores, language)
+// lex as plain identifiers per Q3.
 // Unknown tokens are returned as TokenError so the parser can emit a
 // recoverable diagnostic.
 package lexer
@@ -32,18 +35,25 @@ const (
 	TokenKwDomain  // domain
 	TokenKwDomains // domains
 
+	// S5: service keywords + punctuation
+	TokenKwServices // services (block form)
+	TokenColon      // :
+	TokenComma      // ,
+	TokenString     // "..." quoted string literal
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
 
 var keywords = map[string]TokenType{
-	"actor":   TokenKwActor,
-	"actors":  TokenKwActors,
-	"user":    TokenKwUser,
-	"system":  TokenKwSystem,
-	"service": TokenKwService,
-	"domain":  TokenKwDomain,
-	"domains": TokenKwDomains,
+	"actor":    TokenKwActor,
+	"actors":   TokenKwActors,
+	"user":     TokenKwUser,
+	"system":   TokenKwSystem,
+	"service":  TokenKwService,
+	"domain":   TokenKwDomain,
+	"domains":  TokenKwDomains,
+	"services": TokenKwServices,
 }
 
 // Token is a scanned unit from the source.
@@ -99,6 +109,12 @@ func (l *Lexer) Next() Token {
 		return l.consume(TokenLBrace)
 	case ch == '}':
 		return l.consume(TokenRBrace)
+	case ch == ':':
+		return l.consume(TokenColon)
+	case ch == ',':
+		return l.consume(TokenComma)
+	case ch == '"':
+		return l.scanString()
 	case ch == '\n':
 		// Newlines are generally not significant for Craft's grammar; skip.
 		l.advance()
@@ -133,6 +149,43 @@ func (l *Lexer) skipWhitespaceAndComments() {
 			return
 		}
 	}
+}
+
+// scanString scans a double-quoted string literal. Escape sequences are not
+// interpreted (the raw text between the quotes is the token value). An
+// unterminated string (no closing `"` before EOF) returns TokenError.
+func (l *Lexer) scanString() Token {
+	startLine := l.line
+	startCol := l.col
+	l.advance() // consume opening "
+	var val []rune
+	closed := false
+	for l.pos < len(l.src) {
+		ch := l.src[l.pos]
+		if ch == '"' {
+			l.advance() // consume closing "
+			closed = true
+			break
+		}
+		if ch == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
+			// escaped quote inside the string
+			l.advance()
+			val = append(val, '"')
+			l.advance()
+			continue
+		}
+		val = append(val, ch)
+		l.advance()
+	}
+	if !closed {
+		return Token{
+			Type:   TokenError,
+			Value:  "unterminated string literal",
+			Line:   startLine,
+			Column: startCol,
+		}
+	}
+	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol}
 }
 
 func (l *Lexer) scanIdent() Token {

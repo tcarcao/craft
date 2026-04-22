@@ -11,6 +11,17 @@ func Project(f *ast.File) *craft.CraftDoc {
 	doc := &craft.CraftDoc{
 		UseCases: []craft.UseCase{},
 	}
+	for _, s := range f.Services {
+		svc := craft.Service{
+			Name:       s.Name,
+			Contexts:   s.Contexts,
+			DataStores: s.DataStores,
+			Language:   s.Language,
+			Deployment: craft.DeploymentStrategy{},
+			Line:       s.Line,
+		}
+		doc.Services = append(doc.Services, svc)
+	}
 	for _, a := range f.Actors {
 		doc.Actors = append(doc.Actors, craft.Actor{
 			Name: a.Name,

@@ -1,8 +1,9 @@
 // Package syntax implements the hand-written recursive-descent parser for the
 // Craft DSL. It produces an internal/ast.File.
 //
-// S3: actors. S4: domains. Unsupported top-level keywords emit a recoverable
-// "not-yet-implemented" diagnostic so --parser=v2 is usable on partial files.
+// S3: actors. S4: domains. S5: services + services block.
+// Unsupported top-level keywords emit a recoverable "not-yet-implemented"
+// diagnostic so --parser=v2 is usable on partial files.
 package syntax
 
 import (
@@ -57,6 +58,10 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			domains, d := p.parseDomainsBlock()
 			diags = append(diags, d...)
 			file.Domains = append(file.Domains, domains...)
+		case lexer.TokenKwServices:
+			services, d := p.parseServicesBlock()
+			diags = append(diags, d...)
+			file.Services = append(file.Services, services...)
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -302,7 +307,193 @@ func isDomainNameToken(tt lexer.TokenType) bool {
 	switch tt {
 	case lexer.TokenKwUser, lexer.TokenKwSystem, lexer.TokenKwService,
 		lexer.TokenKwActor, lexer.TokenKwActors,
-		lexer.TokenKwDomain, lexer.TokenKwDomains:
+		lexer.TokenKwDomain, lexer.TokenKwDomains,
+		lexer.TokenKwServices:
+		return true
+	}
+	return false
+}
+
+// parseServicesBlock parses: services { <service_block>* }
+// Each service_block is: <name> { <field>* } where name is an ident,
+// hyphenated-ident, or quoted string.
+func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
+	p.consume() // consume `services`
+	var diags []craft.Diagnostic
+	var services []*ast.ServiceDecl
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume outer `{`
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+
+		// Service name: identifier, string literal, or keyword-as-name
+		var name string
+		var nameLine int
+		switch tok.Type {
+		case lexer.TokenIdent, lexer.TokenString:
+			name = tok.Value
+			nameLine = tok.Line
+			p.consume()
+		default:
+			if isServiceNameKeyword(tok.Type) {
+				name = tok.Value
+				nameLine = tok.Line
+				p.consume()
+			} else {
+				diags = append(diags, p.diagUnexpected(tok, "service name"))
+				p.consume()
+				continue
+			}
+		}
+
+		if p.peek().Type != lexer.TokenLBrace {
+			diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+			continue
+		}
+		p.consume() // consume inner `{`
+
+		svc, d := p.parseServiceBody(name, nameLine)
+		diags = append(diags, d...)
+		services = append(services, svc)
+
+		if p.atEOF() {
+			diags = append(diags, craft.Diagnostic{
+				Code:     "craft/syntax/unclosed-block",
+				Message:  fmt.Sprintf("unclosed service block for %q (missing `}`)", name),
+				Severity: craft.SeverityError,
+				Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(nameLine)}},
+			})
+			return services, diags
+		}
+		p.consume() // consume inner `}`
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed services block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    craft.Range{Start: craft.Position{Line: p.peek().Line - 1}},
+		})
+		return services, diags
+	}
+	p.consume() // consume outer `}`
+	return services, diags
+}
+
+// parseServiceBody parses the fields inside a service { ... } block.
+func (p *Parser) parseServiceBody(name string, nameLine int) (*ast.ServiceDecl, []craft.Diagnostic) {
+	svc := &ast.ServiceDecl{Name: name, Line: nameLine}
+	var diags []craft.Diagnostic
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+
+		// Field names are contextual keywords: contexts, data-stores, language.
+		// They lex as TokenIdent (or hyphenated ident). We match on Value.
+		if tok.Type != lexer.TokenIdent {
+			// Unknown or error token inside service body — skip.
+			diags = append(diags, p.diagUnexpected(tok, "field name (contexts, data-stores, language) or `}`"))
+			p.consume()
+			continue
+		}
+
+		fieldName := tok.Value
+		p.consume() // consume field name
+
+		// Expect colon after field name.
+		if p.peek().Type != lexer.TokenColon {
+			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
+			continue
+		}
+		p.consume() // consume `:`
+
+		switch fieldName {
+		case "contexts":
+			svc.Contexts, svc.ContextLines = p.parseIdentListWithLines()
+		case "data-stores":
+			svc.DataStores = p.parseIdentList()
+		case "language":
+			if p.peek().Type == lexer.TokenIdent {
+				svc.Language = p.peek().Value
+				p.consume()
+			} else {
+				diags = append(diags, p.diagUnexpected(p.peek(), "language identifier"))
+			}
+		default:
+			// Unknown field — skip to next line (consume until next ident that
+			// could be a field name, or `}`).
+			p.skipToNextField()
+		}
+	}
+
+	return svc, diags
+}
+
+// parseIdentList parses a comma-separated list of identifiers (or strings).
+// Used for data-stores: values.
+func (p *Parser) parseIdentList() []string {
+	items, _ := p.parseIdentListWithLines()
+	return items
+}
+
+// parseIdentListWithLines parses a comma-separated list of identifiers (or
+// strings) and returns both the values and their 1-based source lines.
+// Used for contexts: so go-to-definition can match the cursor line.
+func (p *Parser) parseIdentListWithLines() ([]string, []int) {
+	var items []string
+	var lines []int
+	for {
+		tok := p.peek()
+		var val string
+		switch tok.Type {
+		case lexer.TokenIdent:
+			val = tok.Value
+			p.consume()
+		case lexer.TokenString:
+			val = tok.Value
+			p.consume()
+		default:
+			return items, lines
+		}
+		items = append(items, val)
+		lines = append(lines, tok.Line)
+		// Optional comma separator.
+		if p.peek().Type == lexer.TokenComma {
+			p.consume()
+		} else {
+			break
+		}
+	}
+	return items, lines
+}
+
+// skipToNextField advances tokens until it finds what looks like the start of
+// a field name (TokenIdent) or the closing brace of the current block.
+func (p *Parser) skipToNextField() {
+	for !p.atEOF() {
+		tok := p.peek()
+		if tok.Type == lexer.TokenRBrace || tok.Type == lexer.TokenIdent {
+			return
+		}
+		p.consume()
+	}
+}
+
+// isServiceNameKeyword returns true for token types that can legally appear as
+// a service name — i.e., any keyword that a human might use as an identifier.
+func isServiceNameKeyword(tt lexer.TokenType) bool {
+	switch tt {
+	case lexer.TokenKwUser, lexer.TokenKwSystem, lexer.TokenKwService,
+		lexer.TokenKwActor, lexer.TokenKwActors,
+		lexer.TokenKwDomain, lexer.TokenKwDomains,
+		lexer.TokenKwServices:
 		return true
 	}
 	return false
@@ -337,7 +528,8 @@ func (p *Parser) resyncToTopLevel() {
 func isTopLevelKeyword(tt lexer.TokenType) bool {
 	switch tt {
 	case lexer.TokenKwActor, lexer.TokenKwActors,
-		lexer.TokenKwDomain, lexer.TokenKwDomains:
+		lexer.TokenKwDomain, lexer.TokenKwDomains,
+		lexer.TokenKwServices:
 		return true
 	}
 	return false

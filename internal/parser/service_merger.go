@@ -36,6 +36,10 @@ func (sm *ServiceMerger) GetMergedServices() []Service {
 	for _, service := range sm.services {
 		result = append(result, *service)
 	}
+	// Sort by source line so output is deterministic across map iterations.
+	slices.SortFunc(result, func(a, b Service) int {
+		return a.Line - b.Line
+	})
 	return result
 }
 

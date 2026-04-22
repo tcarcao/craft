@@ -112,3 +112,98 @@ func TestAnalyzeFile_NoCrossKindWarningWhenNamesDiffer(t *testing.T) {
 func TestAnalyzeFile_DuplicateName(t *testing.T) {
 	TestAnalyzeFile_DuplicateActorName(t)
 }
+
+// S5: service-related sema tests.
+
+func TestAnalyzeFile_ServiceSymbolsCollected(t *testing.T) {
+	f := &ast.File{
+		Services: []*ast.ServiceDecl{
+			{Name: "PaymentService", Contexts: []string{"Payment"}, Language: "golang", Line: 1},
+			{Name: "UserService", Contexts: []string{"User", "Auth"}, Line: 3},
+		},
+	}
+	syms, diags := sema.AnalyzeFile("file:///a.craft", f)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(syms.Services) != 2 {
+		t.Fatalf("expected 2 service symbols, got %d", len(syms.Services))
+	}
+}
+
+func TestAnalyzeFile_DuplicateServiceName(t *testing.T) {
+	f := &ast.File{
+		Services: []*ast.ServiceDecl{
+			{Name: "PaymentService", Contexts: []string{"Payment"}, Line: 1},
+			{Name: "PaymentService", Contexts: []string{"Billing"}, Line: 5},
+		},
+	}
+	syms, diags := sema.AnalyzeFile("file:///a.craft", f)
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d: %v", len(diags), diags)
+	}
+	if diags[0].Code != "craft/sema/duplicate-name" {
+		t.Errorf("expected code craft/sema/duplicate-name, got %q", diags[0].Code)
+	}
+	if diags[0].Severity != "error" {
+		t.Errorf("expected error severity, got %q", diags[0].Severity)
+	}
+	if len(syms.Services) != 1 {
+		t.Errorf("expected 1 service symbol (first declaration only), got %d", len(syms.Services))
+	}
+}
+
+func TestAnalyzeWorkspace_ResolvesServiceContext(t *testing.T) {
+	fileA := sema.Symbols{
+		Domains: []sema.DomainSymbol{
+			{Name: "Auth", BoundedContexts: []string{"Login", "Registration"}, Line: 1, URI: "file:///a.craft"},
+		},
+	}
+	fileB := sema.Symbols{
+		Services: []sema.ServiceSymbol{
+			{Name: "UserService", Contexts: []string{"Login"}, Line: 1, URI: "file:///b.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{
+		"file:///a.craft": fileA,
+		"file:///b.craft": fileB,
+	}
+	ws, mergeDiags := sema.MergeWorkspaceSymbols(perFile)
+	rm, diags := sema.AnalyzeWorkspace(perFile, ws)
+	allDiags := append(mergeDiags, diags...)
+
+	if len(allDiags) != 0 {
+		t.Fatalf("unexpected workspace diagnostics: %v", allDiags)
+	}
+
+	domSym, ok := sema.ResolveServiceContext(rm, "file:///b.craft", "UserService", "Login")
+	if !ok {
+		t.Fatal("expected Login to resolve to a domain")
+	}
+	if domSym.Name != "Auth" {
+		t.Errorf("expected domain 'Auth', got %q", domSym.Name)
+	}
+}
+
+func TestAnalyzeWorkspace_UnresolvedContext(t *testing.T) {
+	fileB := sema.Symbols{
+		Services: []sema.ServiceSymbol{
+			{Name: "UserService", Contexts: []string{"UnknownContext"}, Line: 1, URI: "file:///b.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{
+		"file:///b.craft": fileB,
+	}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 unresolved-reference diagnostic, got %d: %v", len(diags), diags)
+	}
+	if diags[0].Code != "craft/sema/unresolved-reference" {
+		t.Errorf("expected code craft/sema/unresolved-reference, got %q", diags[0].Code)
+	}
+	if diags[0].Severity != "error" {
+		t.Errorf("expected error severity, got %q", diags[0].Severity)
+	}
+}
