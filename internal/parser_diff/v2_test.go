@@ -16,8 +16,8 @@ import (
 // it advances as each grammar slice lands. Per Q11, it may only move forward —
 // never re-skip a directory that has been un-skipped on main.
 var skippedSubdirs = map[string]bool{
-	"02_domains":  true,
-	"03_services": true,
+	// 02_domains: un-skipped in S4
+	"03_services":  true,
 	"04_use_cases": true,
 	"05_arch":      true,
 	"06_exposures": true,

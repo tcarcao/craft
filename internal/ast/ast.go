@@ -3,9 +3,29 @@
 // is pkg/craft.CraftDoc. AST shapes change freely; CraftDoc is frozen at v0.1.
 package ast
 
+// LineToLSP converts a 1-based source line (as recorded in AST nodes) to a
+// 0-based LSP line number (as required by the LSP protocol).
+// Returns 0 for any non-positive input.
+func LineToLSP(line int) int {
+	if line <= 0 {
+		return 0
+	}
+	return line - 1
+}
+
 // File is the root AST node for a parsed .craft file.
 type File struct {
-	Actors []*ActorDecl `json:"actors,omitempty"`
+	Actors  []*ActorDecl  `json:"actors,omitempty"`
+	Domains []*DomainDecl `json:"domains,omitempty"`
+}
+
+// DomainDecl represents either an individual domain declaration
+// (domain Name { BoundedContext... }) or an entry inside a domains block.
+type DomainDecl struct {
+	Name            string `json:"name"`
+	BoundedContexts []string `json:"boundedContexts,omitempty"`
+	// Line is the 1-based source line where the domain name appears.
+	Line int `json:"line,omitempty"`
 }
 
 // ActorDecl represents either a block entry (actors { user Foo }) or an

@@ -1,7 +1,7 @@
 // Package lexer implements the hand-written scanner for the Craft DSL.
-// S3: only actor-related tokens are defined here. Future slices add keywords
-// as each grammar construct is introduced. Unknown tokens are returned as
-// TokenError so the parser can emit a recoverable diagnostic.
+// S3: actor-related tokens. S4: adds domain/domains keywords.
+// Unknown tokens are returned as TokenError so the parser can emit a
+// recoverable diagnostic.
 package lexer
 
 import (
@@ -28,6 +28,10 @@ const (
 	TokenKwSystem  // system
 	TokenKwService // service
 
+	// S4: domain keywords
+	TokenKwDomain  // domain
+	TokenKwDomains // domains
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -38,6 +42,8 @@ var keywords = map[string]TokenType{
 	"user":    TokenKwUser,
 	"system":  TokenKwSystem,
 	"service": TokenKwService,
+	"domain":  TokenKwDomain,
+	"domains": TokenKwDomains,
 }
 
 // Token is a scanned unit from the source.
@@ -140,8 +146,9 @@ func (l *Lexer) scanIdent() Token {
 	tt := TokenIdent
 	if kw, ok := keywords[strings.ToLower(val)]; ok {
 		tt = kw
-		// Keywords are case-insensitive; normalise to lowercase.
-		val = strings.ToLower(val)
+		// Preserve original casing in the token value. The caller uses
+		// the token Type to detect keywords; Value retains source spelling
+		// so identifiers like "User" aren't lowercased when used as names.
 	}
 	return Token{Type: tt, Value: val, Line: startLine, Column: startCol}
 }

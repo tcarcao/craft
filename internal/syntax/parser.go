@@ -1,8 +1,8 @@
 // Package syntax implements the hand-written recursive-descent parser for the
 // Craft DSL. It produces an internal/ast.File.
 //
-// S3: actors only. Unsupported top-level keywords emit a recoverable
-// "not-yet-implemented" diagnostic so --parser=v2 is usable on actor-only files.
+// S3: actors. S4: domains. Unsupported top-level keywords emit a recoverable
+// "not-yet-implemented" diagnostic so --parser=v2 is usable on partial files.
 package syntax
 
 import (
@@ -47,6 +47,16 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			actors, d := p.parseActorsBlock()
 			diags = append(diags, d...)
 			file.Actors = append(file.Actors, actors...)
+		case lexer.TokenKwDomain:
+			domain, d := p.parseDomainStatement()
+			diags = append(diags, d...)
+			if domain != nil {
+				file.Domains = append(file.Domains, domain)
+			}
+		case lexer.TokenKwDomains:
+			domains, d := p.parseDomainsBlock()
+			diags = append(diags, d...)
+			file.Domains = append(file.Domains, domains...)
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -146,6 +156,158 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, []craft.Diagnostic) {
 	return actors, diags
 }
 
+// parseDomainStatement parses: domain <name> { <bounded_context>* }
+func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
+	p.consume() // consume `domain`
+	var diags []craft.Diagnostic
+
+	nameTok := p.peek()
+	if nameTok.Type != lexer.TokenIdent && !isDomainNameToken(nameTok.Type) {
+		diags = append(diags, p.diagUnexpected(nameTok, "domain name"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume()
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume `{`
+
+	contexts, d := p.parseBoundedContextList()
+	diags = append(diags, d...)
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed domain block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(nameTok.Line)}},
+		})
+		return &ast.DomainDecl{Name: nameTok.Value, BoundedContexts: contexts, Line: nameTok.Line}, diags
+	}
+	p.consume() // consume `}`
+
+	return &ast.DomainDecl{
+		Name:            nameTok.Value,
+		BoundedContexts: contexts,
+		Line:            nameTok.Line,
+	}, diags
+}
+
+// parseDomainsBlock parses: domains { <domain_block>* }
+// where each domain_block is: <name> { <bounded_context>* }
+func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
+	p.consume() // consume `domains`
+	var diags []craft.Diagnostic
+	var domains []*ast.DomainDecl
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume `{`
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+		if tok.Type != lexer.TokenIdent && !isDomainNameToken(tok.Type) {
+			diags = append(diags, p.diagUnexpected(tok, "domain name"))
+			p.consume()
+			continue
+		}
+		nameTok := tok
+		p.consume()
+
+		if p.peek().Type != lexer.TokenLBrace {
+			diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+			continue
+		}
+		p.consume() // consume `{`
+
+		contexts, d := p.parseBoundedContextList()
+		diags = append(diags, d...)
+
+		if p.atEOF() {
+			diags = append(diags, craft.Diagnostic{
+				Code:     "craft/syntax/unclosed-block",
+				Message:  "unclosed domain block (missing `}`)",
+				Severity: craft.SeverityError,
+				Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(nameTok.Line)}},
+			})
+			domains = append(domains, &ast.DomainDecl{
+				Name:            nameTok.Value,
+				BoundedContexts: contexts,
+				Line:            nameTok.Line,
+			})
+			return domains, diags
+		}
+		p.consume() // consume `}`
+
+		domains = append(domains, &ast.DomainDecl{
+			Name:            nameTok.Value,
+			BoundedContexts: contexts,
+			Line:            nameTok.Line,
+		})
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed domains block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    craft.Range{Start: craft.Position{Line: p.peek().Line - 1}},
+		})
+		return domains, diags
+	}
+	p.consume() // consume `}`
+	return domains, diags
+}
+
+// parseBoundedContextList parses a list of identifiers until `}` or EOF.
+// These are the bounded context names inside a domain block.
+// Duplicates are silently deduplicated (keeping first occurrence), matching
+// ANTLR behavior and the v1 spec.
+func (p *Parser) parseBoundedContextList() ([]string, []craft.Diagnostic) {
+	var contexts []string
+	seen := make(map[string]bool)
+	var diags []craft.Diagnostic
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+		if tok.Type == lexer.TokenIdent || isDomainNameToken(tok.Type) {
+			if !seen[tok.Value] {
+				seen[tok.Value] = true
+				contexts = append(contexts, tok.Value)
+			}
+			p.consume()
+		} else if tok.Type == lexer.TokenError {
+			diags = append(diags, p.diagUnexpected(tok, "bounded context name or `}`"))
+			p.consume()
+		} else {
+			// Unknown token inside domain block — could be a sub-keyword; skip.
+			diags = append(diags, p.diagUnexpected(tok, "bounded context name or `}`"))
+			p.consume()
+		}
+	}
+	return contexts, diags
+}
+
+// isDomainNameToken returns true for token types that can legally appear as a
+// domain name or bounded context name (keywords that are also valid identifiers
+// in context — e.g. `domain User { ... }` where User is also an actor type).
+func isDomainNameToken(tt lexer.TokenType) bool {
+	switch tt {
+	case lexer.TokenKwUser, lexer.TokenKwSystem, lexer.TokenKwService,
+		lexer.TokenKwActor, lexer.TokenKwActors,
+		lexer.TokenKwDomain, lexer.TokenKwDomains:
+		return true
+	}
+	return false
+}
+
 // --- helpers ---
 
 func tokenToActorType(tok lexer.Token) (ast.ActorType, bool) {
@@ -174,7 +336,8 @@ func (p *Parser) resyncToTopLevel() {
 
 func isTopLevelKeyword(tt lexer.TokenType) bool {
 	switch tt {
-	case lexer.TokenKwActor, lexer.TokenKwActors:
+	case lexer.TokenKwActor, lexer.TokenKwActors,
+		lexer.TokenKwDomain, lexer.TokenKwDomains:
 		return true
 	}
 	return false

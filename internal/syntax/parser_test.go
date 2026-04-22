@@ -53,9 +53,11 @@ actor service DB`
 }
 
 func TestParse_UnsupportedKeywordEmitsWarning(t *testing.T) {
-	// v2 does not yet support `domain` — should emit a warning and not crash.
+	// v2 does not yet support `services` — should emit a warning and not crash.
 	src := `actor user Foo
-domain SomeDomain {}`
+services {
+    SomeService {}
+}`
 	f, diags := syntax.Parse(src)
 	if len(f.Actors) != 1 {
 		t.Errorf("expected 1 actor, got %d", len(f.Actors))
@@ -67,5 +69,64 @@ domain SomeDomain {}`
 		if d.Severity != "error" && d.Severity != "warning" {
 			t.Errorf("unexpected severity %q", d.Severity)
 		}
+	}
+}
+
+func TestParse_IndividualDomain(t *testing.T) {
+	src := `domain ECommerce {
+    User
+    Product
+    Order
+}`
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(f.Domains))
+	}
+	d := f.Domains[0]
+	if d.Name != "ECommerce" {
+		t.Errorf("expected name ECommerce, got %q", d.Name)
+	}
+	if len(d.BoundedContexts) != 3 {
+		t.Errorf("expected 3 bounded contexts, got %d", len(d.BoundedContexts))
+	}
+}
+
+func TestParse_DomainsBlock(t *testing.T) {
+	src := `domains {
+    Auth {
+        Login
+        Logout
+    }
+    Billing {
+        Invoice
+    }
+}`
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Domains) != 2 {
+		t.Fatalf("expected 2 domains, got %d", len(f.Domains))
+	}
+	if f.Domains[0].Name != "Auth" || f.Domains[1].Name != "Billing" {
+		t.Errorf("unexpected domain names: %v, %v", f.Domains[0].Name, f.Domains[1].Name)
+	}
+}
+
+func TestParse_ActorsAndDomains(t *testing.T) {
+	src := `actor user Customer
+domain User {
+    Authentication
+    Profile
+}`
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Actors) != 1 || len(f.Domains) != 1 {
+		t.Errorf("expected 1 actor and 1 domain, got %d actors, %d domains", len(f.Actors), len(f.Domains))
 	}
 }
