@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/parser"
+	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 // Relationship creation methods for generator
@@ -166,9 +166,9 @@ func (g *C4DiagramGenerator) createServiceRelationships() {
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
-				if action.Type == parser.ActionTypeSync {
+				if action.Type == craft.ActionTypeSync {
 					g.handleSyncAction(action)
-				} else if action.Type == parser.ActionTypeReturn {
+				} else if action.Type == craft.ActionTypeReturn {
 					g.handleReturnAction(action)
 				}
 			}
@@ -177,7 +177,7 @@ func (g *C4DiagramGenerator) createServiceRelationships() {
 }
 
 // handleSyncAction processes synchronous actions between domains/services
-func (g *C4DiagramGenerator) handleSyncAction(action parser.Action) {
+func (g *C4DiagramGenerator) handleSyncAction(action craft.Action) {
 	if action.Domain == "" || action.TargetDomain == "" {
 		return
 	}
@@ -210,7 +210,7 @@ func (g *C4DiagramGenerator) handleSyncAction(action parser.Action) {
 }
 
 // handleReturnAction processes return actions between domains/services
-func (g *C4DiagramGenerator) handleReturnAction(action parser.Action) {
+func (g *C4DiagramGenerator) handleReturnAction(action craft.Action) {
 	if action.Domain == "" {
 		return
 	}
@@ -315,7 +315,7 @@ func (g *C4DiagramGenerator) createEventRelationships() {
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
-				if action.Type == parser.ActionTypeAsync && action.Domain != "" {
+				if action.Type == craft.ActionTypeAsync && action.Domain != "" {
 					fromContainer := g.findDomainContainer(action.Domain)
 					if fromContainer != "" {
 						relation := C4Relation{
@@ -335,7 +335,7 @@ func (g *C4DiagramGenerator) createEventRelationships() {
 	// 2. Create relationships FROM the event queue to domains that listen to events
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
-			if scenario.Trigger.Type == parser.TriggerTypeDomainListen {
+			if scenario.Trigger.Type == craft.TriggerTypeDomainListen {
 				// Extract the listening domain from the trigger
 				listeningDomain := scenario.Trigger.Domain
 				if listeningDomain != "" {
@@ -410,27 +410,27 @@ func (g *C4DiagramGenerator) isDatabaseContainer(container *C4Container) bool {
 // Component description and naming methods
 
 // generatePresentationContainerName creates name for presentation containers
-func (g *C4DiagramGenerator) generatePresentationContainerName(component parser.Component, _ int) string {
-	if component.Type == parser.ComponentTypeFlow && len(component.Chain) > 0 {
+func (g *C4DiagramGenerator) generatePresentationContainerName(component craft.Component, _ int) string {
+	if component.Type == craft.ComponentTypeFlow && len(component.Chain) > 0 {
 		return component.Chain[len(component.Chain)-1].Name
 	}
 	return component.Name
 }
 
 // generateGatewayContainerName creates name for gateway containers
-func (g *C4DiagramGenerator) generateGatewayContainerName(component parser.Component, _ int) string {
-	if component.Type == parser.ComponentTypeFlow && len(component.Chain) > 0 {
+func (g *C4DiagramGenerator) generateGatewayContainerName(component craft.Component, _ int) string {
+	if component.Type == craft.ComponentTypeFlow && len(component.Chain) > 0 {
 		return component.Chain[len(component.Chain)-1].Name
 	}
 	return component.Name
 }
 
 // buildComponentDescription creates description with modifiers
-func (g *C4DiagramGenerator) buildComponentDescription(component parser.Component, layerType string) string {
+func (g *C4DiagramGenerator) buildComponentDescription(component craft.Component, layerType string) string {
 	// description := fmt.Sprintf("%s component: %s", layerType, component.Name)
 	description := ""
 
-	if component.Type == parser.ComponentTypeFlow && len(component.Chain) > 0 {
+	if component.Type == craft.ComponentTypeFlow && len(component.Chain) > 0 {
 		chainNames := make([]string, 0, len(component.Chain))
 		allModifiers := make([]string, 0)
 
@@ -468,7 +468,7 @@ func (g *C4DiagramGenerator) buildComponentDescription(component parser.Componen
 // Technology inference methods
 
 // inferPresentationTechnology determines technology for presentation components
-func (g *C4DiagramGenerator) inferPresentationTechnology(component parser.Component) string {
+func (g *C4DiagramGenerator) inferPresentationTechnology(component craft.Component) string {
 	componentName := strings.ToLower(component.Name)
 
 	// Check modifiers first
@@ -496,7 +496,7 @@ func (g *C4DiagramGenerator) inferPresentationTechnology(component parser.Compon
 }
 
 // inferGatewayTechnology determines technology for gateway components
-func (g *C4DiagramGenerator) inferGatewayTechnology(component parser.Component) string {
+func (g *C4DiagramGenerator) inferGatewayTechnology(component craft.Component) string {
 	componentName := strings.ToLower(component.Name)
 
 	// Check modifiers first
@@ -911,7 +911,7 @@ func (g *C4DiagramGenerator) addComponentRelationships(sb *strings.Builder, doma
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
-				if action.Type == parser.ActionTypeSync &&
+				if action.Type == craft.ActionTypeSync &&
 					g.containsString(domains, action.Domain) &&
 					g.containsString(domains, action.TargetDomain) {
 					sb.WriteString(fmt.Sprintf("Rel(%s, %s, \"%s\")\n",
@@ -966,7 +966,7 @@ func (g *C4DiagramGenerator) isServiceSystem(systemName string) bool {
 }
 
 // findService finds a service by name
-func (g *C4DiagramGenerator) findService(serviceName string) *parser.Service {
+func (g *C4DiagramGenerator) findService(serviceName string) *craft.Service {
 	for _, service := range g.model.Services {
 		if service.Name == serviceName {
 			return &service
@@ -1103,7 +1103,7 @@ func (g *C4DiagramGenerator) getDatabaseIcon(technology string) string {
 }
 
 // getActorInfo finds actor information from the DSL model
-func (g *C4DiagramGenerator) getActorInfo(actorName string) *parser.Actor {
+func (g *C4DiagramGenerator) getActorInfo(actorName string) *craft.Actor {
 	for _, actor := range g.model.Actors {
 		if actor.Name == actorName {
 			return &actor
@@ -1113,18 +1113,18 @@ func (g *C4DiagramGenerator) getActorInfo(actorName string) *parser.Actor {
 }
 
 // getActorC4Element returns the appropriate C4 element type and description for an actor
-func (g *C4DiagramGenerator) getActorC4Element(actor *parser.Actor) (string, string) {
+func (g *C4DiagramGenerator) getActorC4Element(actor *craft.Actor) (string, string) {
 	if actor == nil {
 		// Default fallback for actors not found in the model (legacy behavior)
 		return "Person", "External user"
 	}
 
 	switch actor.Type {
-	case parser.ActorTypeUser:
+	case craft.ActorTypeUser:
 		return "Person", "External user"
-	case parser.ActorTypeSystem:
+	case craft.ActorTypeSystem:
 		return "System_Ext", "External system"
-	case parser.ActorTypeService:
+	case craft.ActorTypeService:
 		return "System_Ext", "External service"
 	default:
 		// Default fallback

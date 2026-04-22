@@ -8,7 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tcarcao/craft/internal/parser"
+	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
 	"github.com/tcarcao/craft/internal/visualizer"
+	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 func generateCmd() *cobra.Command {
@@ -40,6 +42,8 @@ func generateCmd() *cobra.Command {
 					return fmt.Errorf("%s: parse error: %w", file, err)
 				}
 
+				doc := parser_antlr_adapter.FromDSLModel(model)
+
 				outDir := outputDir
 				if outDir == "" {
 					outDir = filepath.Dir(file)
@@ -50,7 +54,7 @@ func generateCmd() *cobra.Command {
 
 				base := baseName(file)
 
-				if err := generateForFile(v, model, base, outDir, diagType, mode); err != nil {
+				if err := generateForFile(v, doc, base, outDir, diagType, mode); err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 			}
@@ -64,7 +68,7 @@ func generateCmd() *cobra.Command {
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *parser.DSLModel, base, outDir, diagType, mode string) error {
+func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string) error {
 	domainMode := visualizer.DomainModeDetailed
 	if strings.ToLower(mode) == "architecture" {
 		domainMode = visualizer.DomainModeArchitecture

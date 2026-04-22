@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/tcarcao/craft/internal/parser"
+	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
 	"github.com/tcarcao/craft/internal/visualizer"
+	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 type Processor struct {
@@ -36,14 +38,16 @@ func (p *Processor) ProcessFile(inputPath, outputDir string) error {
 		return fmt.Errorf("failed to parse architecture: %v", err)
 	}
 
-	if err := p.generateDiagrams(arch, outputDir); err != nil {
+	doc := parser_antlr_adapter.FromDSLModel(arch)
+
+	if err := p.generateDiagrams(doc, outputDir); err != nil {
 		return fmt.Errorf("failed to generate diagrams: %v", err)
 	}
 
 	return nil
 }
 
-func (p *Processor) generateDiagrams(arch *parser.DSLModel, outputDir string) error {
+func (p *Processor) generateDiagrams(arch *craft.CraftDoc, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/parser"
+	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 // C4GenerationMode determines how domains are represented
@@ -18,7 +18,7 @@ const (
 
 // C4DiagramGenerator generates C4 diagrams with proper system separation
 type C4DiagramGenerator struct {
-	model              *parser.DSLModel
+	model              *craft.CraftDoc
 	mode               C4GenerationMode
 	systems            map[string]*C4System
 	containers         map[string]*C4Container
@@ -101,7 +101,7 @@ func NewC4DiagramGeneratorWithFocusAndContexts(mode C4GenerationMode, focusedSer
 }
 
 // GenerateC4Diagram creates a redesigned C4 diagram
-func (g *C4DiagramGenerator) GenerateC4Diagram(model *parser.DSLModel, diagramType C4DiagramType) string {
+func (g *C4DiagramGenerator) GenerateC4Diagram(model *craft.CraftDoc, diagramType C4DiagramType) string {
 	g.model = model
 	g.reset()
 
@@ -220,7 +220,7 @@ func (g *C4DiagramGenerator) createServiceSystems() {
 }
 
 // createDomainContainers creates separate containers for each domain (boundaries mode)
-func (g *C4DiagramGenerator) createDomainContainers(service parser.Service, system *C4System) {
+func (g *C4DiagramGenerator) createDomainContainers(service craft.Service, system *C4System) {
 	for _, domain := range service.Contexts {
 		// containerName := fmt.Sprintf("%s_%s", service.Name, domain)
 		container := &C4Container{
@@ -237,7 +237,7 @@ func (g *C4DiagramGenerator) createDomainContainers(service parser.Service, syst
 }
 
 // createApplicationContainer creates single application container (transparent mode)
-func (g *C4DiagramGenerator) createApplicationContainer(service parser.Service, system *C4System) {
+func (g *C4DiagramGenerator) createApplicationContainer(service craft.Service, system *C4System) {
 	if len(service.Contexts) > 0 {
 		containerName := fmt.Sprintf("%s Application", service.Name)
 		container := &C4Container{
@@ -255,7 +255,7 @@ func (g *C4DiagramGenerator) createApplicationContainer(service parser.Service, 
 }
 
 // createDatabaseContainers creates database containers for each service
-func (g *C4DiagramGenerator) createDatabaseContainers(service parser.Service, system *C4System) {
+func (g *C4DiagramGenerator) createDatabaseContainers(service craft.Service, system *C4System) {
 	for _, dataStore := range service.DataStores {
 		containerName := fmt.Sprintf("%s_%s", service.Name, dataStore)
 		container := &C4Container{
@@ -373,7 +373,7 @@ func (g *C4DiagramGenerator) createEventSystemIfNeeded() {
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
-				if action.Type == parser.ActionTypeAsync {
+				if action.Type == craft.ActionTypeAsync {
 					if !g.hasFocus {
 						// No focus mode - include all async actions
 						hasRelevantAsyncActions = true
@@ -501,13 +501,13 @@ func (g *C4DiagramGenerator) hasArchitectureComponents() bool {
 	return false
 }
 
-func (g *C4DiagramGenerator) isUserInteraction(trigger parser.Trigger) bool {
-	return trigger.Type == parser.TriggerTypeExternal &&
+func (g *C4DiagramGenerator) isUserInteraction(trigger craft.Trigger) bool {
+	return trigger.Type == craft.TriggerTypeExternal &&
 		trigger.Actor != "" &&
 		!strings.HasPrefix(strings.ToUpper(trigger.Actor), "CRON")
 }
 
-func (g *C4DiagramGenerator) extractDomainsFromActions(actions []parser.Action) []string {
+func (g *C4DiagramGenerator) extractDomainsFromActions(actions []craft.Action) []string {
 	domains := make([]string, 0)
 	seen := make(map[string]bool)
 
@@ -539,7 +539,7 @@ func (g *C4DiagramGenerator) findServiceForDomain(domain string) string {
 }
 
 // analyzeDirectlyAccessibleDomains identifies domains that should be directly accessible via gateway
-func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario parser.Scenario) {
+func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario craft.Scenario) {
 	// Find the first domain that is actually triggered by user action
 	// This is typically the first action in the scenario
 	for _, action := range scenario.Actions {
@@ -561,22 +561,22 @@ func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario parser.Sc
 }
 
 // Main generation functions
-func GenerateC4ContextDiagram(model *parser.DSLModel, mode C4GenerationMode, showDatabases bool) string {
+func GenerateC4ContextDiagram(model *craft.CraftDoc, mode C4GenerationMode, showDatabases bool) string {
 	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Context)
 }
 
-func GenerateC4ContainerDiagram(model *parser.DSLModel, mode C4GenerationMode, showDatabases bool) string {
+func GenerateC4ContainerDiagram(model *craft.CraftDoc, mode C4GenerationMode, showDatabases bool) string {
 	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 
-func GenerateC4ContainerDiagramWithFocusAndContexts(model *parser.DSLModel, mode C4GenerationMode, focusedServiceNames []string, focusedContextNames []string, showDatabases bool) string {
+func GenerateC4ContainerDiagramWithFocusAndContexts(model *craft.CraftDoc, mode C4GenerationMode, focusedServiceNames []string, focusedContextNames []string, showDatabases bool) string {
 	generator := NewC4DiagramGeneratorWithFocusAndContexts(mode, focusedServiceNames, focusedContextNames, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
 }
 
-func GenerateC4ComponentDiagram(model *parser.DSLModel, mode C4GenerationMode, showDatabases bool) string {
+func GenerateC4ComponentDiagram(model *craft.CraftDoc, mode C4GenerationMode, showDatabases bool) string {
 	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Components)
 }

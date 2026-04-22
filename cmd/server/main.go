@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/tcarcao/craft/internal/parser"
+	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
 	"github.com/tcarcao/craft/internal/visualizer"
 )
 
@@ -78,8 +79,10 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 			return
 		}
 
+		doc := parser_antlr_adapter.FromDSLModel(arch)
+
 		if generateC4 {
-			diagram, err := s.viz.GenerateC4(arch, "boundaries", true)
+			diagram, err := s.viz.GenerateC4(doc, "boundaries", true)
 			if err != nil {
 				log.Printf("Error generating C4 diagram: %v", err)
 			} else {
@@ -213,11 +216,13 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 		// Parse DSL
 		p := parser.NewParser()
 
-		model, err := p.ParseString(req.DSL)
+		rawModel, err := p.ParseString(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
+
+		model := parser_antlr_adapter.FromDSLModel(rawModel)
 
 		// Parse diagram type, default to "domain" if not provided or invalid
 		diagramType := visualizer.DiagramTypeDomain
@@ -260,11 +265,13 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 		// Parse DSL
 		p := parser.NewParser()
 
-		arch, err := p.ParseString(req.DSL)
+		rawArch, err := p.ParseString(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
+
+		arch := parser_antlr_adapter.FromDSLModel(rawArch)
 
 		fmt.Println(req.FocusInfo)
 
@@ -325,11 +332,13 @@ func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 
 		// Parse DSL
 		p := parser.NewParser()
-		model, err := p.ParseString(req.DSL)
+		rawModel, err := p.ParseString(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
+
+		model := parser_antlr_adapter.FromDSLModel(rawModel)
 
 		// Convert format string to SupportedFormat
 		var format visualizer.SupportedFormat
@@ -401,11 +410,13 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 
 		// Parse DSL
 		p := parser.NewParser()
-		model, err := p.ParseString(req.DSL)
+		rawModel, err := p.ParseString(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
+
+		model := parser_antlr_adapter.FromDSLModel(rawModel)
 
 		// Convert format string to SupportedFormat
 		var format visualizer.SupportedFormat

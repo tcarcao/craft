@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/parser"
+	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 // PlantUMLSequenceGenerator generates PlantUML sequence diagrams from DSL models
 type PlantUMLSequenceGenerator struct {
-	model           *parser.DSLModel
+	model           *craft.CraftDoc
 	participants    map[string]bool
 	actors          map[string]bool
 	eventPublishers map[string]string // event -> domain that publishes it
@@ -25,7 +25,7 @@ func NewPlantUMLSequenceGenerator() *PlantUMLSequenceGenerator {
 }
 
 // GenerateSequenceDiagram converts a DSL model to PlantUML sequence diagram
-func (g *PlantUMLSequenceGenerator) GenerateSequenceDiagram(model *parser.DSLModel) string {
+func (g *PlantUMLSequenceGenerator) GenerateSequenceDiagram(model *craft.CraftDoc) string {
 	g.model = model
 	g.participants = make(map[string]bool)
 	g.actors = make(map[string]bool)
@@ -56,10 +56,10 @@ func (g *PlantUMLSequenceGenerator) GenerateSequenceDiagram(model *parser.DSLMod
 }
 
 // collectEventPublishersForSequence maps events to their publishing domains
-func (g *PlantUMLSequenceGenerator) collectEventPublishersForSequence(useCase parser.UseCase) {
+func (g *PlantUMLSequenceGenerator) collectEventPublishersForSequence(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		for _, action := range scenario.Actions {
-			if action.Type == parser.ActionTypeAsync && action.Domain != "" && action.Event != "" {
+			if action.Type == craft.ActionTypeAsync && action.Domain != "" && action.Event != "" {
 				g.eventPublishers[action.Event] = action.Domain
 			}
 		}
@@ -67,14 +67,14 @@ func (g *PlantUMLSequenceGenerator) collectEventPublishersForSequence(useCase pa
 }
 
 // processScenarioForSequence generates sequence diagram flows for a scenario
-func (g *PlantUMLSequenceGenerator) processScenarioForSequence(sb *strings.Builder, scenario parser.Scenario) {
+func (g *PlantUMLSequenceGenerator) processScenarioForSequence(sb *strings.Builder, scenario craft.Scenario) {
 	// Track call stack for returns
 	callStack := make([]string, 0)
 
 	// Handle trigger
 	trigger := scenario.Trigger
 	switch trigger.Type {
-	case parser.TriggerTypeExternal:
+	case craft.TriggerTypeExternal:
 		if trigger.Actor != "" && len(scenario.Actions) > 0 {
 			g.actors[trigger.Actor] = true
 			firstAction := scenario.Actions[0]
@@ -85,7 +85,7 @@ func (g *PlantUMLSequenceGenerator) processScenarioForSequence(sb *strings.Build
 				callStack = append(callStack, trigger.Actor)
 			}
 		}
-	case parser.TriggerTypeDomainListen:
+	case craft.TriggerTypeDomainListen:
 		if trigger.Domain != "" && trigger.Event != "" {
 			g.participants[trigger.Domain] = true
 			publishingDomain := g.eventPublishers[trigger.Event]
@@ -104,9 +104,9 @@ func (g *PlantUMLSequenceGenerator) processScenarioForSequence(sb *strings.Build
 }
 
 // processActionForSequence generates sequence diagram notation for an action
-func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder, action parser.Action, callStack *[]string) {
+func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder, action craft.Action, callStack *[]string) {
 	switch action.Type {
-	case parser.ActionTypeSync:
+	case craft.ActionTypeSync:
 		if action.Domain != "" && action.TargetDomain != "" {
 			g.participants[action.Domain] = true
 			g.participants[action.TargetDomain] = true
@@ -120,12 +120,12 @@ func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder
 			}
 			sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", action.Domain, action.TargetDomain, description))
 		}
-	case parser.ActionTypeAsync:
+	case craft.ActionTypeAsync:
 		if action.Domain != "" && action.Event != "" {
 			g.participants[action.Domain] = true
 			sb.WriteString(fmt.Sprintf("%s ->> %s : notifies \"%s\"\n", action.Domain, action.Domain, action.Event))
 		}
-	case parser.ActionTypeInternal:
+	case craft.ActionTypeInternal:
 		if action.Domain != "" {
 			g.participants[action.Domain] = true
 			description := action.Phrase
@@ -137,7 +137,7 @@ func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder
 			}
 			sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", action.Domain, action.Domain, description))
 		}
-	case parser.ActionTypeReturn:
+	case craft.ActionTypeReturn:
 		if action.Domain != "" {
 			g.participants[action.Domain] = true
 			description := "returns " + action.Phrase

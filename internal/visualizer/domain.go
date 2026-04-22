@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/parser"
+	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 // DomainMode represents different visualization modes for domain diagrams
@@ -24,21 +24,21 @@ const (
 	DiagramTypeSequence DiagramType = "sequence"
 )
 
-func (v *Visualizer) GenerateDomainDiagram(model *parser.DSLModel) ([]byte, error) {
+func (v *Visualizer) GenerateDomainDiagram(model *craft.CraftDoc) ([]byte, error) {
 	return v.GenerateDomainDiagramWithMode(model, DomainModeDetailed)
 }
 
-func (v *Visualizer) GenerateDomainDiagramWithMode(model *parser.DSLModel, mode DomainMode) ([]byte, error) {
+func (v *Visualizer) GenerateDomainDiagramWithMode(model *craft.CraftDoc, mode DomainMode) ([]byte, error) {
 	data, _, err := v.GenerateDomainDiagramWithModeAndFormat(model, mode, FormatPNG)
 	return data, err
 }
 
-func (v *Visualizer) GenerateDomainDiagramWithModeAndFormat(model *parser.DSLModel, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
+func (v *Visualizer) GenerateDomainDiagramWithModeAndFormat(model *craft.CraftDoc, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
 	return v.GenerateDomainDiagramWithTypeAndModeAndFormat(model, DiagramTypeDomain, mode, format)
 }
 
 // GenerateDomainDiagramWithTypeAndModeAndFormat generates a diagram with specified type, mode, and format
-func (v *Visualizer) GenerateDomainDiagramWithTypeAndModeAndFormat(model *parser.DSLModel, diagramType DiagramType, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
+func (v *Visualizer) GenerateDomainDiagramWithTypeAndModeAndFormat(model *craft.CraftDoc, diagramType DiagramType, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
 	var diagramTxt string
 
 	switch diagramType {
@@ -78,7 +78,7 @@ func (v *Visualizer) GenerateDomainDiagramWithTypeAndModeAndFormat(model *parser
 
 // PlantUMLGenerator generates PlantUML diagrams from DSL models
 type PlantUMLGenerator struct {
-	model           *parser.DSLModel // Reference to the model for actor information
+	model           *craft.CraftDoc // Reference to the model for actor information
 	domains         map[string]bool
 	actors          map[string]bool
 	events          map[string]bool
@@ -145,7 +145,7 @@ func NewPlantUMLArchitectureGenerator() *PlantUMLArchitectureGenerator {
 }
 
 // GeneratePlantUML converts a DSL model to PlantUML code
-func (g *PlantUMLGenerator) GeneratePlantUML(model *parser.DSLModel) string {
+func (g *PlantUMLGenerator) GeneratePlantUML(model *craft.CraftDoc) string {
 	// Reset state
 	g.model = model
 	g.domains = make(map[string]bool)
@@ -174,7 +174,7 @@ func (g *PlantUMLGenerator) GeneratePlantUML(model *parser.DSLModel) string {
 }
 
 // GenerateArchitecturePlantUML converts a DSL model to simplified architecture PlantUML code
-func (g *PlantUMLArchitectureGenerator) GenerateArchitecturePlantUML(model *parser.DSLModel) string {
+func (g *PlantUMLArchitectureGenerator) GenerateArchitecturePlantUML(model *craft.CraftDoc) string {
 	// Reset state
 	g.subDomains = make(map[string]bool)
 	g.connections = make(map[string]bool)
@@ -206,10 +206,10 @@ func (g *PlantUMLArchitectureGenerator) GenerateArchitecturePlantUML(model *pars
 }
 
 // collectEventPublishers maps events to their publishing domains
-func (g *PlantUMLGenerator) collectEventPublishers(useCase parser.UseCase) {
+func (g *PlantUMLGenerator) collectEventPublishers(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		for _, action := range scenario.Actions {
-			if action.Type == parser.ActionTypeAsync && action.Domain != "" && action.Event != "" {
+			if action.Type == craft.ActionTypeAsync && action.Domain != "" && action.Event != "" {
 				g.eventPublishers[action.Event] = action.Domain
 			}
 		}
@@ -233,19 +233,19 @@ func (g *PlantUMLGenerator) findEventPublisher(event string) string {
 }
 
 // processUseCase extracts information from a single use case
-func (g *PlantUMLGenerator) processUseCase(useCase parser.UseCase) {
+func (g *PlantUMLGenerator) processUseCase(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		g.processScenario(useCase.Name, scenario)
 	}
 }
 
 // processScenario extracts flows from a scenario
-func (g *PlantUMLGenerator) processScenario(useCaseName string, scenario parser.Scenario) {
+func (g *PlantUMLGenerator) processScenario(useCaseName string, scenario craft.Scenario) {
 	// Initialize call stack for this scenario with the external trigger
 	callStack := make([]string, 0)
 
 	// Add the triggering actor to call stack if it's an external trigger
-	if scenario.Trigger.Type == parser.TriggerTypeExternal && scenario.Trigger.Actor != "" {
+	if scenario.Trigger.Type == craft.TriggerTypeExternal && scenario.Trigger.Actor != "" {
 		callStack = append(callStack, scenario.Trigger.Actor)
 	}
 
@@ -259,11 +259,11 @@ func (g *PlantUMLGenerator) processScenario(useCaseName string, scenario parser.
 }
 
 // processTrigger handles the scenario trigger
-func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario parser.Scenario) {
+func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario craft.Scenario) {
 	trigger := scenario.Trigger
 
 	switch trigger.Type {
-	case parser.TriggerTypeExternal:
+	case craft.TriggerTypeExternal:
 		// External actor triggers the flow
 		if trigger.Actor != "" {
 			g.actors[trigger.Actor] = true
@@ -288,12 +288,12 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario parser.S
 				}
 			}
 		}
-	case parser.TriggerTypeEvent:
+	case craft.TriggerTypeEvent:
 		// Event-based trigger - will be handled via event queues
 		if trigger.Event != "" {
 			g.events[trigger.Event] = true
 		}
-	case parser.TriggerTypeDomainListen:
+	case craft.TriggerTypeDomainListen:
 		// Domain listening to event - create flow from publishing domain's queue to listening domain
 		if trigger.Domain != "" && trigger.Event != "" {
 			g.domains[trigger.Domain] = true
@@ -319,9 +319,9 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario parser.S
 }
 
 // processActionWithCallStack handles individual actions with call stack tracking
-func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID string, action parser.Action, callStack *[]string) {
+func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID string, action craft.Action, callStack *[]string) {
 	switch action.Type {
-	case parser.ActionTypeSync:
+	case craft.ActionTypeSync:
 		// Synchronous call between domains - push caller to stack
 		if action.Domain != "" && action.TargetDomain != "" {
 			g.domains[action.Domain] = true
@@ -342,7 +342,7 @@ func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID s
 				ScenarioID:  scenarioID,
 			})
 		}
-	case parser.ActionTypeReturn:
+	case craft.ActionTypeReturn:
 		// Return action - flow back to caller
 		if action.Domain != "" {
 			g.domains[action.Domain] = true
@@ -382,9 +382,9 @@ func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID s
 }
 
 // processAction handles individual actions (legacy method for non-call-stack actions)
-func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action parser.Action) {
+func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action craft.Action) {
 	switch action.Type {
-	case parser.ActionTypeSync:
+	case craft.ActionTypeSync:
 		// Synchronous call between domains
 		if action.Domain != "" && action.TargetDomain != "" {
 			g.domains[action.Domain] = true
@@ -402,7 +402,7 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 				ScenarioID:  scenarioID,
 			})
 		}
-	case parser.ActionTypeAsync:
+	case craft.ActionTypeAsync:
 		// Asynchronous notification (domain to its own queue)
 		if action.Domain != "" && action.Event != "" {
 			g.domains[action.Domain] = true
@@ -421,7 +421,7 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 				ScenarioID:  scenarioID,
 			})
 		}
-	case parser.ActionTypeInternal:
+	case craft.ActionTypeInternal:
 		// Internal domain action - shown as self-loops
 		if action.Domain != "" {
 			g.domains[action.Domain] = true
@@ -442,17 +442,17 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 }
 
 // buildActionDescription creates a readable description for actions
-func (g *PlantUMLGenerator) buildActionDescription(action parser.Action) string {
+func (g *PlantUMLGenerator) buildActionDescription(action craft.Action) string {
 	switch action.Type {
-	case parser.ActionTypeSync:
+	case craft.ActionTypeSync:
 		phrase := action.Phrase
 		if action.Connector != "" && phrase != "" {
 			phrase = action.Connector + " " + phrase
 		}
 		return phrase
-	case parser.ActionTypeAsync:
+	case craft.ActionTypeAsync:
 		return action.Event
-	case parser.ActionTypeInternal:
+	case craft.ActionTypeInternal:
 		phrase := action.Phrase
 		if action.Connector != "" && phrase != "" {
 			phrase = action.Connector + " " + phrase
@@ -461,7 +461,7 @@ func (g *PlantUMLGenerator) buildActionDescription(action parser.Action) string 
 			return action.Verb + " " + phrase
 		}
 		return phrase
-	case parser.ActionTypeReturn:
+	case craft.ActionTypeReturn:
 		phrase := action.Phrase
 		if action.TargetDomain != "" {
 			if action.Connector != "" {
@@ -690,14 +690,14 @@ func (g *PlantUMLGenerator) getElementAlias(element string) string {
 }
 
 // Main function to generate PlantUML from DSL model
-func GenerateDomainFlowDiagram(model *parser.DSLModel) string {
+func GenerateDomainFlowDiagram(model *craft.CraftDoc) string {
 	generator := NewPlantUMLGenerator()
 	return generator.GeneratePlantUML(model)
 }
 
 // Architecture generator methods
 // collectServicesForArchitecture collects services and maps domains to services
-func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *parser.DSLModel) {
+func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *craft.CraftDoc) {
 	for _, service := range model.Services {
 		g.services[service.Name] = true
 
@@ -709,10 +709,10 @@ func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *pa
 }
 
 // collectEventPublishersForArchitecture maps events to their publishing domains
-func (g *PlantUMLArchitectureGenerator) collectEventPublishersForArchitecture(useCase parser.UseCase) {
+func (g *PlantUMLArchitectureGenerator) collectEventPublishersForArchitecture(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		for _, action := range scenario.Actions {
-			if action.Type == parser.ActionTypeAsync && action.Domain != "" && action.Event != "" {
+			if action.Type == craft.ActionTypeAsync && action.Domain != "" && action.Event != "" {
 				g.eventPublishers[action.Event] = action.Domain
 				g.events[action.Event] = true
 			}
@@ -721,18 +721,18 @@ func (g *PlantUMLArchitectureGenerator) collectEventPublishersForArchitecture(us
 }
 
 // processUseCaseForArchitecture extracts subdomain connections from use cases
-func (g *PlantUMLArchitectureGenerator) processUseCaseForArchitecture(useCase parser.UseCase) {
+func (g *PlantUMLArchitectureGenerator) processUseCaseForArchitecture(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		g.processScenarioForArchitecture(scenario)
 	}
 }
 
 // processScenarioForArchitecture extracts subdomain connections from a scenario
-func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario parser.Scenario) {
+func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario craft.Scenario) {
 	// Track all subdomains involved in actions
 	for _, action := range scenario.Actions {
 		switch action.Type {
-		case parser.ActionTypeSync:
+		case craft.ActionTypeSync:
 			// Synchronous call between subdomains
 			if action.Domain != "" && action.TargetDomain != "" {
 				g.subDomains[action.Domain] = true
@@ -742,7 +742,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 				connectionKey := action.Domain + "->" + action.TargetDomain
 				g.connections[connectionKey] = true
 			}
-		case parser.ActionTypeAsync:
+		case craft.ActionTypeAsync:
 			// Async events - domain publishes to its own queue
 			if action.Domain != "" && action.Event != "" {
 				g.subDomains[action.Domain] = true
@@ -753,7 +753,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 				connectionKey := action.Domain + "->" + domainQueue
 				g.connections[connectionKey] = true
 			}
-		case parser.ActionTypeInternal:
+		case craft.ActionTypeInternal:
 			// Internal subdomain action - self-connection
 			if action.Domain != "" {
 				g.subDomains[action.Domain] = true
@@ -761,7 +761,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 				connectionKey := action.Domain + "->" + action.Domain
 				g.connections[connectionKey] = true
 			}
-		case parser.ActionTypeReturn:
+		case craft.ActionTypeReturn:
 			// Return action - data flowing back
 			if action.Domain != "" {
 				g.subDomains[action.Domain] = true
@@ -779,7 +779,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 	// Handle triggers that involve domains
 	trigger := scenario.Trigger
 	switch trigger.Type {
-	case parser.TriggerTypeDomainListen:
+	case craft.TriggerTypeDomainListen:
 		// Domain listening to event - create flow from publishing domain's queue to listening domain
 		if trigger.Domain != "" && trigger.Event != "" {
 			g.subDomains[trigger.Domain] = true
@@ -793,7 +793,7 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 				g.connections[connectionKey] = true
 			}
 		}
-	case parser.TriggerTypeEvent:
+	case craft.TriggerTypeEvent:
 		// Event-based trigger
 		if trigger.Event != "" {
 			g.events[trigger.Event] = true
@@ -1065,7 +1065,7 @@ func (g *PlantUMLArchitectureGenerator) getElementAliasForArchitecture(element s
 }
 
 // getActorInfoFromModel finds actor information from the DSL model
-func (g *PlantUMLGenerator) getActorInfoFromModel(actorName string) *parser.Actor {
+func (g *PlantUMLGenerator) getActorInfoFromModel(actorName string) *craft.Actor {
 	if g.model == nil {
 		return nil
 	}
@@ -1079,18 +1079,18 @@ func (g *PlantUMLGenerator) getActorInfoFromModel(actorName string) *parser.Acto
 }
 
 // getActorPlantUMLElement returns the appropriate PlantUML element type for an actor
-func (g *PlantUMLGenerator) getActorPlantUMLElement(actor *parser.Actor) string {
+func (g *PlantUMLGenerator) getActorPlantUMLElement(actor *craft.Actor) string {
 	if actor == nil {
 		// Default fallback for actors not found in the model (legacy behavior)
 		return "actor"
 	}
 
 	switch actor.Type {
-	case parser.ActorTypeUser:
+	case craft.ActorTypeUser:
 		return "actor"
-	case parser.ActorTypeSystem:
+	case craft.ActorTypeSystem:
 		return "boundary" // Use boundary for external systems in domain diagrams
-	case parser.ActorTypeService:
+	case craft.ActorTypeService:
 		return "control" // Use control for external services in domain diagrams
 	default:
 		// Default fallback
