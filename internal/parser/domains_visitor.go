@@ -70,25 +70,26 @@ func (b *DSLModelBuilder) VisitDomain_block(ctx *parser.Domain_blockContext) int
 	return nil
 }
 
-// extractBoundedContextList extracts bounded context names from subdomain_list context
+// extractBoundedContextList extracts bounded context names from subdomain_list context.
+// Source order is preserved; duplicates are deduplicated while keeping first occurrence.
 func (b *DSLModelBuilder) extractBoundedContextList(ctx *parser.Bounded_context_listContext) []string {
-	contextSet := make(map[string]bool)
+	seen := make(map[string]bool)
+	var contexts []string
 
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if sd, ok := child.(*parser.Bounded_contextContext); ok {
 			name := b.extractIdentifier(&sd.BaseParserRuleContext)
-			if name != "" {
-				contextSet[name] = true
+			if name != "" && !seen[name] {
+				seen[name] = true
+				contexts = append(contexts, name)
 			}
 		}
 	}
 
-	contexts := make([]string, 0, len(contextSet))
-	for name := range contextSet {
-		contexts = append(contexts, name)
+	if contexts == nil {
+		return make([]string, 0)
 	}
-
 	return contexts
 }
 
@@ -106,23 +107,20 @@ func (b *DSLModelBuilder) addOrMergeDomain(newDomain Domain) {
 	b.model.Domains = append(b.model.Domains, newDomain)
 }
 
-// mergeBoundedContexts merges two bounded context slices, avoiding duplicates
+// mergeBoundedContexts merges two bounded context slices, avoiding duplicates.
+// Source order of existing is preserved; new entries are appended in order.
 func (b *DSLModelBuilder) mergeBoundedContexts(existing, new []string) []string {
-	contextSet := make(map[string]bool)
-
+	seen := make(map[string]bool)
 	for _, name := range existing {
-		contextSet[name] = true
+		seen[name] = true
 	}
-
+	merged := append([]string(nil), existing...)
 	for _, name := range new {
-		contextSet[name] = true
+		if !seen[name] {
+			seen[name] = true
+			merged = append(merged, name)
+		}
 	}
-
-	merged := make([]string, 0, len(contextSet))
-	for name := range contextSet {
-		merged = append(merged, name)
-	}
-
 	return merged
 }
 
