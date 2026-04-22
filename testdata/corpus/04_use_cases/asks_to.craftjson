@@ -1,0 +1,49 @@
+{
+  "useCases": [
+    {
+      "name": "Money Transfer",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "initiates",
+            "phrase": "transfer",
+            "description": "when Customer initiates transfer"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "sync_action",
+              "domain": "PaymentService",
+              "targetDomain": "AccountService",
+              "connector": "to",
+              "phrase": "verify source account",
+              "description": "PaymentService asks AccountService to verify source account",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "sync_action",
+              "domain": "PaymentService",
+              "targetDomain": "AccountService",
+              "connector": "to",
+              "phrase": "verify destination account",
+              "description": "PaymentService asks AccountService to verify destination account",
+              "line": 4
+            },
+            {
+              "id": "action_4",
+              "type": "async_action",
+              "domain": "AccountService",
+              "event": "Transfer Completed",
+              "description": "AccountService notifies \"Transfer Completed\"",
+              "line": 5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

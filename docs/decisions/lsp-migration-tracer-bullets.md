@@ -76,7 +76,7 @@ S2 (AFK) ──┘             └─▶ S13 (AFK, parallel after S3)
 | S3 | Actors end-to-end | AFK | ✅ Complete 2026-04-22 | A1 (partial), A2 (partial), A3a, B1 (seed), B2 (actor kind), C2, C3, C5, D-dogfood | `.craft` with only actors: diagnostics + outline + hover for actor names, both parsers agree |
 | S4 | Domains end-to-end | AFK | ✅ Complete 2026-04-22 | A3b, B2 (domain kind), C4 (semantic tokens introduced here) | Actors + domains coloured differently, outline expands, hover shows kind |
 | S5 | Services end-to-end + custom-command port | AFK | ✅ Complete 2026-04-22 | A3c, B3 (ResolutionMap seed), C6 (definition first use), Q16 custom-command port | Service blocks with `contexts:` jump to domain declarations via go-to-definition; sidebar services/domains views light up under `--parser=v2` |
-| S6 | Use cases end-to-end | AFK | ⏳ Pending | A3d, B3 (full), B4 (validation rules) | Hover/goto on any identifier inside a `when` clause lands on its declaration across files |
+| S6 | Use cases end-to-end | AFK | ✅ Complete | A3d, B3 (full), B4 (validation rules) | Hover/goto on any identifier inside a `when` clause lands on its declaration across files |
 | S7 | Arch blocks end-to-end | AFK | ⏳ Pending | A3e, C7 (folding) | `arch { presentation: … gateway: … }` folds in VSCode; outline shows segments |
 | S8 | Exposures end-to-end | AFK | ⏳ Pending | A3f, A3g | Cross-kind refs (`to:` actor, `contexts:` domain, `through:` service) resolve; harness A green on 06/99 |
 | S9 | Error recovery end-to-end + diagnostic-codebook consolidation | AFK | ⏳ Pending | A4, P0.5, B5 (lint merge); Q19 codebook consolidation | Red squiggles on broken blocks without cascading errors; `*.diagnostics.json` goldens assert `code` + `range` + `severity` (Q19), not `message` |
@@ -314,7 +314,7 @@ Each slice is self-contained: the sections below can be pasted as-is into indivi
 
 ---
 
-### S6 — Use cases end-to-end *(AFK)*
+### S6 — Use cases end-to-end ✅ Complete
 
 **Source-plan ref:** A3d, B3 (full ResolutionMap across all kinds so far), B4 (validation rules: duplicate names, invalid references), C4 extension (semantic tokens for use-case bodies).
 

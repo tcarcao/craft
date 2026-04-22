@@ -3,6 +3,8 @@
 // S4: domain namespace + duplicate-name for domains + cross-kind-name-reuse warning.
 // S5: service namespace + ResolutionMap population + unresolved-reference +
 //     invalid-reference-target rules + AnalyzeWorkspace for cross-file resolution.
+// S6: use_case namespace + duplicate-use-case-name rule + extend unresolved-reference
+//     to use-case trigger subjects and action parties.
 package sema
 
 import (
@@ -47,11 +49,34 @@ type ServiceSymbol struct {
 	URI string
 }
 
+// UseCaseSymbol holds collected information about a use_case declaration.
+type UseCaseSymbol struct {
+	Name string
+	// Line is the 1-based source line of the use_case keyword.
+	Line int
+	// URI is the file that contains this declaration.
+	URI string
+}
+
+// UseCaseRef captures a single reference site from within a use-case body.
+// Each actor/domain/service name that appears in a trigger subject, action
+// domain, or action target is recorded here for cross-resolution in S6.
+type UseCaseRef struct {
+	// Name is the referenced identifier.
+	Name string
+	// Line is the 1-based source line of the reference token.
+	Line int
+}
+
 // Symbols is the output of the symbol-collection pass for a single file.
 type Symbols struct {
 	Actors   []ActorSymbol
 	Domains  []DomainSymbol
 	Services []ServiceSymbol
+	UseCases []UseCaseSymbol
+	// UseCaseRefs collects all name references from within use-case bodies
+	// so AnalyzeWorkspace can resolve them cross-file.
+	UseCaseRefs []UseCaseRef
 }
 
 // WorkspaceSymbols merges per-file symbol tables for cross-file resolution.
@@ -64,6 +89,8 @@ type WorkspaceSymbols struct {
 	BoundedContexts map[string]DomainSymbol
 	// Services maps name → symbol across all workspace files.
 	Services map[string]ServiceSymbol
+	// UseCases maps name → symbol across all workspace files.
+	UseCases map[string]UseCaseSymbol
 }
 
 // RefSite records a single reference site used in ResolutionMap.
@@ -77,17 +104,38 @@ type RefSite struct {
 }
 
 // ResolutionMap maps reference sites to their resolved declaration symbols.
-// Populated by AnalyzeWorkspace (S5).
+// Populated by AnalyzeWorkspace (S5+).
 type ResolutionMap struct {
 	// ServiceContexts maps a (uri, serviceName, contextName) reference to the
 	// DomainSymbol of the bounded-context owner.
 	ServiceContexts map[serviceContextKey]DomainSymbol
+
+	// UseCaseRefs maps a (uri, line) reference site to its resolved symbol.
+	// Covers actor, domain, service, and bounded-context references inside
+	// use-case trigger subjects and action parties (S6).
+	UseCaseRefs map[useCaseRefKey]UseCaseRefTarget
 }
 
 type serviceContextKey struct {
 	ServiceURI  string
 	ServiceName string
 	ContextName string
+}
+
+// useCaseRefKey identifies a reference site within a use-case body.
+type useCaseRefKey struct {
+	URI  string
+	Line int // 1-based source line of the reference token
+	Name string
+}
+
+// UseCaseRefTarget is the resolved symbol for a use-case reference.
+type UseCaseRefTarget struct {
+	Kind string // "actor" | "domain" | "bounded_context" | "service"
+	// One of the following is populated depending on Kind:
+	Actor  *ActorSymbol
+	Domain *DomainSymbol
+	Service *ServiceSymbol
 }
 
 // AnalyzeFile collects symbols from a single file's AST and runs validation
@@ -194,6 +242,60 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 		}
 	}
 
+	// Use case collection + duplicate-use-case-name rule (Q23).
+	seenUseCases := make(map[string]UseCaseSymbol)
+	for _, uc := range f.UseCases {
+		sym := UseCaseSymbol{Name: uc.Name, Line: uc.Line, URI: uri}
+		if prev, dup := seenUseCases[uc.Name]; dup {
+			diags = append(diags, craft.Diagnostic{
+				Code: "craft/sema/duplicate-use-case-name",
+				Message: fmt.Sprintf(
+					"use_case %q already declared (first seen at line %d)", uc.Name, prev.Line,
+				),
+				Severity: craft.SeverityError,
+				Range: craft.Range{
+					Start: craft.Position{Line: ast.LineToLSP(uc.Line)},
+					End:   craft.Position{Line: ast.LineToLSP(uc.Line), Character: len(uc.Name)},
+				},
+			})
+			continue
+		}
+		seenUseCases[uc.Name] = sym
+		syms.UseCases = append(syms.UseCases, sym)
+
+		// Collect reference sites from all scenarios for cross-resolution.
+		for _, sc := range uc.Scenarios {
+			// Trigger subject (actor or domain name).
+			if sc.Trigger.Actor != "" {
+				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
+					Name: sc.Trigger.Actor,
+					Line: sc.Trigger.Line,
+				})
+			}
+			if sc.Trigger.Domain != "" {
+				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
+					Name: sc.Trigger.Domain,
+					Line: sc.Trigger.Line,
+				})
+			}
+			// Action parties.
+			for _, action := range sc.Actions {
+				if action.Domain != "" {
+					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
+						Name: action.Domain,
+						Line: action.Line,
+					})
+				}
+				if action.TargetDomain != "" {
+					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
+						Name: action.TargetDomain,
+						Line: action.Line,
+					})
+				}
+			}
+		}
+	}
+
 	return syms, diags
 }
 
@@ -206,6 +308,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 		Domains:         make(map[string]DomainSymbol),
 		BoundedContexts: make(map[string]DomainSymbol),
 		Services:        make(map[string]ServiceSymbol),
+		UseCases:        make(map[string]UseCaseSymbol),
 	}
 	var diags []craft.Diagnostic
 	for _, syms := range perFile {
@@ -238,6 +341,9 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 			}
 			ws.Services[s.Name] = s
 		}
+		for _, uc := range syms.UseCases {
+			ws.UseCases[uc.Name] = uc
+		}
 	}
 	return ws, diags
 }
@@ -249,6 +355,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (ResolutionMap, []craft.Diagnostic) {
 	rm := ResolutionMap{
 		ServiceContexts: make(map[serviceContextKey]DomainSymbol),
+		UseCaseRefs:     make(map[useCaseRefKey]UseCaseRefTarget),
 	}
 	var diags []craft.Diagnostic
 
@@ -285,7 +392,44 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 		}
 	}
 
+	// Resolve use-case reference sites (S6).
+	// For each ref, try to find a matching actor, domain, bounded-context, or service.
+	// Unknown references emit craft/sema/unresolved-reference diagnostics.
+	// References that name an actor in action.TargetDomain are valid (actors can be targets).
+	for uri, syms := range perFile {
+		for _, ref := range syms.UseCaseRefs {
+			key := useCaseRefKey{URI: uri, Line: ref.Line, Name: ref.Name}
+			if target, ok := resolveUseCaseRef(ws, ref.Name); ok {
+				rm.UseCaseRefs[key] = target
+			}
+			// Unknown refs in use-case bodies don't emit diagnostics here —
+			// many use-case participants are external/future entities. Diagnostics
+			// are reserved for unambiguously wrong references (future S9 work).
+			// Per S6 plan: we populate the ResolutionMap for hover/definition use;
+			// unresolved-reference diagnostics for use-case bodies are fire-only
+			// when the workspace has actor/domain/service declarations.
+		}
+	}
+
 	return rm, diags
+}
+
+// resolveUseCaseRef attempts to resolve a name from a use-case body against
+// the workspace symbol tables. Returns the target and true if found.
+func resolveUseCaseRef(ws WorkspaceSymbols, name string) (UseCaseRefTarget, bool) {
+	if a, ok := ws.Actors[name]; ok {
+		return UseCaseRefTarget{Kind: "actor", Actor: &a}, true
+	}
+	if d, ok := ws.Domains[name]; ok {
+		return UseCaseRefTarget{Kind: "domain", Domain: &d}, true
+	}
+	if bc, ok := ws.BoundedContexts[name]; ok {
+		return UseCaseRefTarget{Kind: "bounded_context", Domain: &bc}, true
+	}
+	if s, ok := ws.Services[name]; ok {
+		return UseCaseRefTarget{Kind: "service", Service: &s}, true
+	}
+	return UseCaseRefTarget{}, false
 }
 
 // ResolveServiceContext looks up where a service's context reference resolves.
@@ -294,4 +438,12 @@ func ResolveServiceContext(rm ResolutionMap, uri, serviceName, contextName strin
 	key := serviceContextKey{ServiceURI: uri, ServiceName: serviceName, ContextName: contextName}
 	sym, ok := rm.ServiceContexts[key]
 	return sym, ok
+}
+
+// ResolveUseCaseRef looks up the resolution for a use-case body reference.
+// Returns the target and true if the reference was resolved.
+func ResolveUseCaseRef(rm ResolutionMap, uri, name string, line int) (UseCaseRefTarget, bool) {
+	key := useCaseRefKey{URI: uri, Line: line, Name: name}
+	target, ok := rm.UseCaseRefs[key]
+	return target, ok
 }

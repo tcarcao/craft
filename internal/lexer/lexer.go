@@ -3,6 +3,8 @@
 // S5: adds service/services keywords, colon, comma, string literals for
 // service names; contextual field keywords (contexts, data-stores, language)
 // lex as plain identifiers per Q3.
+// S6: adds use_case keyword. Contextual keywords (when, asks, notifies,
+// listens, returns, to) remain plain identifiers per Q3.
 // Unknown tokens are returned as TokenError so the parser can emit a
 // recoverable diagnostic.
 package lexer
@@ -41,6 +43,9 @@ const (
 	TokenComma      // ,
 	TokenString     // "..." quoted string literal
 
+	// S6: use_case keyword (contextual keywords when/asks/notifies/listens/returns/to are plain identifiers per Q3)
+	TokenKwUseCase // use_case
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -54,6 +59,7 @@ var keywords = map[string]TokenType{
 	"domain":   TokenKwDomain,
 	"domains":  TokenKwDomains,
 	"services": TokenKwServices,
+	"use_case": TokenKwUseCase,
 }
 
 // Token is a scanned unit from the source.

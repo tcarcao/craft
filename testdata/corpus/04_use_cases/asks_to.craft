@@ -1,0 +1,6 @@
+use_case "Money Transfer" {
+  when Customer initiates transfer
+    PaymentService asks AccountService to verify source account
+    PaymentService asks AccountService to verify destination account
+    AccountService notifies "Transfer Completed"
+}

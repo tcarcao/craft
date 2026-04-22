@@ -1,0 +1,56 @@
+{
+  "useCases": [
+    {
+      "name": "Data Sync",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "triggers",
+            "phrase": "data sync",
+            "description": "when CRON triggers data sync"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "SyncService",
+              "verb": "fetches",
+              "phrase": "remote data",
+              "description": "SyncService fetches remote data",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "internal_action",
+              "domain": "SyncService",
+              "verb": "transforms",
+              "phrase": "data format",
+              "description": "SyncService transforms data format",
+              "line": 4
+            },
+            {
+              "id": "action_4",
+              "type": "internal_action",
+              "domain": "SyncService",
+              "verb": "persists",
+              "phrase": "updated records",
+              "description": "SyncService persists updated records",
+              "line": 5
+            },
+            {
+              "id": "action_5",
+              "type": "async_action",
+              "domain": "SyncService",
+              "event": "Sync Completed",
+              "description": "SyncService notifies \"Sync Completed\"",
+              "line": 6
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

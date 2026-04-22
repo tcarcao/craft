@@ -2,6 +2,7 @@
 // Craft DSL. It produces an internal/ast.File.
 //
 // S3: actors. S4: domains. S5: services + services block.
+// S6: use_case "..." { when ... } blocks.
 // Unsupported top-level keywords emit a recoverable "not-yet-implemented"
 // diagnostic so --parser=v2 is usable on partial files.
 package syntax
@@ -35,6 +36,10 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 	file := &ast.File{}
 	var diags []craft.Diagnostic
 
+	// Global counter for scenario_N / action_N IDs across all use_cases in the file,
+	// matching ANTLR's numbering scheme.
+	ucCounter := 0
+
 	for !p.atEOF() {
 		tok := p.peek()
 		switch tok.Type {
@@ -62,6 +67,12 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			services, d := p.parseServicesBlock()
 			diags = append(diags, d...)
 			file.Services = append(file.Services, services...)
+		case lexer.TokenKwUseCase:
+			uc, d := p.parseUseCaseBlock(&ucCounter)
+			diags = append(diags, d...)
+			if uc != nil {
+				file.UseCases = append(file.UseCases, uc)
+			}
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -499,6 +510,422 @@ func isServiceNameKeyword(tt lexer.TokenType) bool {
 	return false
 }
 
+// --- use_case parsing ---
+
+// parseUseCaseBlock parses: use_case "<name>" { <scenario>* }
+// A scenario is: when <trigger> <action>*
+// counter is the global ID counter shared across all use_cases in the file.
+func (p *Parser) parseUseCaseBlock(counter *int) (*ast.UseCaseDecl, []craft.Diagnostic) {
+	ucTok := p.consume() // consume `use_case`
+	var diags []craft.Diagnostic
+
+	// Expect a quoted string name.
+	nameTok := p.peek()
+	if nameTok.Type != lexer.TokenString {
+		diags = append(diags, p.diagUnexpected(nameTok, "use_case name string"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	name := nameTok.Value
+	p.consume()
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume `{`
+
+	uc := &ast.UseCaseDecl{Name: name, Line: ucTok.Line}
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+
+		// `when` is a contextual keyword that lexes as TokenIdent.
+		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
+			scenario, d := p.parseScenario(counter)
+			diags = append(diags, d...)
+			if scenario != nil {
+				uc.Scenarios = append(uc.Scenarios, scenario)
+			}
+		} else {
+			// Skip unknown tokens inside the use_case body.
+			diags = append(diags, p.diagUnexpected(tok, "`when` or `}`"))
+			p.consume()
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  fmt.Sprintf("unclosed use_case block for %q (missing `}`)", name),
+			Severity: craft.SeverityError,
+			Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(ucTok.Line)}},
+		})
+		return uc, diags
+	}
+	p.consume() // consume `}`
+	return uc, diags
+}
+
+// parseScenario parses one `when <trigger>` clause plus its following action lines.
+// counter is a shared global ID counter (pointer) for scenario_N / action_N IDs,
+// matching ANTLR's numbering scheme where both scenarios and actions share one counter.
+func (p *Parser) parseScenario(counter *int) (*ast.ScenarioDecl, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+	whenTok := p.consume() // consume `when`
+
+	trigger, d := p.parseTrigger(whenTok.Line)
+	diags = append(diags, d...)
+
+	*counter++
+	scenario := &ast.ScenarioDecl{
+		ID:      fmt.Sprintf("scenario_%d", *counter),
+		Trigger: trigger,
+	}
+
+	// Parse actions until we see `when` (next scenario), `}` (end of use_case), or EOF.
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+		// `when` starts the next scenario — stop here.
+		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
+			break
+		}
+		action, d := p.parseAction(counter)
+		diags = append(diags, d...)
+		if action != nil {
+			scenario.Actions = append(scenario.Actions, action)
+		}
+	}
+
+	return scenario, diags
+}
+
+// parseTrigger parses the `<actor/domain> <verb> <phrase>` part after `when`.
+// Two forms:
+//   - external:      `when <actor> <verb> <phrase>`
+//   - domain_listen: `when <domain> listens "<event>"`
+func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+
+	// The first token is the actor/domain subject.
+	subjectTok := p.peek()
+	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
+		diags = append(diags, p.diagUnexpected(subjectTok, "trigger subject (actor/domain name)"))
+		return ast.TriggerDecl{Description: "when"}, diags
+	}
+	subject := subjectTok.Value
+	p.consume()
+
+	// The second token is the verb.  If it is `listens` (ident), this is domain_listen.
+	verbTok := p.peek()
+	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
+		// No verb token — treat as a partial trigger.
+		return ast.TriggerDecl{
+			TriggerType: "external",
+			Actor:       subject,
+			Description: "when " + subject,
+		}, diags
+	}
+	verb := verbTok.Value
+	p.consume()
+
+	if verb == "listens" {
+		// domain_listen: when <domain> listens "<event>"
+		eventTok := p.peek()
+		var event string
+		if eventTok.Type == lexer.TokenString {
+			event = eventTok.Value
+			p.consume()
+		} else if eventTok.Type == lexer.TokenIdent {
+			event = eventTok.Value
+			p.consume()
+		}
+		desc := fmt.Sprintf("when %s listens %q", subject, event)
+		return ast.TriggerDecl{
+			TriggerType: "domain_listen",
+			Domain:      subject,
+			Event:       event,
+			Description: desc,
+			Line:        whenLine,
+		}, diags
+	}
+
+	// external: when <actor> <verb> <phrase>
+	// Collect the rest of the phrase (all remaining tokens on the logical line until the
+	// next `when`, `}`, or a line that starts a new action — i.e. an ident that is not
+	// a continuation of the phrase). We use a simple heuristic: collect all tokens until
+	// we see `when` or `}` at the start of a line, or EOF.
+	phrase := p.collectPhrase()
+	fullDesc := "when " + subject + " " + verb
+	if phrase != "" {
+		fullDesc += " " + phrase
+	}
+	return ast.TriggerDecl{
+		TriggerType: "external",
+		Actor:       subject,
+		Verb:        verb,
+		Phrase:      phrase,
+		Description: fullDesc,
+		Line:        whenLine,
+	}, diags
+}
+
+// parseAction parses a single action line. counter is the shared global ID counter;
+// it is incremented for each action parsed.
+//
+// Action forms (subject is always an ident/keyword-as-ident):
+//
+//	<domain> asks <target> to|for <phrase>   → sync_action
+//	<domain> notifies "<event>"              → async_action
+//	<domain> returns [to <target>] <phrase>  → return_action
+//	<domain> <verb> <phrase>                 → internal_action
+func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+
+	subjectTok := p.peek()
+	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
+		// Not an action line — skip the token.
+		diags = append(diags, p.diagUnexpected(subjectTok, "action subject (domain/service name) or `when`"))
+		p.consume()
+		return nil, diags
+	}
+	subject := subjectTok.Value
+	actionLine := subjectTok.Line
+	p.consume()
+
+	verbTok := p.peek()
+	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
+		// No verb — treat as minimal internal action.
+		*counter++
+		*counter++
+		return &ast.ActionDecl{
+			ActionType:  "internal_action",
+			ActionID:    *counter,
+			Domain:      subject,
+			Description: subject,
+			Line:        actionLine,
+		}, diags
+	}
+	verb := verbTok.Value
+	p.consume()
+
+	*counter++
+	id := *counter
+
+	switch verb {
+	case "asks":
+		return p.parseAsksAction(id, subject, actionLine, &diags)
+	case "notifies":
+		return p.parseNotifiesAction(id, subject, actionLine, &diags)
+	case "returns":
+		return p.parseReturnsAction(id, subject, actionLine, &diags)
+	default:
+		// internal_action: <domain> <verb> <phrase>
+		phrase := p.collectPhrase()
+		desc := subject + " " + verb
+		if phrase != "" {
+			desc += " " + phrase
+		}
+		return &ast.ActionDecl{
+			ActionType:  "internal_action",
+			ActionID:    id,
+			Domain:      subject,
+			Verb:        verb,
+			Phrase:      phrase,
+			Description: desc,
+			Line:        actionLine,
+		}, diags
+	}
+}
+
+// parseAsksAction parses: <domain> asks <target> to|for <phrase>
+func (p *Parser) parseAsksAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
+	targetTok := p.peek()
+	var target string
+	if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
+		target = targetTok.Value
+		p.consume()
+	}
+
+	// connector: "to" or "for"
+	connTok := p.peek()
+	var connector string
+	if connTok.Type == lexer.TokenIdent && (connTok.Value == "to" || connTok.Value == "for") {
+		connector = connTok.Value
+		p.consume()
+	}
+
+	phrase := p.collectPhrase()
+	desc := subject + " asks " + target + " " + connector
+	if phrase != "" {
+		desc += " " + phrase
+	}
+
+	return &ast.ActionDecl{
+		ActionType:   "sync_action",
+		ActionID:     id,
+		Domain:       subject,
+		TargetDomain: target,
+		Connector:    connector,
+		Phrase:       phrase,
+		Description:  desc,
+		Line:         line,
+	}, *diags
+}
+
+// parseNotifiesAction parses: <domain> notifies "<event>"
+func (p *Parser) parseNotifiesAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
+	eventTok := p.peek()
+	var event string
+	if eventTok.Type == lexer.TokenString {
+		event = eventTok.Value
+		p.consume()
+	} else if eventTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(eventTok.Type) {
+		event = eventTok.Value
+		p.consume()
+	}
+
+	desc := fmt.Sprintf("%s notifies %q", subject, event)
+	return &ast.ActionDecl{
+		ActionType:  "async_action",
+		ActionID:    id,
+		Domain:      subject,
+		Event:       event,
+		Description: desc,
+		Line:        line,
+	}, *diags
+}
+
+// parseReturnsAction parses: <domain> returns [to <target>] <phrase>
+func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
+	// Check for optional `to <target>`
+	var target string
+	if p.peek().Type == lexer.TokenIdent && p.peek().Value == "to" {
+		p.consume() // consume `to`
+		targetTok := p.peek()
+		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
+			target = targetTok.Value
+			p.consume()
+		}
+	}
+
+	phrase := p.collectPhrase()
+
+	// Build description matching ANTLR format.
+	var desc string
+	if target != "" {
+		desc = fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
+	} else {
+		desc = fmt.Sprintf("%s returns %s", subject, phrase)
+	}
+
+	return &ast.ActionDecl{
+		ActionType:   "return_action",
+		ActionID:     id,
+		Domain:       subject,
+		TargetDomain: target,
+		Phrase:       phrase,
+		Description:  desc,
+		Line:         line,
+	}, *diags
+}
+
+// collectPhrase collects the remaining "phrase" tokens on the current logical line.
+// It stops before the next action line or scenario boundary.
+//
+// The phrase ends when we encounter a token on a **different source line** from
+// the current token (since the lexer preserves Line info even when skipping
+// whitespace). This correctly handles multi-word phrases without requiring
+// newline tokens.
+//
+// Additionally, we stop on structural boundaries: `when`, `}`, and EOF.
+func (p *Parser) collectPhrase() string {
+	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+		return ""
+	}
+	// The phrase starts at the current token's line.
+	startLine := p.peek().Line
+	var parts []string
+	for {
+		tok := p.peek()
+		switch tok.Type {
+		case lexer.TokenRBrace, lexer.TokenEOF:
+			return joinPhrase(parts)
+		case lexer.TokenIdent:
+			if tok.Value == "when" {
+				return joinPhrase(parts)
+			}
+			// Stop when we've moved to a different source line.
+			if tok.Line != startLine {
+				return joinPhrase(parts)
+			}
+			parts = append(parts, tok.Value)
+			p.consume()
+		case lexer.TokenString:
+			if tok.Line != startLine {
+				return joinPhrase(parts)
+			}
+			parts = append(parts, fmt.Sprintf("%q", tok.Value))
+			p.consume()
+		default:
+			return joinPhrase(parts)
+		}
+	}
+}
+
+// isActionSubjectAhead returns true when the current token looks like the subject of
+// a new action or scenario, i.e. it is an ident and the token after it is an action
+// verb ("asks", "notifies", "returns") or "when".
+func (p *Parser) isActionSubjectAhead() bool {
+	// Look at positions pos (current) and pos+1 (next).
+	curr := p.peekAt(0)
+	if curr.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(curr.Type) {
+		return false
+	}
+	next := p.peekAt(1)
+	if next.Type == lexer.TokenIdent {
+		switch next.Value {
+		case "asks", "notifies", "returns", "when":
+			return true
+		}
+	}
+	return false
+}
+
+// peekAt returns the token at pos+offset without consuming.
+func (p *Parser) peekAt(offset int) lexer.Token {
+	idx := p.pos + offset
+	if idx < len(p.tokens) {
+		return p.tokens[idx]
+	}
+	return lexer.Token{Type: lexer.TokenEOF}
+}
+
+func joinPhrase(parts []string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += " "
+		}
+		result += p
+	}
+	return result
+}
+
+// isAnyKeywordAsIdent returns true for keyword token types that can appear as
+// identifiers in use-case bodies (e.g. service names that happen to be keywords).
+func isAnyKeywordAsIdent(tt lexer.TokenType) bool {
+	switch tt {
+	case lexer.TokenKwUser, lexer.TokenKwSystem, lexer.TokenKwService,
+		lexer.TokenKwActor, lexer.TokenKwActors,
+		lexer.TokenKwDomain, lexer.TokenKwDomains,
+		lexer.TokenKwServices, lexer.TokenKwUseCase:
+		return true
+	}
+	return false
+}
+
 // --- helpers ---
 
 func tokenToActorType(tok lexer.Token) (ast.ActorType, bool) {
@@ -529,7 +956,7 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 	switch tt {
 	case lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
-		lexer.TokenKwServices:
+		lexer.TokenKwServices, lexer.TokenKwUseCase:
 		return true
 	}
 	return false

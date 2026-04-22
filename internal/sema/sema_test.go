@@ -207,3 +207,22 @@ func TestAnalyzeWorkspace_UnresolvedContext(t *testing.T) {
 		t.Errorf("expected error severity, got %q", diags[0].Severity)
 	}
 }
+
+func TestAnalyzeFile_DuplicateUseCaseName(t *testing.T) {
+	f := &ast.File{
+		UseCases: []*ast.UseCaseDecl{
+			{Name: "User Login", Line: 1},
+			{Name: "User Login", Line: 7},
+		},
+	}
+	_, diags := sema.AnalyzeFile("file:///a.craft", f)
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d: %v", len(diags), diags)
+	}
+	if diags[0].Code != "craft/sema/duplicate-use-case-name" {
+		t.Errorf("expected code craft/sema/duplicate-use-case-name, got %q", diags[0].Code)
+	}
+	if diags[0].Severity != "error" {
+		t.Errorf("expected error severity, got %q", diags[0].Severity)
+	}
+}

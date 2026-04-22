@@ -1,0 +1,48 @@
+{
+  "useCases": [
+    {
+      "name": "Balance Check",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "checks",
+            "phrase": "balance",
+            "description": "when Customer checks balance"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "sync_action",
+              "domain": "AccountService",
+              "targetDomain": "BalanceService",
+              "connector": "to",
+              "phrase": "get current balance",
+              "description": "AccountService asks BalanceService to get current balance",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "return_action",
+              "domain": "BalanceService",
+              "phrase": "balance information",
+              "description": "BalanceService returns balance information",
+              "line": 4
+            },
+            {
+              "id": "action_4",
+              "type": "return_action",
+              "domain": "AccountService",
+              "targetDomain": "Customer",
+              "phrase": "balance details",
+              "description": "AccountService returns balance details to Customer",
+              "line": 5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

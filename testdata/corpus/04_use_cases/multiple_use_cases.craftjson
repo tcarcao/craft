@@ -1,0 +1,72 @@
+{
+  "useCases": [
+    {
+      "name": "Login",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "User",
+            "verb": "submits",
+            "phrase": "credentials",
+            "description": "when User submits credentials"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "AuthService",
+              "verb": "validates",
+              "phrase": "credentials",
+              "description": "AuthService validates credentials",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "async_action",
+              "domain": "AuthService",
+              "event": "User Logged In",
+              "description": "AuthService notifies \"User Logged In\"",
+              "line": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Logout",
+      "scenarios": [
+        {
+          "id": "scenario_4",
+          "trigger": {
+            "type": "external",
+            "actor": "User",
+            "verb": "requests",
+            "phrase": "logout",
+            "description": "when User requests logout"
+          },
+          "actions": [
+            {
+              "id": "action_5",
+              "type": "internal_action",
+              "domain": "AuthService",
+              "verb": "invalidates",
+              "phrase": "session",
+              "description": "AuthService invalidates session",
+              "line": 9
+            },
+            {
+              "id": "action_6",
+              "type": "async_action",
+              "domain": "AuthService",
+              "event": "User Logged Out",
+              "description": "AuthService notifies \"User Logged Out\"",
+              "line": 10
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

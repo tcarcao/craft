@@ -1,0 +1,5 @@
+use_case "User Registration" {
+  when Business_User creates Account
+    Authentication validates email format
+    Authentication notifies "User Registered"
+}

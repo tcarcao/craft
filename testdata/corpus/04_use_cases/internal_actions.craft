@@ -1,0 +1,7 @@
+use_case "Data Sync" {
+  when CRON triggers data sync
+    SyncService fetches remote data
+    SyncService transforms data format
+    SyncService persists updated records
+    SyncService notifies "Sync Completed"
+}

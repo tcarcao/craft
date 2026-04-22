@@ -52,8 +52,8 @@ actor service DB`
 	}
 }
 
-func TestParse_UnsupportedKeywordEmitsWarning(t *testing.T) {
-	// v2 does not yet support `use_case` — should emit a warning and not crash.
+func TestParse_UseCaseParsedWithActor(t *testing.T) {
+	// S6: use_case is now supported — should parse cleanly alongside an actor.
 	src := `actor user Foo
 use_case "DoSomething" {
     when User does something
@@ -62,13 +62,18 @@ use_case "DoSomething" {
 	if len(f.Actors) != 1 {
 		t.Errorf("expected 1 actor, got %d", len(f.Actors))
 	}
-	if len(diags) == 0 {
-		t.Error("expected a diagnostic for unsupported keyword")
+	if len(diags) != 0 {
+		t.Errorf("unexpected diagnostics: %v", diags)
 	}
-	for _, d := range diags {
-		if d.Severity != "error" && d.Severity != "warning" {
-			t.Errorf("unexpected severity %q", d.Severity)
-		}
+	if len(f.UseCases) != 1 {
+		t.Fatalf("expected 1 use case, got %d", len(f.UseCases))
+	}
+	uc := f.UseCases[0]
+	if uc.Name != "DoSomething" {
+		t.Errorf("expected use case name 'DoSomething', got %q", uc.Name)
+	}
+	if len(uc.Scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(uc.Scenarios))
 	}
 }
 

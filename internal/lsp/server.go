@@ -4,6 +4,9 @@
 // S5: definition (go-to-definition for service contexts→domain); service
 //     symbols in documentSymbol/hover/semanticTokens; workspace/executeCommand
 //     for EXTRACT_DOMAINS_FROM_CURRENT and EXTRACT_DOMAINS_FROM_WORKSPACE (Q16).
+// S6: hover/definition/semanticTokens extended to cover actor/domain/service
+//     references inside use-case trigger subjects and action parties.
+//     use_case blocks added to documentSymbol outline.
 // ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
 
@@ -229,7 +232,87 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		}
 	}
 
+	// Walk use-case action parties: cursor on an action line resolves to the
+	// actor/domain/service declaration.
+	for _, uc := range f.AST.UseCases {
+		for _, sc := range uc.Scenarios {
+			// Check trigger subject line.
+			if sc.Trigger.Line == cursorLine {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Actor, sc.Trigger.Line); ok {
+					return []protocol.Location{loc}, nil
+				}
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Domain, sc.Trigger.Line); ok {
+					return []protocol.Location{loc}, nil
+				}
+			}
+			for _, action := range sc.Actions {
+				if action.Line != cursorLine {
+					continue
+				}
+				// Try domain (the "from" party) first.
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.Domain, action.Line); ok {
+					return []protocol.Location{loc}, nil
+				}
+				// Then targetDomain (the "to" party).
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetDomain, action.Line); ok {
+					return []protocol.Location{loc}, nil
+				}
+			}
+		}
+	}
+
 	return nil, nil
+}
+
+// resolveUseCaseRefToLocation looks up a name from a use-case body in the
+// ResolutionMap and returns a protocol.Location pointing at the declaration.
+func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line int) (protocol.Location, bool) {
+	if name == "" {
+		return protocol.Location{}, false
+	}
+	target, ok := sema.ResolveUseCaseRef(rm, uri, name, line)
+	if !ok {
+		return protocol.Location{}, false
+	}
+	switch target.Kind {
+	case "actor":
+		sym := target.Actor
+		if sym.Line == 0 {
+			return protocol.Location{}, false
+		}
+		return protocol.Location{
+			URI: protocol.DocumentURI(sym.URI),
+			Range: protocol.Range{
+				Start: protocol.Position{Line: uint32(sym.Line - 1)},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+			},
+		}, true
+	case "domain", "bounded_context":
+		sym := target.Domain
+		if sym.Line == 0 {
+			return protocol.Location{}, false
+		}
+		return protocol.Location{
+			URI: protocol.DocumentURI(sym.URI),
+			Range: protocol.Range{
+				Start: protocol.Position{Line: uint32(sym.Line - 1)},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+			},
+		}, true
+	case "service":
+		sym := target.Service
+		if sym.Line == 0 {
+			return protocol.Location{}, false
+		}
+		return protocol.Location{
+			URI: protocol.DocumentURI(sym.URI),
+			Range: protocol.Range{
+				Start: protocol.Position{Line: uint32(sym.Line - 1)},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+			},
+		}, true
+	}
+	return protocol.Location{}, false
 }
 
 func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDocumentParams) error {
@@ -343,6 +426,19 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Name:           d.Name,
 			Kind:           protocol.SymbolKindNamespace,
 			Detail:         "domain",
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+		})
+	}
+	for _, uc := range f.AST.UseCases {
+		line := 0
+		if uc.Line > 0 {
+			line = uc.Line - 1
+		}
+		syms = append(syms, protocol.DocumentSymbol{
+			Name:           uc.Name,
+			Kind:           protocol.SymbolKindEvent,
+			Detail:         "use_case",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
@@ -515,7 +611,76 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		}
 	}
 
+	// Walk use-case bodies: hover on an action line shows the resolved declaration.
+	rm := s.ws.ResolutionMap()
+	uri := string(params.TextDocument.URI)
+	for _, uc := range f.AST.UseCases {
+		for _, sc := range uc.Scenarios {
+			// Hover on the use_case name itself (line of use_case keyword).
+			if uc.Line == cursorLine {
+				return &protocol.Hover{
+					Contents: protocol.MarkupContent{
+						Kind:  protocol.PlainText,
+						Value: "use_case: " + uc.Name,
+					},
+				}, nil
+			}
+			// Hover on trigger line.
+			if sc.Trigger.Line == cursorLine {
+				name := sc.Trigger.Actor
+				if name == "" {
+					name = sc.Trigger.Domain
+				}
+				if name != "" {
+					if val := hoverForUseCaseRef(rm, uri, name, sc.Trigger.Line); val != "" {
+						return &protocol.Hover{
+							Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
+						}, nil
+					}
+				}
+			}
+			// Hover on action lines.
+			for _, action := range sc.Actions {
+				if action.Line != cursorLine {
+					continue
+				}
+				// Show hover for the "from" domain first.
+				if val := hoverForUseCaseRef(rm, uri, action.Domain, action.Line); val != "" {
+					return &protocol.Hover{
+						Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
+					}, nil
+				}
+			}
+		}
+	}
+
 	return nil, nil
+}
+
+// hoverForUseCaseRef resolves a use-case body reference and returns a hover string.
+func hoverForUseCaseRef(rm sema.ResolutionMap, uri, name string, line int) string {
+	if name == "" {
+		return ""
+	}
+	target, ok := sema.ResolveUseCaseRef(rm, uri, name, line)
+	if !ok {
+		return ""
+	}
+	switch target.Kind {
+	case "actor":
+		return "actor: " + target.Actor.Name + " (" + string(target.Actor.Type) + ")"
+	case "domain":
+		return "domain: " + target.Domain.Name
+	case "bounded_context":
+		return "bounded context: " + name + " (domain: " + target.Domain.Name + ")"
+	case "service":
+		detail := "service: " + target.Service.Name
+		if target.Service.Language != "" {
+			detail += " (" + target.Service.Language + ")"
+		}
+		return detail
+	}
+	return ""
 }
 
 func (s *Server) Implementation(_ context.Context, _ *protocol.ImplementationParams) ([]protocol.Location, error) {
@@ -724,11 +889,51 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		}
 		tokens = append(tokens, semanticToken{
 			line:      uint32(svc.Line - 1),
-			startChar: 0, // TODO(S6+): use actual column once position tracking lands
+			startChar: 0,
 			length:    uint32(len([]rune(svc.Name))),
 			tokenType: semanticTokenTypeIndex(semanticTokenTypeService),
 			modifiers: 1, // declaration
 		})
+	}
+
+	// Use-case action parties: colour actors/domains/services referenced inside
+	// when clauses using their respective semantic token types (S6).
+	rm := s.ws.ResolutionMap()
+	uri := string(params.TextDocument.URI)
+	for _, uc := range f.AST.UseCases {
+		for _, sc := range uc.Scenarios {
+			// Trigger subject.
+			triggerName := sc.Trigger.Actor
+			if triggerName == "" {
+				triggerName = sc.Trigger.Domain
+			}
+			if triggerName != "" && sc.Trigger.Line > 0 {
+				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, sc.Trigger.Line); ok {
+					tokens = append(tokens, semanticToken{
+						line:      uint32(sc.Trigger.Line - 1),
+						startChar: 0,
+						length:    uint32(len([]rune(triggerName))),
+						tokenType: tt,
+					})
+				}
+			}
+			// Action domain and targetDomain.
+			for _, action := range sc.Actions {
+				if action.Line <= 0 {
+					continue
+				}
+				if action.Domain != "" {
+					if tt, ok := useCaseRefTokenType(rm, uri, action.Domain, action.Line); ok {
+						tokens = append(tokens, semanticToken{
+							line:      uint32(action.Line - 1),
+							startChar: 0,
+							length:    uint32(len([]rune(action.Domain))),
+							tokenType: tt,
+						})
+					}
+				}
+			}
+		}
 	}
 
 	// Sort tokens by line, then character (required for relative encoding).
@@ -737,6 +942,24 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 	return &protocol.SemanticTokens{
 		Data: encodeSemanticTokens(tokens),
 	}, nil
+}
+
+// useCaseRefTokenType resolves a use-case body reference name to its semantic
+// token type. Returns the token type index and true if the name is resolved.
+func useCaseRefTokenType(rm sema.ResolutionMap, uri, name string, line int) (uint32, bool) {
+	target, ok := sema.ResolveUseCaseRef(rm, uri, name, line)
+	if !ok {
+		return 0, false
+	}
+	switch target.Kind {
+	case "actor":
+		return semanticTokenTypeIndex(semanticTokenTypeActor), true
+	case "domain", "bounded_context":
+		return semanticTokenTypeIndex(semanticTokenTypeDomain), true
+	case "service":
+		return semanticTokenTypeIndex(semanticTokenTypeService), true
+	}
+	return 0, false
 }
 
 // sortSemanticTokens sorts tokens ascending by (line, startChar).

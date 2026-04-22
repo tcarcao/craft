@@ -15,9 +15,10 @@ func LineToLSP(line int) int {
 
 // File is the root AST node for a parsed .craft file.
 type File struct {
-	Actors   []*ActorDecl   `json:"actors,omitempty"`
-	Domains  []*DomainDecl  `json:"domains,omitempty"`
-	Services []*ServiceDecl `json:"services,omitempty"`
+	Actors   []*ActorDecl    `json:"actors,omitempty"`
+	Domains  []*DomainDecl   `json:"domains,omitempty"`
+	Services []*ServiceDecl  `json:"services,omitempty"`
+	UseCases []*UseCaseDecl  `json:"useCases,omitempty"`
 }
 
 // ServiceDecl represents a service declaration inside a services { ... } block.
@@ -59,3 +60,68 @@ const (
 	ActorTypeSystem  ActorType = "system"
 	ActorTypeService ActorType = "service"
 )
+
+// UseCaseDecl represents a use_case "..." { ... } declaration.
+type UseCaseDecl struct {
+	// Name is the quoted string title of the use case.
+	Name string `json:"name"`
+	// Scenarios are the `when ...` clauses inside the use case body.
+	Scenarios []*ScenarioDecl `json:"scenarios,omitempty"`
+	// Line is the 1-based source line of the use_case keyword.
+	Line int `json:"line,omitempty"`
+}
+
+// ScenarioDecl represents a single `when ...` clause within a use case.
+type ScenarioDecl struct {
+	// ID is the ANTLR-compatible scenario identifier (e.g. "scenario_1").
+	// Assigned during CraftDoc projection, not parsed directly.
+	ID string `json:"id,omitempty"`
+	// Trigger describes the initiating condition.
+	Trigger TriggerDecl `json:"trigger"`
+	// Actions are the ordered steps within the scenario body.
+	Actions []*ActionDecl `json:"actions,omitempty"`
+}
+
+// TriggerDecl represents the `when ...` line that opens a scenario.
+type TriggerDecl struct {
+	// TriggerType is one of "external", "event", or "domain_listen".
+	TriggerType string `json:"type"`
+	// Actor is the initiating actor name for external triggers.
+	Actor string `json:"actor,omitempty"`
+	// Verb is the action verb for external triggers (e.g. "initiates").
+	Verb string `json:"verb,omitempty"`
+	// Phrase is the rest of the trigger phrase after verb for external triggers.
+	Phrase string `json:"phrase,omitempty"`
+	// Domain is the listening domain/service for domain_listen triggers.
+	Domain string `json:"domain,omitempty"`
+	// Event is the event string for domain_listen and event triggers.
+	Event string `json:"event,omitempty"`
+	// Description is the human-readable description of the full trigger line.
+	Description string `json:"description"`
+	// Line is the 1-based source line of the `when` keyword.
+	Line int `json:"line,omitempty"`
+}
+
+// ActionDecl represents a single action statement within a scenario.
+type ActionDecl struct {
+	// ActionType is one of "sync_action", "async_action", "internal_action", or "return_action".
+	ActionType string `json:"type"`
+	// ActionID is the global numeric ID assigned during parsing (for "action_N" CraftDoc output).
+	ActionID int `json:"actionId,omitempty"`
+	// Domain is the actor/domain/service that performs the action (the "from" party).
+	Domain string `json:"domain"`
+	// TargetDomain is the recipient for sync/return actions.
+	TargetDomain string `json:"targetDomain,omitempty"`
+	// Verb is the action verb for internal actions.
+	Verb string `json:"verb,omitempty"`
+	// Connector is "to" or "for" for sync actions.
+	Connector string `json:"connector,omitempty"`
+	// Phrase is the descriptive phrase of the action.
+	Phrase string `json:"phrase,omitempty"`
+	// Event is the event name for async actions (notifies).
+	Event string `json:"event,omitempty"`
+	// Description is the human-readable full action line.
+	Description string `json:"description"`
+	// Line is the 1-based source line of this action.
+	Line int `json:"line,omitempty"`
+}

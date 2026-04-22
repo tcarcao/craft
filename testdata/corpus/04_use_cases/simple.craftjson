@@ -1,0 +1,38 @@
+{
+  "useCases": [
+    {
+      "name": "User Registration",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "creates",
+            "phrase": "Account",
+            "description": "when Business_User creates Account"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "Authentication",
+              "verb": "validates",
+              "phrase": "email format",
+              "description": "Authentication validates email format",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "async_action",
+              "domain": "Authentication",
+              "event": "User Registered",
+              "description": "Authentication notifies \"User Registered\"",
+              "line": 4
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

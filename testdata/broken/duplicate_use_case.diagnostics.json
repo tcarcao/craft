@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/duplicate-use-case-name",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 6,
+        "character": 0
+      },
+      "end": {
+        "line": 6,
+        "character": 10
+      }
+    }
+  }
+]
