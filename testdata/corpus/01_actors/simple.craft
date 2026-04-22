@@ -1,0 +1,8 @@
+actors {
+    user Business_User
+    system CronA
+    service Database
+}
+
+actor user Customer
+actor system BackgroundWorker

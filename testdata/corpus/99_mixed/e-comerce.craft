@@ -1,0 +1,90 @@
+services {
+  WalletService {
+    contexts: Wallet, WalletItemPurchase, WalletItemAddition
+    data-stores: posgres, redis
+    language: golang
+  }
+  "Order Service" {
+    contexts: OrderManagement, OrderFulfilment
+    data-stores: posgres
+  }
+  service-re-go-vas { 
+    contexts: VASScheduling
+    data-stores: posgres, dynamodb
+  }
+}
+
+domain Monetization {
+  Wallet
+  WalletItemPurchase
+  WalletItemAddition
+  OrderManagement
+  OrderFulfilment
+  VASScheduling
+}
+
+use_case "Purchase VAS to Wallet" {
+  when Business_User purchases VAS to wallet
+    WalletItemPurchase asks Wallet to initiate a VAS addition
+    Wallet notifies "VAS Addition Request Approved"
+
+  when WalletItemPurchase listens "VAS Addition Request Approved"
+    WalletItemPurchase asks OrderManagement to create an Order
+    OrderManagement notifies "Order Created"
+    OrderManagement marks the Order as payment deferred
+    OrderManagement notifies "Order payment deferred"
+
+  when OrderFulfilment listens "Order payment deferred"
+    OrderFulfilment asks WalletItemAddition to fulfil the addition request
+    WalletItemAddition asks Wallet to add VAS
+    Wallet notifies "VAS added"
+      
+  when OrderFulfilment listens "VAS added"
+    OrderFulfilment asks OrderManagement to mark the Order as fulfiled
+    OrderManagement notifies "Order completed"
+}
+
+use_case "VAS scheduled and no VAS in Wallet" {
+  when Business_User schedules VAS
+    VASScheduling asks Wallet to reserve a VAS
+    Wallet creates an unconfirmed VAS reservation
+    Wallet notifies "VAS Addition Request Approved"
+    VASScheduling drafts a VAS schedule
+
+  when VASScheduling listens "VAS Addition Request Approved"
+    VASScheduling asks OrderManagement to create an Order
+    OrderManagement notifies "Order Created"
+    OrderManagement marks the Order as payment deferred
+    OrderManagement notifies "Order payment deferred"
+
+  when OrderFulfilment listens "Order payment deferred"
+    OrderFulfilment asks WalletItemAddition to fulfil the addition request
+    WalletItemAddition asks Wallet to add VAS
+    Wallet notifies "VAS added"
+      
+  when OrderFulfilment listens "VAS added"
+    OrderFulfilment asks OrderManagement to mark the Order as fulfiled
+    OrderManagement notifies "Order completed"
+}
+
+use_case "VAS scheduled and VAS in Wallet" {
+  when Business_User schedules VAS
+    VASScheduling asks Wallet to reserve a VAS
+    Wallet reserves a VAS
+    Wallet notifies "VAS Reserved"
+    VASScheduling creates a VAS schedule
+}
+
+use_case "VAS unscheduled" {
+  when Business_User unschedules a VAS scheduling
+    VASScheduling asks Wallet to cancel the VAS reservation
+    Wallet cancels VAS reservation
+    Wallet notifies "VAS Reservation Canceled"
+    VASScheduling cancels the VAS schedule
+}
+
+use_case "VAS expires" {
+  when CRON identifies a VAS expiring
+    Wallet removes VAS
+    Wallet notifies "VAS Expired"
+}

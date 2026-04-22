@@ -1,0 +1,223 @@
+// Craft VSCode Extension - Screenshot Examples
+// This file contains examples designed for taking documentation screenshots
+
+// =============================================================================
+// Example 1: Basic Syntax Highlighting
+// Use this section for showing syntax highlighting features
+// =============================================================================
+
+actors {
+    user Business_User
+    user Customer_Support
+    system CronScheduler
+    service EmailService
+}
+
+// =============================================================================
+// Example 2: Complete Architecture with Services
+// Use this for C4 diagram screenshots and full architecture views
+// =============================================================================
+
+arch {
+    presentation:
+        WebApp[framework:react, ssl:true]
+        MobileApp[framework:flutter]
+
+    gateway:
+        LoadBalancer[ssl:true] > APIGateway[type:nginx]
+}
+
+exposure default {
+    to: Business_User
+    through: APIGateway
+}
+
+// =============================================================================
+// Example 3: Domain Definitions
+// Use this for Domain Manager sidebar screenshots
+// =============================================================================
+
+domain User {
+    Authentication
+    Profile
+    Preferences
+}
+
+domain Product {
+    Catalog
+    Inventory
+    Pricing
+}
+
+domain Order {
+    OrderManagement
+    Payment
+    Shipping
+}
+
+domain Notification {
+    EmailNotifier
+    SMSNotifier
+    PushNotifier
+}
+
+// =============================================================================
+// Example 4: Services Definition
+// Use this for Services View sidebar screenshots
+// =============================================================================
+
+services {
+    UserService {
+        contexts: Authentication, Profile, Preferences
+        data-stores: postgresql
+        language: golang
+        deployment: canary
+    }
+    ProductService {
+        contexts: Catalog, Inventory, Pricing
+        data-stores: postgresql, redis
+        language: java
+    }
+    OrderService {
+        contexts: OrderManagement, Payment, Shipping
+        data-stores: postgresql, kafka
+        language: typescript
+    }
+    NotificationService {
+        contexts: EmailNotifier, SMSNotifier, PushNotifier
+        data-stores: rabbitmq
+        language: python
+    }
+}
+
+// =============================================================================
+// Example 5: Simple Use Case
+// Use this for basic use case flow screenshots
+// =============================================================================
+
+use_case "User Registration" {
+    when Business_User creates Account
+        Authentication validates email format
+        Authentication asks user_db to check email uniqueness
+        Profile creates user profile
+        Profile asks user_db to store profile data
+        Authentication notifies "UserRegistered"
+
+    when Profile listens "UserRegistered"
+        Preferences creates default preferences
+        Preferences asks user_db to save preferences
+        EmailNotifier sends welcome email
+}
+
+// =============================================================================
+// Example 6: Complex Use Case with Multiple Interactions
+// Use this for detailed domain diagram screenshots
+// =============================================================================
+
+use_case "Product Purchase Flow" {
+    when Business_User views Product
+        Catalog returns product details
+        Pricing calculates current price
+        Inventory checks availability
+
+    when Business_User adds Product to Cart
+        OrderManagement creates draft order
+        OrderManagement asks order_db to save draft
+        Inventory reserves stock
+        Pricing applies discounts
+        OrderManagement returns cart summary
+
+    when Business_User confirms Purchase
+        OrderManagement validates order
+        Payment processes payment
+        Payment asks payment_gateway to charge card
+        Payment notifies "PaymentCompleted"
+
+    when OrderManagement listens "PaymentCompleted"
+        OrderManagement marks order as paid
+        Inventory confirms stock allocation
+        Shipping creates shipment
+        Shipping asks shipping_provider to schedule pickup
+        OrderManagement notifies "OrderConfirmed"
+
+    when EmailNotifier listens "OrderConfirmed"
+        EmailNotifier sends order confirmation
+        SMSNotifier sends tracking notification
+}
+
+// =============================================================================
+// Example 7: Event-Driven Use Case
+// Use this for showing event-driven architecture and async patterns
+// =============================================================================
+
+use_case "Inventory Sync" {
+    when CronScheduler triggers "DailyInventorySync"
+        Inventory fetches stock levels
+        Inventory asks inventory_system to get current stock
+        Inventory notifies "StockLevelsUpdated"
+
+    when Catalog listens "StockLevelsUpdated"
+        Catalog updates product availability
+        Catalog asks product_db to update stock status
+        Catalog notifies "CatalogUpdated"
+
+    when PushNotifier listens "CatalogUpdated"
+        PushNotifier sends restock notifications
+        PushNotifier asks notification_queue to queue messages
+}
+
+// =============================================================================
+// Example 8: Cross-Domain Use Case
+// Use this for showing cross-references and complex interactions
+// =============================================================================
+
+use_case "Customer Support Inquiry" {
+    when Customer_Support views Order
+        OrderManagement fetches order details
+        OrderManagement asks order_db to retrieve order
+        Payment retrieves payment history
+        Shipping retrieves shipment status
+        OrderManagement returns complete order view
+
+    when Customer_Support updates Order
+        OrderManagement validates changes
+        OrderManagement asks order_db to update order
+        OrderManagement notifies "OrderUpdated"
+
+    when EmailNotifier listens "OrderUpdated"
+        EmailNotifier sends update notification to customer
+}
+
+// =============================================================================
+// Example 9: Simple Selection Example
+// Use this specific section for "Preview Selected" screenshots
+// Select only this use case for partial diagram generation
+// =============================================================================
+
+use_case "Password Reset" {
+    when Business_User requests password reset
+        Authentication validates email
+        Authentication generates reset token
+        Authentication asks user_db to store token
+        EmailNotifier sends reset email
+
+    when Business_User submits new password
+        Authentication validates reset token
+        Authentication asks user_db to verify token
+        Authentication updates password
+        Authentication notifies "PasswordChanged"
+
+    when EmailNotifier listens "PasswordChanged"
+        EmailNotifier sends confirmation email
+}
+
+// =============================================================================
+// Example 10: Minimal Example for Installation Verification
+// Use this minimal example in installation.md
+// =============================================================================
+
+use_case "User Login" {
+    when Business_User authenticates
+        Authentication validates credentials
+        Authentication returns access token
+}

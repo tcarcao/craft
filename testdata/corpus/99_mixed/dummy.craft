@@ -1,0 +1,12 @@
+use_case "VAS unscheduled" {
+  when Business_User unschedules a VAS scheduling
+    VASScheduling asks Wallet to cancel the VAS reservation
+    Wallet cancels VAS reservation
+    Wallet notifies "VAS Reservation Canceled"
+    VASScheduling cancels the VAS schedule
+}
+
+use_case "Scheduled VAS Applied" {
+  when VASMgmt identifies a scheduled VAS to apply
+    VASMgmt applies a VAS and stores details until when its valid
+}
