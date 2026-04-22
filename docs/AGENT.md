@@ -122,7 +122,7 @@ These are hard rules. Violations block merge.
 10. **Never touch `examples/*.craft`** during migration. They are frozen through v0.1 (tracer-bullets Q18). Modify `testdata/corpus/99_mixed/` copies instead.
 11. **Never publish to Marketplace or OpenVSX.** These actions belong to Tiago in S11a/S11b.
 12. **Never advertise an LSP capability whose handler is a no-op or panics.** See §3.
-13. **Never ignore `go vet` output.** Treat it as a failing build.
+13. **Never ignore `go vet` output on hand-written packages.** Use `make vet` (not `go vet ./...`) — `pkg/parser` is ANTLR-generated with pre-existing unreachable-code warnings that we must not edit. `make vet` covers all hand-written migration packages.
 14. **Never rename or restructure a public `pkg/craft/` type without following §5.**
 15. **Never skip hooks or bypass signing** on `git commit` or `git push`. If a hook fails, fix the underlying issue.
 16. **Never force-push to `main`.** Feature-branch force-pushes are fine; `main` is protected.
@@ -139,6 +139,9 @@ make generate-grammar
 
 # full test run
 go test ./...
+
+# vet hand-written packages (excludes ANTLR-generated pkg/parser — see never-do rule #13)
+make vet
 
 # differential harness (A = v2 vs goldens, B = ANTLR vs goldens)
 go test ./internal/parser_diff/...

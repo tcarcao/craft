@@ -78,6 +78,21 @@ docker-clean:
 test:
 	go test ./...
 
+# go vet scopes only to hand-written packages that do NOT transitively import
+# pkg/parser (ANTLR-generated). pkg/parser has pre-existing unreachable-code
+# warnings in generated code; we must not edit it per AGENT.md never-do rule #1,
+# and go vet reports all transitive packages, making full ./... exclusion
+# impractical without a linter config. Migration packages (S3+) are clean.
+vet:
+	go vet \
+		github.com/tcarcao/craft/internal/ast \
+		github.com/tcarcao/craft/internal/lexer \
+		github.com/tcarcao/craft/internal/syntax \
+		github.com/tcarcao/craft/internal/sema \
+		github.com/tcarcao/craft/internal/workspace \
+		github.com/tcarcao/craft/internal/lsp \
+		github.com/tcarcao/craft/pkg/craft
+
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:
