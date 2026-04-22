@@ -1,0 +1,10 @@
+actors {
+    user Alice
+    system Bob
+}
+
+actors {
+    service ExternalAPI
+}
+
+actor user Charlie

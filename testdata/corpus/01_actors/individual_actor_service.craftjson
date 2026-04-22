@@ -1,0 +1,9 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "PaymentGateway",
+      "type": "service"
+    }
+  ]
+}

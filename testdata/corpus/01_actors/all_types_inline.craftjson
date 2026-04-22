@@ -1,0 +1,17 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "EndUser",
+      "type": "user"
+    },
+    {
+      "name": "AutomatedJob",
+      "type": "system"
+    },
+    {
+      "name": "ThirdPartyService",
+      "type": "service"
+    }
+  ]
+}

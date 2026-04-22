@@ -1,0 +1,9 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Customer_Support",
+      "type": "user"
+    }
+  ]
+}

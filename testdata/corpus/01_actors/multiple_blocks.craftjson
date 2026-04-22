@@ -1,0 +1,24 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Alice",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "Bob",
+      "type": "system",
+      "line": 3
+    },
+    {
+      "name": "ExternalAPI",
+      "type": "service",
+      "line": 7
+    },
+    {
+      "name": "Charlie",
+      "type": "user"
+    }
+  ]
+}

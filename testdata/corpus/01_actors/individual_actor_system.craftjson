@@ -1,0 +1,9 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "BackgroundWorker",
+      "type": "system"
+    }
+  ]
+}

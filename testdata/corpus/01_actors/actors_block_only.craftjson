@@ -1,0 +1,20 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Business_User",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "CronA",
+      "type": "system",
+      "line": 3
+    },
+    {
+      "name": "Database",
+      "type": "service",
+      "line": 4
+    }
+  ]
+}

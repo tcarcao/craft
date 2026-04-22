@@ -1,0 +1,6 @@
+actors {
+    user Alice
+    system Bob
+}
+
+actor user Alice
