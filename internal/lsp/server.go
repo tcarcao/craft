@@ -1,7 +1,6 @@
 // Package lsp implements the Craft Language Server Protocol server.
-// S2: lifecycle scaffold only — initialize/initialized/shutdown/exit.
-// ServerCapabilities declares only textDocumentSync (Q20 rule: never declare
-// a capability the server doesn't actually serve).
+// S3: adds workspace + diagnostics + documentSymbol + hover handlers.
+// ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
 
 import (
@@ -10,18 +9,31 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
+	"time"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
 	"go.uber.org/zap"
+
+	"github.com/tcarcao/craft/internal/sema"
+	"github.com/tcarcao/craft/internal/workspace"
+	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // Server is the Craft LSP server. It satisfies protocol.Server.
 type Server struct {
 	conn     jsonrpc2.Conn
 	logger   *slog.Logger
+	ws       *workspace.Workspace
 	shutdown bool
 	exitCh   chan struct{}
+
+	// debounce state for publishDiagnostics
+	debounce struct {
+		mu     sync.Mutex
+		timers map[string]*time.Timer
+	}
 }
 
 // Serve reads JSON-RPC messages from r and writes responses to w until the
@@ -32,12 +44,15 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	conn := jsonrpc2.NewConn(stream)
 
 	logger := slog.Default()
+	ws := workspace.New(logger)
 
 	srv := &Server{
 		conn:   conn,
 		logger: logger,
+		ws:     ws,
 		exitCh: make(chan struct{}),
 	}
+	srv.debounce.timers = make(map[string]*time.Timer)
 
 	// The zap logger is required by go.lsp.dev/protocol's ServerHandler.
 	// We use a no-op production logger; slog handles real logging on stderr.
@@ -63,13 +78,24 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 
 // --- lifecycle ---
 
-func (s *Server) Initialize(_ context.Context, _ *protocol.InitializeParams) (*protocol.InitializeResult, error) {
+func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams) (*protocol.InitializeResult, error) {
 	s.logger.Info("craft lsp: initialize")
+
+	// Initialize workspace from rootUri/rootPath if provided (Q15).
+	if params != nil && params.RootURI != "" {
+		rootPath := uriToPath(string(params.RootURI))
+		if rootPath != "" {
+			go s.ws.Initialize(rootPath)
+		}
+	}
+
 	return &protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
-			// Q20: declare only textDocumentSync for now.
-			// Later slices add capabilities alongside their handlers.
-			TextDocumentSync: protocol.TextDocumentSyncKindFull,
+			// Q20: declare only capabilities we actually serve.
+			// S3 adds documentSymbol and hover alongside their handlers.
+			TextDocumentSync:       protocol.TextDocumentSyncKindFull,
+			DocumentSymbolProvider: true,
+			HoverProvider:          true,
 		},
 		ServerInfo: &protocol.ServerInfo{
 			Name:    "craft-lsp",
@@ -147,7 +173,14 @@ func (s *Server) Definition(_ context.Context, _ *protocol.DefinitionParams) ([]
 	return nil, nil
 }
 
-func (s *Server) DidChange(_ context.Context, _ *protocol.DidChangeTextDocumentParams) error {
+func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDocumentParams) error {
+	if params == nil || len(params.ContentChanges) == 0 {
+		return nil
+	}
+	uri := string(params.TextDocument.URI)
+	content := params.ContentChanges[len(params.ContentChanges)-1].Text
+	s.ws.Change(uri, content)
+	s.scheduleDiagnostics(ctx, uri)
 	return nil
 }
 
@@ -163,11 +196,21 @@ func (s *Server) DidChangeWorkspaceFolders(_ context.Context, _ *protocol.DidCha
 	return nil
 }
 
-func (s *Server) DidClose(_ context.Context, _ *protocol.DidCloseTextDocumentParams) error {
+func (s *Server) DidClose(_ context.Context, params *protocol.DidCloseTextDocumentParams) error {
+	if params == nil {
+		return nil
+	}
+	s.ws.Close(string(params.TextDocument.URI))
 	return nil
 }
 
-func (s *Server) DidOpen(_ context.Context, _ *protocol.DidOpenTextDocumentParams) error {
+func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocumentParams) error {
+	if params == nil {
+		return nil
+	}
+	uri := string(params.TextDocument.URI)
+	s.ws.Open(uri, params.TextDocument.Text)
+	s.scheduleDiagnostics(ctx, uri)
 	return nil
 }
 
@@ -191,8 +234,30 @@ func (s *Server) DocumentLinkResolve(_ context.Context, params *protocol.Documen
 	return params, nil
 }
 
-func (s *Server) DocumentSymbol(_ context.Context, _ *protocol.DocumentSymbolParams) ([]interface{}, error) {
-	return nil, nil
+func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymbolParams) ([]interface{}, error) {
+	if params == nil {
+		return nil, nil
+	}
+	f := s.ws.Get(string(params.TextDocument.URI))
+	if f == nil || f.AST == nil {
+		return nil, nil
+	}
+
+	var syms []interface{}
+	for _, a := range f.AST.Actors {
+		line := 0
+		if a.Line > 0 {
+			line = a.Line - 1
+		}
+		syms = append(syms, protocol.DocumentSymbol{
+			Name:           a.Name,
+			Kind:           protocol.SymbolKindObject,
+			Detail:         "actor: " + string(a.Type),
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+		})
+	}
+	return syms, nil
 }
 
 func (s *Server) ExecuteCommand(_ context.Context, _ *protocol.ExecuteCommandParams) (interface{}, error) {
@@ -207,7 +272,33 @@ func (s *Server) Formatting(_ context.Context, _ *protocol.DocumentFormattingPar
 	return nil, nil
 }
 
-func (s *Server) Hover(_ context.Context, _ *protocol.HoverParams) (*protocol.Hover, error) {
+func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
+	if params == nil {
+		return nil, nil
+	}
+	f := s.ws.Get(string(params.TextDocument.URI))
+	if f == nil || f.AST == nil {
+		return nil, nil
+	}
+
+	cursorLine := int(params.Position.Line) + 1 // convert to 1-based
+
+	for _, a := range f.AST.Actors {
+		declLine := a.Line
+		if declLine == 0 {
+			// Individual `actor` statements don't have a line recorded in AST;
+			// hover will not resolve them in S3 (improves with position tracking in S4+).
+			continue
+		}
+		if declLine == cursorLine {
+			return &protocol.Hover{
+				Contents: protocol.MarkupContent{
+					Kind:  protocol.PlainText,
+					Value: "actor: " + a.Name + " (" + string(a.Type) + ")",
+				},
+			}, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -325,6 +416,84 @@ func (s *Server) Moniker(_ context.Context, _ *protocol.MonikerParams) ([]protoc
 
 func (s *Server) Request(_ context.Context, method string, _ interface{}) (interface{}, error) {
 	return nil, fmt.Errorf("unknown request: %s", method)
+}
+
+// scheduleDiagnostics debounces publishDiagnostics for the given URI using
+// a 150ms timer (Q3a / C2). Concurrent calls for the same URI reset the timer.
+func (s *Server) scheduleDiagnostics(ctx context.Context, uri string) {
+	s.debounce.mu.Lock()
+	defer s.debounce.mu.Unlock()
+	if t, ok := s.debounce.timers[uri]; ok {
+		t.Stop()
+	}
+	s.debounce.timers[uri] = time.AfterFunc(150*time.Millisecond, func() {
+		s.publishDiagnostics(ctx, uri)
+	})
+}
+
+// publishDiagnostics runs sema on the cached parse result and pushes
+// textDocument/publishDiagnostics to the client.
+func (s *Server) publishDiagnostics(ctx context.Context, uri string) {
+	f := s.ws.Get(uri)
+	if f == nil {
+		return
+	}
+
+	_, semaDiags := sema.AnalyzeFile(uri, f.AST)
+	allDiags := append(f.Diagnostics, semaDiags...)
+
+	var lspDiags []protocol.Diagnostic
+	for _, d := range allDiags {
+		lspDiags = append(lspDiags, protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{
+					Line:      uint32(d.Range.Start.Line),
+					Character: uint32(d.Range.Start.Character),
+				},
+				End: protocol.Position{
+					Line:      uint32(d.Range.End.Line),
+					Character: uint32(d.Range.End.Character),
+				},
+			},
+			Severity: lspSeverity(d.Severity),
+			Code:     d.Code,
+			Message:  d.Message,
+			Source:   "craft",
+		})
+	}
+	if lspDiags == nil {
+		lspDiags = []protocol.Diagnostic{}
+	}
+
+	if err := s.conn.Notify(ctx, protocol.MethodTextDocumentPublishDiagnostics,
+		&protocol.PublishDiagnosticsParams{
+			URI:         protocol.DocumentURI(uri),
+			Diagnostics: lspDiags,
+		}); err != nil {
+		s.logger.Warn("publishDiagnostics: notify failed", "uri", uri, "err", err)
+	}
+}
+
+func lspSeverity(s craft.Severity) protocol.DiagnosticSeverity {
+	switch s {
+	case craft.SeverityError:
+		return protocol.DiagnosticSeverityError
+	case craft.SeverityWarning:
+		return protocol.DiagnosticSeverityWarning
+	case craft.SeverityInfo:
+		return protocol.DiagnosticSeverityInformation
+	default:
+		return protocol.DiagnosticSeverityHint
+	}
+}
+
+// uriToPath converts a file:// URI to an OS path.
+func uriToPath(uri string) string {
+	const prefix = "file://"
+	if len(uri) > len(prefix) && uri[:len(prefix)] == prefix {
+		return uri[len(prefix):]
+	}
+	return ""
 }
 
 // readWriteCloser wraps a separate reader and writer into an io.ReadWriteCloser.

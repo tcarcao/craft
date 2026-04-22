@@ -96,8 +96,10 @@ func TestServeLifecycle(t *testing.T) {
 
 	var result struct {
 		Capabilities struct {
-			TextDocumentSync interface{} `json:"textDocumentSync"`
-			CompletionProvider interface{} `json:"completionProvider"`
+			TextDocumentSync       interface{} `json:"textDocumentSync"`
+			CompletionProvider     interface{} `json:"completionProvider"`
+			DocumentSymbolProvider interface{} `json:"documentSymbolProvider"`
+			HoverProvider          interface{} `json:"hoverProvider"`
 		} `json:"capabilities"`
 		ServerInfo struct {
 			Name string `json:"name"`
@@ -110,7 +112,14 @@ func TestServeLifecycle(t *testing.T) {
 		t.Error("textDocumentSync capability missing")
 	}
 	if result.Capabilities.CompletionProvider != nil {
-		t.Error("completionProvider must not be declared in S2 (Q20)")
+		t.Error("completionProvider must not be declared (Q20)")
+	}
+	// S3 adds these capabilities (Q20 rule: declare alongside handler).
+	if result.Capabilities.DocumentSymbolProvider == nil {
+		t.Error("documentSymbolProvider must be declared in S3 (Q20)")
+	}
+	if result.Capabilities.HoverProvider == nil {
+		t.Error("hoverProvider must be declared in S3 (Q20)")
 	}
 	if result.ServerInfo.Name != "craft-lsp" {
 		t.Errorf("unexpected server name: %q", result.ServerInfo.Name)
