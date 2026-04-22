@@ -14,7 +14,7 @@ func main() {
 		Long:  "Parse, lint, inspect, and generate diagrams from .craft files.",
 	}
 
-	root.AddCommand(validateCmd(), generateCmd(), inspectCmd(), checkCmd())
+	root.AddCommand(validateCmd(), generateCmd(), inspectCmd(), checkCmd(), lspCmd())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
