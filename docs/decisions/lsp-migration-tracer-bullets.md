@@ -68,23 +68,23 @@ S2 (AFK) ──┘             └─▶ S13 (AFK, parallel after S3)
 
 ## Slice index
 
-| # | Title | Tag | Source-plan ref | Demoable artefact |
-|---|-------|-----|-----------------|-------------------|
-| S0 | Phase 0 guardrail docs | HITL | P0.6, P0.7, P0.8 | `GRAMMAR.md`, `ARCHITECTURE.md`, `AGENT.md` committed |
-| S1 | Canonical-contract tracer (`CraftDoc` full-grammar schema + ANTLR adapter + processor rewire + examples fork + 1 reviewed golden + Harness B) | AFK | P0.1, P0.2, P0.3 (seed), P0.4 (1 reviewed file), A0 (B half); expanded by Q1, Q18, Q22 | `craft check --parser=antlr` emits CraftDoc JSON; `craft visualize` byte-identical pre/post rewire; CI Harness B green |
-| S2 | Distribution tracer (hello-world LSP + surgery of existing client + TextMate grammar + unsigned VSIX build) | AFK | C1 (scaffold only), D1 (scoped by Q7), D1b, D2, D3 (build half, publish stub); Q6 adds TextMate | Local VSIX install on Linux, activation shows "craft lsp connected", baseline colouring works, preview commands + sidebar views still functional against existing HTTP server |
-| S3 | Actors end-to-end | AFK | A1 (partial), A2 (partial), A3a, B1 (seed), B2 (actor kind), C2, C3, C5, D-dogfood | `.craft` with only actors: diagnostics + outline + hover for actor names, both parsers agree |
-| S4 | Domains end-to-end | AFK | A3b, B2 (domain kind), C4 (semantic tokens introduced here) | Actors + domains coloured differently, outline expands, hover shows kind |
-| S5 | Services end-to-end + custom-command port | AFK | A3c, B3 (ResolutionMap seed), C6 (definition first use), Q16 custom-command port | Service blocks with `contexts:` jump to domain declarations via go-to-definition; sidebar services/domains views light up under `--parser=v2` |
-| S6 | Use cases end-to-end | AFK | A3d, B3 (full), B4 (validation rules) | Hover/goto on any identifier inside a `when` clause lands on its declaration across files |
-| S7 | Arch blocks end-to-end | AFK | A3e, C7 (folding) | `arch { presentation: … gateway: … }` folds in VSCode; outline shows segments |
-| S8 | Exposures end-to-end | AFK | A3f, A3g | Cross-kind refs (`to:` actor, `contexts:` domain, `through:` service) resolve; harness A green on 06/99 |
-| S9 | Error recovery end-to-end + diagnostic-codebook consolidation | AFK | A4, P0.5, B5 (lint merge); Q19 codebook consolidation | Red squiggles on broken blocks without cascading errors; `*.diagnostics.json` goldens assert `code` + `range` + `severity` (Q19), not `message` |
-| S10 | Perf + residual audit | AFK | A-bench, A4.5 (residual only per Q10) | Full corpus parses cold <50 ms / warm <5 ms in CI; residual visitor-test audit report confirms S3–S8 left no gap |
-| S11a | Flip default to v2 + pre-release publish | HITL | A5a (flip half), C-trace, D4, partial D3 (pre-release channel) | `craft` ships with `--parser=v2` default via VSCode pre-release channel; dogfooding underway |
-| S11b | Stable v0.1.0 release + macOS signing + tree-sitter pin | HITL | A5a (release half), D3 (stable publish), D5 (CORPUS_VERSION pin), Phase 1 DoD, **macOS signing deferred from S2 (Q8)** | Signed VSIXs on Marketplace + OpenVSX stable channel; `v0.1.0` tags pushed; `tree-sitter-craft/CORPUS_VERSION` pinned |
-| S12 | Delete ANTLR | HITL | A5b | ANTLR, adapter, Harness B, `--parser` flag, `diff-parsers` subcommand all gone |
-| S13 | Tree-sitter corpus-coupling infrastructure | AFK (parallel after S3) | D5 (infra half), D6; grammar catch-up itself is in S3–S8 paired PRs per Q12 | `CORPUS_VERSION` + fetch script + bidirectional CI wired; warning-only on craft side |
+| # | Title | Tag | Status | Source-plan ref | Demoable artefact |
+|---|-------|-----|--------|-----------------|-------------------|
+| S0 | Phase 0 guardrail docs | HITL | ✅ Drafted 2026-04-22 — awaiting Tiago review | P0.6, P0.7, P0.8 | `GRAMMAR.md`, `ARCHITECTURE.md`, `AGENT.md` committed |
+| S1 | Canonical-contract tracer (`CraftDoc` full-grammar schema + ANTLR adapter + processor rewire + examples fork + 1 reviewed golden + Harness B) | AFK | ⏳ Pending | P0.1, P0.2, P0.3 (seed), P0.4 (1 reviewed file), A0 (B half); expanded by Q1, Q18, Q22 | `craft check --parser=antlr` emits CraftDoc JSON; `craft visualize` byte-identical pre/post rewire; CI Harness B green |
+| S2 | Distribution tracer (hello-world LSP + surgery of existing client + TextMate grammar + unsigned VSIX build) | AFK | ⏳ Pending | C1 (scaffold only), D1 (scoped by Q7), D1b, D2, D3 (build half, publish stub); Q6 adds TextMate | Local VSIX install on Linux, activation shows "craft lsp connected", baseline colouring works, preview commands + sidebar views still functional against existing HTTP server |
+| S3 | Actors end-to-end | AFK | ⏳ Pending | A1 (partial), A2 (partial), A3a, B1 (seed), B2 (actor kind), C2, C3, C5, D-dogfood | `.craft` with only actors: diagnostics + outline + hover for actor names, both parsers agree |
+| S4 | Domains end-to-end | AFK | ⏳ Pending | A3b, B2 (domain kind), C4 (semantic tokens introduced here) | Actors + domains coloured differently, outline expands, hover shows kind |
+| S5 | Services end-to-end + custom-command port | AFK | ⏳ Pending | A3c, B3 (ResolutionMap seed), C6 (definition first use), Q16 custom-command port | Service blocks with `contexts:` jump to domain declarations via go-to-definition; sidebar services/domains views light up under `--parser=v2` |
+| S6 | Use cases end-to-end | AFK | ⏳ Pending | A3d, B3 (full), B4 (validation rules) | Hover/goto on any identifier inside a `when` clause lands on its declaration across files |
+| S7 | Arch blocks end-to-end | AFK | ⏳ Pending | A3e, C7 (folding) | `arch { presentation: … gateway: … }` folds in VSCode; outline shows segments |
+| S8 | Exposures end-to-end | AFK | ⏳ Pending | A3f, A3g | Cross-kind refs (`to:` actor, `contexts:` domain, `through:` service) resolve; harness A green on 06/99 |
+| S9 | Error recovery end-to-end + diagnostic-codebook consolidation | AFK | ⏳ Pending | A4, P0.5, B5 (lint merge); Q19 codebook consolidation | Red squiggles on broken blocks without cascading errors; `*.diagnostics.json` goldens assert `code` + `range` + `severity` (Q19), not `message` |
+| S10 | Perf + residual audit | AFK | ⏳ Pending | A-bench, A4.5 (residual only per Q10) | Full corpus parses cold <50 ms / warm <5 ms in CI; residual visitor-test audit report confirms S3–S8 left no gap |
+| S11a | Flip default to v2 + pre-release publish | HITL | ⏳ Pending | A5a (flip half), C-trace, D4, partial D3 (pre-release channel) | `craft` ships with `--parser=v2` default via VSCode pre-release channel; dogfooding underway |
+| S11b | Stable v0.1.0 release + macOS signing + tree-sitter pin | HITL | ⏳ Pending | A5a (release half), D3 (stable publish), D5 (CORPUS_VERSION pin), Phase 1 DoD, **macOS signing deferred from S2 (Q8)** | Signed VSIXs on Marketplace + OpenVSX stable channel; `v0.1.0` tags pushed; `tree-sitter-craft/CORPUS_VERSION` pinned |
+| S12 | Delete ANTLR | HITL | ⏳ Pending | A5b | ANTLR, adapter, Harness B, `--parser` flag, `diff-parsers` subcommand all gone |
+| S13 | Tree-sitter corpus-coupling infrastructure | AFK (parallel after S3) | ⏳ Pending | D5 (infra half), D6; grammar catch-up itself is in S3–S8 paired PRs per Q12 | `CORPUS_VERSION` + fetch script + bidirectional CI wired; warning-only on craft side |
 
 ---
 

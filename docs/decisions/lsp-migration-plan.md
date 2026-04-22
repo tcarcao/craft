@@ -277,14 +277,17 @@ spec that Track A codes against; P0.6–P0.8 are the human-authored guardrails.
       from ANTLR (whose error output is exactly what we're replacing).
       Covers: syntax errors at every block-kind boundary, missing
       terminators, unexpected tokens, deeply nested failures.
-- [ ] **P0.6.** `docs/GRAMMAR.md` — EBNF spec, written against the corpus.
+- [x] **P0.6.** `docs/GRAMMAR.md` — EBNF spec, written against the corpus.
       Corpus is authoritative on any conflict; GRAMMAR.md is prose+EBNF
       documentation, not a parallel source of truth.
-- [ ] **P0.7.** `docs/ARCHITECTURE.md` — layer boundaries, interfaces,
+      *(Drafted 2026-04-22 as part of S0. Awaiting Tiago review.)*
+- [x] **P0.7.** `docs/ARCHITECTURE.md` — layer boundaries, interfaces,
       Q1–Q15 decisions distilled. Codifies the layer dependency direction.
-- [ ] **P0.8.** `docs/AGENT.md` — operating rules, per-track task
+      *(Drafted 2026-04-22 as part of S0. Awaiting Tiago review.)*
+- [x] **P0.8.** `docs/AGENT.md` — operating rules, per-track task
       checklists, hard rules (never-do list), explicit red-green-refactor
       loop definition, green-between-commits rule.
+      *(Drafted 2026-04-22 as part of S0. Awaiting Tiago review.)*
 
 **Phase 0 exit criteria:** Harness B (ANTLR-vs-goldens; see Q13) is green
 on CI; the goldens are the committed source of truth. At this point Track A
