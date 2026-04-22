@@ -1,0 +1,4 @@
+domain Authentication {
+  LoginContext
+  RegistrationContext
+}

@@ -1,0 +1,13 @@
+{
+  "services": [
+    {
+      "name": "CommsService",
+      "contexts": [
+        "Notifier"
+      ],
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

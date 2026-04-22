@@ -1,0 +1,17 @@
+{
+  "services": [
+    {
+      "name": "Order Service",
+      "contexts": [
+        "OrderManagement",
+        "OrderFulfilment"
+      ],
+      "dataStores": [
+        "posgres"
+      ],
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

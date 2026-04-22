@@ -1,0 +1,12 @@
+services {
+  AccountService {
+    contexts: AccountManagement, BalanceTracking
+    data-stores: account_db
+    language: java
+  }
+  NotificationService {
+    contexts: CustomerNotification
+    data-stores: notification_queue
+    language: python
+  }
+}

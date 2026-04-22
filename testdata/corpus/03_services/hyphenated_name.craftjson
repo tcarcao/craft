@@ -1,0 +1,17 @@
+{
+  "services": [
+    {
+      "name": "service-re-go-vas",
+      "contexts": [
+        "VASScheduling"
+      ],
+      "dataStores": [
+        "posgres",
+        "dynamodb"
+      ],
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

@@ -1,0 +1,19 @@
+{
+  "services": [
+    {
+      "name": "PaymentService",
+      "contexts": [
+        "PaymentProcessing",
+        "TransactionValidation"
+      ],
+      "dataStores": [
+        "payment_db",
+        "fraud_detection_cache"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

@@ -1,0 +1,10 @@
+[
+  {
+    "code": "craft/sema/duplicate-name",
+    "severity": "error",
+    "range": {
+      "start": { "line": 5, "character": 0 },
+      "end": { "line": 5, "character": 14 }
+    }
+  }
+]

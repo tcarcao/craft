@@ -1,0 +1,6 @@
+services {
+  ReportService {
+    contexts: ReportGeneration
+    language: python
+  }
+}

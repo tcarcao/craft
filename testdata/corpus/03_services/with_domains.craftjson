@@ -1,0 +1,39 @@
+{
+  "services": [
+    {
+      "name": "WalletService",
+      "contexts": [
+        "Wallet"
+      ],
+      "dataStores": [
+        "postgres",
+        "redis"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 7
+    },
+    {
+      "name": "OrderService",
+      "contexts": [
+        "OrderManagement"
+      ],
+      "dataStores": [
+        "postgres"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 12
+    }
+  ],
+  "useCases": [],
+  "domains": [
+    {
+      "name": "Monetization",
+      "boundedContexts": [
+        "Wallet",
+        "OrderManagement"
+      ]
+    }
+  ]
+}

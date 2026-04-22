@@ -1,0 +1,18 @@
+{
+  "services": [
+    {
+      "name": "UserService",
+      "contexts": [
+        "LoginContext",
+        "RegistrationContext"
+      ],
+      "dataStores": [
+        "user_db"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

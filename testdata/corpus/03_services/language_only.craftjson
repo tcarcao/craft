@@ -1,0 +1,14 @@
+{
+  "services": [
+    {
+      "name": "ReportService",
+      "contexts": [
+        "ReportGeneration"
+      ],
+      "language": "python",
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

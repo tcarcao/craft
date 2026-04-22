@@ -1,0 +1,14 @@
+{
+  "services": [
+    {
+      "name": "AccountService",
+      "contexts": [
+        "AccountManagement"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 2
+    }
+  ],
+  "useCases": []
+}

@@ -1,0 +1,30 @@
+{
+  "services": [
+    {
+      "name": "AccountService",
+      "contexts": [
+        "AccountManagement",
+        "BalanceTracking"
+      ],
+      "dataStores": [
+        "account_db"
+      ],
+      "language": "java",
+      "deployment": {},
+      "line": 2
+    },
+    {
+      "name": "NotificationService",
+      "contexts": [
+        "CustomerNotification"
+      ],
+      "dataStores": [
+        "notification_queue"
+      ],
+      "language": "python",
+      "deployment": {},
+      "line": 7
+    }
+  ],
+  "useCases": []
+}

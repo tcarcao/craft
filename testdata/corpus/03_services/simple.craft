@@ -1,0 +1,6 @@
+services {
+  AccountService {
+    contexts: AccountManagement
+    language: golang
+  }
+}

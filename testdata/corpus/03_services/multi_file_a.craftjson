@@ -1,0 +1,12 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "Authentication",
+      "boundedContexts": [
+        "LoginContext",
+        "RegistrationContext"
+      ]
+    }
+  ]
+}

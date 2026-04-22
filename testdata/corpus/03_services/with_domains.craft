@@ -1,0 +1,17 @@
+domain Monetization {
+  Wallet
+  OrderManagement
+}
+
+services {
+  WalletService {
+    contexts: Wallet
+    data-stores: postgres, redis
+    language: golang
+  }
+  OrderService {
+    contexts: OrderManagement
+    data-stores: postgres
+    language: golang
+  }
+}

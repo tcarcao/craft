@@ -1,0 +1,10 @@
+services {
+  PaymentService {
+    contexts: Payment
+    language: golang
+  }
+  PaymentService {
+    contexts: Billing
+    language: java
+  }
+}

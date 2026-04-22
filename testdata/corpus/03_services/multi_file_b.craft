@@ -1,0 +1,7 @@
+services {
+  UserService {
+    contexts: LoginContext, RegistrationContext
+    data-stores: user_db
+    language: golang
+  }
+}

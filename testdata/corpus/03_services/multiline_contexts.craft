@@ -1,0 +1,7 @@
+services {
+  AccountService {
+    contexts: RegistrationApplication, AccountManagement, AccountManagementProcess,
+        AccountSettings, AccountNote
+    language: golang
+  }
+}

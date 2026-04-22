@@ -53,10 +53,10 @@ actor service DB`
 }
 
 func TestParse_UnsupportedKeywordEmitsWarning(t *testing.T) {
-	// v2 does not yet support `services` — should emit a warning and not crash.
+	// v2 does not yet support `use_case` — should emit a warning and not crash.
 	src := `actor user Foo
-services {
-    SomeService {}
+use_case "DoSomething" {
+    when User does something
 }`
 	f, diags := syntax.Parse(src)
 	if len(f.Actors) != 1 {
