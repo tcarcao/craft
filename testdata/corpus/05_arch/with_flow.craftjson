@@ -1,0 +1,48 @@
+{
+  "architectures": [
+    {
+      "name": "FlowArch",
+      "presentation": [
+        {
+          "name": "",
+          "type": "flow",
+          "chain": [
+            {
+              "name": "WebClient",
+              "type": "simple"
+            },
+            {
+              "name": "APIGateway",
+              "type": "simple"
+            },
+            {
+              "name": "ServiceMesh",
+              "type": "simple"
+            }
+          ]
+        }
+      ],
+      "gateway": [
+        {
+          "name": "",
+          "type": "flow",
+          "chain": [
+            {
+              "name": "LoadBalancer",
+              "type": "simple"
+            },
+            {
+              "name": "AuthService",
+              "type": "simple"
+            },
+            {
+              "name": "BusinessLogic",
+              "type": "simple"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "useCases": []
+}

@@ -19,7 +19,7 @@ var skippedSubdirs = map[string]bool{
 	// 02_domains: un-skipped in S4
 	// 03_services: un-skipped in S5
 	// 04_use_cases: un-skipped in S6
-	"05_arch":    true,
+	// 05_arch: un-skipped in S7
 	"06_exposures": true,
 	"99_mixed":     true,
 }

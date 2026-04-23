@@ -1,0 +1,52 @@
+{
+  "architectures": [
+    {
+      "name": "ModifiedArch",
+      "presentation": [
+        {
+          "name": "WebApp",
+          "type": "simple",
+          "modifiers": [
+            {
+              "key": "ssl"
+            },
+            {
+              "key": "cache"
+            }
+          ]
+        },
+        {
+          "name": "MobileApp",
+          "type": "simple",
+          "modifiers": [
+            {
+              "key": "auth",
+              "value": "oauth"
+            },
+            {
+              "key": "timeout",
+              "value": "30s"
+            }
+          ]
+        }
+      ],
+      "gateway": [
+        {
+          "name": "APIGateway",
+          "type": "simple",
+          "modifiers": [
+            {
+              "key": "rate_limit",
+              "value": "1000"
+            },
+            {
+              "key": "protocol",
+              "value": "https"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "useCases": []
+}

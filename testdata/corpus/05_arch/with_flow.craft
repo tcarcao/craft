@@ -1,0 +1,6 @@
+arch FlowArch {
+    presentation:
+        WebClient > APIGateway > ServiceMesh
+    gateway:
+        LoadBalancer > AuthService > BusinessLogic
+}

@@ -1,0 +1,8 @@
+arch MicroservicesArch {
+    presentation:
+        WebApp
+        MobileApp
+    gateway:
+        LoadBalancer
+        ReverseProxy
+}

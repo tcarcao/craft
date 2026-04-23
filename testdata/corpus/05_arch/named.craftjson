@@ -1,0 +1,28 @@
+{
+  "architectures": [
+    {
+      "name": "MicroservicesArch",
+      "presentation": [
+        {
+          "name": "WebApp",
+          "type": "simple"
+        },
+        {
+          "name": "MobileApp",
+          "type": "simple"
+        }
+      ],
+      "gateway": [
+        {
+          "name": "LoadBalancer",
+          "type": "simple"
+        },
+        {
+          "name": "ReverseProxy",
+          "type": "simple"
+        }
+      ]
+    }
+  ],
+  "useCases": []
+}

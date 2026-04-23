@@ -3,6 +3,8 @@
 //
 // S3: actors. S4: domains. S5: services + services block.
 // S6: use_case "..." { when ... } blocks.
+// S7: arch { presentation: ... gateway: ... } blocks with flow (>) and
+//     component modifiers ([key, key:value]).
 // Unsupported top-level keywords emit a recoverable "not-yet-implemented"
 // diagnostic so --parser=v2 is usable on partial files.
 package syntax
@@ -73,6 +75,12 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			diags = append(diags, d...)
 			if uc != nil {
 				file.UseCases = append(file.UseCases, uc)
+			}
+		case lexer.TokenKwArch:
+			arch, d := p.parseArchBlock()
+			diags = append(diags, d...)
+			if arch != nil {
+				file.Archs = append(file.Archs, arch)
 			}
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
@@ -888,14 +896,233 @@ func (p *Parser) collectPhrase() string {
 }
 
 
+// --- arch parsing ---
+
+// parseArchBlock parses: arch <name>? { <arch_sections> }
+// where arch_sections is one or more presentation: or gateway: labelled lists.
+func (p *Parser) parseArchBlock() (*ast.ArchDecl, []craft.Diagnostic) {
+	archTok := p.consume() // consume `arch`
+	var diags []craft.Diagnostic
+
+	arch := &ast.ArchDecl{Line: archTok.Line}
+
+	// Optional name: an identifier that is NOT `{`.
+	if p.peek().Type == lexer.TokenIdent || isAnyKeywordAsIdent(p.peek().Type) {
+		if p.peek().Type != lexer.TokenLBrace {
+			arch.Name = p.peek().Value
+			p.consume()
+		}
+	}
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume `{`
+
+	// Parse sections until `}` or EOF.
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+
+		// Section label detection: identifier followed by `:` at this position.
+		// presentation: or gateway: are the only valid section labels.
+		if (tok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(tok.Type)) && p.peekAt(1).Type == lexer.TokenColon {
+			label := tok.Value
+			labelLine := tok.Line
+			p.consume() // consume label ident
+			p.consume() // consume `:`
+
+			components, d := p.parseArchComponentList()
+			diags = append(diags, d...)
+
+			switch label {
+			case "presentation":
+				arch.Presentation = components
+				arch.PresentationLine = labelLine
+			case "gateway":
+				arch.Gateway = components
+				arch.GatewayLine = labelLine
+			default:
+				// Unknown section label — warn and discard components.
+				diags = append(diags, craft.Diagnostic{
+					Code:     "craft/syntax/unknown-arch-section",
+					Message:  fmt.Sprintf("unknown arch section %q; expected presentation or gateway", label),
+					Severity: craft.SeverityWarning,
+					Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(labelLine)}},
+				})
+			}
+		} else {
+			// Unexpected token in arch body — skip.
+			diags = append(diags, p.diagUnexpected(tok, "arch section label (presentation or gateway) or `}`"))
+			p.consume()
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed arch block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(archTok.Line)}},
+		})
+		return arch, diags
+	}
+	arch.EndLine = p.peek().Line
+	p.consume() // consume `}`
+	return arch, diags
+}
+
+// parseArchComponentList parses a list of arch components until a section label
+// (ident followed by `:`), `}`, or EOF. Each component is on its own logical line.
+func (p *Parser) parseArchComponentList() ([]*ast.ArchComponent, []craft.Diagnostic) {
+	var components []*ast.ArchComponent
+	var diags []craft.Diagnostic
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Stop if we see the start of another section label (ident:).
+		if (p.peek().Type == lexer.TokenIdent || isAnyKeywordAsIdent(p.peek().Type)) &&
+			p.peekAt(1).Type == lexer.TokenColon {
+			break
+		}
+		// Skip unexpected non-ident tokens.
+		if p.peek().Type != lexer.TokenIdent && !isAnyKeywordAsIdent(p.peek().Type) {
+			diags = append(diags, p.diagUnexpected(p.peek(), "component name or section label"))
+			p.consume()
+			continue
+		}
+
+		comp, d := p.parseArchComponent()
+		diags = append(diags, d...)
+		if comp != nil {
+			components = append(components, comp)
+		}
+	}
+	return components, diags
+}
+
+// parseArchComponent parses a single component entry. May be a simple component
+// or a flow chain (A > B > C), each component optionally bearing modifiers.
+func (p *Parser) parseArchComponent() (*ast.ArchComponent, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+
+	first, d := p.parseComponentWithModifiers()
+	diags = append(diags, d...)
+	if first == nil {
+		return nil, diags
+	}
+
+	// Check for flow operator `>`.
+	if p.peek().Type != lexer.TokenGT {
+		first.Type = "simple"
+		return first, diags
+	}
+
+	// Flow chain: collect all components separated by `>`.
+	chain := []*ast.ArchComponent{first}
+	for p.peek().Type == lexer.TokenGT {
+		p.consume() // consume `>`
+		next, d := p.parseComponentWithModifiers()
+		diags = append(diags, d...)
+		if next != nil {
+			next.Type = "simple"
+			chain = append(chain, next)
+		}
+	}
+
+	return &ast.ArchComponent{
+		Type:  "flow",
+		Chain: chain,
+	}, diags
+}
+
+// parseComponentWithModifiers parses: <name> ('[' modifier_list ']')?
+func (p *Parser) parseComponentWithModifiers() (*ast.ArchComponent, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+
+	nameTok := p.peek()
+	if nameTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(nameTok.Type) {
+		diags = append(diags, p.diagUnexpected(nameTok, "component name"))
+		return nil, diags
+	}
+	name := nameTok.Value
+	p.consume()
+
+	comp := &ast.ArchComponent{Name: name, Type: "simple"}
+
+	if p.peek().Type == lexer.TokenLBracket {
+		p.consume() // consume `[`
+		mods, d := p.parseModifierList()
+		diags = append(diags, d...)
+		comp.Modifiers = mods
+
+		if p.peek().Type == lexer.TokenRBracket {
+			p.consume() // consume `]`
+		} else {
+			diags = append(diags, p.diagUnexpected(p.peek(), "]"))
+		}
+	}
+
+	return comp, diags
+}
+
+// parseModifierList parses: modifier (',' modifier)* inside `[...]`.
+// A modifier is: identifier (':' identifier)?
+func (p *Parser) parseModifierList() ([]ast.ArchModifier, []craft.Diagnostic) {
+	var mods []ast.ArchModifier
+	var diags []craft.Diagnostic
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBracket {
+		keyTok := p.peek()
+		if keyTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(keyTok.Type) {
+			diags = append(diags, p.diagUnexpected(keyTok, "modifier key"))
+			p.consume()
+			continue
+		}
+		key := keyTok.Value
+		p.consume()
+
+		var value string
+		if p.peek().Type == lexer.TokenColon {
+			p.consume() // consume `:`
+			valTok := p.peek()
+			if valTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(valTok.Type) {
+				value = valTok.Value
+				p.consume()
+			} else {
+				diags = append(diags, p.diagUnexpected(valTok, "modifier value"))
+			}
+		}
+
+		mods = append(mods, ast.ArchModifier{Key: key, Value: value})
+
+		if p.peek().Type == lexer.TokenComma {
+			p.consume() // consume `,`
+		} else {
+			break
+		}
+	}
+	return mods, diags
+}
+
+// peekAt returns the token at pos+offset without advancing the lexer.
+func (p *Parser) peekAt(offset int) lexer.Token {
+	idx := p.pos + offset
+	if idx < len(p.tokens) {
+		return p.tokens[idx]
+	}
+	return lexer.Token{Type: lexer.TokenEOF}
+}
+
 // isAnyKeywordAsIdent returns true for keyword token types that can appear as
-// identifiers in use-case bodies (e.g. service names that happen to be keywords).
+// identifiers in use-case bodies or component names (e.g. keywords used as names).
 func isAnyKeywordAsIdent(tt lexer.TokenType) bool {
 	switch tt {
 	case lexer.TokenKwUser, lexer.TokenKwSystem, lexer.TokenKwService,
 		lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
-		lexer.TokenKwServices, lexer.TokenKwUseCase:
+		lexer.TokenKwServices, lexer.TokenKwUseCase,
+		lexer.TokenKwArch:
 		return true
 	}
 	return false
@@ -931,7 +1158,8 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 	switch tt {
 	case lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
-		lexer.TokenKwServices, lexer.TokenKwUseCase:
+		lexer.TokenKwServices, lexer.TokenKwUseCase,
+		lexer.TokenKwArch:
 		return true
 	}
 	return false

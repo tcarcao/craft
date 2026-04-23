@@ -1,0 +1,7 @@
+arch ModifiedArch {
+    presentation:
+        WebApp[ssl, cache]
+        MobileApp[auth:oauth, timeout:30s]
+    gateway:
+        APIGateway[rate_limit:1000, protocol:https]
+}

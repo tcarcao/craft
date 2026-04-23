@@ -1,0 +1,6 @@
+arch {
+    presentation:
+        Frontend
+    gateway:
+        APIGateway
+}

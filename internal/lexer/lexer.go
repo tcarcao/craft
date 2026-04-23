@@ -5,6 +5,8 @@
 // lex as plain identifiers per Q3.
 // S6: adds use_case keyword. Contextual keywords (when, asks, notifies,
 // listens, returns, to) remain plain identifiers per Q3.
+// S7: adds arch keyword; TokenGT (>), TokenLBracket ([), TokenRBracket (]).
+// presentation/gateway remain plain identifiers per Q3.
 // Unknown tokens are returned as TokenError so the parser can emit a
 // recoverable diagnostic.
 package lexer
@@ -46,6 +48,13 @@ const (
 	// S6: use_case keyword (contextual keywords when/asks/notifies/listens/returns/to are plain identifiers per Q3)
 	TokenKwUseCase // use_case
 
+	// S7: arch keyword + flow/modifier punctuation.
+	// presentation/gateway remain plain identifiers per Q3.
+	TokenKwArch    // arch
+	TokenGT        // > (component flow operator)
+	TokenLBracket  // [ (component modifier open)
+	TokenRBracket  // ] (component modifier close)
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -60,6 +69,7 @@ var keywords = map[string]TokenType{
 	"domains":  TokenKwDomains,
 	"services": TokenKwServices,
 	"use_case": TokenKwUseCase,
+	"arch":     TokenKwArch,
 }
 
 // Token is a scanned unit from the source.
@@ -119,6 +129,12 @@ func (l *Lexer) Next() Token {
 		return l.consume(TokenColon)
 	case ch == ',':
 		return l.consume(TokenComma)
+	case ch == '>':
+		return l.consume(TokenGT)
+	case ch == '[':
+		return l.consume(TokenLBracket)
+	case ch == ']':
+		return l.consume(TokenRBracket)
 	case ch == '"':
 		return l.scanString()
 	case ch == '\n':
@@ -243,7 +259,7 @@ func (l *Lexer) peek(offset int) rune {
 }
 
 func isIdentStart(r rune) bool {
-	return unicode.IsLetter(r) || r == '_'
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
 func isIdentContinue(r rune) bool {

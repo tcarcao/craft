@@ -19,6 +19,36 @@ type File struct {
 	Domains  []*DomainDecl   `json:"domains,omitempty"`
 	Services []*ServiceDecl  `json:"services,omitempty"`
 	UseCases []*UseCaseDecl  `json:"useCases,omitempty"`
+	Archs    []*ArchDecl     `json:"archs,omitempty"`
+}
+
+// ArchDecl represents an arch { ... } block.
+type ArchDecl struct {
+	Name         string
+	Presentation []*ArchComponent
+	Gateway      []*ArchComponent
+	// Line is the 1-based source line of the `arch` keyword.
+	Line int
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int
+	// PresentationLine is the 1-based source line of the `presentation:` label (0 if absent).
+	PresentationLine int
+	// GatewayLine is the 1-based source line of the `gateway:` label (0 if absent).
+	GatewayLine int
+}
+
+// ArchComponent represents a single component (simple or flow chain) within an arch section.
+type ArchComponent struct {
+	Name      string
+	Type      string           // "simple" or "flow"
+	Modifiers []ArchModifier
+	Chain     []*ArchComponent // non-nil when Type == "flow"
+}
+
+// ArchModifier is a key-value pair attached to an arch component.
+type ArchModifier struct {
+	Key   string
+	Value string
 }
 
 // ServiceDecl represents a service declaration inside a services { ... } block.
