@@ -7,6 +7,8 @@
 // S6: hover/definition/semanticTokens extended to cover actor/domain/service
 //     references inside use-case trigger subjects and action parties.
 //     use_case blocks added to documentSymbol outline.
+// S7: arch blocks added to documentSymbol outline; FoldingRanges handler
+//     returns one fold per arch block plus one per labelled segment inside arch.
 // ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
 
@@ -104,10 +106,12 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// S3: documentSymbol, hover.
 			// S4: semanticTokens (full) with actor/domain/service token types.
 			// S5: definition (go-to-definition), executeCommand (custom LSP commands).
+			// S7: foldingRange (arch blocks + labelled segments).
 			TextDocumentSync:       protocol.TextDocumentSyncKindFull,
 			DocumentSymbolProvider: true,
 			HoverProvider:          true,
 			DefinitionProvider:     true,
+			FoldingRangeProvider:   true,
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
@@ -443,6 +447,23 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
+	for _, arch := range f.AST.Archs {
+		line := 0
+		if arch.Line > 0 {
+			line = arch.Line - 1
+		}
+		name := arch.Name
+		if name == "" {
+			name = "arch"
+		}
+		syms = append(syms, protocol.DocumentSymbol{
+			Name:           name,
+			Kind:           protocol.SymbolKindPackage,
+			Detail:         "arch",
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+		})
+	}
 	return syms, nil
 }
 
@@ -543,9 +564,65 @@ type domainRef struct {
 	BCName string `json:"bcName"`
 }
 
-func (s *Server) FoldingRanges(_ context.Context, _ *protocol.FoldingRangeParams) ([]protocol.FoldingRange, error) {
-	return nil, nil
+// FoldingRanges returns folding ranges for the document.
+// S7: one fold per arch block, plus one per labelled segment (presentation/gateway)
+// inside each arch block. LSP line numbers are 0-based.
+func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeParams) ([]protocol.FoldingRange, error) {
+	if params == nil {
+		return nil, nil
+	}
+	f := s.ws.Get(string(params.TextDocument.URI))
+	if f == nil || f.AST == nil {
+		return nil, nil
+	}
+
+	var ranges []protocol.FoldingRange
+
+	for _, arch := range f.AST.Archs {
+		if arch.Line <= 0 || arch.EndLine <= arch.Line {
+			continue
+		}
+		// One fold for the entire arch block.
+		startLine := uint32(arch.Line - 1)
+		endLine := uint32(arch.EndLine - 1)
+		ranges = append(ranges, protocol.FoldingRange{
+			StartLine: startLine,
+			EndLine:   endLine,
+			Kind:      protocol.RegionFoldingRange,
+		})
+
+		// One fold per labelled section inside arch.
+		// presentation: folds from its label line to the line before gateway: (or arch end).
+		if arch.PresentationLine > 0 {
+			sectionStart := uint32(arch.PresentationLine - 1)
+			sectionEnd := endLine - 1 // default: end just before closing `}`
+			if arch.GatewayLine > 0 && arch.GatewayLine > arch.PresentationLine {
+				sectionEnd = uint32(arch.GatewayLine - 2) // end line before gateway label
+			}
+			if sectionEnd > sectionStart {
+				ranges = append(ranges, protocol.FoldingRange{
+					StartLine: sectionStart,
+					EndLine:   sectionEnd,
+					Kind:      protocol.RegionFoldingRange,
+				})
+			}
+		}
+		if arch.GatewayLine > 0 {
+			sectionStart := uint32(arch.GatewayLine - 1)
+			sectionEnd := endLine - 1
+			if sectionEnd > sectionStart {
+				ranges = append(ranges, protocol.FoldingRange{
+					StartLine: sectionStart,
+					EndLine:   sectionEnd,
+					Kind:      protocol.RegionFoldingRange,
+				})
+			}
+		}
+	}
+
+	return ranges, nil
 }
+
 
 func (s *Server) Formatting(_ context.Context, _ *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
 	return nil, nil

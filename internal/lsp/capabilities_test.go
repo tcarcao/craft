@@ -17,8 +17,8 @@ import (
 	"github.com/tcarcao/craft/internal/lsp"
 )
 
-// TestServerCapabilities_S5 asserts exactly the capabilities declared after S5.
-// Slices S6+ extend this list alongside their handlers (Q20).
+// TestServerCapabilities_S7 asserts exactly the capabilities declared after S7.
+// Slices S8+ extend this list alongside their handlers (Q20).
 func TestServerCapabilities_S5(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
@@ -87,12 +87,13 @@ func TestServerCapabilities_S5(t *testing.T) {
 	if result.Capabilities.ExecuteCommandProvider == nil {
 		t.Error("executeCommandProvider must be declared (S5, Q20)")
 	}
+	// S7 capability — added alongside FoldingRanges handler.
+	if result.Capabilities.FoldingRangeProvider == nil {
+		t.Error("foldingRangeProvider must be declared (S7, Q20)")
+	}
 	// Future capabilities — must not be declared yet.
 	if result.Capabilities.CompletionProvider != nil {
 		t.Error("completionProvider must not be declared yet (Q20)")
-	}
-	if result.Capabilities.FoldingRangeProvider != nil {
-		t.Error("foldingRangeProvider must not be declared yet (Q20); add in S7")
 	}
 
 	testOut.Close()

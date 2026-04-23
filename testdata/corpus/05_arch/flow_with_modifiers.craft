@@ -1,0 +1,6 @@
+arch ComplexFlowArch {
+    presentation:
+        WebClient[ssl] > APIGateway[auth:jwt] > ServiceMesh[tracing]
+    gateway:
+        EdgeProxy[ddos_protection] > AuthService[provider:auth0] > Router[strategy:path_based]
+}

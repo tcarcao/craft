@@ -1,0 +1,81 @@
+{
+  "architectures": [
+    {
+      "name": "ComplexFlowArch",
+      "presentation": [
+        {
+          "name": "",
+          "type": "flow",
+          "chain": [
+            {
+              "name": "WebClient",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "ssl"
+                }
+              ]
+            },
+            {
+              "name": "APIGateway",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "auth",
+                  "value": "jwt"
+                }
+              ]
+            },
+            {
+              "name": "ServiceMesh",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "tracing"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "gateway": [
+        {
+          "name": "",
+          "type": "flow",
+          "chain": [
+            {
+              "name": "EdgeProxy",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "ddos_protection"
+                }
+              ]
+            },
+            {
+              "name": "AuthService",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "provider",
+                  "value": "auth0"
+                }
+              ]
+            },
+            {
+              "name": "Router",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "strategy",
+                  "value": "path_based"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "useCases": []
+}

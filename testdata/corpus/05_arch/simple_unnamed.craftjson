@@ -1,0 +1,19 @@
+{
+  "architectures": [
+    {
+      "presentation": [
+        {
+          "name": "Frontend",
+          "type": "simple"
+        }
+      ],
+      "gateway": [
+        {
+          "name": "APIGateway",
+          "type": "simple"
+        }
+      ]
+    }
+  ],
+  "useCases": []
+}

@@ -46,7 +46,44 @@ func Project(f *ast.File) *craft.CraftDoc {
 		doc.UseCases = append(doc.UseCases, projectUseCase(uc))
 	}
 
+	for _, a := range f.Archs {
+		doc.Architectures = append(doc.Architectures, projectArch(a))
+	}
+
 	return doc
+}
+
+// projectArch converts an AST ArchDecl to a craft.ArchBlock.
+// Presentation and Gateway are always initialised as slices (never nil) to
+// match the ANTLR adapter's behaviour.
+func projectArch(a *ast.ArchDecl) craft.ArchBlock {
+	ab := craft.ArchBlock{
+		Name:         a.Name,
+		Presentation: []craft.Component{},
+		Gateway:      []craft.Component{},
+	}
+	for _, c := range a.Presentation {
+		ab.Presentation = append(ab.Presentation, projectArchComponent(c))
+	}
+	for _, c := range a.Gateway {
+		ab.Gateway = append(ab.Gateway, projectArchComponent(c))
+	}
+	return ab
+}
+
+// projectArchComponent converts an AST ArchComponent to a craft.Component.
+func projectArchComponent(c *ast.ArchComponent) craft.Component {
+	comp := craft.Component{
+		Name: c.Name,
+		Type: craft.ComponentType(c.Type),
+	}
+	for _, m := range c.Modifiers {
+		comp.Modifiers = append(comp.Modifiers, craft.ComponentModifier{Key: m.Key, Value: m.Value})
+	}
+	for _, ch := range c.Chain {
+		comp.Chain = append(comp.Chain, projectArchComponent(ch))
+	}
+	return comp
 }
 
 // projectUseCase converts a single AST UseCaseDecl to a craft.UseCase.
