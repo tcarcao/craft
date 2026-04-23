@@ -13,17 +13,8 @@ func Project(f *ast.File) *craft.CraftDoc {
 	doc := &craft.CraftDoc{
 		UseCases: []craft.UseCase{},
 	}
-	for _, s := range f.Services {
-		svc := craft.Service{
-			Name:       s.Name,
-			Contexts:   s.Contexts,
-			DataStores: s.DataStores,
-			Language:   s.Language,
-			Deployment: craft.DeploymentStrategy{Type: s.DeploymentType},
-			Line:       s.Line,
-		}
-		doc.Services = append(doc.Services, svc)
-	}
+	doc.Services = mergeServices(f.Services)
+
 	for _, a := range f.Actors {
 		doc.Actors = append(doc.Actors, craft.Actor{
 			Name: a.Name,
@@ -140,6 +131,63 @@ func projectTrigger(t ast.TriggerDecl) craft.Trigger {
 		Event:       t.Event,
 		Description: t.Description,
 	}
+}
+
+// mergeServices collapses multiple AST ServiceDecls that share the same name
+// into a single craft.Service, matching the ANTLR parser's service-merger
+// behaviour (internal/parser/service_merger.go). Merge rules:
+//   - Contexts and DataStores are unioned (duplicates removed, first-seen order).
+//   - Language and Deployment are taken from the first declaration that sets them.
+//   - Line is taken from the first declaration.
+func mergeServices(svcs []*ast.ServiceDecl) []craft.Service {
+	type entry struct {
+		svc    craft.Service
+		ctxSet map[string]bool
+		dsSet  map[string]bool
+	}
+	var order []string
+	byName := map[string]*entry{}
+
+	for _, s := range svcs {
+		e, exists := byName[s.Name]
+		if !exists {
+			e = &entry{
+				svc: craft.Service{
+					Name:       s.Name,
+					Deployment: craft.DeploymentStrategy{Type: s.DeploymentType},
+					Line:       s.Line,
+				},
+				ctxSet: map[string]bool{},
+				dsSet:  map[string]bool{},
+			}
+			byName[s.Name] = e
+			order = append(order, s.Name)
+		}
+		for _, c := range s.Contexts {
+			if !e.ctxSet[c] {
+				e.ctxSet[c] = true
+				e.svc.Contexts = append(e.svc.Contexts, c)
+			}
+		}
+		for _, d := range s.DataStores {
+			if !e.dsSet[d] {
+				e.dsSet[d] = true
+				e.svc.DataStores = append(e.svc.DataStores, d)
+			}
+		}
+		if e.svc.Language == "" && s.Language != "" {
+			e.svc.Language = s.Language
+		}
+		if e.svc.Deployment.Type == "" && s.DeploymentType != "" {
+			e.svc.Deployment.Type = s.DeploymentType
+		}
+	}
+
+	out := make([]craft.Service, 0, len(order))
+	for _, name := range order {
+		out = append(out, byName[name].svc)
+	}
+	return out
 }
 
 // projectAction converts an AST ActionDecl to a craft.Action.

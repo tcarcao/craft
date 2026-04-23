@@ -1,0 +1,30 @@
+{
+  "services": [
+    {
+      "name": "UserService",
+      "contexts": [
+        "User",
+        "Authentication",
+        "Domain",
+        "Service"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 2
+    },
+    {
+      "name": "ActorService",
+      "contexts": [
+        "Actor",
+        "Actors"
+      ],
+      "dataStores": [
+        "actor_db"
+      ],
+      "language": "java",
+      "deployment": {},
+      "line": 6
+    }
+  ],
+  "useCases": []
+}

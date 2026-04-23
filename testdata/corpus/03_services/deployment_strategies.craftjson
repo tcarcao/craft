@@ -1,0 +1,38 @@
+{
+  "services": [
+    {
+      "name": "CanaryService",
+      "contexts": [
+        "CanaryContext"
+      ],
+      "language": "golang",
+      "deployment": {
+        "type": "canary"
+      },
+      "line": 2
+    },
+    {
+      "name": "BlueGreenService",
+      "contexts": [
+        "BlueGreenContext"
+      ],
+      "language": "java",
+      "deployment": {
+        "type": "blue_green"
+      },
+      "line": 7
+    },
+    {
+      "name": "RollingService",
+      "contexts": [
+        "RollingContext"
+      ],
+      "language": "python",
+      "deployment": {
+        "type": "rolling"
+      },
+      "line": 12
+    }
+  ],
+  "useCases": []
+}

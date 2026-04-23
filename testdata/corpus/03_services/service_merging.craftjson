@@ -1,0 +1,29 @@
+{
+  "services": [
+    {
+      "name": "UserService",
+      "contexts": [
+        "User",
+        "Authentication",
+        "Profile",
+        "Settings"
+      ],
+      "dataStores": [
+        "user_db"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 2
+    },
+    {
+      "name": "PaymentService",
+      "contexts": [
+        "Payment"
+      ],
+      "language": "java",
+      "deployment": {},
+      "line": 13
+    }
+  ],
+  "useCases": []
+}

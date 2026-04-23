@@ -336,8 +336,9 @@ progressively un-skips files in its `testdata/corpus/NN_kind/` subdirectory.
       `testdata/corpus/`. Back-fill missing cases as new corpus entries
       (with goldens generated via P0.2 adapter + human review). This is the
       safety net that lets A5b delete the visitor tests en bloc.
-- [ ] **A-bench.** `internal/syntax/bench_test.go` — full corpus parses
+- [x] **A-bench.** `internal/syntax/bench_test.go` — full corpus parses
       cold <50ms, warm <5ms (documented in CI).
+      *(Completed 2026-04-23 in S10. Cold ~1.5ms, warm ~0.5ms on M1 Pro.)*
 - [ ] **A5a.** **Flip default parser** from `antlr` to `v2`. Release v0.1.0.
       Gate (human sign-off by Tiago; no fixed duration):
       - A3a–A3g + A4 + A4.5 + A-bench all green

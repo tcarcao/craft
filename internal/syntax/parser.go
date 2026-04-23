@@ -483,17 +483,19 @@ func (p *Parser) parseIdentList() []string {
 // parseIdentListWithLines parses a comma-separated list of identifiers (or
 // strings) and returns both the values and their 1-based source lines.
 // Used for contexts: so go-to-definition can match the cursor line.
+// Per Q3, contextual keywords (e.g. user, domain, service) are valid
+// identifiers when they appear in list position — accept any keyword token.
 func (p *Parser) parseIdentListWithLines() ([]string, []int) {
 	var items []string
 	var lines []int
 	for {
 		tok := p.peek()
 		var val string
-		switch tok.Type {
-		case lexer.TokenIdent:
+		switch {
+		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
 			val = tok.Value
 			p.consume()
-		case lexer.TokenString:
+		case isKeywordUsedAsIdent(tok.Type):
 			val = tok.Value
 			p.consume()
 		default:
@@ -509,6 +511,21 @@ func (p *Parser) parseIdentListWithLines() ([]string, []int) {
 		}
 	}
 	return items, lines
+}
+
+// isKeywordUsedAsIdent returns true for keyword token types that the grammar
+// allows as plain identifiers in list and name positions (Q3: contextual
+// keywords are only keywords by position, not globally reserved).
+func isKeywordUsedAsIdent(tt lexer.TokenType) bool {
+	switch tt {
+	case lexer.TokenKwUser, lexer.TokenKwSystem, lexer.TokenKwService,
+		lexer.TokenKwActor, lexer.TokenKwActors,
+		lexer.TokenKwDomain, lexer.TokenKwDomains,
+		lexer.TokenKwServices, lexer.TokenKwUseCase,
+		lexer.TokenKwArch, lexer.TokenKwExposure:
+		return true
+	}
+	return false
 }
 
 // skipToNextField advances tokens until it finds what looks like the start of
@@ -1293,9 +1310,9 @@ func (p *Parser) parseExposureBlock() (*ast.ExposureDecl, []craft.Diagnostic) {
 	p.consume() // consume `exposure`
 	var diags []craft.Diagnostic
 
-	// Exposure name: any identifier (including "default").
+	// Exposure name: any identifier or keyword-used-as-identifier (including "default").
 	nameTok := p.peek()
-	if nameTok.Type != lexer.TokenIdent {
+	if nameTok.Type != lexer.TokenIdent && !isKeywordUsedAsIdent(nameTok.Type) {
 		diags = append(diags, p.diagUnexpected(nameTok, "exposure name"))
 		p.resyncToTopLevel()
 		return nil, diags
