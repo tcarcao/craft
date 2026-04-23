@@ -78,7 +78,7 @@ S2 (AFK) ──┘             └─▶ S13 (AFK, parallel after S3)
 | S5 | Services end-to-end + custom-command port | AFK | ✅ Complete 2026-04-22 | A3c, B3 (ResolutionMap seed), C6 (definition first use), Q16 custom-command port | Service blocks with `contexts:` jump to domain declarations via go-to-definition; sidebar services/domains views light up under `--parser=v2` |
 | S6 | Use cases end-to-end | AFK | ✅ Complete | A3d, B3 (full), B4 (validation rules) | Hover/goto on any identifier inside a `when` clause lands on its declaration across files |
 | S7 | Arch blocks end-to-end | AFK | ✅ Complete 2026-04-22 | A3e, C7 (folding) | `arch { presentation: … gateway: … }` folds in VSCode; outline shows segments |
-| S8 | Exposures end-to-end | AFK | ⏳ Pending | A3f, A3g | Cross-kind refs (`to:` actor, `contexts:` domain, `through:` service) resolve; harness A green on 06/99 |
+| S8 | Exposures end-to-end | AFK | ✅ Complete 2026-04-23 | A3f, A3g | Cross-kind refs (`to:` actor, `contexts:` domain, `through:` service) resolve; harness A green on 06/99 |
 | S9 | Error recovery end-to-end + diagnostic-codebook consolidation | AFK | ⏳ Pending | A4, P0.5, B5 (lint merge); Q19 codebook consolidation | Red squiggles on broken blocks without cascading errors; `*.diagnostics.json` goldens assert `code` + `range` + `severity` (Q19), not `message` |
 | S10 | Perf + residual audit | AFK | ⏳ Pending | A-bench, A4.5 (residual only per Q10) | Full corpus parses cold <50 ms / warm <5 ms in CI; residual visitor-test audit report confirms S3–S8 left no gap |
 | S11a | Flip default to v2 + pre-release publish | HITL | ⏳ Pending | A5a (flip half), C-trace, D4, partial D3 (pre-release channel) | `craft` ships with `--parser=v2` default via VSCode pre-release channel; dogfooding underway |
@@ -363,7 +363,7 @@ Each slice is self-contained: the sections below can be pasted as-is into indivi
 
 ---
 
-### S8 — Exposures end-to-end *(AFK)*
+### S8 — Exposures end-to-end ✅ Complete 2026-04-23
 
 **Source-plan ref:** A3f, A3g.
 

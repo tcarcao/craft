@@ -1,0 +1,757 @@
+{
+  "useCases": [
+    {
+      "name": "C2C user purchases",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "decides",
+            "phrase": "purchase a VAS",
+            "description": "when Customer decides purchase a VAS"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "return_action",
+              "domain": "Offering",
+              "phrase": "available offering",
+              "description": "Offering returns available offering",
+              "line": 3
+            }
+          ]
+        },
+        {
+          "id": "scenario_3",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "asks",
+            "phrase": "Order to create an order",
+            "description": "when Customer asks Order to create an order"
+          },
+          "actions": [
+            {
+              "id": "action_4",
+              "type": "internal_action",
+              "domain": "Order",
+              "verb": "creates",
+              "connector": "a",
+              "phrase": "draft Order",
+              "description": "Order creates a draft Order",
+              "line": 6
+            },
+            {
+              "id": "action_5",
+              "type": "return_action",
+              "domain": "Order",
+              "connector": "the",
+              "phrase": "url of the payment providers",
+              "description": "Order returns url of the payment providers",
+              "line": 7
+            }
+          ]
+        },
+        {
+          "id": "scenario_6",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "pays",
+            "phrase": "the order",
+            "description": "when Customer pays the order"
+          },
+          "actions": [
+            {
+              "id": "action_7",
+              "type": "internal_action",
+              "domain": "PaymentProvider",
+              "verb": "confirms",
+              "phrase": "payment",
+              "description": "PaymentProvider confirms payment",
+              "line": 10
+            },
+            {
+              "id": "action_8",
+              "type": "async_action",
+              "domain": "PaymentProvider",
+              "event": "PaymentCompleted",
+              "description": "PaymentProvider notifies \"PaymentCompleted\"",
+              "line": 11
+            }
+          ]
+        },
+        {
+          "id": "scenario_9",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "Order",
+            "event": "PaymentCompleted",
+            "description": "when Order listens \"PaymentCompleted\""
+          },
+          "actions": [
+            {
+              "id": "action_10",
+              "type": "internal_action",
+              "domain": "Order",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "Order as Paid",
+              "description": "Order marks the Order as Paid",
+              "line": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS scheduled and no VAS in Wallet",
+      "scenarios": [
+        {
+          "id": "scenario_11",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "schedules",
+            "phrase": "VAS",
+            "description": "when Business_User schedules VAS"
+          },
+          "actions": [
+            {
+              "id": "action_12",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "reserve a VAS",
+              "description": "VASScheduling asks Wallet to reserve a VAS",
+              "line": 20
+            },
+            {
+              "id": "action_13",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "creates",
+              "connector": "an",
+              "phrase": "unconfirmed VAS reservation",
+              "description": "Wallet creates an unconfirmed VAS reservation",
+              "line": 21
+            },
+            {
+              "id": "action_14",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Addition Request Approved",
+              "description": "Wallet notifies \"VAS Addition Request Approved\"",
+              "line": 22
+            },
+            {
+              "id": "action_15",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "drafts",
+              "connector": "a",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling drafts a VAS schedule",
+              "line": 23
+            }
+          ]
+        },
+        {
+          "id": "scenario_16",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "VASScheduling",
+            "event": "VAS Addition Request Approved",
+            "description": "when VASScheduling listens \"VAS Addition Request Approved\""
+          },
+          "actions": [
+            {
+              "id": "action_17",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "OrderManagement",
+              "connector": "to",
+              "phrase": "create an Order",
+              "description": "VASScheduling asks OrderManagement to create an Order",
+              "line": 26
+            },
+            {
+              "id": "action_18",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order Created",
+              "description": "OrderManagement notifies \"Order Created\"",
+              "line": 27
+            },
+            {
+              "id": "action_19",
+              "type": "internal_action",
+              "domain": "OrderManagement",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "Order as payment deferred",
+              "description": "OrderManagement marks the Order as payment deferred",
+              "line": 28
+            },
+            {
+              "id": "action_20",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order payment deferred",
+              "description": "OrderManagement notifies \"Order payment deferred\"",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "id": "scenario_21",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "Order payment deferred",
+            "description": "when OrderFulfilment listens \"Order payment deferred\""
+          },
+          "actions": [
+            {
+              "id": "action_22",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "WalletItemAddition",
+              "connector": "to",
+              "phrase": "fulfil the addition request",
+              "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
+              "line": 32
+            },
+            {
+              "id": "action_23",
+              "type": "sync_action",
+              "domain": "WalletItemAddition",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "add VAS",
+              "description": "WalletItemAddition asks Wallet to add VAS",
+              "line": 33
+            },
+            {
+              "id": "action_24",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS added",
+              "description": "Wallet notifies \"VAS added\"",
+              "line": 34
+            }
+          ]
+        },
+        {
+          "id": "scenario_25",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "VAS added",
+            "description": "when OrderFulfilment listens \"VAS added\""
+          },
+          "actions": [
+            {
+              "id": "action_26",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "OrderManagement",
+              "connector": "to",
+              "phrase": "mark the Order as fulfiled",
+              "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
+              "line": 37
+            },
+            {
+              "id": "action_27",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order completed",
+              "description": "OrderManagement notifies \"Order completed\"",
+              "line": 38
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS scheduled and VAS in Wallet",
+      "scenarios": [
+        {
+          "id": "scenario_28",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "schedules",
+            "phrase": "VAS",
+            "description": "when Business_User schedules VAS"
+          },
+          "actions": [
+            {
+              "id": "action_29",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "reserve a VAS",
+              "description": "VASScheduling asks Wallet to reserve a VAS",
+              "line": 43
+            },
+            {
+              "id": "action_30",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "reserves",
+              "connector": "a",
+              "phrase": "VAS",
+              "description": "Wallet reserves a VAS",
+              "line": 44
+            },
+            {
+              "id": "action_31",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Reserved",
+              "description": "Wallet notifies \"VAS Reserved\"",
+              "line": 45
+            },
+            {
+              "id": "action_32",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "creates",
+              "connector": "a",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling creates a VAS schedule",
+              "line": 46
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS unscheduled",
+      "scenarios": [
+        {
+          "id": "scenario_33",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "unschedules",
+            "phrase": "VAS scheduling",
+            "description": "when Business_User unschedules VAS scheduling"
+          },
+          "actions": [
+            {
+              "id": "action_34",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "cancel the VAS reservation",
+              "description": "VASScheduling asks Wallet to cancel the VAS reservation",
+              "line": 51
+            },
+            {
+              "id": "action_35",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "cancels",
+              "phrase": "VAS reservation",
+              "description": "Wallet cancels VAS reservation",
+              "line": 52
+            },
+            {
+              "id": "action_36",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Reservation Canceled",
+              "description": "Wallet notifies \"VAS Reservation Canceled\"",
+              "line": 53
+            },
+            {
+              "id": "action_37",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "cancels",
+              "connector": "the",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling cancels the VAS schedule",
+              "line": 54
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS expires",
+      "scenarios": [
+        {
+          "id": "scenario_38",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "identifies",
+            "phrase": "VAS expiring",
+            "description": "when CRON identifies VAS expiring"
+          },
+          "actions": [
+            {
+              "id": "action_39",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "removes",
+              "phrase": "VAS",
+              "description": "Wallet removes VAS",
+              "line": 59
+            },
+            {
+              "id": "action_40",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Expired",
+              "description": "Wallet notifies \"VAS Expired\"",
+              "line": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Purchase VAS schedule and its renewal (ideal scenario)",
+      "scenarios": [
+        {
+          "id": "scenario_41",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "schedules",
+            "phrase": "VAS",
+            "description": "when Business_User schedules VAS"
+          },
+          "actions": [
+            {
+              "id": "action_42",
+              "type": "internal_action",
+              "domain": "OrderMgmt",
+              "verb": "creates",
+              "connector": "an",
+              "phrase": "Order with two items to fulfil: VAS and VAS Subscription",
+              "description": "OrderMgmt creates an Order with two items to fulfil: VAS and VAS Subscription",
+              "line": 67
+            },
+            {
+              "id": "action_43",
+              "type": "async_action",
+              "domain": "OrderMgmt",
+              "event": "Order Created",
+              "description": "OrderMgmt notifies \"Order Created\"",
+              "line": 68
+            },
+            {
+              "id": "action_44",
+              "type": "internal_action",
+              "domain": "OrderMgmt",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "Order as payment deferred",
+              "description": "OrderMgmt marks the Order as payment deferred",
+              "line": 69
+            },
+            {
+              "id": "action_45",
+              "type": "async_action",
+              "domain": "OrderMgmt",
+              "event": "Order payment deferred",
+              "description": "OrderMgmt notifies \"Order payment deferred\"",
+              "line": 70
+            }
+          ]
+        },
+        {
+          "id": "scenario_46",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "Order payment deferred",
+            "description": "when OrderFulfilment listens \"Order payment deferred\""
+          },
+          "actions": [
+            {
+              "id": "action_47",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "VASMgmt",
+              "connector": "to",
+              "phrase": "schedule the VAS",
+              "description": "OrderFulfilment asks VASMgmt to schedule the VAS",
+              "line": 73
+            },
+            {
+              "id": "action_48",
+              "type": "internal_action",
+              "domain": "VASMgmt",
+              "verb": "schedules",
+              "connector": "the",
+              "phrase": "VAS for future application",
+              "description": "VASMgmt schedules the VAS for future application",
+              "line": 74
+            },
+            {
+              "id": "action_49",
+              "type": "async_action",
+              "domain": "VASMgmt",
+              "event": "VAS scheduled",
+              "description": "VASMgmt notifies \"VAS scheduled\"",
+              "line": 75
+            }
+          ]
+        },
+        {
+          "id": "scenario_50",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "VAS scheduled",
+            "description": "when OrderFulfilment listens \"VAS scheduled\""
+          },
+          "actions": [
+            {
+              "id": "action_51",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "Subscription",
+              "connector": "to",
+              "phrase": "create a VAS Subscription",
+              "description": "OrderFulfilment asks Subscription to create a VAS Subscription",
+              "line": 78
+            },
+            {
+              "id": "action_52",
+              "type": "internal_action",
+              "domain": "Subscription",
+              "verb": "creates",
+              "connector": "a",
+              "phrase": "VAS Subscription with the details",
+              "description": "Subscription creates a VAS Subscription with the details",
+              "line": 79
+            },
+            {
+              "id": "action_53",
+              "type": "internal_action",
+              "domain": "OrderFulfilment",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "vas subscription item as Fulfiled",
+              "description": "OrderFulfilment marks the vas subscription item as Fulfiled",
+              "line": 80
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Purchase VAS schedule and its renewal (current possible scenario)",
+      "scenarios": [
+        {
+          "id": "scenario_54",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "schedules",
+            "phrase": "VAS",
+            "description": "when Business_User schedules VAS"
+          },
+          "actions": [
+            {
+              "id": "action_55",
+              "type": "internal_action",
+              "domain": "VASMgmt",
+              "verb": "schedules",
+              "connector": "a",
+              "phrase": "VAS for future application",
+              "description": "VASMgmt schedules a VAS for future application",
+              "line": 85
+            },
+            {
+              "id": "action_56",
+              "type": "async_action",
+              "domain": "VASMgmt",
+              "event": "VAS scheduled with subscription included",
+              "description": "VASMgmt notifies \"VAS scheduled with subscription included\"",
+              "line": 86
+            }
+          ]
+        },
+        {
+          "id": "scenario_57",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "Subscription",
+            "event": "VAS scheduled with subscription included",
+            "description": "when Subscription listens \"VAS scheduled with subscription included\""
+          },
+          "actions": [
+            {
+              "id": "action_58",
+              "type": "internal_action",
+              "domain": "Subscription",
+              "verb": "creates",
+              "connector": "a",
+              "phrase": "VAS Subscription with the details",
+              "description": "Subscription creates a VAS Subscription with the details",
+              "line": 89
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scheduled VAS Applied",
+      "scenarios": [
+        {
+          "id": "scenario_59",
+          "trigger": {
+            "type": "external",
+            "actor": "VASMgmt",
+            "verb": "identifies",
+            "phrase": "scheduled VAS to apply",
+            "description": "when VASMgmt identifies scheduled VAS to apply"
+          },
+          "actions": [
+            {
+              "id": "action_60",
+              "type": "internal_action",
+              "domain": "VASMgmt",
+              "verb": "applies",
+              "connector": "a",
+              "phrase": "VAS and stores details until when its valid",
+              "description": "VASMgmt applies a VAS and stores details until when its valid",
+              "line": 94
+            },
+            {
+              "id": "action_61",
+              "type": "async_action",
+              "domain": "VASMgmt",
+              "event": "VAS Applied",
+              "description": "VASMgmt notifies \"VAS Applied\"",
+              "line": 95
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS Renewal Flow",
+      "scenarios": [
+        {
+          "id": "scenario_62",
+          "trigger": {
+            "type": "external",
+            "actor": "VASMgmt",
+            "verb": "identifies",
+            "phrase": "VAS expired",
+            "description": "when VASMgmt identifies VAS expired"
+          },
+          "actions": [
+            {
+              "id": "action_63",
+              "type": "internal_action",
+              "domain": "VASMgmt",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "VAS as expired",
+              "description": "VASMgmt marks the VAS as expired",
+              "line": 100
+            },
+            {
+              "id": "action_64",
+              "type": "async_action",
+              "domain": "VASMgmt",
+              "event": "VAS expired",
+              "description": "VASMgmt notifies \"VAS expired\"",
+              "line": 101
+            }
+          ]
+        },
+        {
+          "id": "scenario_65",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "Subscription",
+            "event": "VAS expired",
+            "description": "when Subscription listens \"VAS expired\""
+          },
+          "actions": [
+            {
+              "id": "action_66",
+              "type": "internal_action",
+              "domain": "Subscription",
+              "verb": "checks",
+              "phrase": "if VAS has active associated subscription",
+              "description": "Subscription checks if VAS has active associated subscription",
+              "line": 104
+            },
+            {
+              "id": "action_67",
+              "type": "sync_action",
+              "domain": "Subscription",
+              "targetDomain": "VASMgmt",
+              "connector": "to",
+              "phrase": "schedule/apply a new VAS",
+              "description": "Subscription asks VASMgmt to schedule/apply a new VAS",
+              "line": 105
+            },
+            {
+              "id": "action_68",
+              "type": "internal_action",
+              "domain": "Subscription",
+              "verb": "renews",
+              "connector": "the",
+              "phrase": "VAS Subscription with the VAS",
+              "description": "Subscription renews the VAS Subscription with the VAS",
+              "line": 106
+            },
+            {
+              "id": "action_69",
+              "type": "async_action",
+              "domain": "Susbscription",
+              "event": "VAS Subscription Renewed",
+              "description": "Susbscription notifies \"VAS Subscription Renewed\"",
+              "line": 107
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Stop Auto-Renewal",
+      "scenarios": [
+        {
+          "id": "scenario_70",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "stops",
+            "phrase": "VAS Auto-Renewal",
+            "description": "when Business_User stops VAS Auto-Renewal"
+          },
+          "actions": [
+            {
+              "id": "action_71",
+              "type": "internal_action",
+              "domain": "Subscription",
+              "verb": "cancels",
+              "connector": "the",
+              "phrase": "subscription",
+              "description": "Subscription cancels the subscription",
+              "line": 112
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

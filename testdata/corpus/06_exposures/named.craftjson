@@ -1,0 +1,33 @@
+{
+  "exposures": [
+    {
+      "name": "PublicAPI",
+      "to": [
+        "Business_User"
+      ],
+      "through": [
+        "APIGateway"
+      ]
+    },
+    {
+      "name": "InternalAPI",
+      "to": [
+        "InternalSystem"
+      ],
+      "through": [
+        "InternalGateway"
+      ]
+    }
+  ],
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Business_User",
+      "type": "user"
+    },
+    {
+      "name": "InternalSystem",
+      "type": "system"
+    }
+  ]
+}

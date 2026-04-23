@@ -1,0 +1,155 @@
+{
+  "useCases": [
+    {
+      "name": "Payment Processing with Proper Return Flow",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "User",
+            "verb": "submits",
+            "phrase": "payment request",
+            "description": "when User submits payment request"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "PaymentService",
+              "verb": "validates",
+              "phrase": "payment data",
+              "description": "PaymentService validates payment data",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "sync_action",
+              "domain": "PaymentService",
+              "targetDomain": "BankGateway",
+              "connector": "to",
+              "phrase": "process payment",
+              "description": "PaymentService asks BankGateway to process payment",
+              "line": 4
+            },
+            {
+              "id": "action_4",
+              "type": "return_action",
+              "domain": "BankGateway",
+              "phrase": "payment result",
+              "description": "BankGateway returns payment result",
+              "line": 5
+            },
+            {
+              "id": "action_5",
+              "type": "sync_action",
+              "domain": "PaymentService",
+              "targetDomain": "NotificationService",
+              "connector": "to",
+              "phrase": "send confirmation",
+              "description": "PaymentService asks NotificationService to send confirmation",
+              "line": 6
+            },
+            {
+              "id": "action_6",
+              "type": "return_action",
+              "domain": "NotificationService",
+              "phrase": "delivery status",
+              "description": "NotificationService returns delivery status",
+              "line": 7
+            },
+            {
+              "id": "action_7",
+              "type": "return_action",
+              "domain": "PaymentService",
+              "targetDomain": "User",
+              "phrase": "final confirmation",
+              "description": "PaymentService returns final confirmation to User",
+              "line": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nested Call Chain",
+      "scenarios": [
+        {
+          "id": "scenario_8",
+          "trigger": {
+            "type": "external",
+            "actor": "Admin",
+            "verb": "requests",
+            "phrase": "report",
+            "description": "when Admin requests report"
+          },
+          "actions": [
+            {
+              "id": "action_9",
+              "type": "sync_action",
+              "domain": "ReportService",
+              "targetDomain": "DatabaseService",
+              "connector": "for",
+              "phrase": "data",
+              "description": "ReportService asks DatabaseService for data",
+              "line": 13
+            },
+            {
+              "id": "action_10",
+              "type": "sync_action",
+              "domain": "DatabaseService",
+              "targetDomain": "CacheService",
+              "connector": "to",
+              "phrase": "check cache",
+              "description": "DatabaseService asks CacheService to check cache",
+              "line": 14
+            },
+            {
+              "id": "action_11",
+              "type": "return_action",
+              "domain": "CacheService",
+              "phrase": "cache miss",
+              "description": "CacheService returns cache miss",
+              "line": 15
+            },
+            {
+              "id": "action_12",
+              "type": "internal_action",
+              "domain": "DatabaseService",
+              "verb": "queries",
+              "phrase": "main database",
+              "description": "DatabaseService queries main database",
+              "line": 16
+            },
+            {
+              "id": "action_13",
+              "type": "return_action",
+              "domain": "DatabaseService",
+              "phrase": "report data",
+              "description": "DatabaseService returns report data",
+              "line": 17
+            },
+            {
+              "id": "action_14",
+              "type": "internal_action",
+              "domain": "ReportService",
+              "verb": "formats",
+              "connector": "the",
+              "phrase": "data",
+              "description": "ReportService formats the data",
+              "line": 18
+            },
+            {
+              "id": "action_15",
+              "type": "return_action",
+              "domain": "ReportService",
+              "phrase": "formatted report",
+              "description": "ReportService returns formatted report",
+              "line": 19
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -15,11 +15,22 @@ func LineToLSP(line int) int {
 
 // File is the root AST node for a parsed .craft file.
 type File struct {
-	Actors   []*ActorDecl    `json:"actors,omitempty"`
-	Domains  []*DomainDecl   `json:"domains,omitempty"`
-	Services []*ServiceDecl  `json:"services,omitempty"`
-	UseCases []*UseCaseDecl  `json:"useCases,omitempty"`
-	Archs    []*ArchDecl     `json:"archs,omitempty"`
+	Actors    []*ActorDecl    `json:"actors,omitempty"`
+	Domains   []*DomainDecl   `json:"domains,omitempty"`
+	Services  []*ServiceDecl  `json:"services,omitempty"`
+	UseCases  []*UseCaseDecl  `json:"useCases,omitempty"`
+	Archs     []*ArchDecl     `json:"archs,omitempty"`
+	Exposures []*ExposureDecl `json:"exposures,omitempty"`
+}
+
+// ExposureDecl represents an exposure block: exposure <name> { to: ... through: ... }.
+type ExposureDecl struct {
+	Name     string
+	To       []string
+	Contexts []string
+	Through  []string
+	// Line is the 1-based source line of the `exposure` keyword.
+	Line int
 }
 
 // ArchDecl represents an arch { ... } block.

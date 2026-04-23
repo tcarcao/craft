@@ -1,0 +1,7 @@
+domain Payments {
+    ProcessPayment
+}
+
+exposure default {
+    to: Payments
+}

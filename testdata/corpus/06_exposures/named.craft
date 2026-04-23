@@ -1,0 +1,12 @@
+actor user Business_User
+actor system InternalSystem
+
+exposure PublicAPI {
+    to: Business_User
+    through: APIGateway
+}
+
+exposure InternalAPI {
+    to: InternalSystem
+    through: InternalGateway
+}

@@ -1,0 +1,32 @@
+{
+  "exposures": [
+    {
+      "name": "api",
+      "to": [
+        "Business_User"
+      ],
+      "contexts": [
+        "Authentication"
+      ],
+      "through": [
+        "APIGateway"
+      ]
+    }
+  ],
+  "useCases": [],
+  "domains": [
+    {
+      "name": "User",
+      "boundedContexts": [
+        "Authentication",
+        "Profile"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Business_User",
+      "type": "user"
+    }
+  ]
+}

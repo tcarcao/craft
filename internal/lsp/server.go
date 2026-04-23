@@ -9,6 +9,7 @@
 //     use_case blocks added to documentSymbol outline.
 // S7: arch blocks added to documentSymbol outline; FoldingRanges handler
 //     returns one fold per arch block plus one per labelled segment inside arch.
+// S8: exposure blocks added to documentSymbol outline and hover.
 // ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
 
@@ -20,6 +21,7 @@ import (
 	"log/slog"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -464,6 +466,19 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
+	for _, exp := range f.AST.Exposures {
+		line := 0
+		if exp.Line > 0 {
+			line = exp.Line - 1
+		}
+		syms = append(syms, protocol.DocumentSymbol{
+			Name:           exp.Name,
+			Kind:           protocol.SymbolKindInterface,
+			Detail:         "exposure",
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+		})
+	}
 	return syms, nil
 }
 
@@ -686,6 +701,19 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 				},
 			}, nil
 		}
+	}
+
+	for _, exp := range f.AST.Exposures {
+		if exp.Line == 0 || exp.Line != cursorLine {
+			continue
+		}
+		detail := "exposure: " + exp.Name
+		if len(exp.To) > 0 {
+			detail += " → " + strings.Join(exp.To, ", ")
+		}
+		return &protocol.Hover{
+			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: detail},
+		}, nil
 	}
 
 	// Walk use-case bodies: hover on an action line shows the resolved declaration.

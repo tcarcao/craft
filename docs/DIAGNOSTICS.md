@@ -30,6 +30,7 @@ Each entry lists:
 | `craft/sema/cross-kind-name-reuse` | warning | The same identifier is declared in two different kind-namespaces (e.g. actor and domain) | `"Customer" is declared as both an actor (line 0) and a domain (line 3); consider renaming to avoid confusion` | S4 |
 | `craft/sema/sema-panic` | error | Unexpected panic recovered in the sema tier; analysis results may be incomplete | `internal sema error: <panic value>` | S4 |
 | `craft/sema/unresolved-reference` | error | A service's `contexts:` list names a bounded context or domain that doesn't exist in any workspace file | `service "UserService" references context "UnknownBC" which is not declared in any domain` | S5 |
+| `craft/sema/invalid-exposure-target` | error | An exposure field references an identifier of the wrong kind: `to:` must name actors; `through:` must name services; `contexts:` must name domains, bounded contexts, or services | `exposure "default": \`to:\` target "Payments" is a domain, not an actor` | S8 |
 
 ---
 
@@ -43,4 +44,4 @@ These codes are never shown to end users by default; they appear only in `$/logT
 
 ---
 
-*This file is updated by each grammar slice (S4–S8) as new validation rules land. S9 performs a final review pass.*
+*This file is updated by each grammar slice (S4–S8) as new validation rules land. S9 performs a final review pass. S8 added `craft/sema/invalid-exposure-target`.*

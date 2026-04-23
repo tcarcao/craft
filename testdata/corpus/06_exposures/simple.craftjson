@@ -1,0 +1,17 @@
+{
+  "exposures": [
+    {
+      "name": "default",
+      "to": [
+        "Business_User"
+      ]
+    }
+  ],
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Business_User",
+      "type": "user"
+    }
+  ]
+}
