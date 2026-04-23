@@ -50,7 +50,24 @@ func Project(f *ast.File) *craft.CraftDoc {
 		doc.Architectures = append(doc.Architectures, projectArch(a))
 	}
 
+	for _, e := range f.Exposures {
+		doc.Exposures = append(doc.Exposures, projectExposure(e))
+	}
+
 	return doc
+}
+
+// projectExposure converts an AST ExposureDecl to a craft.Exposure.
+func projectExposure(e *ast.ExposureDecl) craft.Exposure {
+	exp := craft.Exposure{
+		Name:    e.Name,
+		To:      e.To,
+		Through: e.Through,
+	}
+	if len(e.Contexts) > 0 {
+		exp.Contexts = e.Contexts
+	}
+	return exp
 }
 
 // projectArch converts an AST ArchDecl to a craft.ArchBlock.

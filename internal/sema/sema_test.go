@@ -226,3 +226,107 @@ func TestAnalyzeFile_DuplicateUseCaseName(t *testing.T) {
 		t.Errorf("expected error severity, got %q", diags[0].Severity)
 	}
 }
+
+func TestAnalyzeWorkspace_ExposureValidTarget(t *testing.T) {
+	syms := sema.Symbols{
+		Actors: []sema.ActorSymbol{{Name: "Business_User", Type: ast.ActorTypeUser, Line: 1, URI: "file:///a.craft"}},
+		Exposures: []sema.ExposureSymbol{
+			{Name: "default", To: []string{"Business_User"}, Through: []string{"APIGateway"}, Line: 3, URI: "file:///a.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+	for _, d := range diags {
+		if d.Code == "craft/sema/invalid-exposure-target" {
+			t.Errorf("unexpected invalid-exposure-target diagnostic: %v", d)
+		}
+	}
+}
+
+func TestAnalyzeWorkspace_ExposureTo_TargetIsDomain(t *testing.T) {
+	syms := sema.Symbols{
+		Domains: []sema.DomainSymbol{{Name: "Payments", Line: 1, URI: "file:///a.craft"}},
+		Exposures: []sema.ExposureSymbol{
+			{Name: "default", To: []string{"Payments"}, Line: 5, URI: "file:///a.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+	found := false
+	for _, d := range diags {
+		if d.Code == "craft/sema/invalid-exposure-target" {
+			found = true
+			if d.Severity != "error" {
+				t.Errorf("expected error severity, got %q", d.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected invalid-exposure-target diagnostic for domain in `to:`, got none: %v", diags)
+	}
+}
+
+func TestAnalyzeWorkspace_ExposureTo_TargetIsService(t *testing.T) {
+	syms := sema.Symbols{
+		Services: []sema.ServiceSymbol{{Name: "UserService", Line: 1, URI: "file:///a.craft"}},
+		Exposures: []sema.ExposureSymbol{
+			{Name: "default", To: []string{"UserService"}, Line: 5, URI: "file:///a.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+	found := false
+	for _, d := range diags {
+		if d.Code == "craft/sema/invalid-exposure-target" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected invalid-exposure-target diagnostic for service in `to:`, got none: %v", diags)
+	}
+}
+
+func TestAnalyzeWorkspace_ExposureThrough_TargetIsActor(t *testing.T) {
+	syms := sema.Symbols{
+		Actors: []sema.ActorSymbol{{Name: "Admin", Type: ast.ActorTypeUser, Line: 1, URI: "file:///a.craft"}},
+		Exposures: []sema.ExposureSymbol{
+			{Name: "default", To: []string{"APIUser"}, Through: []string{"Admin"}, Line: 5, URI: "file:///a.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+	found := false
+	for _, d := range diags {
+		if d.Code == "craft/sema/invalid-exposure-target" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected invalid-exposure-target diagnostic for actor in `through:`, got none: %v", diags)
+	}
+}
+
+func TestAnalyzeWorkspace_ExposureContexts_TargetIsActor(t *testing.T) {
+	syms := sema.Symbols{
+		Actors: []sema.ActorSymbol{{Name: "Customer", Type: ast.ActorTypeUser, Line: 1, URI: "file:///a.craft"}},
+		Exposures: []sema.ExposureSymbol{
+			{Name: "default", To: []string{"ExternalUser"}, Contexts: []string{"Customer"}, Line: 5, URI: "file:///a.craft"},
+		},
+	}
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+	found := false
+	for _, d := range diags {
+		if d.Code == "craft/sema/invalid-exposure-target" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected invalid-exposure-target diagnostic for actor in `contexts:`, got none: %v", diags)
+	}
+}

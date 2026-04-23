@@ -1,0 +1,85 @@
+{
+  "useCases": [
+    {
+      "name": "VAS unscheduled",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "unschedules",
+            "phrase": "VAS scheduling",
+            "description": "when Business_User unschedules VAS scheduling"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "cancel the VAS reservation",
+              "description": "VASScheduling asks Wallet to cancel the VAS reservation",
+              "line": 3
+            },
+            {
+              "id": "action_3",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "cancels",
+              "phrase": "VAS reservation",
+              "description": "Wallet cancels VAS reservation",
+              "line": 4
+            },
+            {
+              "id": "action_4",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Reservation Canceled",
+              "description": "Wallet notifies \"VAS Reservation Canceled\"",
+              "line": 5
+            },
+            {
+              "id": "action_5",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "cancels",
+              "connector": "the",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling cancels the VAS schedule",
+              "line": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scheduled VAS Applied",
+      "scenarios": [
+        {
+          "id": "scenario_6",
+          "trigger": {
+            "type": "external",
+            "actor": "VASMgmt",
+            "verb": "identifies",
+            "phrase": "scheduled VAS to apply",
+            "description": "when VASMgmt identifies scheduled VAS to apply"
+          },
+          "actions": [
+            {
+              "id": "action_7",
+              "type": "internal_action",
+              "domain": "VASMgmt",
+              "verb": "applies",
+              "connector": "a",
+              "phrase": "VAS and stores details until when its valid",
+              "description": "VASMgmt applies a VAS and stores details until when its valid",
+              "line": 11
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

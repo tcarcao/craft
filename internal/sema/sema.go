@@ -5,6 +5,8 @@
 //     invalid-reference-target rules + AnalyzeWorkspace for cross-file resolution.
 // S6: use_case namespace + duplicate-use-case-name rule + extend unresolved-reference
 //     to use-case trigger subjects and action parties.
+// S8: exposure collection + invalid-exposure-target validation (to:→actor,
+//     through:→service, contexts:→domain/service).
 package sema
 
 import (
@@ -58,6 +60,18 @@ type UseCaseSymbol struct {
 	URI string
 }
 
+// ExposureSymbol holds collected information about an exposure declaration.
+type ExposureSymbol struct {
+	Name     string
+	To       []string
+	Contexts []string
+	Through  []string
+	// Line is the 1-based source line of the `exposure` keyword.
+	Line int
+	// URI is the file that contains this declaration.
+	URI string
+}
+
 // UseCaseRef captures a single reference site from within a use-case body.
 // Each actor/domain/service name that appears in a trigger subject, action
 // domain, or action target is recorded here for cross-resolution in S6.
@@ -70,10 +84,11 @@ type UseCaseRef struct {
 
 // Symbols is the output of the symbol-collection pass for a single file.
 type Symbols struct {
-	Actors   []ActorSymbol
-	Domains  []DomainSymbol
-	Services []ServiceSymbol
-	UseCases []UseCaseSymbol
+	Actors    []ActorSymbol
+	Domains   []DomainSymbol
+	Services  []ServiceSymbol
+	UseCases  []UseCaseSymbol
+	Exposures []ExposureSymbol
 	// UseCaseRefs collects all name references from within use-case bodies
 	// so AnalyzeWorkspace can resolve them cross-file.
 	UseCaseRefs []UseCaseRef
@@ -296,6 +311,20 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 		}
 	}
 
+	// Exposure collection (S8). Exposures have no duplicate-name rule (two
+	// exposures named "default" in separate files is valid; the design
+	// intentionally allows one exposure per API gateway).
+	for _, e := range f.Exposures {
+		syms.Exposures = append(syms.Exposures, ExposureSymbol{
+			Name:     e.Name,
+			To:       e.To,
+			Contexts: e.Contexts,
+			Through:  e.Through,
+			Line:     e.Line,
+			URI:      uri,
+		})
+	}
+
 	return syms, diags
 }
 
@@ -408,6 +437,93 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 			// Per S6 plan: we populate the ResolutionMap for hover/definition use;
 			// unresolved-reference diagnostics for use-case bodies are fire-only
 			// when the workspace has actor/domain/service declarations.
+		}
+	}
+
+	// Validate exposure targets (S8, Q23: craft/sema/invalid-exposure-target).
+	// Only fire when the referenced name is known but is of the wrong kind.
+	// Unknown names are silently ignored (many exposure targets may be
+	// architecture components that aren't modelled as DSL declarations).
+	for uri, syms := range perFile {
+		for _, exp := range syms.Exposures {
+			expRange := craft.Range{
+				Start: craft.Position{Line: ast.LineToLSP(exp.Line)},
+				End:   craft.Position{Line: ast.LineToLSP(exp.Line), Character: len(exp.Name)},
+			}
+			// `to:` must name actors.
+			for _, name := range exp.To {
+				if _, isActor := ws.Actors[name]; isActor {
+					continue // correct — actor reference
+				}
+				if _, isDomain := ws.Domains[name]; isDomain {
+					diags = append(diags, craft.Diagnostic{
+						Code:      "craft/sema/invalid-exposure-target",
+						Message:   fmt.Sprintf("exposure %q: `to:` target %q is a domain, not an actor — use actor declarations for `to:` targets", exp.Name, name),
+						Severity:  craft.SeverityError,
+						SourceURI: uri,
+						Range:     expRange,
+					})
+					continue
+				}
+				if _, isService := ws.Services[name]; isService {
+					diags = append(diags, craft.Diagnostic{
+						Code:      "craft/sema/invalid-exposure-target",
+						Message:   fmt.Sprintf("exposure %q: `to:` target %q is a service, not an actor — use actor declarations for `to:` targets", exp.Name, name),
+						Severity:  craft.SeverityError,
+						SourceURI: uri,
+						Range:     expRange,
+					})
+				}
+				// Unknown name: skip (may be an external entity or arch component).
+			}
+			// `through:` must name services.
+			for _, name := range exp.Through {
+				if _, isService := ws.Services[name]; isService {
+					continue // correct — service reference
+				}
+				if _, isActor := ws.Actors[name]; isActor {
+					diags = append(diags, craft.Diagnostic{
+						Code:      "craft/sema/invalid-exposure-target",
+						Message:   fmt.Sprintf("exposure %q: `through:` target %q is an actor, not a service — use service declarations for `through:` targets", exp.Name, name),
+						Severity:  craft.SeverityError,
+						SourceURI: uri,
+						Range:     expRange,
+					})
+					continue
+				}
+				if _, isDomain := ws.Domains[name]; isDomain {
+					diags = append(diags, craft.Diagnostic{
+						Code:      "craft/sema/invalid-exposure-target",
+						Message:   fmt.Sprintf("exposure %q: `through:` target %q is a domain, not a service — use service declarations for `through:` targets", exp.Name, name),
+						Severity:  craft.SeverityError,
+						SourceURI: uri,
+						Range:     expRange,
+					})
+				}
+				// Unknown name: skip (arch gateway components are valid but not modelled as services).
+			}
+			// `contexts:` must name domains, bounded contexts, or services.
+			for _, name := range exp.Contexts {
+				if _, isDomain := ws.Domains[name]; isDomain {
+					continue
+				}
+				if _, isBC := ws.BoundedContexts[name]; isBC {
+					continue
+				}
+				if _, isService := ws.Services[name]; isService {
+					continue
+				}
+				if _, isActor := ws.Actors[name]; isActor {
+					diags = append(diags, craft.Diagnostic{
+						Code:      "craft/sema/invalid-exposure-target",
+						Message:   fmt.Sprintf("exposure %q: `contexts:` target %q is an actor — use domain or service declarations for `contexts:` targets", exp.Name, name),
+						Severity:  craft.SeverityError,
+						SourceURI: uri,
+						Range:     expRange,
+					})
+				}
+				// Unknown name: skip.
+			}
 		}
 	}
 

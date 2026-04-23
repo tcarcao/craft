@@ -5,6 +5,7 @@
 // S6: use_case "..." { when ... } blocks.
 // S7: arch { presentation: ... gateway: ... } blocks with flow (>) and
 //     component modifiers ([key, key:value]).
+// S8: exposure <name> { to: ... contexts: ... through: ... } blocks.
 // Unsupported top-level keywords emit a recoverable "not-yet-implemented"
 // diagnostic so --parser=v2 is usable on partial files.
 package syntax
@@ -81,6 +82,12 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			diags = append(diags, d...)
 			if arch != nil {
 				file.Archs = append(file.Archs, arch)
+			}
+		case lexer.TokenKwExposure:
+			exp, d := p.parseExposureBlock()
+			diags = append(diags, d...)
+			if exp != nil {
+				file.Exposures = append(file.Exposures, exp)
 			}
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
@@ -1217,4 +1224,73 @@ func tokenRange(tok lexer.Token) craft.Range {
 		Start: craft.Position{Line: line, Character: col},
 		End:   craft.Position{Line: line, Character: end},
 	}
+}
+
+// --- exposure parsing (S8) ---
+
+// parseExposureBlock parses: exposure <name> { to: ... contexts: ... through: ... }
+// Field keywords (to, contexts, through) are contextual identifiers per Q3.
+func (p *Parser) parseExposureBlock() (*ast.ExposureDecl, []craft.Diagnostic) {
+	kwLine := p.peek().Line
+	p.consume() // consume `exposure`
+	var diags []craft.Diagnostic
+
+	// Exposure name: any identifier (including "default").
+	nameTok := p.peek()
+	if nameTok.Type != lexer.TokenIdent {
+		diags = append(diags, p.diagUnexpected(nameTok, "exposure name"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	name := nameTok.Value
+	p.consume()
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume `{`
+
+	exp := &ast.ExposureDecl{Name: name, Line: kwLine}
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		tok := p.peek()
+		if tok.Type != lexer.TokenIdent {
+			diags = append(diags, p.diagUnexpected(tok, "field name (to, contexts, through) or `}`"))
+			p.consume()
+			continue
+		}
+		fieldName := tok.Value
+		p.consume()
+
+		if p.peek().Type != lexer.TokenColon {
+			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
+			continue
+		}
+		p.consume() // consume `:`
+
+		switch fieldName {
+		case "to":
+			exp.To = p.parseIdentList()
+		case "contexts":
+			exp.Contexts = p.parseIdentList()
+		case "through":
+			exp.Through = p.parseIdentList()
+		default:
+			p.skipToNextField()
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed exposure block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    craft.Range{Start: craft.Position{Line: kwLine - 1}},
+		})
+		return exp, diags
+	}
+	p.consume() // consume `}`
+	return exp, diags
 }

@@ -1,0 +1,521 @@
+{
+  "services": [
+    {
+      "name": "WalletService",
+      "contexts": [
+        "Wallet",
+        "WalletItemPurchase",
+        "WalletItemAddition"
+      ],
+      "dataStores": [
+        "posgres",
+        "redis"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 2
+    },
+    {
+      "name": "Order Service",
+      "contexts": [
+        "OrderManagement",
+        "OrderFulfilment"
+      ],
+      "dataStores": [
+        "posgres"
+      ],
+      "deployment": {},
+      "line": 7
+    },
+    {
+      "name": "service-re-go-vas",
+      "contexts": [
+        "VASScheduling"
+      ],
+      "dataStores": [
+        "posgres",
+        "dynamodb"
+      ],
+      "deployment": {},
+      "line": 11
+    }
+  ],
+  "useCases": [
+    {
+      "name": "Purchase VAS to Wallet",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "purchases",
+            "phrase": "VAS to wallet",
+            "description": "when Business_User purchases VAS to wallet"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "sync_action",
+              "domain": "WalletItemPurchase",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "initiate a VAS addition",
+              "description": "WalletItemPurchase asks Wallet to initiate a VAS addition",
+              "line": 28
+            },
+            {
+              "id": "action_3",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Addition Request Approved",
+              "description": "Wallet notifies \"VAS Addition Request Approved\"",
+              "line": 29
+            }
+          ]
+        },
+        {
+          "id": "scenario_4",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "WalletItemPurchase",
+            "event": "VAS Addition Request Approved",
+            "description": "when WalletItemPurchase listens \"VAS Addition Request Approved\""
+          },
+          "actions": [
+            {
+              "id": "action_5",
+              "type": "sync_action",
+              "domain": "WalletItemPurchase",
+              "targetDomain": "OrderManagement",
+              "connector": "to",
+              "phrase": "create an Order",
+              "description": "WalletItemPurchase asks OrderManagement to create an Order",
+              "line": 32
+            },
+            {
+              "id": "action_6",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order Created",
+              "description": "OrderManagement notifies \"Order Created\"",
+              "line": 33
+            },
+            {
+              "id": "action_7",
+              "type": "internal_action",
+              "domain": "OrderManagement",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "Order as payment deferred",
+              "description": "OrderManagement marks the Order as payment deferred",
+              "line": 34
+            },
+            {
+              "id": "action_8",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order payment deferred",
+              "description": "OrderManagement notifies \"Order payment deferred\"",
+              "line": 35
+            }
+          ]
+        },
+        {
+          "id": "scenario_9",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "Order payment deferred",
+            "description": "when OrderFulfilment listens \"Order payment deferred\""
+          },
+          "actions": [
+            {
+              "id": "action_10",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "WalletItemAddition",
+              "connector": "to",
+              "phrase": "fulfil the addition request",
+              "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
+              "line": 38
+            },
+            {
+              "id": "action_11",
+              "type": "sync_action",
+              "domain": "WalletItemAddition",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "add VAS",
+              "description": "WalletItemAddition asks Wallet to add VAS",
+              "line": 39
+            },
+            {
+              "id": "action_12",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS added",
+              "description": "Wallet notifies \"VAS added\"",
+              "line": 40
+            }
+          ]
+        },
+        {
+          "id": "scenario_13",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "VAS added",
+            "description": "when OrderFulfilment listens \"VAS added\""
+          },
+          "actions": [
+            {
+              "id": "action_14",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "OrderManagement",
+              "connector": "to",
+              "phrase": "mark the Order as fulfiled",
+              "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
+              "line": 43
+            },
+            {
+              "id": "action_15",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order completed",
+              "description": "OrderManagement notifies \"Order completed\"",
+              "line": 44
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS scheduled and no VAS in Wallet",
+      "scenarios": [
+        {
+          "id": "scenario_16",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "schedules",
+            "phrase": "VAS",
+            "description": "when Business_User schedules VAS"
+          },
+          "actions": [
+            {
+              "id": "action_17",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "reserve a VAS",
+              "description": "VASScheduling asks Wallet to reserve a VAS",
+              "line": 49
+            },
+            {
+              "id": "action_18",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "creates",
+              "connector": "an",
+              "phrase": "unconfirmed VAS reservation",
+              "description": "Wallet creates an unconfirmed VAS reservation",
+              "line": 50
+            },
+            {
+              "id": "action_19",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Addition Request Approved",
+              "description": "Wallet notifies \"VAS Addition Request Approved\"",
+              "line": 51
+            },
+            {
+              "id": "action_20",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "drafts",
+              "connector": "a",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling drafts a VAS schedule",
+              "line": 52
+            }
+          ]
+        },
+        {
+          "id": "scenario_21",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "VASScheduling",
+            "event": "VAS Addition Request Approved",
+            "description": "when VASScheduling listens \"VAS Addition Request Approved\""
+          },
+          "actions": [
+            {
+              "id": "action_22",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "OrderManagement",
+              "connector": "to",
+              "phrase": "create an Order",
+              "description": "VASScheduling asks OrderManagement to create an Order",
+              "line": 55
+            },
+            {
+              "id": "action_23",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order Created",
+              "description": "OrderManagement notifies \"Order Created\"",
+              "line": 56
+            },
+            {
+              "id": "action_24",
+              "type": "internal_action",
+              "domain": "OrderManagement",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "Order as payment deferred",
+              "description": "OrderManagement marks the Order as payment deferred",
+              "line": 57
+            },
+            {
+              "id": "action_25",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order payment deferred",
+              "description": "OrderManagement notifies \"Order payment deferred\"",
+              "line": 58
+            }
+          ]
+        },
+        {
+          "id": "scenario_26",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "Order payment deferred",
+            "description": "when OrderFulfilment listens \"Order payment deferred\""
+          },
+          "actions": [
+            {
+              "id": "action_27",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "WalletItemAddition",
+              "connector": "to",
+              "phrase": "fulfil the addition request",
+              "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
+              "line": 61
+            },
+            {
+              "id": "action_28",
+              "type": "sync_action",
+              "domain": "WalletItemAddition",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "add VAS",
+              "description": "WalletItemAddition asks Wallet to add VAS",
+              "line": 62
+            },
+            {
+              "id": "action_29",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS added",
+              "description": "Wallet notifies \"VAS added\"",
+              "line": 63
+            }
+          ]
+        },
+        {
+          "id": "scenario_30",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "OrderFulfilment",
+            "event": "VAS added",
+            "description": "when OrderFulfilment listens \"VAS added\""
+          },
+          "actions": [
+            {
+              "id": "action_31",
+              "type": "sync_action",
+              "domain": "OrderFulfilment",
+              "targetDomain": "OrderManagement",
+              "connector": "to",
+              "phrase": "mark the Order as fulfiled",
+              "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
+              "line": 66
+            },
+            {
+              "id": "action_32",
+              "type": "async_action",
+              "domain": "OrderManagement",
+              "event": "Order completed",
+              "description": "OrderManagement notifies \"Order completed\"",
+              "line": 67
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS scheduled and VAS in Wallet",
+      "scenarios": [
+        {
+          "id": "scenario_33",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "schedules",
+            "phrase": "VAS",
+            "description": "when Business_User schedules VAS"
+          },
+          "actions": [
+            {
+              "id": "action_34",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "reserve a VAS",
+              "description": "VASScheduling asks Wallet to reserve a VAS",
+              "line": 72
+            },
+            {
+              "id": "action_35",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "reserves",
+              "connector": "a",
+              "phrase": "VAS",
+              "description": "Wallet reserves a VAS",
+              "line": 73
+            },
+            {
+              "id": "action_36",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Reserved",
+              "description": "Wallet notifies \"VAS Reserved\"",
+              "line": 74
+            },
+            {
+              "id": "action_37",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "creates",
+              "connector": "a",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling creates a VAS schedule",
+              "line": 75
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS unscheduled",
+      "scenarios": [
+        {
+          "id": "scenario_38",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "unschedules",
+            "phrase": "VAS scheduling",
+            "description": "when Business_User unschedules VAS scheduling"
+          },
+          "actions": [
+            {
+              "id": "action_39",
+              "type": "sync_action",
+              "domain": "VASScheduling",
+              "targetDomain": "Wallet",
+              "connector": "to",
+              "phrase": "cancel the VAS reservation",
+              "description": "VASScheduling asks Wallet to cancel the VAS reservation",
+              "line": 80
+            },
+            {
+              "id": "action_40",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "cancels",
+              "phrase": "VAS reservation",
+              "description": "Wallet cancels VAS reservation",
+              "line": 81
+            },
+            {
+              "id": "action_41",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Reservation Canceled",
+              "description": "Wallet notifies \"VAS Reservation Canceled\"",
+              "line": 82
+            },
+            {
+              "id": "action_42",
+              "type": "internal_action",
+              "domain": "VASScheduling",
+              "verb": "cancels",
+              "connector": "the",
+              "phrase": "VAS schedule",
+              "description": "VASScheduling cancels the VAS schedule",
+              "line": 83
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VAS expires",
+      "scenarios": [
+        {
+          "id": "scenario_43",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "identifies",
+            "phrase": "VAS expiring",
+            "description": "when CRON identifies VAS expiring"
+          },
+          "actions": [
+            {
+              "id": "action_44",
+              "type": "internal_action",
+              "domain": "Wallet",
+              "verb": "removes",
+              "phrase": "VAS",
+              "description": "Wallet removes VAS",
+              "line": 88
+            },
+            {
+              "id": "action_45",
+              "type": "async_action",
+              "domain": "Wallet",
+              "event": "VAS Expired",
+              "description": "Wallet notifies \"VAS Expired\"",
+              "line": 89
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "name": "Monetization",
+      "boundedContexts": [
+        "Wallet",
+        "WalletItemPurchase",
+        "WalletItemAddition",
+        "OrderManagement",
+        "OrderFulfilment",
+        "VASScheduling"
+      ]
+    }
+  ]
+}

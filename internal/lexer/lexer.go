@@ -7,6 +7,8 @@
 // listens, returns, to) remain plain identifiers per Q3.
 // S7: adds arch keyword; TokenGT (>), TokenLBracket ([), TokenRBracket (]).
 // presentation/gateway remain plain identifiers per Q3.
+// S8: adds exposure keyword. Contextual field keywords (to, through, contexts)
+// remain plain identifiers per Q3.
 // Unknown tokens are returned as TokenError so the parser can emit a
 // recoverable diagnostic.
 package lexer
@@ -55,6 +57,10 @@ const (
 	TokenLBracket  // [ (component modifier open)
 	TokenRBracket  // ] (component modifier close)
 
+	// S8: exposure keyword. Field keywords (to, through, contexts) are plain
+	// identifiers per Q3.
+	TokenKwExposure // exposure
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -70,6 +76,7 @@ var keywords = map[string]TokenType{
 	"services": TokenKwServices,
 	"use_case": TokenKwUseCase,
 	"arch":     TokenKwArch,
+	"exposure": TokenKwExposure,
 }
 
 // Token is a scanned unit from the source.

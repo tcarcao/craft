@@ -1,0 +1,25 @@
+{
+  "exposures": [
+    {
+      "name": "default",
+      "to": [
+        "Business_User",
+        "Customer_Support"
+      ],
+      "through": [
+        "APIGateway"
+      ]
+    }
+  ],
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Business_User",
+      "type": "user"
+    },
+    {
+      "name": "Customer_Support",
+      "type": "user"
+    }
+  ]
+}

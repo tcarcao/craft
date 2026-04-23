@@ -20,8 +20,8 @@ var skippedSubdirs = map[string]bool{
 	// 03_services: un-skipped in S5
 	// 04_use_cases: un-skipped in S6
 	// 05_arch: un-skipped in S7
-	"06_exposures": true,
-	"99_mixed":     true,
+	// 06_exposures: un-skipped in S8
+	// 99_mixed: un-skipped in S8
 }
 
 func TestHarnessA_V2vsGoldens(t *testing.T) {

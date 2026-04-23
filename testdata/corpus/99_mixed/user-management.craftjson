@@ -1,0 +1,203 @@
+{
+  "architectures": [
+    {
+      "presentation": [
+        {
+          "name": "WebApp",
+          "type": "simple",
+          "modifiers": [
+            {
+              "key": "framework",
+              "value": "react"
+            },
+            {
+              "key": "ssl"
+            }
+          ]
+        },
+        {
+          "name": "MobileApp",
+          "type": "simple"
+        }
+      ],
+      "gateway": [
+        {
+          "name": "",
+          "type": "flow",
+          "chain": [
+            {
+              "name": "LoadBalancer",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "ssl",
+                  "value": "true"
+                }
+              ]
+            },
+            {
+              "name": "APIGateway",
+              "type": "simple",
+              "modifiers": [
+                {
+                  "key": "type",
+                  "value": "nginx"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "exposures": [
+    {
+      "name": "default",
+      "to": [
+        "Business_User"
+      ],
+      "through": [
+        "APIGateway"
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "UserService",
+      "contexts": [
+        "Authentication",
+        "Profile"
+      ],
+      "dataStores": [
+        "user_db"
+      ],
+      "language": "golang",
+      "deployment": {},
+      "line": 29
+    },
+    {
+      "name": "CommsService",
+      "contexts": [
+        "Notifier"
+      ],
+      "deployment": {},
+      "line": 34
+    }
+  ],
+  "useCases": [
+    {
+      "name": "User Registration",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Business_User",
+            "verb": "creates",
+            "phrase": "Account",
+            "description": "when Business_User creates Account"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "internal_action",
+              "domain": "Authentication",
+              "verb": "validates",
+              "phrase": "email format",
+              "description": "Authentication validates email format",
+              "line": 42
+            },
+            {
+              "id": "action_3",
+              "type": "sync_action",
+              "domain": "Authentication",
+              "targetDomain": "Database",
+              "connector": "to",
+              "phrase": "check email uniqueness",
+              "description": "Authentication asks Database to check email uniqueness",
+              "line": 43
+            },
+            {
+              "id": "action_4",
+              "type": "internal_action",
+              "domain": "Profile",
+              "verb": "creates",
+              "phrase": "user profile",
+              "description": "Profile creates user profile",
+              "line": 44
+            },
+            {
+              "id": "action_5",
+              "type": "async_action",
+              "domain": "Authentication",
+              "event": "User Registered",
+              "description": "Authentication notifies \"User Registered\"",
+              "line": 45
+            }
+          ]
+        },
+        {
+          "id": "scenario_6",
+          "trigger": {
+            "type": "domain_listen",
+            "domain": "Profile",
+            "event": "User Registered",
+            "description": "when Profile listens \"User Registered\""
+          },
+          "actions": [
+            {
+              "id": "action_7",
+              "type": "sync_action",
+              "domain": "Profile",
+              "targetDomain": "Database",
+              "connector": "to",
+              "phrase": "store profile data",
+              "description": "Profile asks Database to store profile data",
+              "line": 48
+            },
+            {
+              "id": "action_8",
+              "type": "sync_action",
+              "domain": "Profile",
+              "targetDomain": "Notifier",
+              "connector": "to",
+              "phrase": "send welcome email",
+              "description": "Profile asks Notifier to send welcome email",
+              "line": 49
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "name": "User",
+      "boundedContexts": [
+        "Authentication",
+        "Profile"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Business_User",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "CronA",
+      "type": "system",
+      "line": 3
+    },
+    {
+      "name": "Database",
+      "type": "service",
+      "line": 4
+    },
+    {
+      "name": "Customer_Support",
+      "type": "user"
+    }
+  ]
+}

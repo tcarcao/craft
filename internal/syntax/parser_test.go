@@ -135,3 +135,102 @@ domain User {
 		t.Errorf("expected 1 actor and 1 domain, got %d actors, %d domains", len(f.Actors), len(f.Domains))
 	}
 }
+
+func TestParse_ExposureSimple(t *testing.T) {
+	src := `actor user Business_User
+
+exposure default {
+    to: Business_User
+}
+`
+	f, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
+		}
+	}
+	if len(f.Exposures) != 1 {
+		t.Fatalf("expected 1 exposure, got %d", len(f.Exposures))
+	}
+	exp := f.Exposures[0]
+	if exp.Name != "default" {
+		t.Errorf("exposure name: got %q, want %q", exp.Name, "default")
+	}
+	if len(exp.To) != 1 || exp.To[0] != "Business_User" {
+		t.Errorf("exposure.to: got %v", exp.To)
+	}
+}
+
+func TestParse_ExposureWithThrough(t *testing.T) {
+	src := `exposure api {
+    to: Business_User, Customer_Support
+    through: APIGateway
+}
+`
+	f, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
+		}
+	}
+	if len(f.Exposures) != 1 {
+		t.Fatalf("expected 1 exposure, got %d", len(f.Exposures))
+	}
+	exp := f.Exposures[0]
+	if exp.Name != "api" {
+		t.Errorf("exposure name: got %q, want %q", exp.Name, "api")
+	}
+	if len(exp.To) != 2 || exp.To[0] != "Business_User" || exp.To[1] != "Customer_Support" {
+		t.Errorf("exposure.to: got %v", exp.To)
+	}
+	if len(exp.Through) != 1 || exp.Through[0] != "APIGateway" {
+		t.Errorf("exposure.through: got %v", exp.Through)
+	}
+}
+
+func TestParse_ExposureWithContexts(t *testing.T) {
+	src := `exposure web {
+    to: Business_User
+    contexts: Authentication, Profile
+    through: LoadBalancer
+}
+`
+	f, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
+		}
+	}
+	if len(f.Exposures) != 1 {
+		t.Fatalf("expected 1 exposure, got %d", len(f.Exposures))
+	}
+	exp := f.Exposures[0]
+	if len(exp.Contexts) != 2 {
+		t.Errorf("exposure.contexts: got %v", exp.Contexts)
+	}
+}
+
+func TestParse_MultipleExposures(t *testing.T) {
+	src := `exposure PublicAPI {
+    to: Business_User
+    through: APIGateway
+}
+
+exposure InternalAPI {
+    to: InternalSystem
+    through: InternalGateway
+}
+`
+	f, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
+		}
+	}
+	if len(f.Exposures) != 2 {
+		t.Fatalf("expected 2 exposures, got %d", len(f.Exposures))
+	}
+	if f.Exposures[0].Name != "PublicAPI" || f.Exposures[1].Name != "InternalAPI" {
+		t.Errorf("wrong exposure names: %v", []string{f.Exposures[0].Name, f.Exposures[1].Name})
+	}
+}

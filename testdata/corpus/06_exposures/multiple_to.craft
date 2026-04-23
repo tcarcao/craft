@@ -1,0 +1,7 @@
+actor user Business_User
+actor user Customer_Support
+
+exposure default {
+    to: Business_User, Customer_Support
+    through: APIGateway
+}

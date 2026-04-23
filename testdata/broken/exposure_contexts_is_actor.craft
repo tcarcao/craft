@@ -1,0 +1,6 @@
+actor user Business_User
+
+exposure default {
+    to: Business_User
+    contexts: Business_User
+}
