@@ -36,6 +36,10 @@ type File struct {
 	Diagnostics []craft.Diagnostic
 	// Symbols is the per-file symbol table, computed after parsing.
 	Symbols sema.Symbols
+	// LastGoodAST is the most recent parse result that succeeded without a
+	// panic. LSP handlers use this as a fallback when the current parse panicked
+	// so that hover, definition, and outline stay responsive on broken files.
+	LastGoodAST *ast.File
 }
 
 // Workspace is the multi-file index. It is safe for concurrent access.
@@ -167,20 +171,32 @@ func (w *Workspace) parseAndStore(uri, content string) {
 		return // nothing changed
 	}
 
+	// Preserve the previous last-good AST so we can fall back on panic.
+	var prevLastGood *ast.File
+	if existing, ok := w.files[uri]; ok {
+		prevLastGood = existing.LastGoodAST
+	}
+
 	file := &File{
 		URI:         uri,
 		Content:     content,
 		ContentHash: hash,
+		LastGoodAST: prevLastGood,
 	}
 
+	panicked := false
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
+				panicked = true
 				w.log.Error("workspace: parser panic recovered",
 					"uri", uri,
 					"panic", fmt.Sprintf("%v", r),
 				)
-				if file.AST == nil {
+				// Fall back to the previous good AST for semantic features.
+				if file.LastGoodAST != nil {
+					file.AST = file.LastGoodAST
+				} else {
 					file.AST = &ast.File{}
 				}
 				file.Diagnostics = append(file.Diagnostics, craft.Diagnostic{
@@ -192,6 +208,11 @@ func (w *Workspace) parseAndStore(uri, content string) {
 		}()
 		file.AST, file.Diagnostics = syntax.Parse(content)
 	}()
+
+	// On successful parse, advance LastGoodAST.
+	if !panicked {
+		file.LastGoodAST = file.AST
+	}
 
 	// Collect per-file symbols (no cross-file resolution yet).
 	syms, semaDiags := sema.AnalyzeFile(uri, file.AST)
@@ -206,17 +227,21 @@ func (w *Workspace) parseAndStore(uri, content string) {
 // Must be called with w.mu held.
 func (w *Workspace) recomputeResolution() {
 	perFile := make(map[string]sema.Symbols, len(w.files))
+	perFileASTs := make(map[string]*ast.File, len(w.files))
 	for uri, f := range w.files {
 		perFile[uri] = f.Symbols
+		perFileASTs[uri] = f.AST
 	}
 	ws, mergeDiags := sema.MergeWorkspaceSymbols(perFile)
 	rm, resolveDiags := sema.AnalyzeWorkspace(perFile, ws)
+	lintDiags := sema.LintWorkspace(perFileASTs, ws)
 	w.resolution.ws = ws
 	w.resolution.rm = rm
 
 	// Index all workspace-level diagnostics by source file URI so
 	// publishDiagnostics can merge them into the per-file payload.
 	allWSDiags := append(mergeDiags, resolveDiags...)
+	allWSDiags = append(allWSDiags, lintDiags...)
 	byURI := make(map[string][]craft.Diagnostic, len(allWSDiags))
 	for _, d := range allWSDiags {
 		byURI[d.SourceURI] = append(byURI[d.SourceURI], d)

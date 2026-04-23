@@ -1,15 +1,15 @@
 [
   {
-    "code": "craft/sema/duplicate-use-case-name",
+    "code": "craft/syntax/unclosed-block",
     "severity": "error",
     "range": {
       "start": {
-        "line": 5,
+        "line": 0,
         "character": 0
       },
       "end": {
-        "line": 5,
-        "character": 10
+        "line": 0,
+        "character": 8
       }
     }
   }

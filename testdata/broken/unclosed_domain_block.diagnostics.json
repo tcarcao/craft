@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/unclosed-block",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 0,
+        "character": 7
+      },
+      "end": {
+        "line": 0,
+        "character": 15
+      }
+    }
+  }
+]

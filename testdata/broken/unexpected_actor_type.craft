@@ -1,0 +1,4 @@
+actors {
+  robot Alice
+  user Bob
+}

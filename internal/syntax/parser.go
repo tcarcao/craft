@@ -180,7 +180,7 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, []craft.Diagnostic) {
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed actors block (missing `}`)",
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: p.peek().Line - 1}},
+			Range:    tokenRange(p.peek()),
 		})
 		return actors, diags
 	}
@@ -216,7 +216,7 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed domain block (missing `}`)",
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(nameTok.Line)}},
+			Range:    tokenRange(nameTok),
 		})
 		return &ast.DomainDecl{Name: nameTok.Value, BoundedContexts: contexts, Line: nameTok.Line}, diags
 	}
@@ -267,7 +267,7 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 				Code:     "craft/syntax/unclosed-block",
 				Message:  "unclosed domain block (missing `}`)",
 				Severity: craft.SeverityError,
-				Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(nameTok.Line)}},
+				Range:    tokenRange(nameTok),
 			})
 			domains = append(domains, &ast.DomainDecl{
 				Name:            nameTok.Value,
@@ -290,7 +290,7 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed domains block (missing `}`)",
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: p.peek().Line - 1}},
+			Range:    tokenRange(p.peek()),
 		})
 		return domains, diags
 	}
@@ -394,7 +394,10 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 				Code:     "craft/syntax/unclosed-block",
 				Message:  fmt.Sprintf("unclosed service block for %q (missing `}`)", name),
 				Severity: craft.SeverityError,
-				Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(nameLine)}},
+				Range: craft.Range{
+					Start: craft.Position{Line: ast.LineToLSP(nameLine)},
+					End:   craft.Position{Line: ast.LineToLSP(nameLine)},
+				},
 			})
 			return services, diags
 		}
@@ -406,7 +409,7 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed services block (missing `}`)",
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: p.peek().Line - 1}},
+			Range:    tokenRange(p.peek()),
 		})
 		return services, diags
 	}
@@ -583,7 +586,7 @@ func (p *Parser) parseUseCaseBlock(counter *int) (*ast.UseCaseDecl, []craft.Diag
 			Code:     "craft/syntax/unclosed-block",
 			Message:  fmt.Sprintf("unclosed use_case block for %q (missing `}`)", name),
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(ucTok.Line)}},
+			Range:    tokenRange(ucTok),
 		})
 		return uc, diags
 	}
@@ -1025,7 +1028,7 @@ func (p *Parser) parseArchBlock() (*ast.ArchDecl, []craft.Diagnostic) {
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed arch block (missing `}`)",
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: ast.LineToLSP(archTok.Line)}},
+			Range:    tokenRange(archTok),
 		})
 		return arch, diags
 	}
@@ -1285,7 +1288,8 @@ func tokenRange(tok lexer.Token) craft.Range {
 // parseExposureBlock parses: exposure <name> { to: ... contexts: ... through: ... }
 // Field keywords (to, contexts, through) are contextual identifiers per Q3.
 func (p *Parser) parseExposureBlock() (*ast.ExposureDecl, []craft.Diagnostic) {
-	kwLine := p.peek().Line
+	kwTok := p.peek()
+	kwLine := kwTok.Line
 	p.consume() // consume `exposure`
 	var diags []craft.Diagnostic
 
@@ -1341,7 +1345,7 @@ func (p *Parser) parseExposureBlock() (*ast.ExposureDecl, []craft.Diagnostic) {
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed exposure block (missing `}`)",
 			Severity: craft.SeverityError,
-			Range:    craft.Range{Start: craft.Position{Line: kwLine - 1}},
+			Range:    tokenRange(kwTok),
 		})
 		return exp, diags
 	}

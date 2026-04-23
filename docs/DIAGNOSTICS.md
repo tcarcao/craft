@@ -1,6 +1,6 @@
 # Craft Diagnostic Codebook
 
-> **Status:** Seeded in S3; consolidated in S9.
+> **Status:** Consolidated in S9. ✅ Complete.
 > **Convention (Q19):** golden files assert on `code` + `range` + `severity` only. The `message` field is free-form prose and is NOT asserted in tests.
 
 Each entry lists:
@@ -34,14 +34,26 @@ Each entry lists:
 
 ---
 
+## Lint diagnostics (`craft/lint/*`)
+
+Style and consistency warnings produced by `sema.LintWorkspace`. These mirror the heuristics from `internal/linter/` but operate on the v2 AST and workspace symbol table (B5, S9).
+
+| Code | Severity | Meaning | Example message | Origin |
+|------|----------|---------|-----------------|--------|
+| `craft/lint/dead-event` | warning | An event is published via `notifies` but never consumed by any `when … listens` or event trigger in the workspace | `event "Order Processing" is published but never consumed` | S9 |
+| `craft/lint/unused-actor` | warning | An actor is declared but never appears as the subject of an external trigger (`when <Actor> …`) | `actor "Admin" is defined but never used as a trigger subject` | S9 |
+| `craft/lint/event-not-past-tense` | warning | An event name does not appear to use past tense (does not contain a word ending in `-ed` or `-en`) | `event "Order Processing" does not appear to use past tense` | S9 |
+
+---
+
 ## Internal diagnostics (`craft/internal/*`)
 
 These codes are never shown to end users by default; they appear only in `$/logTrace` output.
 
 | Code | Severity | Meaning | Origin |
 |------|----------|---------|--------|
-| `craft/internal/parser-panic` | error | Unexpected panic recovered in the parser tier | S3 |
+| `craft/internal/parser-panic` | error | Unexpected panic recovered in the parser tier; LastGoodAST is used as fallback for semantic features | S3 |
 
 ---
 
-*This file is updated by each grammar slice (S4–S8) as new validation rules land. S9 performs a final review pass. S8 added `craft/sema/invalid-exposure-target`.*
+*Final review performed in S9. All codes stable from S9 onward unless a new grammar construct is added.*

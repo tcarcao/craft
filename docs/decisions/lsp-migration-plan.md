@@ -272,11 +272,12 @@ spec that Track A codes against; P0.6–P0.8 are the human-authored guardrails.
       audits every golden before commit. Any ANTLR quirks surfaced here are
       either (a) fixed and re-generated, or (b) documented in the file's
       nearby `README.md` as "known ANTLR behavior frozen as v1 spec."
-- [ ] **P0.5.** `testdata/broken/` — hand-authored intentionally broken
+- [x] **P0.5.** `testdata/broken/` — hand-authored intentionally broken
       `.craft` files + expected `.diagnostics.json`. **Not** bootstrapped
       from ANTLR (whose error output is exactly what we're replacing).
       Covers: syntax errors at every block-kind boundary, missing
       terminators, unexpected tokens, deeply nested failures.
+      *(Completed 2026-04-23 in S9. 13 broken-corpus files with accurate goldens.)*
 - [x] **P0.6.** `docs/GRAMMAR.md` — EBNF spec, written against the corpus.
       Corpus is authoritative on any conflict; GRAMMAR.md is prose+EBNF
       documentation, not a parallel source of truth.
@@ -326,9 +327,10 @@ progressively un-skips files in its `testdata/corpus/NN_kind/` subdirectory.
   - [ ] A3e. architecture blocks (`arch { presentation: … gateway: … }`) — un-skips `corpus/05_arch/`
   - [ ] A3f. exposures (`exposure X { to: …, contexts: …, through: … }`) — un-skips `corpus/06_exposures/`
   - [ ] A3g. cross-kind integration — un-skips `corpus/99_mixed/`
-- [ ] **A4.** Island parsing + error recovery; `testdata/broken/` produces
+- [x] **A4.** Island parsing + error recovery; `testdata/broken/` produces
       expected diagnostics with no cascading errors. Asserted by a third
       test suite comparing v2-emitted diagnostics to `*.diagnostics.json`.
+      *(Completed 2026-04-23 in S9. Harness C in internal/parser_diff/diagnostics_test.go.)*
 - [ ] **A4.5.** **Visitor-test parity audit.** Scan
       `internal/parser/*_test.go` for assertions not covered by
       `testdata/corpus/`. Back-fill missing cases as new corpus entries
@@ -366,7 +368,8 @@ progressively un-skips files in its `testdata/corpus/NN_kind/` subdirectory.
 - [ ] **B2.** `internal/sema/` — symbol collection (per-kind namespaces); corpus → expected symbol tables.
 - [ ] **B3.** `internal/sema/` — `ResolutionMap`; every reference in corpus resolves correctly or emits expected "unresolved" diagnostic.
 - [ ] **B4.** `internal/sema/` — validation rules: duplicate names (error), cross-kind name reuse (warning), invalid references (error); per-rule test corpus.
-- [ ] **B5.** Existing `internal/linter/` merged under `sema` or adjacent; existing tests green.
+- [x] **B5.** Existing `internal/linter/` merged under `sema` or adjacent; existing tests green.
+      *(Completed 2026-04-23 in S9. internal/sema/lint.go: dead-event, unused-actor, event-not-past-tense rules.)*
 
 ### Track C — LSP server
 

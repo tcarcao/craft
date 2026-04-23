@@ -121,3 +121,34 @@ func TestWorkspace_PerformanceGate_S5(t *testing.T) {
 		t.Logf("S5 perf gate: Change+resolution took %v (budget %dms) ✓", elapsed, budgetMs)
 	}
 }
+
+// TestWorkspace_LastGoodAST verifies that after a successful parse the
+// LastGoodAST is populated, so that if a future change causes a parser panic
+// the semantic features can fall back to the previous good state.
+func TestWorkspace_LastGoodAST(t *testing.T) {
+	w := workspace.New(nil)
+
+	// Initial valid parse — LastGoodAST should be set.
+	w.Open("file:///a.craft", "actor user Alice")
+	f := w.Get("file:///a.craft")
+	if f == nil {
+		t.Fatal("file not found")
+	}
+	if f.LastGoodAST == nil {
+		t.Fatal("LastGoodAST should be non-nil after successful parse")
+	}
+	if len(f.LastGoodAST.Actors) != 1 {
+		t.Errorf("LastGoodAST: expected 1 actor, got %d", len(f.LastGoodAST.Actors))
+	}
+
+	// After a content change that still parses successfully, LastGoodAST
+	// reflects the new parse.
+	w.Change("file:///a.craft", "actor user Alice\nactor system Bob")
+	f2 := w.Get("file:///a.craft")
+	if f2.LastGoodAST == nil {
+		t.Fatal("LastGoodAST should still be set after second successful parse")
+	}
+	if len(f2.LastGoodAST.Actors) != 2 {
+		t.Errorf("LastGoodAST: expected 2 actors, got %d", len(f2.LastGoodAST.Actors))
+	}
+}
