@@ -68,6 +68,8 @@ type ServiceDecl struct {
 	Contexts   []string `json:"contexts,omitempty"`
 	DataStores []string `json:"dataStores,omitempty"`
 	Language   string   `json:"language,omitempty"`
+	// DeploymentType is the deployment strategy type (e.g. "canary", "blue_green", "rolling").
+	DeploymentType string `json:"deploymentType,omitempty"`
 	// Line is the 1-based source line where the service name appears.
 	Line int `json:"line,omitempty"`
 	// ContextLines holds the 1-based source line for each entry in Contexts

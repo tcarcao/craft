@@ -19,7 +19,7 @@ func Project(f *ast.File) *craft.CraftDoc {
 			Contexts:   s.Contexts,
 			DataStores: s.DataStores,
 			Language:   s.Language,
-			Deployment: craft.DeploymentStrategy{},
+			Deployment: craft.DeploymentStrategy{Type: s.DeploymentType},
 			Line:       s.Line,
 		}
 		doc.Services = append(doc.Services, svc)

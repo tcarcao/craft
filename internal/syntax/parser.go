@@ -453,6 +453,13 @@ func (p *Parser) parseServiceBody(name string, nameLine int) (*ast.ServiceDecl, 
 			} else {
 				diags = append(diags, p.diagUnexpected(p.peek(), "language identifier"))
 			}
+		case "deployment":
+			if p.peek().Type == lexer.TokenIdent {
+				svc.DeploymentType = p.peek().Value
+				p.consume()
+			} else {
+				diags = append(diags, p.diagUnexpected(p.peek(), "deployment type identifier"))
+			}
 		default:
 			// Unknown field — skip to next line (consume until next ident that
 			// could be a field name, or `}`).
@@ -679,16 +686,16 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		}, diags
 	}
 
-	// external: when <actor> <verb> <phrase>
-	// Collect the rest of the phrase (all remaining tokens on the logical line until the
-	// next `when`, `}`, or a line that starts a new action — i.e. an ident that is not
-	// a continuation of the phrase). We use a simple heuristic: collect all tokens until
-	// we see `when` or `}` at the start of a line, or EOF.
-	phrase := p.collectPhrase()
-	fullDesc := "when " + subject + " " + verb
-	if phrase != "" {
-		fullDesc += " " + phrase
+	// external: when <actor> <verb> [connector_word] <phrase>
+	// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
+	// When present, it is stripped from the phrase (matching ANTLR trigger description format).
+	connTok := p.peek()
+	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == verbTok.Line {
+		p.consume() // strip connector_word; triggers don't store it anywhere
 	}
+	phrase := p.collectPhrase(verbTok.Line)
+	// ANTLR builds description as "when actor verb phrase" (always appends phrase, even when empty).
+	fullDesc := fmt.Sprintf("when %s %s %s", subject, verb, phrase)
 	return ast.TriggerDecl{
 		TriggerType: "external",
 		Actor:       subject,
@@ -697,6 +704,16 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		Description: fullDesc,
 		Line:        whenLine,
 	}, diags
+}
+
+// isConnectorWord returns true for ANTLR grammar connector_word tokens.
+// Grammar rule: 'a' | 'an' | 'the' | 'as' | 'to' | 'from' | 'in' | 'on' | 'at' | 'for' | 'with' | 'by'
+func isConnectorWord(v string) bool {
+	switch v {
+	case "a", "an", "the", "as", "to", "from", "in", "on", "at", "for", "with", "by":
+		return true
+	}
+	return false
 }
 
 // parseAction parses a single action line. counter is the shared global ID counter;
@@ -749,9 +766,19 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 	case "returns":
 		return p.parseReturnsAction(id, subject, actionLine, &diags)
 	default:
-		// internal_action: <domain> <verb> <phrase>
-		phrase := p.collectPhrase()
+		// internal_action: <domain> <verb> [connector_word] <phrase>
+		// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
+		var connector string
+		connTok := p.peek()
+		if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == actionLine {
+			connector = connTok.Value
+			p.consume()
+		}
+		phrase := p.collectPhrase(actionLine)
 		desc := subject + " " + verb
+		if connector != "" {
+			desc += " " + connector
+		}
 		if phrase != "" {
 			desc += " " + phrase
 		}
@@ -760,6 +787,7 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 			ActionID:    id,
 			Domain:      subject,
 			Verb:        verb,
+			Connector:   connector,
 			Phrase:      phrase,
 			Description: desc,
 			Line:        actionLine,
@@ -784,7 +812,7 @@ func (p *Parser) parseAsksAction(id int, subject string, line int, diags *[]craf
 		p.consume()
 	}
 
-	phrase := p.collectPhrase()
+	phrase := p.collectPhrase(line)
 	desc := subject + " asks " + target + " " + connector
 	if phrase != "" {
 		desc += " " + phrase
@@ -825,7 +853,7 @@ func (p *Parser) parseNotifiesAction(id int, subject string, line int, diags *[]
 	}, *diags
 }
 
-// parseReturnsAction parses: <domain> returns [to <target>] <phrase>
+// parseReturnsAction parses: <domain> returns [to <target>] [connector_word] <phrase>
 func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
 	// Check for optional `to <target>`
 	var target string
@@ -838,9 +866,18 @@ func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]c
 		}
 	}
 
-	phrase := p.collectPhrase()
+	// Optional connector_word before phrase (ANTLR grammar: return_action connector_word? phrase)
+	var connector string
+	connTok := p.peek()
+	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == line {
+		connector = connTok.Value
+		p.consume()
+	}
+
+	phrase := p.collectPhrase(line)
 
 	// Build description matching ANTLR format.
+	// ANTLR: connector is NOT included in description for no-target returns.
 	var desc string
 	if target != "" {
 		desc = fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
@@ -853,6 +890,7 @@ func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]c
 		ActionID:     id,
 		Domain:       subject,
 		TargetDomain: target,
+		Connector:    connector,
 		Phrase:       phrase,
 		Description:  desc,
 		Line:         line,
@@ -867,13 +905,19 @@ func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]c
 // whitespace). This correctly handles multi-word phrases without requiring
 // newline tokens.
 //
-// Additionally, we stop on structural boundaries: `when`, `}`, and EOF.
-func (p *Parser) collectPhrase() string {
+// actionLine is the 1-based source line of the action/trigger that owns this phrase.
+// If the first available token is already on a different line, the phrase is empty.
+// Additionally, we stop on structural boundaries: `}` and EOF.
+func (p *Parser) collectPhrase(actionLine int) string {
 	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 		return ""
 	}
-	// The phrase starts at the current token's line.
-	startLine := p.peek().Line
+	// If the next token is already past the action's line, the phrase is empty.
+	if p.peek().Line != actionLine {
+		return ""
+	}
+	// The phrase starts at the current token's line (== actionLine).
+	startLine := actionLine
 	var parts []string
 	for {
 		tok := p.peek()
@@ -881,10 +925,9 @@ func (p *Parser) collectPhrase() string {
 		case lexer.TokenRBrace, lexer.TokenEOF:
 			return strings.Join(parts, " ")
 		case lexer.TokenIdent:
-			if tok.Value == "when" {
-				return strings.Join(parts, " ")
-			}
 			// Stop when we've moved to a different source line.
+			// `when` on a new line is a scenario boundary; `when` on the same
+			// line is a valid phrase_word per the ANTLR grammar and is collected.
 			if tok.Line != startLine {
 				return strings.Join(parts, " ")
 			}
@@ -894,9 +937,20 @@ func (p *Parser) collectPhrase() string {
 			if tok.Line != startLine {
 				return strings.Join(parts, " ")
 			}
-			parts = append(parts, fmt.Sprintf("%q", tok.Value))
+			// Use the raw value without re-quoting to match ANTLR phrase output.
+			parts = append(parts, tok.Value)
 			p.consume()
 		default:
+			// Keywords that act as identifiers in phrase context (e.g. `user`, `system`,
+			// `service`, `domain`, `arch`) are valid phrase_words per the ANTLR grammar.
+			if isAnyKeywordAsIdent(tok.Type) {
+				if tok.Line != startLine {
+					return strings.Join(parts, " ")
+				}
+				parts = append(parts, tok.Value)
+				p.consume()
+				continue
+			}
 			return strings.Join(parts, " ")
 		}
 	}
