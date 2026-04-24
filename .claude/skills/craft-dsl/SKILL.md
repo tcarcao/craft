@@ -325,15 +325,15 @@ This flows from "who and what exists" to "how it's built" to "what happens."
 
 ## Tooling
 
-After generating or editing a `.craft` file, the user can run `craft-cli` to validate and inspect it:
+After generating or editing a `.craft` file, the user can run `craft` to validate and inspect it:
 
-- `craft-cli validate <file>` — parse and lint; reports errors and warnings, exits 1 on errors
-- `craft-cli generate <file>` — produce PlantUML diagram files
-- `craft-cli inspect <file>` — dump the parsed model as structured text or JSON
+- `craft validate <file>` — parse and lint; reports errors and warnings, exits 1 on errors
+- `craft generate <file>` — produce PlantUML diagram files
+- `craft inspect <file>` — dump the parsed model as structured text or JSON
 
-Glob patterns work for file arguments: `craft-cli validate docs/**/*.craft`
+Glob patterns work for file arguments: `craft validate docs/**/*.craft`
 
-If the user asks how to install craft-cli or needs details on flags and options, read `references/cli-reference.md`.
+If the user asks how to install craft or needs details on flags and options, read `references/cli-reference.md`.
 
 ---
 
@@ -391,7 +391,7 @@ After generating or extending a `.craft` file, review your own output for these 
 - **Generate code** from `.craft` files — separate tooling handles that
 - **Modify the grammar** — the grammar is defined in `Craft.g4` and `tree-sitter-craft/grammar.js`
 - **Make architecture decisions** — the DSL documents decisions; it doesn't prescribe them
-- **Generate diagrams** — use `craft-cli generate` or the VS Code extension for visualization
+- **Generate diagrams** — use `craft generate` or the VS Code extension for visualization
 
 ---
 

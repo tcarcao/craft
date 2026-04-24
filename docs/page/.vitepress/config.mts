@@ -54,7 +54,7 @@ export default defineConfig({
       {
         text: 'Tooling',
         items: [
-          { text: 'CLI (craft-cli)', link: '/tooling/cli' },
+          { text: 'CLI (craft)', link: '/tooling/cli' },
           { text: 'Claude Code Skill', link: '/tooling/skill' }
         ]
       },
