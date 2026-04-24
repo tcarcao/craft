@@ -26,7 +26,7 @@ The skill provides Claude with:
 - Event-driven choreography patterns (`notifies` / `listens`)
 - Common mistakes and how to avoid them
 - File conventions (kebab-case filenames, canonical ordering, `docs/` placement)
-- Integration with `craft-cli` for validation and diagram generation
+- Integration with `craft` for validation and diagram generation
 
 ## Example session
 
@@ -40,19 +40,19 @@ Claude: [generates a valid .craft file with actors, domains, services,
 After Claude generates or edits a file, validate it:
 
 ```bash
-craft-cli validate docs/notification-system.craft
+craft validate docs/notification-system.craft
 ```
 
-## How it pairs with craft-cli
+## How it pairs with craft
 
 The skill and CLI complement each other:
 
 | Task | Tool |
 |------|------|
 | Generate or extend `.craft` files | Claude Code skill |
-| Validate syntax and lint rules | `craft-cli validate` |
-| Produce diagrams | `craft-cli generate` |
-| Inspect the parsed model | `craft-cli inspect` |
+| Validate syntax and lint rules | `craft validate` |
+| Produce diagrams | `craft generate` |
+| Inspect the parsed model | `craft inspect` |
 
 ## Source
 

@@ -390,7 +390,7 @@ In `craft/cmd/craft/main.go`, find the root command construction and wrap it:
 
 ```go
 func newRootCmd() *cobra.Command {
-	root := &cobra.Command{Use: "craft-cli"}
+	root := &cobra.Command{Use: "craft"}
 	root.AddCommand(checkCmd())
 	root.AddCommand(generateCmd())
 	root.AddCommand(lspCmd())

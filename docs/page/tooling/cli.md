@@ -1,17 +1,17 @@
-# craft-cli
+# craft
 
 Command-line tool for validating, inspecting, and generating diagrams from `.craft` files.
 
 ## Installation
 
 ```bash
-brew install tcarcao/craft/craft-cli
+brew install tcarcao/craft/craft
 ```
 
 Verify:
 
 ```bash
-craft-cli --help
+craft --help
 ```
 
 ---
@@ -23,7 +23,7 @@ craft-cli --help
 Parse and lint one or more `.craft` files.
 
 ```bash
-craft-cli validate [files...] [flags]
+craft validate [files...] [flags]
 ```
 
 | Flag | Default | Description |
@@ -32,9 +32,9 @@ craft-cli validate [files...] [flags]
 | `--strict` | false | Treat warnings as errors (exit 1 on any finding) |
 
 ```bash
-craft-cli validate docs/payments.craft
-craft-cli validate docs/**/*.craft --strict
-craft-cli validate docs/payments.craft --format json
+craft validate docs/payments.craft
+craft validate docs/**/*.craft --strict
+craft validate docs/payments.craft --format json
 ```
 
 ---
@@ -44,7 +44,7 @@ craft-cli validate docs/payments.craft --format json
 Produce PlantUML diagram files from `.craft` sources.
 
 ```bash
-craft-cli generate [files...] [flags]
+craft generate [files...] [flags]
 ```
 
 | Flag | Default | Description |
@@ -54,9 +54,9 @@ craft-cli generate [files...] [flags]
 | `-o, --output` | same dir as input | Directory to write output files |
 
 ```bash
-craft-cli generate docs/payments.craft
-craft-cli generate docs/payments.craft --type c4 --output diagrams/
-craft-cli generate docs/**/*.craft --type sequence --mode architecture
+craft generate docs/payments.craft
+craft generate docs/payments.craft --type c4 --output diagrams/
+craft generate docs/**/*.craft --type sequence --mode architecture
 ```
 
 ---
@@ -66,7 +66,7 @@ craft-cli generate docs/**/*.craft --type sequence --mode architecture
 Dump the parsed model as structured text or JSON.
 
 ```bash
-craft-cli inspect [files...] [flags]
+craft inspect [files...] [flags]
 ```
 
 | Flag | Default | Description |
@@ -74,8 +74,8 @@ craft-cli inspect [files...] [flags]
 | `--format` | `text` | Output format: `text` or `json` |
 
 ```bash
-craft-cli inspect docs/payments.craft
-craft-cli inspect docs/payments.craft --format json | jq '.services'
+craft inspect docs/payments.craft
+craft inspect docs/payments.craft --format json | jq '.services'
 ```
 
 ---
@@ -85,8 +85,8 @@ craft-cli inspect docs/payments.craft --format json | jq '.services'
 All commands accept one or more file paths. Glob patterns with `**` are supported:
 
 ```bash
-craft-cli validate docs/**/*.craft
-craft-cli generate payments.craft orders.craft
+craft validate docs/**/*.craft
+craft generate payments.craft orders.craft
 ```
 
 ---

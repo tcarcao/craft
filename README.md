@@ -9,13 +9,13 @@ A domain-specific language for modeling business use cases and domain interactio
 ## Install
 
 ```bash
-brew install tcarcao/craft/craft-cli
+brew install tcarcao/craft/craft
 ```
 
 Verify:
 
 ```bash
-craft-cli --help
+craft --help
 ```
 
 ---
@@ -54,7 +54,7 @@ use_case "Purchase Item" {
 }
 ```
 
-Run `craft-cli validate`, `craft-cli generate`, or `craft-cli inspect` on any `.craft` file. See the [CLI reference](https://tcarcao.github.io/craft/tooling/cli).
+Run `craft validate`, `craft generate`, or `craft inspect` on any `.craft` file. See the [CLI reference](https://tcarcao.github.io/craft/tooling/cli).
 
 ---
 

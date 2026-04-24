@@ -9,7 +9,7 @@ import (
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "craft-cli",
+		Use:   "craft",
 		Short: "Craft — DDD modeling CLI",
 		Long:  "Parse, lint, inspect, and generate diagrams from .craft files.",
 	}
