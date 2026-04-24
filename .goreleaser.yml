@@ -52,3 +52,14 @@ homebrew_casks:
     homepage: "https://github.com/tcarcao/craft"
     description: "DDD modeling CLI with language server — parse, lint, inspect, visualize, and edit .craft files"
     license: "MIT"
+
+  - name: "craft@{{ .Major }}.{{ .Minor }}"
+    ids: [craft]
+    repository:
+      owner: tcarcao
+      name: homebrew-craft
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/tcarcao/craft"
+    description: "DDD modeling CLI with language server — parse, lint, inspect, visualize, and edit .craft files"
+    license: "MIT"
