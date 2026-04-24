@@ -50,5 +50,6 @@ This subcommand is intended to be spawned by LSP clients such as VS Code.`,
 	}
 
 	cmd.Flags().String("log-file", "", "Redirect log output to a file instead of stderr")
+	cmd.Flags().Bool("stdio", false, "Use stdio transport (default and only supported mode; accepted for LSP client compatibility)")
 	return cmd
 }
