@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.0] — 2026-04-24
+
+### Removed
+- ANTLR parser fully removed — `--parser=antlr` flag no longer exists on `craft check`, `craft generate`, or `craft inspect`.
+- `?parser=` query parameter removed from the HTTP server.
+- `github.com/antlr4-go/antlr/v4` dependency removed.
+
+### Changed
+- `cmd/craft/validate` now uses the v2 semantic analysis layer (`internal/sema`) for all lint checks.
+- `cmd/craft/inspect` output now uses `pkg/craft.CraftDoc` types.
+
+---
+
 ## [0.1.0] — 2026-04-24
 
 ### Added
