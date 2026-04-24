@@ -6,7 +6,7 @@
 
 Craft is a domain-specific language (DSL) for modeling business use cases and domain interactions. It generates visual diagrams (C4, domain-flow, sequence) from `.craft` source files.
 
-**Tech Stack:** Go 1.22, ANTLR4 4.13.2, Docker / Podman, GitHub Actions.
+**Tech Stack:** Go 1.22, Docker / Podman, GitHub Actions.
 
 ---
 
@@ -17,24 +17,30 @@ cmd/
   server/       HTTP server (diagram generation API)
   craft/        CLI entry point
 internal/
-  parser/       ANTLR visitor + Go types (Services, Domains, Exposures, UseCases)
+  ast/          v2 AST — pure data types
+  lexer/        Hand-written scanner
+  syntax/       Hand-written recursive-descent parser → ast
+  sema/         Symbol tables, ResolutionMap, validation + lint rules
+  workspace/    Multi-file store, per-file parse cache, URI index
+  lsp/          LSP protocol handlers
   visualizer/   PlantUML / C4 diagram generators
   processor/    .craft file processing pipeline
+  parser_diff/  Differential harness (Harness A + Harness C)
 pkg/
-  parser/       ANTLR-generated Go parser (auto-generated — do not edit manually)
-tools/
-  antlr-grammar/  Craft.g4 — the ANTLR grammar source
+  craft/        Stable public Go API — CraftDoc canonical type
 build/
   package/
     Dockerfile          Multi-stage server image
-    antlr.Dockerfile    ANTLR builder image (tiagocarcao/antlr4-craft)
 .github/
   workflows/
     deploy.yml    Deploy VitePress docs to GitHub Pages
     publish.yml   Build & push tiagocarcao/craft to Docker Hub on v* tags
 docs/
   page/         VitePress documentation site
-  superpowers/  Agent plans and specs
+  decisions/    Architecture decision records
+testdata/
+  corpus/       Acceptance corpus (.craft + .craftjson pairs)
+  broken/       Intentionally broken files + expected .diagnostics.json
 examples/       Example .craft files
 ```
 
@@ -83,46 +89,21 @@ use_case "User Registration" {
 ## Container Requirements
 
 - **Docker or Podman**: Auto-detected — whichever is available is used (`CONTAINER_RUNTIME` in Makefile)
-- **ANTLR4 Docker Image**: Pulled from `tiagocarcao/antlr4-craft:4.13.2` (no local build required)
 
 ---
 
 ## Common Commands
 
 ```bash
-# First-time setup — pulls ANTLR image and regenerates parser
-make fresh-setup
-
-# Grammar generation only (pulls ANTLR image automatically)
-make generate-grammar
+# Run tests
+make test
 
 # Build and run the server container
 make docker-build && make docker-run
 
-# Run tests
-make test
-
 # Multi-arch publish to Docker Hub (maintainers only, requires Docker + Buildx)
 make docker-publish IMAGE_TAG=v2.0.0
-
-# Publish ANTLR builder image (manual, rarely needed)
-make docker-publish-antlr
 ```
-
----
-
-## Grammar Generation
-
-The ANTLR grammar lives in `tools/antlr-grammar/Craft.g4`. Generated Go parser code lives in `pkg/parser/` (gitignored — regenerated on demand).
-
-To regenerate after grammar changes:
-
-```bash
-make generate-grammar
-# (automatically pulls tiagocarcao/antlr4-craft:4.13.2 from Docker Hub)
-```
-
-Do **not** edit files in `pkg/parser/` manually.
 
 ---
 
@@ -150,8 +131,6 @@ Set these at: GitHub repo → Settings → Secrets and variables → Actions.
 go test ./...
 ```
 
-Parser tests live in `internal/parser/`. After grammar changes, run tests to confirm visitors handle new types correctly.
-
 ---
 
 ## VS Code Extension
@@ -159,4 +138,4 @@ Parser tests live in `internal/parser/`. After grammar changes, run tests to con
 The Craft VS Code extension is a separate repository:
 🔗 **[craft-vscode-extension](https://github.com/tcarcao/craft-vscode-extension)**
 
-It uses `tree-sitter-craft` for syntax highlighting and communicates with the Craft HTTP server for diagram generation.
+See `docs/decisions/lsp-migration-plan.md` and `docs/AGENT.md` for operating rules.

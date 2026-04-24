@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/parser"
-	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/visualizer"
 	craft "github.com/tcarcao/craft/pkg/craft"
@@ -18,7 +16,6 @@ func generateCmd() *cobra.Command {
 	var diagType string
 	var mode string
 	var outputDir string
-	var parserFlag string
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -38,31 +35,18 @@ func generateCmd() *cobra.Command {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 
-				var doc *craft.CraftDoc
-				switch parserFlag {
-				case "antlr":
-					p := parser.NewParser()
-					model, err := p.ParseString(string(content))
-					if err != nil {
-						return fmt.Errorf("%s: parse error: %w", file, err)
+				astFile, diags := syntax.Parse(string(content))
+				hasError := false
+				for _, d := range diags {
+					fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", file, d.Range.Start.Line+1, d.Severity, d.Message)
+					if d.Severity == craft.SeverityError {
+						hasError = true
 					}
-					doc = parser_antlr_adapter.FromDSLModel(model)
-				case "v2":
-					astFile, diags := syntax.Parse(string(content))
-					hasError := false
-					for _, d := range diags {
-						fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", file, d.Range.Start.Line+1, d.Severity, d.Message)
-						if d.Severity == craft.SeverityError {
-							hasError = true
-						}
-					}
-					if hasError {
-						return fmt.Errorf("%s: parse errors prevent diagram generation", file)
-					}
-					doc = syntax.Project(astFile)
-				default:
-					return fmt.Errorf("unknown --parser value %q; want v2|antlr", parserFlag)
 				}
+				if hasError {
+					return fmt.Errorf("%s: parse errors prevent diagram generation", file)
+				}
+				doc := syntax.Project(astFile)
 
 				outDir := outputDir
 				if outDir == "" {
@@ -85,7 +69,6 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&diagType, "type", "all", "diagram type: c4|domain|sequence|all")
 	cmd.Flags().StringVar(&mode, "mode", "detailed", "domain diagram mode: detailed|architecture")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "output directory (default: same as input file)")
-	cmd.Flags().StringVar(&parserFlag, "parser", "v2", "parser to use: v2|antlr  (antlr kept as escape hatch)")
 	return cmd
 }
 

@@ -5,25 +5,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tcarcao/craft/internal/parser"
-	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/visualizer"
 	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
 type Processor struct {
-	parser     *parser.Parser
 	visualizer *visualizer.Visualizer
 }
 
 func New() (*Processor, error) {
-	p := parser.NewParser()
-
-	v := visualizer.New()
-
 	return &Processor{
-		parser:     p,
-		visualizer: v,
+		visualizer: visualizer.New(),
 	}, nil
 }
 
@@ -33,12 +26,8 @@ func (p *Processor) ProcessFile(inputPath, outputDir string) error {
 		return fmt.Errorf("failed to read input file: %v", err)
 	}
 
-	arch, err := p.parser.ParseString(string(content))
-	if err != nil {
-		return fmt.Errorf("failed to parse architecture: %v", err)
-	}
-
-	doc := parser_antlr_adapter.FromDSLModel(arch)
+	astFile, _ := syntax.Parse(string(content))
+	doc := syntax.Project(astFile)
 
 	if err := p.generateDiagrams(doc, outputDir); err != nil {
 		return fmt.Errorf("failed to generate diagrams: %v", err)
@@ -52,7 +41,6 @@ func (p *Processor) generateDiagrams(arch *craft.CraftDoc, outputDir string) err
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	// Generate C4 diagram
 	c4Content, err := p.visualizer.GenerateC4(arch, visualizer.C4ModeBoundaries, true)
 	if err != nil {
 		return fmt.Errorf("failed to generate C4 diagram: %v", err)
@@ -61,7 +49,6 @@ func (p *Processor) generateDiagrams(arch *craft.CraftDoc, outputDir string) err
 		return fmt.Errorf("failed to write C4 diagram: %v", err)
 	}
 
-	// Generate domain diagram
 	domainContent, err := p.visualizer.GenerateDomainDiagram(arch)
 	if err != nil {
 		return fmt.Errorf("failed to generate domain diagram: %v", err)

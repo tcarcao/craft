@@ -1,0 +1,126 @@
+name: Tree-sitter Compatibility (Warning-only)
+
+# Runs on every PR and push to main that touches the corpus.
+# A failure is a warning: it surfaces in the log and as a PR comment,
+# but it never blocks a merge. The expectation is that a paired
+# tree-sitter-craft PR lands alongside the craft corpus change.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'testdata/corpus/**'
+  pull_request:
+    paths:
+      - 'testdata/corpus/**'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  tree-sitter-compat:
+    runs-on: ubuntu-latest
+    # Never block: this job failing still counts as green for branch protection.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Clone tree-sitter-craft at main
+        uses: actions/checkout@v4
+        with:
+          repository: tcarcao/tree-sitter-craft
+          path: _tree_sitter_craft
+          ref: main
+
+      - name: Install tree-sitter-craft dependencies
+        working-directory: _tree_sitter_craft
+        run: npm install
+
+      - name: Generate parser
+        working-directory: _tree_sitter_craft
+        run: npm run generate
+
+      - name: Parse corpus files
+        id: parse
+        run: |
+          cd _tree_sitter_craft
+          CORPUS_DIR="../testdata/corpus"
+          FAILED=()
+
+          while IFS= read -r -d '' file; do
+            if ! tree-sitter parse "$file" > /dev/null 2>&1; then
+              FAILED+=("${file#$CORPUS_DIR/}")
+            fi
+          done < <(find "$CORPUS_DIR" -name '*.craft' -print0 | sort -z)
+
+          TOTAL="$(find "$CORPUS_DIR" -name '*.craft' | wc -l | tr -d ' ')"
+
+          if [[ ${#FAILED[@]} -gt 0 ]]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            # Emit GitHub warning annotations
+            for f in "${FAILED[@]}"; do
+              echo "::warning file=testdata/corpus/$f::tree-sitter parse failed (tree-sitter-craft@main)"
+            done
+            # Build a compact list for the PR comment (cap at 20 lines)
+            LIST=""
+            COUNT=0
+            for f in "${FAILED[@]}"; do
+              LIST="${LIST}- \`testdata/corpus/$f\`\n"
+              COUNT=$((COUNT + 1))
+              if [[ $COUNT -ge 20 ]]; then
+                REMAINING=$((${#FAILED[@]} - 20))
+                LIST="${LIST}…and ${REMAINING} more\n"
+                break
+              fi
+            done
+            echo "failed_list<<EOF" >> "$GITHUB_OUTPUT"
+            printf '%b' "$LIST" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "failed_count=${#FAILED[@]}" >> "$GITHUB_OUTPUT"
+            echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+            echo "Tree-sitter warning: ${#FAILED[@]} of ${TOTAL} corpus files failed."
+            exit 1
+          fi
+
+          echo "status=ok" >> "$GITHUB_OUTPUT"
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "All ${TOTAL} corpus files parse cleanly with tree-sitter-craft@main."
+
+      - name: Post PR comment on failure
+        if: ${{ failure() && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const failedCount = '${{ steps.parse.outputs.failed_count }}';
+            const total = '${{ steps.parse.outputs.total }}';
+            const list = `${{ steps.parse.outputs.failed_list }}`;
+            const body = [
+              '### ⚠️ Tree-sitter compatibility warning',
+              '',
+              `**${failedCount} of ${total}** corpus files in \`testdata/corpus/\` could not be parsed by \`tree-sitter-craft@main\`.`,
+              '',
+              'This is a **warning only** — it does not block the merge.',
+              'If this PR adds new grammar constructs, please open a paired PR in',
+              '[tree-sitter-craft](https://github.com/tcarcao/tree-sitter-craft) to update `grammar.js`.',
+              '',
+              '<details><summary>Affected files</summary>',
+              '',
+              list,
+              '</details>',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

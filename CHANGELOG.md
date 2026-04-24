@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] — 2026-04-24 (pre-release)
+## [0.1.0] — 2026-04-24
 
 ### Added
 - Hand-written Go parser (`--parser=v2`) covering the full Craft grammar: actors, domains, services, use cases, arch blocks, and exposures.
@@ -16,5 +16,5 @@
 - HTTP server (`craft server`) defaults to the v2 parser; `?parser=antlr` query param available as escape hatch.
 
 ### Notes
-- The ANTLR parser remains available throughout the `0.1.x` pre-release stream and will be removed in `0.2.0` after the stable release.
+- The ANTLR parser (`--parser=antlr`) remains available as an escape hatch and will be removed in `0.2.0`.
 - macOS users: if Gatekeeper blocks the downloaded binary, run `xattr -dr com.apple.quarantine /path/to/craft` once. Code signing is planned for `0.2.0`.

@@ -11,8 +11,6 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/tcarcao/craft/internal/parser"
-	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/visualizer"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -73,7 +71,7 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 			WantSequence: generateSequence,
 		}
 
-		doc, err := parseDSL(input, r.FormValue("parser"))
+		doc, err := parseDSL(input)
 		if err != nil {
 			s.respondWithError(w, err, input, generateC4, generateContext, generateSequence)
 			return
@@ -213,7 +211,7 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		model, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
+		model, err := parseDSL(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
@@ -269,7 +267,7 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		arch, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
+		arch, err := parseDSL(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
@@ -324,23 +322,11 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// parseDSL parses a Craft DSL string with the specified parser.
-// parserName "" or "v2" uses the hand-written parser (default for all handlers).
-// parserName "antlr" uses the ANTLR parser as an escape hatch via ?parser=antlr.
-//
-// v2 parse diagnostics are intentionally discarded — the HTTP server uses
-// island-parsing semantics and renders whatever partial model the parser produces.
-// Handlers that need strict error checking should use the CLI instead.
-func parseDSL(src, parserName string) (*craft.CraftDoc, error) {
-	if parserName == "antlr" {
-		p := parser.NewParser()
-		model, err := p.ParseString(src)
-		if err != nil {
-			return nil, err
-		}
-		return parser_antlr_adapter.FromDSLModel(model), nil
-	}
-	// default: v2 hand-written parser
+// parseDSL parses a Craft DSL string using the hand-written v2 parser.
+// Diagnostics are intentionally discarded — the HTTP server uses island-parsing
+// semantics and renders whatever partial model the parser produces.
+// Callers that need strict error checking should use the CLI instead.
+func parseDSL(src string) (*craft.CraftDoc, error) {
 	astFile, _ := syntax.Parse(src)
 	return syntax.Project(astFile), nil
 }
@@ -354,7 +340,7 @@ func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		model, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
+		model, err := parseDSL(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
@@ -429,7 +415,7 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		model, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
+		model, err := parseDSL(req.DSL)
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return

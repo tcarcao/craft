@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseDSL_V2Default(t *testing.T) {
-	doc, err := parseDSL("actor user Foo", "v2")
+	doc, err := parseDSL("actor user Foo")
 	if err != nil {
 		t.Fatalf("v2 parse failed: %v", err)
 	}
@@ -17,23 +17,13 @@ func TestParseDSL_V2Default(t *testing.T) {
 	}
 }
 
-func TestParseDSL_AntlrFallback(t *testing.T) {
-	doc, err := parseDSL("actor user Foo", "antlr")
+func TestParseDSL_EmptyInput(t *testing.T) {
+	doc, err := parseDSL("")
 	if err != nil {
-		t.Fatalf("antlr parse failed: %v", err)
+		t.Fatalf("empty input failed: %v", err)
 	}
-	if len(doc.Actors) == 0 {
-		t.Error("expected at least one actor in CraftDoc")
-	}
-}
-
-func TestParseDSL_EmptyParamDefaultsToV2(t *testing.T) {
-	doc, err := parseDSL("actor user Foo", "")
-	if err != nil {
-		t.Fatalf("empty parserName (default) failed: %v", err)
-	}
-	if len(doc.Actors) == 0 {
-		t.Error("expected at least one actor when parserName is empty (v2 default)")
+	if doc == nil {
+		t.Error("expected non-nil CraftDoc for empty input")
 	}
 }
 

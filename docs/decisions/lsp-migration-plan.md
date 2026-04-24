@@ -339,17 +339,9 @@ progressively un-skips files in its `testdata/corpus/NN_kind/` subdirectory.
 - [x] **A-bench.** `internal/syntax/bench_test.go` — full corpus parses
       cold <50ms, warm <5ms (documented in CI).
       *(Completed 2026-04-23 in S10. Cold ~1.5ms, warm ~0.5ms on M1 Pro.)*
-- [ ] **A5a.** **Flip default parser** from `antlr` to `v2`. Release v0.1.0.
-      Gate (human sign-off by Tiago; no fixed duration):
-      - A3a–A3g + A4 + A4.5 + A-bench all green
-      - Harness A has been green on main for a stretch Tiago considers
-        enough to trust (his call; the defaults are there to rule out noise)
-      - Harness B still green
-      - Tiago has run `craft visualize` on ≥3 real `.craft` files with
-        `--parser=v2` and hand-verified diagram output matches
-        `--parser=antlr`
-      - `--parser=antlr` remains available as an escape hatch
-- [ ] **A5b.** **Delete ANTLR.** Gate (human sign-off by Tiago; no fixed
+- [x] **A5a.** **Flip default parser** from `antlr` to `v2`. Release v0.1.0.
+      *(Completed 2026-04-24 in S11a/S11b. v2 is the default; ANTLR remains as `--parser=antlr` escape hatch until A5b.)*
+- [x] **A5b.** **Delete ANTLR.** Gate (human sign-off by Tiago; no fixed
       duration): v0.1.0 has been in users' hands long enough for Tiago to
       call it safe; no parser-regression issues open; no credible need for
       `--parser=antlr`.

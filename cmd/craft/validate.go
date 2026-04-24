@@ -6,8 +6,10 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/linter"
-	"github.com/tcarcao/craft/internal/parser"
+	"github.com/tcarcao/craft/internal/ast"
+	"github.com/tcarcao/craft/internal/sema"
+	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/pkg/craft"
 )
 
 type validateResult struct {
@@ -31,8 +33,9 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
+			perFileASTs := make(map[string]*ast.File)
+			perFileSyms := make(map[string]sema.Symbols)
 			var results []validateResult
-			var models []*parser.DSLModel
 
 			for _, file := range files {
 				content, err := os.ReadFile(file)
@@ -45,30 +48,59 @@ func validateCmd() *cobra.Command {
 					continue
 				}
 
-				p := parser.NewParser()
-				model, err := p.ParseString(string(content))
-				if err != nil {
-					for _, se := range p.SyntaxErrors() {
-						results = append(results, validateResult{
-							File:     file,
-							Line:     se.Line,
-							Severity: "error",
-							Message:  se.Message,
-						})
-					}
-					continue
+				uri := "file://" + file
+				astFile, parseDiags := syntax.Parse(string(content))
+				perFileASTs[uri] = astFile
+
+				for _, d := range parseDiags {
+					results = append(results, validateResult{
+						File:     file,
+						Line:     d.Range.Start.Line + 1,
+						Severity: string(d.Severity),
+						Message:  d.Message,
+					})
 				}
-				models = append(models, model)
+
+				syms, semaDiags := sema.AnalyzeFile(uri, astFile)
+				perFileSyms[uri] = syms
+				for _, d := range semaDiags {
+					results = append(results, validateResult{
+						File:     file,
+						Line:     d.Range.Start.Line + 1,
+						Severity: string(d.Severity),
+						Message:  d.Message,
+					})
+				}
 			}
 
-			if len(models) > 0 {
-				merged := parser.MergeModels(models)
-				for _, r := range linter.Lint(files, merged) {
+			// Cross-file resolution and workspace-level lint.
+			if len(perFileSyms) > 0 {
+				ws, wsDiags := sema.MergeWorkspaceSymbols(perFileSyms)
+				for _, d := range wsDiags {
 					results = append(results, validateResult{
-						File:     r.File,
-						Line:     r.Line,
-						Severity: string(r.Severity),
-						Message:  r.Message,
+						File:     d.SourceURI,
+						Line:     d.Range.Start.Line + 1,
+						Severity: string(d.Severity),
+						Message:  d.Message,
+					})
+				}
+
+				_, resDiags := sema.AnalyzeWorkspace(perFileSyms, ws)
+				for _, d := range resDiags {
+					results = append(results, validateResult{
+						File:     d.SourceURI,
+						Line:     d.Range.Start.Line + 1,
+						Severity: string(d.Severity),
+						Message:  d.Message,
+					})
+				}
+
+				for _, d := range sema.LintWorkspace(perFileASTs, ws) {
+					results = append(results, validateResult{
+						File:     d.SourceURI,
+						Line:     d.Range.Start.Line + 1,
+						Severity: string(d.Severity),
+						Message:  d.Message,
 					})
 				}
 			}
@@ -90,7 +122,7 @@ func validateCmd() *cobra.Command {
 
 			hasFailure := false
 			for _, r := range results {
-				if r.Severity == "error" || (strict && r.Severity == "warning") {
+				if r.Severity == string(craft.SeverityError) || (strict && r.Severity == string(craft.SeverityWarning)) {
 					hasFailure = true
 					break
 				}

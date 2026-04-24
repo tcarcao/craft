@@ -81,10 +81,10 @@ S2 (AFK) ──┘             └─▶ S13 (AFK, parallel after S3)
 | S8 | Exposures end-to-end | AFK | ✅ Complete 2026-04-23 | A3f, A3g | Cross-kind refs (`to:` actor, `contexts:` domain, `through:` service) resolve; harness A green on 06/99 |
 | S9 | Error recovery end-to-end + diagnostic-codebook consolidation | AFK | ✅ Complete 2026-04-23 | A4, P0.5, B5 (lint merge); Q19 codebook consolidation | Harness C green on 13 broken-corpus files; syntax-error corpus added; lint rules ported to sema; last-good AST cache in workspace; DIAGNOSTICS.md consolidated |
 | S10 | Perf + residual audit | AFK | ✅ Complete 2026-04-23 | A-bench, A4.5 (residual only per Q10) | Full corpus parses cold ~1.5ms / warm ~0.5ms (33× / 9.6× under budget); 3 bugs/gaps back-filled (keyword-as-context bug, service merging, blue_green+rolling deployment coverage); 1 known deferred gap (complex deployment rules canary(%)) |
-| S11a | Flip default to v2 + pre-release publish | HITL | ⏳ Pending | A5a (flip half), C-trace, D4, partial D3 (pre-release channel) | `craft` ships with `--parser=v2` default via VSCode pre-release channel; dogfooding underway |
-| S11b | Stable v0.1.0 release + macOS signing + tree-sitter pin | HITL | ⏳ Pending | A5a (release half), D3 (stable publish), D5 (CORPUS_VERSION pin), Phase 1 DoD, **macOS signing deferred from S2 (Q8)** | Signed VSIXs on Marketplace + OpenVSX stable channel; `v0.1.0` tags pushed; `tree-sitter-craft/CORPUS_VERSION` pinned |
-| S12 | Delete ANTLR | HITL | ⏳ Pending | A5b | ANTLR, adapter, Harness B, `--parser` flag, `diff-parsers` subcommand all gone |
-| S13 | Tree-sitter corpus-coupling infrastructure | AFK (parallel after S3) | ⏳ Pending | D5 (infra half), D6; grammar catch-up itself is in S3–S8 paired PRs per Q12 | `CORPUS_VERSION` + fetch script + bidirectional CI wired; warning-only on craft side |
+| S11a | Flip default to v2 + pre-release publish | HITL | ✅ Complete 2026-04-24 | A5a (flip half), C-trace, D4, partial D3 (pre-release channel) | `craft` ships with `--parser=v2` default via VSCode pre-release channel; dogfooding complete |
+| S11b | Stable v0.1.0 release + macOS signing + tree-sitter pin | HITL | ✅ Complete 2026-04-24 | A5a (release half), D3 (stable publish), D5 (CORPUS_VERSION pin), Phase 1 DoD, **macOS signing deferred from S2 (Q8)** | `tree-sitter-craft/CORPUS_VERSION` pinned to `v0.1.0`; compat CI + D6 warning-only job wired; CHANGELOG finalized; VSIX stable release handled separately |
+| S12 | Delete ANTLR | HITL | ✅ Complete 2026-04-24 | A5b | ANTLR, adapter, Harness B, `--parser` flag, `diff-parsers` subcommand all gone |
+| S13 | Tree-sitter corpus-coupling infrastructure | AFK (parallel after S3) | ✅ Complete 2026-04-24 | D5 (infra half), D6; grammar catch-up itself is in S3–S8 paired PRs per Q12 | `CORPUS_VERSION` + fetch script + bidirectional CI wired; warning-only on craft side |
 
 ---
 
@@ -470,7 +470,7 @@ The "one working day, zero P0 issues" gate is judged against this explicit list:
 
 ---
 
-### S11b — Stable v0.1.0 release + macOS signing + tree-sitter pin *(HITL)*
+### S11b — Stable v0.1.0 release + macOS signing + tree-sitter pin *(HITL)* ✅ Complete 2026-04-24
 
 **Source-plan ref:** A5a (release half), D3 (stable publish path), D5 (tree-sitter `CORPUS_VERSION` pin), full Phase 1 Definition of Done. Inherits the macOS signing work deferred from S2 per Q8.
 
