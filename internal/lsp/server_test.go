@@ -182,3 +182,138 @@ func isClosedPipe(err error) bool {
 	s := err.Error()
 	return strings.Contains(s, "closed") || strings.Contains(s, "EOF") || strings.Contains(s, "broken pipe")
 }
+
+// collectMsgs reads messages from br for up to dur, returning all collected.
+// It uses a background goroutine so the deadline is respected even when readMsg blocks.
+func collectMsgs(br *bufio.Reader, dur time.Duration) []lspMsg {
+	type result struct {
+		msg lspMsg
+		err error
+	}
+	ch := make(chan result, 64)
+	go func() {
+		for {
+			msg, err := readMsg(br)
+			ch <- result{msg, err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	timer := time.NewTimer(dur)
+	defer timer.Stop()
+	var msgs []lspMsg
+	for {
+		select {
+		case r := <-ch:
+			if r.err != nil {
+				return msgs
+			}
+			msgs = append(msgs, r.msg)
+		case <-timer.C:
+			return msgs
+		}
+	}
+}
+
+func TestSetTrace_LogTrace(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- lsp.Serve(ctx, serverIn, serverOut)
+	}()
+
+	defer testOut.Close()
+	br := bufio.NewReader(testIn)
+
+	// initialize
+	id1 := 1
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id1, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{},"trace":"verbose"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	initResp, err := readMsg(br)
+	if err != nil || initResp.Error != nil {
+		t.Fatalf("initialize failed: err=%v resp=%s", err, initResp.Error)
+	}
+
+	// initialized (no response expected)
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// $/setTrace verbose
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "$/setTrace", Params: json.RawMessage(`{"value":"verbose"}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// open a document to trigger a parse + logTrace notification
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///test.craft","languageId":"craft","version":1,"text":"actor Foo"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect messages for 500ms; expect at least one $/logTrace notification
+	var gotLogTrace bool
+	for _, msg := range collectMsgs(br, 500*time.Millisecond) {
+		if msg.Method == "$/logTrace" {
+			gotLogTrace = true
+			break
+		}
+	}
+
+	if !gotLogTrace {
+		t.Error("expected at least one $/logTrace notification after $/setTrace verbose + didOpen, got none")
+	}
+
+	// Now set trace to "off" — subsequent didChange must NOT produce $/logTrace
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "$/setTrace", Params: json.RawMessage(`{"value":"off"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didChange",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///test.craft","version":2},"contentChanges":[{"text":"actor Bar"}]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var sawLogTraceAfterOff bool
+	for _, msg := range collectMsgs(br, 300*time.Millisecond) {
+		if msg.Method == "$/logTrace" {
+			sawLogTraceAfterOff = true
+			break
+		}
+	}
+	if sawLogTraceAfterOff {
+		t.Error("expected no $/logTrace after $/setTrace off, but got one")
+	}
+
+	// messages level must NOT produce $/logTrace (only verbose should)
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "$/setTrace", Params: json.RawMessage(`{"value":"messages"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didChange",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///test.craft","version":3},"contentChanges":[{"text":"actor Baz"}]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msgs3 := collectMsgs(br, 300*time.Millisecond)
+	for _, m := range msgs3 {
+		if m.Method == "$/logTrace" {
+			t.Error("expected no $/logTrace at trace level 'messages', but got one")
+			break
+		}
+	}
+
+	cancel()
+}

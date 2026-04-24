@@ -42,6 +42,9 @@ type Server struct {
 	shutdown bool
 	exitCh   chan struct{}
 
+	mu         sync.Mutex
+	traceLevel protocol.TraceValue
+
 	// debounce state for publishDiagnostics
 	debounce struct {
 		mu     sync.Mutex
@@ -102,6 +105,12 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 		}
 	}
 
+	if params != nil && params.Trace != "" {
+		s.mu.Lock()
+		s.traceLevel = params.Trace
+		s.mu.Unlock()
+	}
+
 	return &protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			// Q20: declare only capabilities we actually serve.
@@ -160,11 +169,26 @@ func (s *Server) WorkDoneProgressCancel(_ context.Context, _ *protocol.WorkDoneP
 }
 
 func (s *Server) LogTrace(_ context.Context, params *protocol.LogTraceParams) error {
-	s.logger.Debug("$/logTrace", "message", params.Message)
+	s.logger.Debug("$/logTrace (from client)", "message", params.Message)
 	return nil
 }
 
+// notifyLogTrace sends a $/logTrace notification to the client when the trace
+// level is "messages" or "verbose". Safe to call from any goroutine.
+func (s *Server) notifyLogTrace(ctx context.Context, message string) {
+	s.mu.Lock()
+	level := s.traceLevel
+	s.mu.Unlock()
+	if level != protocol.TraceVerbose {
+		return
+	}
+	_ = s.conn.Notify(ctx, "$/logTrace", &protocol.LogTraceParams{Message: message})
+}
+
 func (s *Server) SetTrace(_ context.Context, params *protocol.SetTraceParams) error {
+	s.mu.Lock()
+	s.traceLevel = params.Value
+	s.mu.Unlock()
 	s.logger.Debug("$/setTrace", "value", params.Value)
 	return nil
 }
@@ -328,6 +352,7 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 	uri := string(params.TextDocument.URI)
 	content := params.ContentChanges[len(params.ContentChanges)-1].Text
 	s.ws.Change(uri, content)
+	s.notifyLogTrace(ctx, fmt.Sprintf("didChange: parsed %s", uri))
 	s.scheduleDiagnostics(ctx, uri)
 	return nil
 }
@@ -363,6 +388,7 @@ func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocume
 	}
 	uri := string(params.TextDocument.URI)
 	s.ws.Open(uri, params.TextDocument.Text)
+	s.notifyLogTrace(ctx, fmt.Sprintf("didOpen: parsed %s", uri))
 	s.scheduleDiagnostics(ctx, uri)
 	return nil
 }
