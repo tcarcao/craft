@@ -41,13 +41,14 @@ changelog:
       - "^chore:"
       - "^test:"
 
-brews:
+homebrew_casks:
   - name: craft
     ids: [craft]
     repository:
       owner: tcarcao
       name: homebrew-craft
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
     homepage: "https://github.com/tcarcao/craft"
     description: "DDD modeling CLI with language server — parse, lint, inspect, visualize, and edit .craft files"
     license: "MIT"

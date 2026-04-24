@@ -11,7 +11,7 @@
 - Acceptance corpus at `testdata/corpus/` with 80+ `.craft` files and paired `.craftjson` goldens.
 
 ### Changed
-- CLI executable renamed from `craft-cli` to `craft`. Homebrew formula updated accordingly.
+- CLI executable renamed from `craft-cli` to `craft`. The Homebrew name is also updated to `craft`.
 - `craft check` and `craft generate` now default to `--parser=v2`. Use `--parser=antlr` as an escape hatch.
 - HTTP server (`craft server`) defaults to the v2 parser; `?parser=antlr` query param available as escape hatch.
 
