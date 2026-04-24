@@ -85,7 +85,7 @@ func checkCmd() *cobra.Command {
 			}
 		},
 	}
-	cmd.Flags().StringVar(&parserFlag, "parser", "antlr", "parser to use: antlr|v2")
+	cmd.Flags().StringVar(&parserFlag, "parser", "v2", "parser to use: v2|antlr  (antlr kept as escape hatch)")
 	cmd.Flags().BoolVar(&lspJSON, "lsp-json", false, "emit diagnostics+symbols+craftDoc as JSON (mirrors LSP responses)")
 	return cmd
 }
