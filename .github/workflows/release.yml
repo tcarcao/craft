@@ -19,9 +19,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Generate ANTLR parser
-        run: make generate-grammar
-
       - name: Run tests
         run: go test ./...
 
