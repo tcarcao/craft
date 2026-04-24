@@ -13,7 +13,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/tcarcao/craft/internal/parser"
 	"github.com/tcarcao/craft/internal/parser_antlr_adapter"
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/visualizer"
+	"github.com/tcarcao/craft/pkg/craft"
 )
 
 //go:embed templates
@@ -71,15 +73,11 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 			WantSequence: generateSequence,
 		}
 
-		p := parser.NewParser()
-
-		arch, err := p.ParseString(input)
+		doc, err := parseDSL(input, r.FormValue("parser"))
 		if err != nil {
 			s.respondWithError(w, err, input, generateC4, generateContext, generateSequence)
 			return
 		}
-
-		doc := parser_antlr_adapter.FromDSLModel(arch)
 
 		if generateC4 {
 			diagram, err := s.viz.GenerateC4(doc, "boundaries", true)
@@ -163,6 +161,7 @@ type DomainPreviewRequest struct {
 	DSL         string `json:"dsl"`
 	DiagramType string `json:"diagramType,omitempty"` // domain, sequence
 	DomainMode  string `json:"domainMode,omitempty"`  // detailed, architecture (only applies when diagramType is "domain")
+	Format      string `json:"format,omitempty"`      // png, svg, pdf, puml (default: png)
 }
 
 // C4-specific preview request
@@ -214,15 +213,11 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		p := parser.NewParser()
-
-		rawModel, err := p.ParseString(req.DSL)
+		model, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
-
-		model := parser_antlr_adapter.FromDSLModel(rawModel)
 
 		// Parse diagram type, default to "domain" if not provided or invalid
 		diagramType := visualizer.DiagramTypeDomain
@@ -236,8 +231,19 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 			domainMode = visualizer.DomainModeArchitecture
 		}
 
+		// Parse format, default to PNG
+		format := visualizer.FormatPNG
+		switch req.Format {
+		case "puml":
+			format = visualizer.FormatPUML
+		case "svg":
+			format = visualizer.FormatSVG
+		case "pdf":
+			format = visualizer.FormatPDF
+		}
+
 		// Generate diagram with type and mode
-		diagram, _, err := s.viz.GenerateDomainDiagramWithTypeAndModeAndFormat(model, diagramType, domainMode, visualizer.FormatPNG)
+		diagram, _, err := s.viz.GenerateDomainDiagramWithTypeAndModeAndFormat(model, diagramType, domainMode, format)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
 			return
@@ -263,15 +269,11 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		p := parser.NewParser()
-
-		rawArch, err := p.ParseString(req.DSL)
+		arch, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
-
-		arch := parser_antlr_adapter.FromDSLModel(rawArch)
 
 		fmt.Println(req.FocusInfo)
 
@@ -322,6 +324,27 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// parseDSL parses a Craft DSL string with the specified parser.
+// parserName "" or "v2" uses the hand-written parser (default for all handlers).
+// parserName "antlr" uses the ANTLR parser as an escape hatch via ?parser=antlr.
+//
+// v2 parse diagnostics are intentionally discarded — the HTTP server uses
+// island-parsing semantics and renders whatever partial model the parser produces.
+// Handlers that need strict error checking should use the CLI instead.
+func parseDSL(src, parserName string) (*craft.CraftDoc, error) {
+	if parserName == "antlr" {
+		p := parser.NewParser()
+		model, err := p.ParseString(src)
+		if err != nil {
+			return nil, err
+		}
+		return parser_antlr_adapter.FromDSLModel(model), nil
+	}
+	// default: v2 hand-written parser
+	astFile, _ := syntax.Parse(src)
+	return syntax.Project(astFile), nil
+}
+
 func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DomainDownloadRequest
@@ -331,14 +354,11 @@ func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		p := parser.NewParser()
-		rawModel, err := p.ParseString(req.DSL)
+		model, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
-
-		model := parser_antlr_adapter.FromDSLModel(rawModel)
 
 		// Convert format string to SupportedFormat
 		var format visualizer.SupportedFormat
@@ -409,14 +429,11 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		p := parser.NewParser()
-		rawModel, err := p.ParseString(req.DSL)
+		model, err := parseDSL(req.DSL, r.URL.Query().Get("parser"))
 		if err != nil {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
 			return
 		}
-
-		model := parser_antlr_adapter.FromDSLModel(rawModel)
 
 		// Convert format string to SupportedFormat
 		var format visualizer.SupportedFormat
