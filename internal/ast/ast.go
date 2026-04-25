@@ -15,12 +15,21 @@ func LineToLSP(line int) int {
 
 // File is the root AST node for a parsed .craft file.
 type File struct {
-	Actors    []*ActorDecl    `json:"actors,omitempty"`
-	Domains   []*DomainDecl   `json:"domains,omitempty"`
-	Services  []*ServiceDecl  `json:"services,omitempty"`
-	UseCases  []*UseCaseDecl  `json:"useCases,omitempty"`
-	Archs     []*ArchDecl     `json:"archs,omitempty"`
-	Exposures []*ExposureDecl `json:"exposures,omitempty"`
+	Actors      []*ActorDecl       `json:"actors,omitempty"`
+	ActorBlocks []*ActorBlockRange `json:"actorBlocks,omitempty"` // ranges of actors { } blocks
+	Domains     []*DomainDecl      `json:"domains,omitempty"`
+	Services    []*ServiceDecl     `json:"services,omitempty"`
+	UseCases    []*UseCaseDecl     `json:"useCases,omitempty"`
+	Archs       []*ArchDecl        `json:"archs,omitempty"`
+	Exposures   []*ExposureDecl    `json:"exposures,omitempty"`
+}
+
+// ActorBlockRange tracks the source range of an actors { } block.
+type ActorBlockRange struct {
+	// Line is the 1-based source line of the `actors` keyword.
+	Line int
+	// EndLine is the 1-based source line of the closing `}`.
+	EndLine int
 }
 
 // ExposureDecl represents an exposure block: exposure <name> { to: ... through: ... }.
@@ -80,6 +89,8 @@ type ServiceDecl struct {
 	DeploymentRules []DeploymentRule `json:"deploymentRules,omitempty"`
 	// Line is the 1-based source line where the service name appears.
 	Line int `json:"line,omitempty"`
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int `json:"endLine,omitempty"`
 	// ContextLines holds the 1-based source line for each entry in Contexts
 	// (parallel slice). Used for go-to-definition cursor matching.
 	ContextLines []int `json:"contextLines,omitempty"`
@@ -92,6 +103,8 @@ type DomainDecl struct {
 	BoundedContexts []string `json:"boundedContexts,omitempty"`
 	// Line is the 1-based source line where the domain name appears.
 	Line int `json:"line,omitempty"`
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int `json:"endLine,omitempty"`
 }
 
 // ActorDecl represents either a block entry (actors { user Foo }) or an
@@ -120,6 +133,8 @@ type UseCaseDecl struct {
 	Scenarios []*ScenarioDecl `json:"scenarios,omitempty"`
 	// Line is the 1-based source line of the use_case keyword.
 	Line int `json:"line,omitempty"`
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int `json:"endLine,omitempty"`
 }
 
 // ScenarioDecl represents a single `when ...` clause within a use case.

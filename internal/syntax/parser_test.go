@@ -444,3 +444,62 @@ func TestParse_SubjectlessTrigger(t *testing.T) {
 		t.Errorf("event: got %q want DailyCron", trigger.Event)
 	}
 }
+
+func TestParse_ServiceEndLine(t *testing.T) {
+	src := "services {\n  MyService {\n    contexts: Foo\n  }\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if len(f.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(f.Services))
+	}
+	if f.Services[0].EndLine != 4 {
+		t.Errorf("expected EndLine=4, got %d", f.Services[0].EndLine)
+	}
+}
+
+func TestParse_DomainEndLine(t *testing.T) {
+	src := "domain Commerce {\n  Orders\n  Payments\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if len(f.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(f.Domains))
+	}
+	if f.Domains[0].EndLine != 4 {
+		t.Errorf("expected EndLine=4, got %d", f.Domains[0].EndLine)
+	}
+}
+
+func TestParse_UseCaseEndLine(t *testing.T) {
+	src := "actor user Foo\nuse_case \"DoThing\" {\n  when Foo does something\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if len(f.UseCases) != 1 {
+		t.Fatalf("expected 1 use case, got %d", len(f.UseCases))
+	}
+	if f.UseCases[0].EndLine != 4 {
+		t.Errorf("expected EndLine=4, got %d", f.UseCases[0].EndLine)
+	}
+}
+
+func TestParse_ActorBlockRange(t *testing.T) {
+	src := "actors {\n  user Alice\n  system Bob\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if len(f.ActorBlocks) != 1 {
+		t.Fatalf("expected 1 actor block, got %d", len(f.ActorBlocks))
+	}
+	if f.ActorBlocks[0].Line != 1 {
+		t.Errorf("expected block Line=1, got %d", f.ActorBlocks[0].Line)
+	}
+	if f.ActorBlocks[0].EndLine != 4 {
+		t.Errorf("expected block EndLine=4, got %d", f.ActorBlocks[0].EndLine)
+	}
+}
