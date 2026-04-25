@@ -202,7 +202,13 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 	}
 
 	for _, d := range f.Domains {
-		sym := DomainSymbol{Name: d.Name, BoundedContexts: d.BoundedContexts, Line: d.Line, EndLine: d.EndLine, URI: uri}
+		sym := DomainSymbol{
+			Name:            d.Name,
+			BoundedContexts: d.BoundedContexts,
+			Line:            d.Line,
+			EndLine:         d.EndLine,
+			URI:             uri,
+		}
 		if prev, dup := seenDomains[d.Name]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",

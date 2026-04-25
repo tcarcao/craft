@@ -330,3 +330,49 @@ func TestAnalyzeWorkspace_ExposureContexts_TargetIsActor(t *testing.T) {
 		t.Errorf("expected invalid-exposure-target diagnostic for actor in `contexts:`, got none: %v", diags)
 	}
 }
+
+func TestAnalyzeFile_ServiceEndLinePropagated(t *testing.T) {
+	f := &ast.File{
+		Services: []*ast.ServiceDecl{
+			{Name: "Svc", Contexts: []string{"Ctx"}, Line: 2, EndLine: 5},
+		},
+	}
+	syms, _ := sema.AnalyzeFile("file:///a.craft", f)
+	if len(syms.Services) == 0 {
+		t.Fatal("expected 1 service symbol")
+	}
+	if syms.Services[0].EndLine != 5 {
+		t.Errorf("expected EndLine=5, got %d", syms.Services[0].EndLine)
+	}
+}
+
+func TestAnalyzeFile_DomainEndLinePropagated(t *testing.T) {
+	f := &ast.File{
+		Domains: []*ast.DomainDecl{
+			{Name: "Commerce", BoundedContexts: []string{"Orders"}, Line: 1, EndLine: 4},
+		},
+	}
+	syms, _ := sema.AnalyzeFile("file:///a.craft", f)
+	if len(syms.Domains) == 0 {
+		t.Fatal("expected 1 domain symbol")
+	}
+	if syms.Domains[0].EndLine != 4 {
+		t.Errorf("expected EndLine=4, got %d", syms.Domains[0].EndLine)
+	}
+}
+
+func TestAnalyzeFile_UseCaseEndLinePropagated(t *testing.T) {
+	f := &ast.File{
+		Actors: []*ast.ActorDecl{{Name: "Foo", Type: ast.ActorTypeUser}},
+		UseCases: []*ast.UseCaseDecl{
+			{Name: "DoThing", Line: 2, EndLine: 6},
+		},
+	}
+	syms, _ := sema.AnalyzeFile("file:///a.craft", f)
+	if len(syms.UseCases) == 0 {
+		t.Fatal("expected 1 use case symbol")
+	}
+	if syms.UseCases[0].EndLine != 6 {
+		t.Errorf("expected EndLine=6, got %d", syms.UseCases[0].EndLine)
+	}
+}
