@@ -181,6 +181,14 @@ func mergeServices(svcs []*ast.ServiceDecl) []craft.Service {
 		if e.svc.Deployment.Type == "" && s.DeploymentType != "" {
 			e.svc.Deployment.Type = s.DeploymentType
 		}
+		if len(e.svc.Deployment.Rules) == 0 && len(s.DeploymentRules) > 0 {
+			for _, r := range s.DeploymentRules {
+				e.svc.Deployment.Rules = append(e.svc.Deployment.Rules, craft.DeploymentRule{
+					Percentage: r.Percentage,
+					Target:     r.Target,
+				})
+			}
+		}
 	}
 
 	out := make([]craft.Service, 0, len(order))

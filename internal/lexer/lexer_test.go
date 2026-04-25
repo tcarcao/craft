@@ -60,6 +60,63 @@ func TestLexer_Actors(t *testing.T) {
 	}
 }
 
+func TestLexer_BlockComment(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		wantTypes []lexer.TokenType
+	}{
+		{
+			name:      "block comment skipped",
+			src:       "/* this is a comment */ actor user Foo",
+			wantTypes: []lexer.TokenType{lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "multi-line block comment",
+			src:       "/* line1\nline2 */ domain Foo { }",
+			wantTypes: []lexer.TokenType{lexer.TokenKwDomain, lexer.TokenIdent, lexer.TokenLBrace, lexer.TokenRBrace, lexer.TokenEOF},
+		},
+		{
+			name:      "unclosed block comment reaches EOF safely",
+			src:       "/* unclosed",
+			wantTypes: []lexer.TokenType{lexer.TokenEOF},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			toks := l.All()
+			if len(toks) != len(tc.wantTypes) {
+				t.Fatalf("token count: got %d want %d\ntokens: %v", len(toks), len(tc.wantTypes), toks)
+			}
+			for i, tok := range toks {
+				if tok.Type != tc.wantTypes[i] {
+					t.Errorf("token[%d]: got type %v want %v (value=%q)", i, tok.Type, tc.wantTypes[i], tok.Value)
+				}
+			}
+		})
+	}
+}
+
+func TestLexer_IdentifierWithDot(t *testing.T) {
+	tests := []struct{ src, want string }{
+		{"my.service", "my.service"},
+		{"v1.2.3", "v1.2.3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.src, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			tok := l.Next()
+			if tok.Type != lexer.TokenIdent {
+				t.Fatalf("expected TokenIdent, got %v", tok.Type)
+			}
+			if tok.Value != tc.want {
+				t.Errorf("got %q want %q", tok.Value, tc.want)
+			}
+		})
+	}
+}
+
 func TestLexer_LineNumbers(t *testing.T) {
 	src := "actors {\n    user Foo\n    system Bar\n}"
 	l := lexer.New(src)
@@ -92,5 +149,76 @@ func TestLexer_LineNumbers(t *testing.T) {
 	}
 	if barLine != 3 {
 		t.Errorf("Bar line: got %d want 3", barLine)
+	}
+}
+
+func TestLexer_StringEscapes(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{name: "escaped quote",           src: `"He said \"hi\""`, want: `He said "hi"`},
+		{name: "escaped backslash",       src: `"path\\file"`,      want: `path\file`},
+		{name: "escaped newline",         src: `"line1\nline2"`,    want: "line1\nline2"},
+		{name: "escaped tab",             src: `"col1\tcol2"`,      want: "col1\tcol2"},
+		{name: "escaped carriage return", src: `"cr\r"`,            want: "cr\r"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			tok := l.Next()
+			if tok.Type != lexer.TokenString {
+				t.Fatalf("expected TokenString, got %v", tok.Type)
+			}
+			if tok.Value != tc.want {
+				t.Errorf("got %q want %q", tok.Value, tc.want)
+			}
+		})
+	}
+}
+
+func TestLexer_NumberTokens(t *testing.T) {
+	tests := []struct {
+		src       string
+		wantType  lexer.TokenType
+		wantValue string
+	}{
+		{"42",    lexer.TokenNumber,     "42"},
+		{"1.5",   lexer.TokenNumber,     "1.5"},
+		{"90%",   lexer.TokenPercentage, "90%"},
+		{"25.5%", lexer.TokenPercentage, "25.5%"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.src, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			tok := l.Next()
+			if tok.Type != tc.wantType {
+				t.Errorf("type: got %v want %v", tok.Type, tc.wantType)
+			}
+			if tok.Value != tc.wantValue {
+				t.Errorf("value: got %q want %q", tok.Value, tc.wantValue)
+			}
+		})
+	}
+}
+
+func TestLexer_PunctuationTokens(t *testing.T) {
+	tests := []struct {
+		src      string
+		wantType lexer.TokenType
+	}{
+		{"(", lexer.TokenLParen},
+		{")", lexer.TokenRParen},
+		{"->", lexer.TokenArrow},
+	}
+	for _, tc := range tests {
+		t.Run(tc.src, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			tok := l.Next()
+			if tok.Type != tc.wantType {
+				t.Errorf("got %v want %v", tok.Type, tc.wantType)
+			}
+		})
 	}
 }

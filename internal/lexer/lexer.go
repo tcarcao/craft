@@ -61,6 +61,15 @@ const (
 	// identifiers per Q3.
 	TokenKwExposure // exposure
 
+	// Q7: numeric values for modifier values and deployment rules
+	TokenNumber     // [0-9]+ ('.' [0-9]+)?
+	TokenPercentage // NUMBER '%'
+
+	// deployment rule punctuation
+	TokenLParen // (
+	TokenRParen // )
+	TokenArrow  // ->
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -144,6 +153,17 @@ func (l *Lexer) Next() Token {
 		return l.consume(TokenRBracket)
 	case ch == '"':
 		return l.scanString()
+	case ch == '(':
+		return l.consume(TokenLParen)
+	case ch == ')':
+		return l.consume(TokenRParen)
+	case ch == '-' && l.peek(1) == '>':
+		tok := l.token(TokenArrow, "->")
+		l.advance()
+		l.advance()
+		return tok
+	case unicode.IsDigit(ch):
+		return l.scanNumber()
 	case ch == '\n':
 		// Newlines are generally not significant for Craft's grammar; skip.
 		l.advance()
@@ -174,15 +194,26 @@ func (l *Lexer) skipWhitespaceAndComments() {
 			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 				l.advance()
 			}
+		case ch == '/' && l.peek(1) == '*':
+			l.advance() // consume /
+			l.advance() // consume *
+			for l.pos < len(l.src) {
+				if l.src[l.pos] == '*' && l.peek(1) == '/' {
+					l.advance() // consume *
+					l.advance() // consume /
+					break
+				}
+				l.advance()
+			}
 		default:
 			return
 		}
 	}
 }
 
-// scanString scans a double-quoted string literal. Escape sequences are not
-// interpreted (the raw text between the quotes is the token value). An
-// unterminated string (no closing `"` before EOF) returns TokenError.
+// scanString scans a double-quoted string literal. Supported escape sequences:
+// \", \\, \n, \t, \r. Unknown escapes are passed through as-is (backslash + char).
+// An unterminated string (no closing `"` before EOF) returns TokenError.
 func (l *Lexer) scanString() Token {
 	startLine := l.line
 	startCol := l.col
@@ -192,27 +223,35 @@ func (l *Lexer) scanString() Token {
 	for l.pos < len(l.src) {
 		ch := l.src[l.pos]
 		if ch == '"' {
-			l.advance() // consume closing "
+			l.advance()
 			closed = true
 			break
 		}
-		if ch == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
-			// escaped quote inside the string
-			l.advance()
-			val = append(val, '"')
-			l.advance()
+		if ch == '\\' && l.pos+1 < len(l.src) {
+			l.advance() // consume backslash
+			next := l.src[l.pos]
+			l.advance() // consume escape char
+			switch next {
+			case '"':
+				val = append(val, '"')
+			case '\\':
+				val = append(val, '\\')
+			case 'n':
+				val = append(val, '\n')
+			case 't':
+				val = append(val, '\t')
+			case 'r':
+				val = append(val, '\r')
+			default:
+				val = append(val, '\\', next)
+			}
 			continue
 		}
 		val = append(val, ch)
 		l.advance()
 	}
 	if !closed {
-		return Token{
-			Type:   TokenError,
-			Value:  "unterminated string literal",
-			Line:   startLine,
-			Column: startCol,
-		}
+		return Token{Type: TokenError, Value: "unterminated string literal", Line: startLine, Column: startCol}
 	}
 	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol}
 }
@@ -233,6 +272,37 @@ func (l *Lexer) scanIdent() Token {
 		// so identifiers like "User" aren't lowercased when used as names.
 	}
 	return Token{Type: tt, Value: val, Line: startLine, Column: startCol}
+}
+
+func (l *Lexer) scanNumber() Token {
+	startLine := l.line
+	startCol := l.col
+	start := l.pos
+	for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+		l.advance()
+	}
+	// Check for decimal part (only if followed by more digits, e.g. 1.5 not 1.identifier)
+	if l.pos < len(l.src) && l.src[l.pos] == '.' &&
+		l.pos+1 < len(l.src) && unicode.IsDigit(l.src[l.pos+1]) {
+		l.advance() // consume '.'
+		for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+			l.advance()
+		}
+	}
+	// If followed by '%', emit as percentage (e.g. 90%)
+	if l.pos < len(l.src) && l.src[l.pos] == '%' {
+		l.advance()
+		return Token{Type: TokenPercentage, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
+	}
+	// If followed by a letter/underscore (e.g. 30s, 1ms), scan as identifier for
+	// backward compatibility with alphanumeric modifier values.
+	if l.pos < len(l.src) && (unicode.IsLetter(l.src[l.pos]) || l.src[l.pos] == '_') {
+		for l.pos < len(l.src) && isIdentContinue(l.src[l.pos]) {
+			l.advance()
+		}
+		return Token{Type: TokenIdent, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
+	}
+	return Token{Type: TokenNumber, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
 }
 
 func (l *Lexer) consume(tt TokenType) Token {
@@ -270,5 +340,5 @@ func isIdentStart(r rune) bool {
 }
 
 func isIdentContinue(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-'
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.'
 }

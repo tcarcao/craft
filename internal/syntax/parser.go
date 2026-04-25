@@ -67,6 +67,12 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			domains, d := p.parseDomainsBlock()
 			diags = append(diags, d...)
 			file.Domains = append(file.Domains, domains...)
+		case lexer.TokenKwService:
+			svc, d := p.parseServiceStatement()
+			diags = append(diags, d...)
+			if svc != nil {
+				file.Services = append(file.Services, svc)
+			}
 		case lexer.TokenKwServices:
 			services, d := p.parseServicesBlock()
 			diags = append(diags, d...)
@@ -107,7 +113,7 @@ func (p *Parser) parseActorStatement() (*ast.ActorDecl, []craft.Diagnostic) {
 	typeTok := p.peek()
 	at, ok := tokenToActorType(typeTok)
 	if !ok {
-		diags = append(diags, p.diagUnexpected(typeTok, "actor type (user/system/service)"))
+		diags = append(diags, p.diagUnexpected(typeTok, "actor type"))
 		p.resyncToTopLevel()
 		return nil, diags
 	}
@@ -154,7 +160,7 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, []craft.Diagnostic) {
 				continue
 			}
 			// Unknown token inside block — skip to avoid infinite loop.
-			diags = append(diags, p.diagUnexpected(tok, "actor type (user/system/service)"))
+			diags = append(diags, p.diagUnexpected(tok, "actor type"))
 			p.consume()
 			continue
 		}
@@ -417,6 +423,51 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 	return services, diags
 }
 
+// parseServiceStatement parses: service <name> { <field>* }
+// This is the singular top-level service form (Q11).
+func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) {
+	p.consume() // consume `service`
+	var diags []craft.Diagnostic
+
+	nameTok := p.peek()
+	var name string
+	var nameLine int
+	if nameTok.Type == lexer.TokenIdent || nameTok.Type == lexer.TokenString {
+		name = nameTok.Value
+		nameLine = nameTok.Line
+		p.consume()
+	} else {
+		diags = append(diags, p.diagUnexpected(nameTok, "service name"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		return nil, diags
+	}
+	p.consume() // consume '{'
+
+	svc, d := p.parseServiceBody(name, nameLine)
+	diags = append(diags, d...)
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  fmt.Sprintf("unclosed service block for %q (missing `}`)", name),
+			Severity: craft.SeverityError,
+			Range: craft.Range{
+				Start: craft.Position{Line: ast.LineToLSP(nameLine)},
+				End:   craft.Position{Line: ast.LineToLSP(nameLine)},
+			},
+		})
+		return svc, diags
+	}
+	p.consume() // consume '}'
+	return svc, diags
+}
+
 // parseServiceBody parses the fields inside a service { ... } block.
 func (p *Parser) parseServiceBody(name string, nameLine int) (*ast.ServiceDecl, []craft.Diagnostic) {
 	svc := &ast.ServiceDecl{Name: name, Line: nameLine}
@@ -457,12 +508,10 @@ func (p *Parser) parseServiceBody(name string, nameLine int) (*ast.ServiceDecl, 
 				diags = append(diags, p.diagUnexpected(p.peek(), "language identifier"))
 			}
 		case "deployment":
-			if p.peek().Type == lexer.TokenIdent {
-				svc.DeploymentType = p.peek().Value
-				p.consume()
-			} else {
-				diags = append(diags, p.diagUnexpected(p.peek(), "deployment type identifier"))
-			}
+			dt, rules, dd := p.parseDeploymentSpec()
+			diags = append(diags, dd...)
+			svc.DeploymentType = dt
+			svc.DeploymentRules = rules
 		default:
 			// Unknown field — skip to next line (consume until next ident that
 			// could be a field name, or `}`).
@@ -471,6 +520,72 @@ func (p *Parser) parseServiceBody(name string, nameLine int) (*ast.ServiceDecl, 
 	}
 
 	return svc, diags
+}
+
+// parseDeploymentSpec parses: deployment_type ('(' deployment_rule (',' deployment_rule)* ')')?
+func (p *Parser) parseDeploymentSpec() (string, []ast.DeploymentRule, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+
+	typeTok := p.peek()
+	var dt string
+	if typeTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(typeTok.Type) {
+		dt = typeTok.Value
+		p.consume()
+	} else {
+		diags = append(diags, p.diagUnexpected(typeTok, "deployment type identifier"))
+		return "", nil, diags
+	}
+
+	if p.peek().Type != lexer.TokenLParen {
+		return dt, nil, diags
+	}
+	p.consume() // consume '('
+
+	var rules []ast.DeploymentRule
+	for !p.atEOF() && p.peek().Type != lexer.TokenRParen {
+		pctTok := p.peek()
+		if pctTok.Type != lexer.TokenPercentage {
+			diags = append(diags, p.diagUnexpected(pctTok, "percentage (e.g. 90%)"))
+			p.consume()
+			continue
+		}
+		pct := pctTok.Value
+		p.consume()
+
+		if p.peek().Type != lexer.TokenArrow {
+			diags = append(diags, p.diagUnexpected(p.peek(), "->"))
+			p.consume()
+			continue
+		}
+		p.consume() // consume '->'
+
+		targetTok := p.peek()
+		var target string
+		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
+			target = targetTok.Value
+			p.consume()
+		} else {
+			diags = append(diags, p.diagUnexpected(targetTok, "deployment target identifier"))
+		}
+
+		rules = append(rules, ast.DeploymentRule{Percentage: pct, Target: target})
+
+		if p.peek().Type == lexer.TokenComma {
+			p.consume()
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed deployment rule list (missing `)`)",
+			Severity: craft.SeverityError,
+			Range:    tokenRange(typeTok),
+		})
+		return dt, rules, diags
+	}
+	p.consume() // consume ')'
+	return dt, rules, diags
 }
 
 // parseIdentList parses a comma-separated list of identifiers (or strings).
@@ -1167,11 +1282,23 @@ func (p *Parser) parseModifierList() ([]ast.ArchModifier, []craft.Diagnostic) {
 		if p.peek().Type == lexer.TokenColon {
 			p.consume() // consume `:`
 			valTok := p.peek()
-			if valTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(valTok.Type) {
+			switch valTok.Type {
+			case lexer.TokenIdent:
 				value = valTok.Value
 				p.consume()
-			} else {
-				diags = append(diags, p.diagUnexpected(valTok, "modifier value"))
+			case lexer.TokenString:
+				value = valTok.Value // already unquoted by lexer
+				p.consume()
+			case lexer.TokenNumber, lexer.TokenPercentage:
+				value = valTok.Value
+				p.consume()
+			default:
+				if isAnyKeywordAsIdent(valTok.Type) {
+					value = valTok.Value
+					p.consume()
+				} else {
+					diags = append(diags, p.diagUnexpected(valTok, "modifier value (identifier, string, or number)"))
+				}
 			}
 		}
 
@@ -1211,6 +1338,9 @@ func isAnyKeywordAsIdent(tt lexer.TokenType) bool {
 
 // --- helpers ---
 
+// tokenToActorType converts a token to an ActorType.
+// Q5: any identifier is a valid actor type (open taxonomy).
+// The canonical types (user/system/service) are preserved as constants.
 func tokenToActorType(tok lexer.Token) (ast.ActorType, bool) {
 	switch tok.Type {
 	case lexer.TokenKwUser:
@@ -1219,6 +1349,11 @@ func tokenToActorType(tok lexer.Token) (ast.ActorType, bool) {
 		return ast.ActorTypeSystem, true
 	case lexer.TokenKwService:
 		return ast.ActorTypeService, true
+	case lexer.TokenIdent:
+		return ast.ActorType(tok.Value), true
+	}
+	if isAnyKeywordAsIdent(tok.Type) {
+		return ast.ActorType(tok.Value), true
 	}
 	return "", false
 }
@@ -1239,8 +1374,8 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 	switch tt {
 	case lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
-		lexer.TokenKwServices, lexer.TokenKwUseCase,
-		lexer.TokenKwArch:
+		lexer.TokenKwService, lexer.TokenKwServices,
+		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure:
 		return true
 	}
 	return false

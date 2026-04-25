@@ -62,6 +62,12 @@ type ArchModifier struct {
 	Value string
 }
 
+// DeploymentRule is a single percentage-to-target mapping within a deployment spec.
+type DeploymentRule struct {
+	Percentage string // e.g. "90%"
+	Target     string // e.g. "stable"
+}
+
 // ServiceDecl represents a service declaration inside a services { ... } block.
 type ServiceDecl struct {
 	Name       string   `json:"name"`
@@ -70,6 +76,8 @@ type ServiceDecl struct {
 	Language   string   `json:"language,omitempty"`
 	// DeploymentType is the deployment strategy type (e.g. "canary", "blue_green", "rolling").
 	DeploymentType string `json:"deploymentType,omitempty"`
+	// DeploymentRules holds the percentage-to-target rules for parameterised deployment types.
+	DeploymentRules []DeploymentRule `json:"deploymentRules,omitempty"`
 	// Line is the 1-based source line where the service name appears.
 	Line int `json:"line,omitempty"`
 	// ContextLines holds the 1-based source line for each entry in Contexts
