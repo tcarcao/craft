@@ -35,6 +35,8 @@ type DomainSymbol struct {
 	BoundedContexts []string
 	// Line is the 1-based source line of the domain name.
 	Line int
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int
 	// URI is the file that contains this declaration.
 	URI string
 }
@@ -47,6 +49,8 @@ type ServiceSymbol struct {
 	Language   string
 	// Line is the 1-based source line of the service name.
 	Line int
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int
 	// URI is the file that contains this declaration.
 	URI string
 }
@@ -56,6 +60,8 @@ type UseCaseSymbol struct {
 	Name string
 	// Line is the 1-based source line of the use_case keyword.
 	Line int
+	// EndLine is the 1-based source line of the closing `}`, for folding.
+	EndLine int
 	// URI is the file that contains this declaration.
 	URI string
 }
@@ -196,7 +202,7 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 	}
 
 	for _, d := range f.Domains {
-		sym := DomainSymbol{Name: d.Name, BoundedContexts: d.BoundedContexts, Line: d.Line, URI: uri}
+		sym := DomainSymbol{Name: d.Name, BoundedContexts: d.BoundedContexts, Line: d.Line, EndLine: d.EndLine, URI: uri}
 		if prev, dup := seenDomains[d.Name]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
@@ -220,6 +226,7 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 			DataStores: s.DataStores,
 			Language:   s.Language,
 			Line:       s.Line,
+			EndLine:    s.EndLine,
 			URI:        uri,
 		}
 		if prev, dup := seenServices[s.Name]; dup {
@@ -260,7 +267,7 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 	// Use case collection + duplicate-use-case-name rule (Q23).
 	seenUseCases := make(map[string]UseCaseSymbol)
 	for _, uc := range f.UseCases {
-		sym := UseCaseSymbol{Name: uc.Name, Line: uc.Line, URI: uri}
+		sym := UseCaseSymbol{Name: uc.Name, Line: uc.Line, EndLine: uc.EndLine, URI: uri}
 		if prev, dup := seenUseCases[uc.Name]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code: "craft/sema/duplicate-use-case-name",
