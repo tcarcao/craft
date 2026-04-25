@@ -317,3 +317,116 @@ func TestSetTrace_LogTrace(t *testing.T) {
 
 	cancel()
 }
+
+func TestExecuteCommand_CraftExtractWorkspace(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- lsp.Serve(ctx, serverIn, serverOut)
+	}()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id,
+		Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	craftSrc := "domain Commerce {\n  Orders\n}\nservices {\n  OrderSvc {\n    contexts: Orders\n  }\n}\n"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///test.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"CRAFT_EXTRACT_WORKSPACE","arguments":[]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read messages until we find the command response (skip diagnostics etc.)
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Services []struct {
+			Name      string   `json:"name"`
+			StartLine int      `json:"startLine"`
+			EndLine   int      `json:"endLine"`
+			Contexts  []string `json:"contexts"`
+		} `json:"services"`
+		Domains []struct {
+			Name    string `json:"name"`
+			EndLine int    `json:"endLine"`
+		} `json:"domains"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+
+	if len(result.Services) != 1 || result.Services[0].Name != "OrderSvc" {
+		t.Errorf("expected 1 service OrderSvc, got %+v", result.Services)
+	}
+	if result.Services[0].EndLine == 0 {
+		t.Error("expected non-zero EndLine for OrderSvc")
+	}
+	if len(result.Services[0].Contexts) == 0 || result.Services[0].Contexts[0] != "Orders" {
+		t.Errorf("expected contexts=[Orders], got %v", result.Services[0].Contexts)
+	}
+	if len(result.Domains) != 1 || result.Domains[0].Name != "Commerce" {
+		t.Errorf("expected 1 domain Commerce, got %+v", result.Domains)
+	}
+	if result.Domains[0].EndLine == 0 {
+		t.Error("expected non-zero EndLine for Commerce domain")
+	}
+
+	cancel()
+}
+
+func mustMarshalString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}

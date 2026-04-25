@@ -126,11 +126,11 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
-			// ExecuteCommandProvider lists the custom LSP commands we handle (Q16).
+			// ExecuteCommandProvider lists the custom LSP commands we handle.
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
 				Commands: []string{
-					"EXTRACT_DOMAINS_FROM_CURRENT",
-					"EXTRACT_DOMAINS_FROM_WORKSPACE",
+					"CRAFT_EXTRACT_WORKSPACE",
+					"craft.extractDslFromBlockRanges",
 				},
 			},
 		},
@@ -509,100 +509,213 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 }
 
 // ExecuteCommand handles workspace/executeCommand for custom Craft LSP commands.
-// EXTRACT_DOMAINS_FROM_CURRENT and EXTRACT_DOMAINS_FROM_WORKSPACE are ported
-// here from the old TS server (Q16). They return a domain extraction payload
-// that the VSCode sidebar views consume.
 func (s *Server) ExecuteCommand(_ context.Context, params *protocol.ExecuteCommandParams) (interface{}, error) {
 	if params == nil {
 		return nil, nil
 	}
 	switch params.Command {
-	case "EXTRACT_DOMAINS_FROM_CURRENT":
-		return s.extractDomainsFromCurrent(params.Arguments), nil
-	case "EXTRACT_DOMAINS_FROM_WORKSPACE":
-		return s.extractDomainsFromWorkspace(), nil
+	case "CRAFT_EXTRACT_WORKSPACE":
+		return s.craftExtractWorkspace(params.Arguments), nil
+	case "craft.extractDslFromBlockRanges":
+		return s.extractPartialDslFromBlockRanges(params.Arguments), nil
 	}
 	return nil, nil
 }
 
-// extractDomainsFromCurrent returns domain/service data for the active file.
-// The first argument (if present) should be the current file URI.
-func (s *Server) extractDomainsFromCurrent(args []interface{}) interface{} {
-	if len(args) == 0 {
-		return domainExtractionResult{}
-	}
-	uriArg, ok := args[0].(string)
-	if !ok {
-		// args may be json.RawMessage; attempt decode
-		if raw, ok2 := args[0].(json.RawMessage); ok2 {
-			var s string
-			if err := json.Unmarshal(raw, &s); err == nil {
-				uriArg = s
-			}
+// craftExtractWorkspace returns the full flat DSL schema across all workspace files.
+// The optional first argument is the current file URI used to set inCurrentFile flags.
+func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
+	var currentFileURI string
+	if len(args) > 0 {
+		switch v := args[0].(type) {
+		case string:
+			currentFileURI = v
+		case json.RawMessage:
+			_ = json.Unmarshal(v, &currentFileURI)
 		}
 	}
-	f := s.ws.Get(uriArg)
-	if f == nil || f.AST == nil {
-		return domainExtractionResult{}
-	}
 
-	result := domainExtractionResult{}
-	rm := s.ws.ResolutionMap()
-
-	for _, svc := range f.AST.Services {
-		entry := serviceEntry{Name: svc.Name}
-		for _, ctx := range svc.Contexts {
-			if domSym, ok := sema.ResolveServiceContext(rm, uriArg, svc.Name, ctx); ok {
-				entry.Domains = append(entry.Domains, domainRef{
-					Name:   domSym.Name,
-					URI:    domSym.URI,
-					Line:   domSym.Line,
-					BCName: ctx,
-				})
-			}
-		}
-		result.Services = append(result.Services, entry)
-	}
-	return result
-}
-
-// extractDomainsFromWorkspace returns domain/service data across all workspace files.
-func (s *Server) extractDomainsFromWorkspace() interface{} {
 	wsSym := s.ws.WorkspaceSymbols()
-	result := domainExtractionResult{}
+	result := craftExtractionResult{}
 
 	for _, svc := range wsSym.Services {
-		entry := serviceEntry{Name: svc.Name}
-		for _, ctx := range svc.Contexts {
-			if domSym, ok := wsSym.BoundedContexts[ctx]; ok {
-				entry.Domains = append(entry.Domains, domainRef{
-					Name:   domSym.Name,
-					URI:    domSym.URI,
-					Line:   domSym.Line,
-					BCName: ctx,
-				})
-			}
-		}
-		result.Services = append(result.Services, entry)
+		result.Services = append(result.Services, craftServiceEntry{
+			Name:          svc.Name,
+			URI:           svc.URI,
+			StartLine:     svc.Line,
+			EndLine:       svc.EndLine,
+			Contexts:      svc.Contexts,
+			InCurrentFile: currentFileURI != "" && svc.URI == currentFileURI,
+		})
 	}
+
+	for _, dom := range wsSym.Domains {
+		var bcs []craftBCEntry
+		for _, bcName := range dom.BoundedContexts {
+			bcs = append(bcs, craftBCEntry{Name: bcName})
+		}
+		result.Domains = append(result.Domains, craftDomainEntry{
+			Name:            dom.Name,
+			URI:             dom.URI,
+			StartLine:       dom.Line,
+			EndLine:         dom.EndLine,
+			BoundedContexts: bcs,
+			InCurrentFile:   currentFileURI != "" && dom.URI == currentFileURI,
+		})
+	}
+
+	for _, uc := range wsSym.UseCases {
+		result.UseCases = append(result.UseCases, craftUseCaseEntry{
+			Name:          uc.Name,
+			URI:           uc.URI,
+			StartLine:     uc.Line,
+			EndLine:       uc.EndLine,
+			InCurrentFile: currentFileURI != "" && uc.URI == currentFileURI,
+		})
+	}
+
+	for _, actor := range wsSym.Actors {
+		result.Actors = append(result.Actors, craftActorEntry{
+			Name:          actor.Name,
+			ActorType:     string(actor.Type),
+			URI:           actor.URI,
+			StartLine:     actor.Line,
+			EndLine:       actor.Line, // actors are single-line within a block
+			InCurrentFile: currentFileURI != "" && actor.URI == currentFileURI,
+		})
+	}
+
+	for _, f := range s.ws.AllFiles() {
+		if f.AST == nil {
+			continue
+		}
+		for _, blockRange := range f.AST.ActorBlocks {
+			result.ActorBlocks = append(result.ActorBlocks, craftBlockRef{
+				FileURI:   f.URI,
+				StartLine: blockRange.Line,
+				EndLine:   blockRange.EndLine,
+			})
+		}
+		for _, arch := range f.AST.Archs {
+			result.Archs = append(result.Archs, craftArchEntry{
+				Name:          arch.Name,
+				URI:           f.URI,
+				StartLine:     arch.Line,
+				EndLine:       arch.EndLine,
+				InCurrentFile: currentFileURI != "" && f.URI == currentFileURI,
+			})
+		}
+	}
+
 	return result
 }
 
-// domainExtractionResult is the payload shape consumed by the VSCode sidebar.
-type domainExtractionResult struct {
-	Services []serviceEntry `json:"services,omitempty"`
+// extractPartialDslFromBlockRanges extracts DSL source lines for the given block ranges.
+func (s *Server) extractPartialDslFromBlockRanges(args []interface{}) interface{} {
+	if len(args) == 0 {
+		return ""
+	}
+
+	type blockRange struct {
+		FileURI   string `json:"fileUri"`
+		StartLine int    `json:"startLine"`
+		EndLine   int    `json:"endLine"`
+	}
+
+	rawBytes, err := json.Marshal(args[0])
+	if err != nil {
+		return ""
+	}
+	var ranges []blockRange
+	if err := json.Unmarshal(rawBytes, &ranges); err != nil {
+		return ""
+	}
+
+	var parts []string
+	for _, r := range ranges {
+		f := s.ws.Get(r.FileURI)
+		if f == nil {
+			continue
+		}
+		lines := strings.Split(f.Content, "\n")
+		start := r.StartLine - 1
+		end := r.EndLine
+		if start < 0 {
+			start = 0
+		}
+		if end > len(lines) {
+			end = len(lines)
+		}
+		if start >= end {
+			continue
+		}
+		parts = append(parts, strings.Join(lines[start:end], "\n"))
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 
-type serviceEntry struct {
-	Name    string      `json:"name"`
-	Domains []domainRef `json:"domains,omitempty"`
+type craftExtractionResult struct {
+	Services    []craftServiceEntry `json:"services,omitempty"`
+	Domains     []craftDomainEntry  `json:"domains,omitempty"`
+	UseCases    []craftUseCaseEntry `json:"useCases,omitempty"`
+	Actors      []craftActorEntry   `json:"actors,omitempty"`
+	ActorBlocks []craftBlockRef     `json:"actorBlocks,omitempty"`
+	Archs       []craftArchEntry    `json:"archs,omitempty"`
 }
 
-type domainRef struct {
-	Name   string `json:"name"`
-	URI    string `json:"uri"`
-	Line   int    `json:"line,omitempty"`
-	BCName string `json:"bcName"`
+type craftBlockRef struct {
+	FileURI   string `json:"fileUri"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
+}
+
+type craftServiceEntry struct {
+	Name          string   `json:"name"`
+	URI           string   `json:"uri"`
+	StartLine     int      `json:"startLine"`
+	EndLine       int      `json:"endLine"`
+	Contexts      []string `json:"contexts,omitempty"`
+	InCurrentFile bool     `json:"inCurrentFile,omitempty"`
+}
+
+type craftDomainEntry struct {
+	Name            string         `json:"name"`
+	URI             string         `json:"uri"`
+	StartLine       int            `json:"startLine"`
+	EndLine         int            `json:"endLine"`
+	BoundedContexts []craftBCEntry `json:"boundedContexts,omitempty"`
+	InCurrentFile   bool           `json:"inCurrentFile,omitempty"`
+}
+
+type craftBCEntry struct {
+	Name      string `json:"name"`
+	StartLine int    `json:"startLine"`
+}
+
+type craftUseCaseEntry struct {
+	Name          string `json:"name"`
+	URI           string `json:"uri"`
+	StartLine     int    `json:"startLine"`
+	EndLine       int    `json:"endLine"`
+	InCurrentFile bool   `json:"inCurrentFile,omitempty"`
+}
+
+type craftActorEntry struct {
+	Name          string `json:"name"`
+	ActorType     string `json:"type"`
+	URI           string `json:"uri"`
+	StartLine     int    `json:"startLine"`
+	EndLine       int    `json:"endLine"`
+	InCurrentFile bool   `json:"inCurrentFile,omitempty"`
+}
+
+type craftArchEntry struct {
+	Name          string `json:"name"`
+	URI           string `json:"uri"`
+	StartLine     int    `json:"startLine"`
+	EndLine       int    `json:"endLine"`
+	InCurrentFile bool   `json:"inCurrentFile,omitempty"`
 }
 
 // FoldingRanges returns folding ranges for the document.
