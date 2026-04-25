@@ -54,9 +54,12 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 				file.Actors = append(file.Actors, actor)
 			}
 		case lexer.TokenKwActors:
-			actors, d := p.parseActorsBlock()
+			actors, blockRange, d := p.parseActorsBlock()
 			diags = append(diags, d...)
 			file.Actors = append(file.Actors, actors...)
+			if blockRange != nil {
+				file.ActorBlocks = append(file.ActorBlocks, blockRange)
+			}
 		case lexer.TokenKwDomain:
 			domain, d := p.parseDomainStatement()
 			diags = append(diags, d...)
@@ -138,18 +141,19 @@ func (p *Parser) parseActorStatement() (*ast.ActorDecl, []craft.Diagnostic) {
 }
 
 // parseActorsBlock parses: actors { <actor_definition>* }
-func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, []craft.Diagnostic) {
-	p.consume() // consume `actors`
+func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, *ast.ActorBlockRange, []craft.Diagnostic) {
+	actorsTok := p.consume() // consume `actors`, capture line
 	var diags []craft.Diagnostic
-	var actors []*ast.ActorDecl
+	blockRange := &ast.ActorBlockRange{Line: actorsTok.Line}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return nil, nil, diags
 	}
 	p.consume() // consume `{`
 
+	var actors []*ast.ActorDecl
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
 		at, ok := tokenToActorType(tok)
@@ -188,10 +192,11 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return actors, diags
+		return actors, nil, diags // no block range on unclosed block
 	}
-	p.consume() // consume `}`
-	return actors, diags
+	blockRange.EndLine = p.peek().Line // capture `}` line
+	p.consume()                        // consume `}`
+	return actors, blockRange, diags
 }
 
 // parseDomainStatement parses: domain <name> { <bounded_context>* }
@@ -226,12 +231,14 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 		})
 		return &ast.DomainDecl{Name: nameTok.Value, BoundedContexts: contexts, Line: nameTok.Line}, diags
 	}
-	p.consume() // consume `}`
+	endLine := p.peek().Line // capture `}` line
+	p.consume()              // consume `}`
 
 	return &ast.DomainDecl{
 		Name:            nameTok.Value,
 		BoundedContexts: contexts,
 		Line:            nameTok.Line,
+		EndLine:         endLine,
 	}, diags
 }
 
@@ -282,12 +289,14 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 			})
 			return domains, diags
 		}
-		p.consume() // consume `}`
+		endLine := p.peek().Line // capture inner `}` line
+		p.consume()              // consume `}`
 
 		domains = append(domains, &ast.DomainDecl{
 			Name:            nameTok.Value,
 			BoundedContexts: contexts,
 			Line:            nameTok.Line,
+			EndLine:         endLine,
 		})
 	}
 
@@ -407,7 +416,8 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 			})
 			return services, diags
 		}
-		p.consume() // consume inner `}`
+		svc.EndLine = p.peek().Line // record `}` line before consuming
+		p.consume()                 // consume inner `}`
 	}
 
 	if p.atEOF() {
@@ -464,7 +474,8 @@ func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) 
 		})
 		return svc, diags
 	}
-	p.consume() // consume '}'
+	svc.EndLine = p.peek().Line // record `}` line before consuming
+	p.consume()                 // consume '}'
 	return svc, diags
 }
 
@@ -722,7 +733,8 @@ func (p *Parser) parseUseCaseBlock(counter *int) (*ast.UseCaseDecl, []craft.Diag
 		})
 		return uc, diags
 	}
-	p.consume() // consume `}`
+	uc.EndLine = p.peek().Line // record `}` line
+	p.consume()                // consume `}`
 	return uc, diags
 }
 
