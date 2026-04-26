@@ -286,6 +286,7 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 				Name:            nameTok.Value,
 				BoundedContexts: contexts,
 				Line:            nameTok.Line,
+				IsGrouped:       true,
 			})
 			return domains, diags
 		}
@@ -297,6 +298,7 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 			BoundedContexts: contexts,
 			Line:            nameTok.Line,
 			EndLine:         endLine,
+			IsGrouped:       true,
 		})
 	}
 
@@ -402,6 +404,7 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 
 		svc, d := p.parseServiceBody(name, nameLine)
 		diags = append(diags, d...)
+		svc.IsGrouped = true
 		services = append(services, svc)
 
 		if p.atEOF() {

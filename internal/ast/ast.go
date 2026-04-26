@@ -94,6 +94,8 @@ type ServiceDecl struct {
 	// ContextLines holds the 1-based source line for each entry in Contexts
 	// (parallel slice). Used for go-to-definition cursor matching.
 	ContextLines []int `json:"contextLines,omitempty"`
+	// IsGrouped is true when the service was declared inside a services { } block.
+	IsGrouped bool `json:"isGrouped,omitempty"`
 }
 
 // DomainDecl represents either an individual domain declaration
@@ -105,6 +107,8 @@ type DomainDecl struct {
 	Line int `json:"line,omitempty"`
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int `json:"endLine,omitempty"`
+	// IsGrouped is true when the domain was declared inside a domains { } block.
+	IsGrouped bool `json:"isGrouped,omitempty"`
 }
 
 // ActorDecl represents either a block entry (actors { user Foo }) or an

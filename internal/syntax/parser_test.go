@@ -503,3 +503,59 @@ func TestParse_ActorBlockRange(t *testing.T) {
 		t.Errorf("expected block EndLine=4, got %d", f.ActorBlocks[0].EndLine)
 	}
 }
+
+func TestParse_ServiceIsGrouped_InsideBlock(t *testing.T) {
+	src := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(f.Services))
+	}
+	if !f.Services[0].IsGrouped {
+		t.Error("expected IsGrouped=true for service inside services { } block")
+	}
+}
+
+func TestParse_ServiceIsGrouped_TopLevel(t *testing.T) {
+	src := "service OrderSvc {\n  contexts: Orders\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(f.Services))
+	}
+	if f.Services[0].IsGrouped {
+		t.Error("expected IsGrouped=false for top-level service declaration")
+	}
+}
+
+func TestParse_DomainIsGrouped_InsideBlock(t *testing.T) {
+	src := "domains {\n  Commerce {\n    Orders\n  }\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(f.Domains))
+	}
+	if !f.Domains[0].IsGrouped {
+		t.Error("expected IsGrouped=true for domain inside domains { } block")
+	}
+}
+
+func TestParse_DomainIsGrouped_TopLevel(t *testing.T) {
+	src := "domain Commerce {\n  Orders\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(f.Domains))
+	}
+	if f.Domains[0].IsGrouped {
+		t.Error("expected IsGrouped=false for top-level domain declaration")
+	}
+}
