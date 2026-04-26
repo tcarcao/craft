@@ -37,6 +37,8 @@ type DomainSymbol struct {
 	Line int
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int
+	// IsGrouped is true when the domain was declared inside a domains { } block.
+	IsGrouped bool
 	// URI is the file that contains this declaration.
 	URI string
 }
@@ -51,6 +53,8 @@ type ServiceSymbol struct {
 	Line int
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int
+	// IsGrouped is true when the service was declared inside a services { } block.
+	IsGrouped bool
 	// URI is the file that contains this declaration.
 	URI string
 }
@@ -207,6 +211,7 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 			BoundedContexts: d.BoundedContexts,
 			Line:            d.Line,
 			EndLine:         d.EndLine,
+			IsGrouped:       d.IsGrouped,
 			URI:             uri,
 		}
 		if prev, dup := seenDomains[d.Name]; dup {
@@ -233,6 +238,7 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 			Language:   s.Language,
 			Line:       s.Line,
 			EndLine:    s.EndLine,
+			IsGrouped:  s.IsGrouped,
 			URI:        uri,
 		}
 		if prev, dup := seenServices[s.Name]; dup {

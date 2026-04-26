@@ -5,6 +5,7 @@ import (
 
 	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
+	"github.com/tcarcao/craft/internal/syntax"
 )
 
 func TestAnalyzeFile_NoDuplicates(t *testing.T) {
@@ -374,5 +375,53 @@ func TestAnalyzeFile_UseCaseEndLinePropagated(t *testing.T) {
 	}
 	if syms.UseCases[0].EndLine != 6 {
 		t.Errorf("expected EndLine=6, got %d", syms.UseCases[0].EndLine)
+	}
+}
+
+func TestAnalyzeFile_ServiceIsGroupedPropagated(t *testing.T) {
+	src := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
+	f, _ := syntax.Parse(src)
+	syms, _ := sema.AnalyzeFile("file:///test.craft", f)
+	if len(syms.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(syms.Services))
+	}
+	if !syms.Services[0].IsGrouped {
+		t.Error("expected IsGrouped=true for service inside services { } block")
+	}
+}
+
+func TestAnalyzeFile_ServiceIsGrouped_TopLevel(t *testing.T) {
+	src := "service OrderSvc {\n  contexts: Orders\n}"
+	f, _ := syntax.Parse(src)
+	syms, _ := sema.AnalyzeFile("file:///test.craft", f)
+	if len(syms.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(syms.Services))
+	}
+	if syms.Services[0].IsGrouped {
+		t.Error("expected IsGrouped=false for top-level service")
+	}
+}
+
+func TestAnalyzeFile_DomainIsGroupedPropagated(t *testing.T) {
+	src := "domains {\n  Commerce {\n    Orders\n  }\n}"
+	f, _ := syntax.Parse(src)
+	syms, _ := sema.AnalyzeFile("file:///test.craft", f)
+	if len(syms.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(syms.Domains))
+	}
+	if !syms.Domains[0].IsGrouped {
+		t.Error("expected IsGrouped=true for domain inside domains { } block")
+	}
+}
+
+func TestAnalyzeFile_DomainIsGrouped_TopLevel(t *testing.T) {
+	src := "domain Commerce {\n  Orders\n}"
+	f, _ := syntax.Parse(src)
+	syms, _ := sema.AnalyzeFile("file:///test.craft", f)
+	if len(syms.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(syms.Domains))
+	}
+	if syms.Domains[0].IsGrouped {
+		t.Error("expected IsGrouped=false for top-level domain")
 	}
 }
