@@ -430,3 +430,531 @@ func mustMarshalString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
+
+func TestExtractDslFromBlockRanges_GroupedService(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1: services {
+	// Line 2:   OrderSvc {
+	// Line 3:     contexts: Orders
+	// Line 4:   }
+	// Line 5: }
+	craftSrc := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///grouped.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	// startLine:2 endLine:4 — the OrderSvc block (name line through closing })
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"craft.extractDslFromBlockRanges","arguments":[[{"fileUri":"file:///grouped.craft","startLine":2,"endLine":4}]]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var dsl string
+	if err := json.Unmarshal(resp.Result, &dsl); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if !strings.Contains(dsl, "services {") {
+		t.Errorf("expected grouped service to be wrapped in 'services {', got:\n%s", dsl)
+	}
+	if !strings.Contains(dsl, "OrderSvc") {
+		t.Errorf("expected service name OrderSvc in output, got:\n%s", dsl)
+	}
+	if !strings.Contains(dsl, "contexts: Orders") {
+		t.Errorf("expected contexts: Orders in output, got:\n%s", dsl)
+	}
+	cancel()
+}
+
+func TestExtractDslFromBlockRanges_TopLevelService(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1: service OrderSvc {
+	// Line 2:   contexts: Orders
+	// Line 3: }
+	craftSrc := "service OrderSvc {\n  contexts: Orders\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///toplevel.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	// startLine:1 endLine:3 — the OrderSvc block
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"craft.extractDslFromBlockRanges","arguments":[[{"fileUri":"file:///toplevel.craft","startLine":1,"endLine":3}]]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var dsl string
+	if err := json.Unmarshal(resp.Result, &dsl); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if !strings.Contains(dsl, "service OrderSvc") {
+		t.Errorf("expected top-level 'service OrderSvc' in output, got:\n%s", dsl)
+	}
+	// Must NOT be wrapped in services { }
+	if strings.HasPrefix(strings.TrimSpace(dsl), "services {") {
+		t.Errorf("expected top-level form (not wrapped in services { }), got:\n%s", dsl)
+	}
+	cancel()
+}
+
+func TestExtractDslFromBlockRanges_GroupedDomain(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1: domains {
+	// Line 2:   Commerce {
+	// Line 3:     Orders
+	// Line 4:   }
+	// Line 5: }
+	craftSrc := "domains {\n  Commerce {\n    Orders\n  }\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///domains.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	// startLine:2 endLine:4 — the Commerce block
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"craft.extractDslFromBlockRanges","arguments":[[{"fileUri":"file:///domains.craft","startLine":2,"endLine":4}]]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var dsl string
+	if err := json.Unmarshal(resp.Result, &dsl); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if !strings.Contains(dsl, "domains {") {
+		t.Errorf("expected grouped domain to be wrapped in 'domains {', got:\n%s", dsl)
+	}
+	if !strings.Contains(dsl, "Commerce") {
+		t.Errorf("expected domain name Commerce in output, got:\n%s", dsl)
+	}
+	cancel()
+}
+
+func TestExtractDslFromBlockRanges_TopLevelDomain(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1: domain Commerce {
+	// Line 2:   Orders
+	// Line 3: }
+	craftSrc := "domain Commerce {\n  Orders\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///topdomain.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"craft.extractDslFromBlockRanges","arguments":[[{"fileUri":"file:///topdomain.craft","startLine":1,"endLine":3}]]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var dsl string
+	if err := json.Unmarshal(resp.Result, &dsl); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if !strings.Contains(dsl, "domain Commerce") {
+		t.Errorf("expected top-level 'domain Commerce' in output, got:\n%s", dsl)
+	}
+	if strings.HasPrefix(strings.TrimSpace(dsl), "domains {") {
+		t.Errorf("expected top-level form (not wrapped in domains { }), got:\n%s", dsl)
+	}
+	cancel()
+}
+
+func TestExtractDslFromBlockRanges_OutOfBoundsRangeReturnsEmpty(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	craftSrc := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///skip.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	// startLine:99 endLine:100 — no declaration at these lines
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"craft.extractDslFromBlockRanges","arguments":[[{"fileUri":"file:///skip.craft","startLine":99,"endLine":100}]]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var dsl string
+	if err := json.Unmarshal(resp.Result, &dsl); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if strings.TrimSpace(dsl) != "" {
+		t.Errorf("expected empty result for unmatched range, got: %q", dsl)
+	}
+	cancel()
+}
+
+func TestExtractDslFromBlockRanges_UnmatchedInBoundsRangeFallsBackToRawLines(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1: services {
+	// Line 2:   OrderSvc {
+	// Line 3:     contexts: Orders
+	// Line 4:   }
+	// Line 5: }
+	// OrderSvc has Line=2, EndLine=4. Requesting startLine:3, endLine:4 does not
+	// match any service or domain declaration, so the fallback returns raw lines.
+	craftSrc := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///fallback.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	cmdID := id
+	// startLine:3 endLine:4 — in-bounds but does not match any AST declaration
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &cmdID,
+		Method: "workspace/executeCommand",
+		Params: json.RawMessage(`{"command":"craft.extractDslFromBlockRanges","arguments":[[{"fileUri":"file:///fallback.craft","startLine":3,"endLine":4}]]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == cmdID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for command response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("command returned error: %s", resp.Error)
+	}
+
+	var dsl string
+	if err := json.Unmarshal(resp.Result, &dsl); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	// The fallback should return the raw lines for the range (lines 3-4 of the file),
+	// which is non-empty content (not an AST-reconstructed block).
+	if strings.TrimSpace(dsl) == "" {
+		t.Errorf("expected non-empty raw-line fallback for in-bounds unmatched range, got empty string")
+	}
+	// The fallback must NOT produce a reconstructed services { } wrapper.
+	if strings.Contains(dsl, "services {") {
+		t.Errorf("expected raw-line fallback (no services { } wrapper), got:\n%s", dsl)
+	}
+	// The raw lines should contain content from lines 3 and 4.
+	if !strings.Contains(dsl, "contexts: Orders") {
+		t.Errorf("expected raw line content 'contexts: Orders' in fallback output, got:\n%s", dsl)
+	}
+	cancel()
+}

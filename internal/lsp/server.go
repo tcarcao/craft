@@ -29,6 +29,7 @@ import (
 	"go.lsp.dev/protocol"
 	"go.uber.org/zap"
 
+	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/workspace"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -610,7 +611,11 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	return result
 }
 
-// extractPartialDslFromBlockRanges extracts DSL source lines for the given block ranges.
+// extractPartialDslFromBlockRanges reconstructs well-formed DSL for the given block ranges.
+// Ranges are grouped by file so each file's AST is accessed only once.
+// Services and domains are reconstructed from AST fields with correct wrapping.
+// Ranges that don't match any declaration are silently skipped.
+// Remaining ranges (actor blocks, arch blocks) fall back to raw line slicing.
 func (s *Server) extractPartialDslFromBlockRanges(args []interface{}) interface{} {
 	if len(args) == 0 {
 		return ""
@@ -631,28 +636,164 @@ func (s *Server) extractPartialDslFromBlockRanges(args []interface{}) interface{
 		return ""
 	}
 
-	var parts []string
+	// Group ranges by file URI to access each file's AST only once.
+	type fileRange struct {
+		startLine int
+		endLine   int
+	}
+	byFile := make(map[string][]fileRange)
+	// Preserve input order by tracking file URIs in order of first appearance.
+	var fileOrder []string
+	seen := make(map[string]bool)
 	for _, r := range ranges {
-		f := s.ws.Get(r.FileURI)
-		if f == nil {
+		if !seen[r.FileURI] {
+			seen[r.FileURI] = true
+			fileOrder = append(fileOrder, r.FileURI)
+		}
+		byFile[r.FileURI] = append(byFile[r.FileURI], fileRange{r.StartLine, r.EndLine})
+	}
+
+	var parts []string
+	for _, fileURI := range fileOrder {
+		f := s.ws.Get(fileURI)
+		if f == nil || f.AST == nil {
 			continue
 		}
-		lines := strings.Split(f.Content, "\n")
-		start := r.StartLine - 1
-		end := r.EndLine
-		if start < 0 {
-			start = 0
+		contentLines := strings.Split(f.Content, "\n")
+
+		for _, r := range byFile[fileURI] {
+			part := reconstructDSLRange(f.AST, contentLines, r.startLine, r.endLine)
+			if part != "" {
+				parts = append(parts, part)
+			}
 		}
-		if end > len(lines) {
-			end = len(lines)
-		}
-		if start >= end {
-			continue
-		}
-		parts = append(parts, strings.Join(lines[start:end], "\n"))
 	}
 
 	return strings.Join(parts, "\n\n")
+}
+
+// reconstructDSLRange finds the AST declaration whose line range matches startLine:endLine
+// and returns well-formed DSL. Falls back to raw line slicing for non-service/domain ranges.
+// Returns empty string if no content is available for the range.
+func reconstructDSLRange(file *ast.File, contentLines []string, startLine, endLine int) string {
+	for _, svc := range file.Services {
+		if svc.Line == startLine && svc.EndLine == endLine {
+			return reconstructService(svc)
+		}
+	}
+	for _, dom := range file.Domains {
+		if dom.Line == startLine && dom.EndLine == endLine {
+			return reconstructDomain(dom)
+		}
+	}
+	// Fallback: raw line slice for actor blocks, arch blocks, and other top-level ranges.
+	start := startLine - 1
+	end := endLine
+	if start < 0 {
+		start = 0
+	}
+	if end > len(contentLines) {
+		end = len(contentLines)
+	}
+	if start >= end {
+		return ""
+	}
+	return strings.Join(contentLines[start:end], "\n")
+}
+
+// reconstructService builds valid DSL for a single service declaration.
+// Grouped services (from services { }) are wrapped; top-level services use the service keyword.
+func reconstructService(svc *ast.ServiceDecl) string {
+	var sb strings.Builder
+	indent := "  "
+	fieldIndent := "    "
+	if !svc.IsGrouped {
+		sb.WriteString("service ")
+		sb.WriteString(svc.Name)
+		sb.WriteString(" {\n")
+		indent = ""
+		fieldIndent = "  "
+	} else {
+		sb.WriteString("services {\n")
+		sb.WriteString(indent)
+		sb.WriteString(svc.Name)
+		sb.WriteString(" {\n")
+	}
+	if len(svc.Contexts) > 0 {
+		sb.WriteString(fieldIndent)
+		sb.WriteString("contexts: ")
+		sb.WriteString(strings.Join(svc.Contexts, ", "))
+		sb.WriteString("\n")
+	}
+	if len(svc.DataStores) > 0 {
+		sb.WriteString(fieldIndent)
+		sb.WriteString("data-stores: ")
+		sb.WriteString(strings.Join(svc.DataStores, ", "))
+		sb.WriteString("\n")
+	}
+	if svc.Language != "" {
+		sb.WriteString(fieldIndent)
+		sb.WriteString("language: ")
+		sb.WriteString(svc.Language)
+		sb.WriteString("\n")
+	}
+	if svc.DeploymentType != "" {
+		sb.WriteString(fieldIndent)
+		sb.WriteString("deployment: ")
+		sb.WriteString(svc.DeploymentType)
+		if len(svc.DeploymentRules) > 0 {
+			sb.WriteString("(")
+			for i, rule := range svc.DeploymentRules {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(rule.Percentage)
+				sb.WriteString(" -> ")
+				sb.WriteString(rule.Target)
+			}
+			sb.WriteString(")")
+		}
+		sb.WriteString("\n")
+	}
+	if svc.IsGrouped {
+		sb.WriteString(indent)
+		sb.WriteString("}\n}")
+	} else {
+		sb.WriteString("}")
+	}
+	return sb.String()
+}
+
+// reconstructDomain builds valid DSL for a single domain declaration.
+// Grouped domains (from domains { }) are wrapped; top-level domains use the domain keyword.
+func reconstructDomain(dom *ast.DomainDecl) string {
+	var sb strings.Builder
+	indent := "  "
+	bcIndent := "    "
+	if !dom.IsGrouped {
+		sb.WriteString("domain ")
+		sb.WriteString(dom.Name)
+		sb.WriteString(" {\n")
+		indent = ""
+		bcIndent = "  "
+	} else {
+		sb.WriteString("domains {\n")
+		sb.WriteString(indent)
+		sb.WriteString(dom.Name)
+		sb.WriteString(" {\n")
+	}
+	for _, bc := range dom.BoundedContexts {
+		sb.WriteString(bcIndent)
+		sb.WriteString(bc)
+		sb.WriteString("\n")
+	}
+	if dom.IsGrouped {
+		sb.WriteString(indent)
+		sb.WriteString("}\n}")
+	} else {
+		sb.WriteString("}")
+	}
+	return sb.String()
 }
 
 type craftExtractionResult struct {
