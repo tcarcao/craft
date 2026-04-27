@@ -183,38 +183,6 @@ func isClosedPipe(err error) bool {
 	return strings.Contains(s, "closed") || strings.Contains(s, "EOF") || strings.Contains(s, "broken pipe")
 }
 
-// collectMsgs reads messages from br for up to dur, returning all collected.
-// It uses a background goroutine so the deadline is respected even when readMsg blocks.
-func collectMsgs(br *bufio.Reader, dur time.Duration) []lspMsg {
-	type result struct {
-		msg lspMsg
-		err error
-	}
-	ch := make(chan result, 64)
-	go func() {
-		for {
-			msg, err := readMsg(br)
-			ch <- result{msg, err}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	timer := time.NewTimer(dur)
-	defer timer.Stop()
-	var msgs []lspMsg
-	for {
-		select {
-		case r := <-ch:
-			if r.err != nil {
-				return msgs
-			}
-			msgs = append(msgs, r.msg)
-		case <-timer.C:
-			return msgs
-		}
-	}
-}
 
 func TestSetTrace_LogTrace(t *testing.T) {
 	serverIn, testOut := io.Pipe()
@@ -249,6 +217,37 @@ func TestSetTrace_LogTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Single reader goroutine for the rest of the test. collectMsgs spawns a
+	// goroutine per call and leaks it after the timer fires; calling it more
+	// than once on the same bufio.Reader causes concurrent reads → panic.
+	msgCh := make(chan lspMsg, 128)
+	go func() {
+		for {
+			msg, err := readMsg(br)
+			if err != nil {
+				close(msgCh)
+				return
+			}
+			msgCh <- msg
+		}
+	}()
+	drainFor := func(dur time.Duration) []lspMsg {
+		timer := time.NewTimer(dur)
+		defer timer.Stop()
+		var msgs []lspMsg
+		for {
+			select {
+			case msg, ok := <-msgCh:
+				if !ok {
+					return msgs
+				}
+				msgs = append(msgs, msg)
+			case <-timer.C:
+				return msgs
+			}
+		}
+	}
+
 	// $/setTrace verbose
 	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "$/setTrace", Params: json.RawMessage(`{"value":"verbose"}`)}); err != nil {
 		t.Fatal(err)
@@ -264,7 +263,7 @@ func TestSetTrace_LogTrace(t *testing.T) {
 
 	// Collect messages for 500ms; expect at least one $/logTrace notification
 	var gotLogTrace bool
-	for _, msg := range collectMsgs(br, 500*time.Millisecond) {
+	for _, msg := range drainFor(500 * time.Millisecond) {
 		if msg.Method == "$/logTrace" {
 			gotLogTrace = true
 			break
@@ -287,7 +286,7 @@ func TestSetTrace_LogTrace(t *testing.T) {
 	}
 
 	var sawLogTraceAfterOff bool
-	for _, msg := range collectMsgs(br, 300*time.Millisecond) {
+	for _, msg := range drainFor(300 * time.Millisecond) {
 		if msg.Method == "$/logTrace" {
 			sawLogTraceAfterOff = true
 			break
@@ -307,7 +306,7 @@ func TestSetTrace_LogTrace(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	msgs3 := collectMsgs(br, 300*time.Millisecond)
+	msgs3 := drainFor(300 * time.Millisecond)
 	for _, m := range msgs3 {
 		if m.Method == "$/logTrace" {
 			t.Error("expected no $/logTrace at trace level 'messages', but got one")
