@@ -89,6 +89,8 @@ type ServiceDecl struct {
 	DeploymentRules []DeploymentRule `json:"deploymentRules,omitempty"`
 	// Line is the 1-based source line where the service name appears.
 	Line int `json:"line,omitempty"`
+	// Column is the 1-based column where the service name starts.
+	Column int `json:"column,omitempty"`
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int `json:"endLine,omitempty"`
 	// ContextLines holds the 1-based source line for each entry in Contexts
@@ -98,13 +100,23 @@ type ServiceDecl struct {
 	IsGrouped bool `json:"isGrouped,omitempty"`
 }
 
+// BoundedContextEntry is a bounded context name together with its source position.
+// Line and Column are 1-based, matching the lexer convention.
+type BoundedContextEntry struct {
+	Name   string `json:"name"`
+	Line   int    `json:"line,omitempty"`
+	Column int    `json:"column,omitempty"`
+}
+
 // DomainDecl represents either an individual domain declaration
 // (domain Name { BoundedContext... }) or an entry inside a domains block.
 type DomainDecl struct {
-	Name            string `json:"name"`
-	BoundedContexts []string `json:"boundedContexts,omitempty"`
+	Name            string                `json:"name"`
+	BoundedContexts []BoundedContextEntry `json:"boundedContexts,omitempty"`
 	// Line is the 1-based source line where the domain name appears.
 	Line int `json:"line,omitempty"`
+	// Column is the 1-based column where the domain name starts.
+	Column int `json:"column,omitempty"`
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int `json:"endLine,omitempty"`
 	// IsGrouped is true when the domain was declared inside a domains { } block.
@@ -118,6 +130,8 @@ type ActorDecl struct {
 	Type ActorType `json:"type"`
 	// Line is the 1-based source line where the actor name appears.
 	Line int `json:"line,omitempty"`
+	// Column is the 1-based column where the actor name starts.
+	Column int `json:"column,omitempty"`
 }
 
 // ActorType classifies an actor.

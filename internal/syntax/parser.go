@@ -179,9 +179,10 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, *ast.ActorBlockRange, []c
 		p.consume() // consume name
 
 		actors = append(actors, &ast.ActorDecl{
-			Name: nameTok.Value,
-			Type: at,
-			Line: nameTok.Line,
+			Name:   nameTok.Value,
+			Type:   at,
+			Line:   nameTok.Line,
+			Column: nameTok.Column,
 		})
 	}
 
@@ -229,7 +230,12 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(nameTok),
 		})
-		return &ast.DomainDecl{Name: nameTok.Value, BoundedContexts: contexts, Line: nameTok.Line}, diags
+		return &ast.DomainDecl{
+			Name:            nameTok.Value,
+			BoundedContexts: contexts,
+			Line:            nameTok.Line,
+			Column:          nameTok.Column,
+		}, diags
 	}
 	endLine := p.peek().Line // capture `}` line
 	p.consume()              // consume `}`
@@ -238,6 +244,7 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 		Name:            nameTok.Value,
 		BoundedContexts: contexts,
 		Line:            nameTok.Line,
+		Column:          nameTok.Column,
 		EndLine:         endLine,
 	}, diags
 }
@@ -286,6 +293,7 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 				Name:            nameTok.Value,
 				BoundedContexts: contexts,
 				Line:            nameTok.Line,
+				Column:          nameTok.Column,
 				IsGrouped:       true,
 			})
 			return domains, diags
@@ -297,6 +305,7 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 			Name:            nameTok.Value,
 			BoundedContexts: contexts,
 			Line:            nameTok.Line,
+			Column:          nameTok.Column,
 			EndLine:         endLine,
 			IsGrouped:       true,
 		})
@@ -319,8 +328,8 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 // These are the bounded context names inside a domain block.
 // Duplicates are silently deduplicated (keeping first occurrence), matching
 // ANTLR behavior and the v1 spec.
-func (p *Parser) parseBoundedContextList() ([]string, []craft.Diagnostic) {
-	var contexts []string
+func (p *Parser) parseBoundedContextList() ([]ast.BoundedContextEntry, []craft.Diagnostic) {
+	var contexts []ast.BoundedContextEntry
 	seen := make(map[string]bool)
 	var diags []craft.Diagnostic
 
@@ -329,7 +338,11 @@ func (p *Parser) parseBoundedContextList() ([]string, []craft.Diagnostic) {
 		if tok.Type == lexer.TokenIdent || isDomainNameToken(tok.Type) {
 			if !seen[tok.Value] {
 				seen[tok.Value] = true
-				contexts = append(contexts, tok.Value)
+				contexts = append(contexts, ast.BoundedContextEntry{
+					Name:   tok.Value,
+					Line:   tok.Line,
+					Column: tok.Column,
+				})
 			}
 			p.consume()
 		} else if tok.Type == lexer.TokenError {
@@ -378,16 +391,18 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 
 		// Service name: identifier, string literal, or keyword-as-name
 		var name string
-		var nameLine int
+		var nameLine, nameCol int
 		switch tok.Type {
 		case lexer.TokenIdent, lexer.TokenString:
 			name = tok.Value
 			nameLine = tok.Line
+			nameCol = tok.Column
 			p.consume()
 		default:
 			if isServiceNameKeyword(tok.Type) {
 				name = tok.Value
 				nameLine = tok.Line
+				nameCol = tok.Column
 				p.consume()
 			} else {
 				diags = append(diags, p.diagUnexpected(tok, "service name"))
@@ -402,7 +417,7 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 		}
 		p.consume() // consume inner `{`
 
-		svc, d := p.parseServiceBody(name, nameLine)
+		svc, d := p.parseServiceBody(name, nameLine, nameCol)
 		diags = append(diags, d...)
 		svc.IsGrouped = true
 		services = append(services, svc)
@@ -444,10 +459,11 @@ func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) 
 
 	nameTok := p.peek()
 	var name string
-	var nameLine int
+	var nameLine, nameCol int
 	if nameTok.Type == lexer.TokenIdent || nameTok.Type == lexer.TokenString {
 		name = nameTok.Value
 		nameLine = nameTok.Line
+		nameCol = nameTok.Column
 		p.consume()
 	} else {
 		diags = append(diags, p.diagUnexpected(nameTok, "service name"))
@@ -462,7 +478,7 @@ func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) 
 	}
 	p.consume() // consume '{'
 
-	svc, d := p.parseServiceBody(name, nameLine)
+	svc, d := p.parseServiceBody(name, nameLine, nameCol)
 	diags = append(diags, d...)
 
 	if p.atEOF() {
@@ -483,8 +499,8 @@ func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) 
 }
 
 // parseServiceBody parses the fields inside a service { ... } block.
-func (p *Parser) parseServiceBody(name string, nameLine int) (*ast.ServiceDecl, []craft.Diagnostic) {
-	svc := &ast.ServiceDecl{Name: name, Line: nameLine}
+func (p *Parser) parseServiceBody(name string, nameLine, nameCol int) (*ast.ServiceDecl, []craft.Diagnostic) {
+	svc := &ast.ServiceDecl{Name: name, Line: nameLine, Column: nameCol}
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {

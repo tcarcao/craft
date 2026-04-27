@@ -817,7 +817,7 @@ func reconstructDomain(dom *ast.DomainDecl) string {
 	}
 	for _, bc := range dom.BoundedContexts {
 		sb.WriteString(bcIndent)
-		sb.WriteString(bc)
+		sb.WriteString(bc.Name)
 		sb.WriteString("\n")
 	}
 	if dom.IsGrouped {
@@ -1279,9 +1279,13 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		if a.Line <= 0 {
 			continue // individual `actor` stmts without position — skip for now
 		}
+		col := uint32(0)
+		if a.Column > 0 {
+			col = uint32(a.Column - 1)
+		}
 		tokens = append(tokens, semanticToken{
 			line:      uint32(a.Line - 1),
-			startChar: 0, // TODO(S6+): use actual column once position tracking lands
+			startChar: col,
 			length:    uint32(len([]rune(a.Name))),
 			tokenType: semanticTokenTypeIndex(semanticTokenTypeActor),
 			modifiers: 1, // declaration
@@ -1293,13 +1297,34 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		if d.Line <= 0 {
 			continue
 		}
+		col := uint32(0)
+		if d.Column > 0 {
+			col = uint32(d.Column - 1)
+		}
 		tokens = append(tokens, semanticToken{
 			line:      uint32(d.Line - 1),
-			startChar: 0, // TODO(S6+): use actual column once position tracking lands
+			startChar: col,
 			length:    uint32(len([]rune(d.Name))),
 			tokenType: semanticTokenTypeIndex(semanticTokenTypeDomain),
 			modifiers: 1, // declaration
 		})
+		// Bounded contexts within the domain also get namespace tokens.
+		for _, bc := range d.BoundedContexts {
+			if bc.Line <= 0 {
+				continue
+			}
+			bcCol := uint32(0)
+			if bc.Column > 0 {
+				bcCol = uint32(bc.Column - 1)
+			}
+			tokens = append(tokens, semanticToken{
+				line:      uint32(bc.Line - 1),
+				startChar: bcCol,
+				length:    uint32(len([]rune(bc.Name))),
+				tokenType: semanticTokenTypeIndex(semanticTokenTypeDomain),
+				modifiers: 0,
+			})
+		}
 	}
 
 	// Services: token type index 2 ("interface"), modifier 1 (declaration).
@@ -1307,9 +1332,13 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		if svc.Line <= 0 {
 			continue
 		}
+		col := uint32(0)
+		if svc.Column > 0 {
+			col = uint32(svc.Column - 1)
+		}
 		tokens = append(tokens, semanticToken{
 			line:      uint32(svc.Line - 1),
-			startChar: 0,
+			startChar: col,
 			length:    uint32(len([]rune(svc.Name))),
 			tokenType: semanticTokenTypeIndex(semanticTokenTypeService),
 			modifiers: 1, // declaration

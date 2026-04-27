@@ -958,3 +958,136 @@ func TestExtractDslFromBlockRanges_UnmatchedInBoundsRangeFallsBackToRawLines(t *
 	}
 	cancel()
 }
+
+// TestSemanticTokens_ColumnTracking verifies that the relative-encoded uint32
+// data returned by textDocument/semanticTokens/full has correct startChar values
+// for actors, domain names, bounded contexts, and services. This guards against
+// regressions where all tokens are emitted at column 0.
+func TestSemanticTokens_ColumnTracking(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1:  actors {
+	// Line 2:      user Alice        — Alice at col 10 (1-based) → startChar 9
+	// Line 3:      system Bob        — Bob   at col 12           → startChar 11
+	// Line 4:  }
+	// Line 5:  domain Commerce {     — Commerce at col 8         → startChar 7
+	// Line 6:      Orders            — Orders   at col 5         → startChar 4
+	// Line 7:      Payments          — Payments at col 5         → startChar 4
+	// Line 8:  }
+	// Line 9:  service MyService {   — MyService at col 9        → startChar 8
+	// Line 10:     contexts: Orders
+	// Line 11: }
+	craftSrc := "actors {\n    user Alice\n    system Bob\n}\ndomain Commerce {\n    Orders\n    Payments\n}\nservice MyService {\n    contexts: Orders\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///tokens.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///tokens.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling semantic tokens result: %v", err)
+	}
+
+	// 6 tokens × 5 fields each = 30 uint32 values.
+	// Expected relative encoding (deltaLine, deltaChar, length, tokenType, modifiers):
+	//   Alice     → [1,  9, 5, 0, 1]  type=class(actor),     mod=declaration
+	//   Bob       → [1, 11, 3, 0, 1]  type=class(actor),     mod=declaration
+	//   Commerce  → [2,  7, 8, 1, 1]  type=namespace(domain), mod=declaration
+	//   Orders    → [1,  4, 6, 1, 0]  type=namespace(bc),     mod=0
+	//   Payments  → [1,  4, 8, 1, 0]  type=namespace(bc),     mod=0
+	//   MyService → [2,  8, 9, 2, 1]  type=interface(service),mod=declaration
+	want := []uint32{
+		1, 9, 5, 0, 1,
+		1, 11, 3, 0, 1,
+		2, 7, 8, 1, 1,
+		1, 4, 6, 1, 0,
+		1, 4, 8, 1, 0,
+		2, 8, 9, 2, 1,
+	}
+
+	if len(result.Data) != len(want) {
+		t.Fatalf("expected %d uint32 values (6 tokens × 5), got %d: %v", len(want), len(result.Data), result.Data)
+	}
+
+	type tokenFields struct {
+		deltaLine, deltaChar, length, tokenType, modifiers uint32
+	}
+	names := []string{"Alice", "Bob", "Commerce", "Orders(bc)", "Payments(bc)", "MyService"}
+	for i, name := range names {
+		base := i * 5
+		got := tokenFields{result.Data[base], result.Data[base+1], result.Data[base+2], result.Data[base+3], result.Data[base+4]}
+		exp := tokenFields{want[base], want[base+1], want[base+2], want[base+3], want[base+4]}
+		if got != exp {
+			t.Errorf("token %d (%s): got [%d,%d,%d,%d,%d] want [%d,%d,%d,%d,%d]",
+				i, name,
+				got.deltaLine, got.deltaChar, got.length, got.tokenType, got.modifiers,
+				exp.deltaLine, exp.deltaChar, exp.length, exp.tokenType, exp.modifiers,
+			)
+		}
+	}
+
+	cancel()
+}

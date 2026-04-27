@@ -49,8 +49,8 @@ func TestAnalyzeFile_DuplicateActorName(t *testing.T) {
 func TestAnalyzeFile_DuplicateDomainName(t *testing.T) {
 	f := &ast.File{
 		Domains: []*ast.DomainDecl{
-			{Name: "Payments", Line: 1, BoundedContexts: []string{"ProcessPayment"}},
-			{Name: "Payments", Line: 5, BoundedContexts: []string{"RefundPayment"}},
+			{Name: "Payments", Line: 1, BoundedContexts: []ast.BoundedContextEntry{{Name: "ProcessPayment"}}},
+			{Name: "Payments", Line: 5, BoundedContexts: []ast.BoundedContextEntry{{Name: "RefundPayment"}}},
 		},
 	}
 	syms, diags := sema.AnalyzeFile("file:///a.craft", f)
@@ -78,7 +78,7 @@ func TestAnalyzeFile_CrossKindNameReuse(t *testing.T) {
 			{Name: "Customer", Type: ast.ActorTypeUser, Line: 1},
 		},
 		Domains: []*ast.DomainDecl{
-			{Name: "Customer", Line: 3, BoundedContexts: []string{"Authentication"}},
+			{Name: "Customer", Line: 3, BoundedContexts: []ast.BoundedContextEntry{{Name: "Authentication"}}},
 		},
 	}
 	_, diags := sema.AnalyzeFile("file:///a.craft", f)
@@ -99,7 +99,7 @@ func TestAnalyzeFile_NoCrossKindWarningWhenNamesDiffer(t *testing.T) {
 			{Name: "Alice", Type: ast.ActorTypeUser, Line: 1},
 		},
 		Domains: []*ast.DomainDecl{
-			{Name: "Payments", Line: 3, BoundedContexts: []string{"ProcessPayment"}},
+			{Name: "Payments", Line: 3, BoundedContexts: []ast.BoundedContextEntry{{Name: "ProcessPayment"}}},
 		},
 	}
 	_, diags := sema.AnalyzeFile("file:///a.craft", f)
@@ -350,7 +350,7 @@ func TestAnalyzeFile_ServiceEndLinePropagated(t *testing.T) {
 func TestAnalyzeFile_DomainEndLinePropagated(t *testing.T) {
 	f := &ast.File{
 		Domains: []*ast.DomainDecl{
-			{Name: "Commerce", BoundedContexts: []string{"Orders"}, Line: 1, EndLine: 4},
+			{Name: "Commerce", BoundedContexts: []ast.BoundedContextEntry{{Name: "Orders"}}, Line: 1, EndLine: 4},
 		},
 	}
 	syms, _ := sema.AnalyzeFile("file:///a.craft", f)

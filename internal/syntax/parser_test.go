@@ -577,3 +577,124 @@ func TestParse_DomainIsGrouped_TopLevel(t *testing.T) {
 		t.Error("expected IsGrouped=false for top-level domain declaration")
 	}
 }
+
+// --- position tracking tests ---
+// These verify that Line and Column are set correctly on AST nodes so that
+// LSP semantic tokens point to the exact character where each name starts.
+
+func TestParse_ActorColumnTracking(t *testing.T) {
+	// Line 2: "    user Alice" — Alice starts at column 10 (1-based)
+	src := "actors {\n    user Alice\n    system Bob\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Actors) != 2 {
+		t.Fatalf("expected 2 actors, got %d", len(f.Actors))
+	}
+	alice := f.Actors[0]
+	if alice.Line != 2 {
+		t.Errorf("Alice: want Line=2, got %d", alice.Line)
+	}
+	if alice.Column != 10 {
+		t.Errorf("Alice: want Column=10, got %d", alice.Column)
+	}
+	bob := f.Actors[1]
+	if bob.Line != 3 {
+		t.Errorf("Bob: want Line=3, got %d", bob.Line)
+	}
+	if bob.Column != 12 {
+		t.Errorf("Bob: want Column=12, got %d", bob.Column)
+	}
+}
+
+func TestParse_DomainNameColumnTracking(t *testing.T) {
+	// "domain ECommerce {" — ECommerce starts at column 8 (after "domain ")
+	src := "domain ECommerce {\n    Auth\n    Profile\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Domains) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(f.Domains))
+	}
+	d := f.Domains[0]
+	if d.Line != 1 {
+		t.Errorf("domain name: want Line=1, got %d", d.Line)
+	}
+	if d.Column != 8 {
+		t.Errorf("domain name: want Column=8, got %d", d.Column)
+	}
+}
+
+func TestParse_BoundedContextPositionTracking(t *testing.T) {
+	// Line 2: "    Auth"   — Auth starts at column 5
+	// Line 3: "    Profile" — Profile starts at column 5
+	src := "domain ECommerce {\n    Auth\n    Profile\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	d := f.Domains[0]
+	if len(d.BoundedContexts) != 2 {
+		t.Fatalf("expected 2 bounded contexts, got %d", len(d.BoundedContexts))
+	}
+	auth := d.BoundedContexts[0]
+	if auth.Name != "Auth" {
+		t.Errorf("want Name=Auth, got %q", auth.Name)
+	}
+	if auth.Line != 2 {
+		t.Errorf("Auth: want Line=2, got %d", auth.Line)
+	}
+	if auth.Column != 5 {
+		t.Errorf("Auth: want Column=5, got %d", auth.Column)
+	}
+	profile := d.BoundedContexts[1]
+	if profile.Name != "Profile" {
+		t.Errorf("want Name=Profile, got %q", profile.Name)
+	}
+	if profile.Line != 3 {
+		t.Errorf("Profile: want Line=3, got %d", profile.Line)
+	}
+	if profile.Column != 5 {
+		t.Errorf("Profile: want Column=5, got %d", profile.Column)
+	}
+}
+
+func TestParse_ServiceColumnTracking(t *testing.T) {
+	// "service MyService {" — MyService starts at column 9 (after "service ")
+	src := "service MyService {\n    contexts: Auth\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(f.Services))
+	}
+	svc := f.Services[0]
+	if svc.Line != 1 {
+		t.Errorf("service: want Line=1, got %d", svc.Line)
+	}
+	if svc.Column != 9 {
+		t.Errorf("service: want Column=9, got %d", svc.Column)
+	}
+}
+
+func TestParse_GroupedServiceColumnTracking(t *testing.T) {
+	// Inside services block: "  OrderSvc {" — OrderSvc starts at column 3
+	src := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if len(f.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(f.Services))
+	}
+	svc := f.Services[0]
+	if svc.Line != 2 {
+		t.Errorf("service: want Line=2, got %d", svc.Line)
+	}
+	if svc.Column != 3 {
+		t.Errorf("service: want Column=3, got %d", svc.Column)
+	}
+}

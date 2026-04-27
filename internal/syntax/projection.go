@@ -23,9 +23,9 @@ func Project(f *ast.File) *craft.CraftDoc {
 		})
 	}
 	for _, d := range f.Domains {
-		contexts := d.BoundedContexts
-		if contexts == nil {
-			contexts = []string{}
+		contexts := make([]string, len(d.BoundedContexts))
+		for i, bc := range d.BoundedContexts {
+			contexts[i] = bc.Name
 		}
 		doc.Domains = append(doc.Domains, craft.Domain{
 			Name:            d.Name,

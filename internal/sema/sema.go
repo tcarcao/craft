@@ -206,9 +206,13 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 	}
 
 	for _, d := range f.Domains {
+		bcNames := make([]string, len(d.BoundedContexts))
+		for i, bc := range d.BoundedContexts {
+			bcNames[i] = bc.Name
+		}
 		sym := DomainSymbol{
 			Name:            d.Name,
-			BoundedContexts: d.BoundedContexts,
+			BoundedContexts: bcNames,
 			Line:            d.Line,
 			EndLine:         d.EndLine,
 			IsGrouped:       d.IsGrouped,
