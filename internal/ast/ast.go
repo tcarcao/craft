@@ -162,8 +162,8 @@ type TriggerDecl struct {
 	Verb string `json:"verb,omitempty"`
 	// Phrase is the rest of the trigger phrase after verb for external triggers.
 	Phrase string `json:"phrase,omitempty"`
-	// Domain is the listening domain/service for domain_listen triggers.
-	Domain string `json:"domain,omitempty"`
+	// Context is the listening context for domain_listen triggers.
+	Context string `json:"context,omitempty"`
 	// Event is the event string for domain_listen and event triggers.
 	Event string `json:"event,omitempty"`
 	// Description is the human-readable description of the full trigger line.
@@ -178,10 +178,10 @@ type ActionDecl struct {
 	ActionType string `json:"type"`
 	// ActionID is the global numeric ID assigned during parsing (for "action_N" CraftDoc output).
 	ActionID int `json:"actionId,omitempty"`
-	// Domain is the actor/domain/service that performs the action (the "from" party).
-	Domain string `json:"domain"`
-	// TargetDomain is the recipient for sync/return actions.
-	TargetDomain string `json:"targetDomain,omitempty"`
+	// Context is the context that performs the action (the "from" party).
+	Context string `json:"context"`
+	// TargetContext is the recipient for sync/return actions.
+	TargetContext string `json:"targetContext,omitempty"`
 	// Verb is the action verb for internal actions.
 	Verb string `json:"verb,omitempty"`
 	// Connector is "to" or "for" for sync actions.

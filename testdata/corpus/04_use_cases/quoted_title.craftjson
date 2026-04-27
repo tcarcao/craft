@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "UserService",
+              "context": "UserService",
               "verb": "creates",
               "phrase": "account",
               "description": "UserService creates account",

@@ -58,8 +58,8 @@
             {
               "id": "action_2",
               "type": "sync_action",
-              "domain": "PaymentProcessing",
-              "targetDomain": "AccountManagement",
+              "context": "PaymentProcessing",
+              "targetContext": "AccountManagement",
               "connector": "to",
               "phrase": "verify source account",
               "description": "PaymentProcessing asks AccountManagement to verify source account",
@@ -68,8 +68,8 @@
             {
               "id": "action_3",
               "type": "sync_action",
-              "domain": "PaymentProcessing",
-              "targetDomain": "TransactionValidation",
+              "context": "PaymentProcessing",
+              "targetContext": "TransactionValidation",
               "connector": "to",
               "phrase": "check transfer limits",
               "description": "PaymentProcessing asks TransactionValidation to check transfer limits",
@@ -78,7 +78,7 @@
             {
               "id": "action_4",
               "type": "internal_action",
-              "domain": "TransactionValidation",
+              "context": "TransactionValidation",
               "verb": "validates",
               "phrase": "transaction rules",
               "description": "TransactionValidation validates transaction rules",
@@ -87,8 +87,8 @@
             {
               "id": "action_5",
               "type": "sync_action",
-              "domain": "PaymentProcessing",
-              "targetDomain": "BalanceTracking",
+              "context": "PaymentProcessing",
+              "targetContext": "BalanceTracking",
               "connector": "to",
               "phrase": "reserve funds",
               "description": "PaymentProcessing asks BalanceTracking to reserve funds",
@@ -97,7 +97,7 @@
             {
               "id": "action_6",
               "type": "async_action",
-              "domain": "BalanceTracking",
+              "context": "BalanceTracking",
               "event": "Funds Reserved",
               "description": "BalanceTracking notifies \"Funds Reserved\"",
               "line": 25
@@ -108,7 +108,7 @@
           "id": "scenario_7",
           "trigger": {
             "type": "domain_listen",
-            "domain": "PaymentProcessing",
+            "context": "PaymentProcessing",
             "event": "Funds Reserved",
             "description": "when PaymentProcessing listens \"Funds Reserved\""
           },
@@ -116,8 +116,8 @@
             {
               "id": "action_8",
               "type": "sync_action",
-              "domain": "PaymentProcessing",
-              "targetDomain": "AccountManagement",
+              "context": "PaymentProcessing",
+              "targetContext": "AccountManagement",
               "connector": "to",
               "phrase": "verify destination account",
               "description": "PaymentProcessing asks AccountManagement to verify destination account",
@@ -126,7 +126,7 @@
             {
               "id": "action_9",
               "type": "internal_action",
-              "domain": "PaymentProcessing",
+              "context": "PaymentProcessing",
               "verb": "executes",
               "phrase": "fund transfer",
               "description": "PaymentProcessing executes fund transfer",
@@ -135,7 +135,7 @@
             {
               "id": "action_10",
               "type": "internal_action",
-              "domain": "BalanceTracking",
+              "context": "BalanceTracking",
               "verb": "updates",
               "phrase": "account balances",
               "description": "BalanceTracking updates account balances",
@@ -144,7 +144,7 @@
             {
               "id": "action_11",
               "type": "async_action",
-              "domain": "PaymentProcessing",
+              "context": "PaymentProcessing",
               "event": "Transfer Completed",
               "description": "PaymentProcessing notifies \"Transfer Completed\"",
               "line": 31
@@ -155,7 +155,7 @@
           "id": "scenario_12",
           "trigger": {
             "type": "domain_listen",
-            "domain": "CustomerNotification",
+            "context": "CustomerNotification",
             "event": "Transfer Completed",
             "description": "when CustomerNotification listens \"Transfer Completed\""
           },
@@ -163,7 +163,7 @@
             {
               "id": "action_13",
               "type": "internal_action",
-              "domain": "CustomerNotification",
+              "context": "CustomerNotification",
               "verb": "sends",
               "phrase": "confirmation to both accounts",
               "description": "CustomerNotification sends confirmation to both accounts",
@@ -189,8 +189,8 @@
             {
               "id": "action_15",
               "type": "sync_action",
-              "domain": "AccountManagement",
-              "targetDomain": "BalanceTracking",
+              "context": "AccountManagement",
+              "targetContext": "BalanceTracking",
               "connector": "to",
               "phrase": "get current balance",
               "description": "AccountManagement asks BalanceTracking to get current balance",
@@ -199,7 +199,7 @@
             {
               "id": "action_16",
               "type": "internal_action",
-              "domain": "BalanceTracking",
+              "context": "BalanceTracking",
               "verb": "calculates",
               "phrase": "available balance",
               "description": "BalanceTracking calculates available balance",
@@ -208,7 +208,7 @@
             {
               "id": "action_17",
               "type": "return_action",
-              "domain": "AccountManagement",
+              "context": "AccountManagement",
               "phrase": "balance information",
               "description": "AccountManagement returns balance information",
               "line": 41
@@ -233,8 +233,8 @@
             {
               "id": "action_19",
               "type": "sync_action",
-              "domain": "TransactionValidation",
-              "targetDomain": "AccountManagement",
+              "context": "TransactionValidation",
+              "targetContext": "AccountManagement",
               "connector": "to",
               "phrase": "freeze account",
               "description": "TransactionValidation asks AccountManagement to freeze account",
@@ -243,7 +243,7 @@
             {
               "id": "action_20",
               "type": "internal_action",
-              "domain": "AccountManagement",
+              "context": "AccountManagement",
               "verb": "applies",
               "phrase": "security hold",
               "description": "AccountManagement applies security hold",
@@ -252,7 +252,7 @@
             {
               "id": "action_21",
               "type": "async_action",
-              "domain": "TransactionValidation",
+              "context": "TransactionValidation",
               "event": "Account Frozen",
               "description": "TransactionValidation notifies \"Account Frozen\"",
               "line": 48
@@ -263,7 +263,7 @@
           "id": "scenario_22",
           "trigger": {
             "type": "domain_listen",
-            "domain": "CustomerNotification",
+            "context": "CustomerNotification",
             "event": "Account Frozen",
             "description": "when CustomerNotification listens \"Account Frozen\""
           },
@@ -271,7 +271,7 @@
             {
               "id": "action_23",
               "type": "internal_action",
-              "domain": "CustomerNotification",
+              "context": "CustomerNotification",
               "verb": "sends",
               "phrase": "security alert to customer",
               "description": "CustomerNotification sends security alert to customer",
@@ -280,7 +280,7 @@
             {
               "id": "action_24",
               "type": "async_action",
-              "domain": "CustomerNotification",
+              "context": "CustomerNotification",
               "event": "bank security team",
               "description": "CustomerNotification notifies \"bank security team\"",
               "line": 52
@@ -305,8 +305,8 @@
             {
               "id": "action_26",
               "type": "sync_action",
-              "domain": "PaymentProcessing",
-              "targetDomain": "AccountManagement",
+              "context": "PaymentProcessing",
+              "targetContext": "AccountManagement",
               "connector": "to",
               "phrase": "get scheduled payments",
               "description": "PaymentProcessing asks AccountManagement to get scheduled payments",
@@ -315,7 +315,7 @@
             {
               "id": "action_27",
               "type": "internal_action",
-              "domain": "PaymentProcessing",
+              "context": "PaymentProcessing",
               "verb": "processes",
               "phrase": "each scheduled payment",
               "description": "PaymentProcessing processes each scheduled payment",
@@ -324,7 +324,7 @@
             {
               "id": "action_28",
               "type": "internal_action",
-              "domain": "BalanceTracking",
+              "context": "BalanceTracking",
               "verb": "updates",
               "phrase": "balances for processed payments",
               "description": "BalanceTracking updates balances for processed payments",
@@ -333,7 +333,7 @@
             {
               "id": "action_29",
               "type": "async_action",
-              "domain": "PaymentProcessing",
+              "context": "PaymentProcessing",
               "event": "Scheduled Payments Processed",
               "description": "PaymentProcessing notifies \"Scheduled Payments Processed\"",
               "line": 60

@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "return_action",
-              "domain": "Offering",
+              "context": "Offering",
               "phrase": "available offering",
               "description": "Offering returns available offering",
               "line": 3
@@ -36,7 +36,7 @@
             {
               "id": "action_4",
               "type": "internal_action",
-              "domain": "Order",
+              "context": "Order",
               "verb": "creates",
               "connector": "a",
               "phrase": "draft Order",
@@ -46,7 +46,7 @@
             {
               "id": "action_5",
               "type": "return_action",
-              "domain": "Order",
+              "context": "Order",
               "connector": "the",
               "phrase": "url of the payment providers",
               "description": "Order returns url of the payment providers",
@@ -67,7 +67,7 @@
             {
               "id": "action_7",
               "type": "internal_action",
-              "domain": "PaymentProvider",
+              "context": "PaymentProvider",
               "verb": "confirms",
               "phrase": "payment",
               "description": "PaymentProvider confirms payment",
@@ -76,7 +76,7 @@
             {
               "id": "action_8",
               "type": "async_action",
-              "domain": "PaymentProvider",
+              "context": "PaymentProvider",
               "event": "PaymentCompleted",
               "description": "PaymentProvider notifies \"PaymentCompleted\"",
               "line": 11
@@ -87,7 +87,7 @@
           "id": "scenario_9",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Order",
+            "context": "Order",
             "event": "PaymentCompleted",
             "description": "when Order listens \"PaymentCompleted\""
           },
@@ -95,7 +95,7 @@
             {
               "id": "action_10",
               "type": "internal_action",
-              "domain": "Order",
+              "context": "Order",
               "verb": "marks",
               "connector": "the",
               "phrase": "Order as Paid",
@@ -122,8 +122,8 @@
             {
               "id": "action_12",
               "type": "sync_action",
-              "domain": "VASScheduling",
-              "targetDomain": "Wallet",
+              "context": "VASScheduling",
+              "targetContext": "Wallet",
               "connector": "to",
               "phrase": "reserve a VAS",
               "description": "VASScheduling asks Wallet to reserve a VAS",
@@ -132,7 +132,7 @@
             {
               "id": "action_13",
               "type": "internal_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "verb": "creates",
               "connector": "an",
               "phrase": "unconfirmed VAS reservation",
@@ -142,7 +142,7 @@
             {
               "id": "action_14",
               "type": "async_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "event": "VAS Addition Request Approved",
               "description": "Wallet notifies \"VAS Addition Request Approved\"",
               "line": 22
@@ -150,7 +150,7 @@
             {
               "id": "action_15",
               "type": "internal_action",
-              "domain": "VASScheduling",
+              "context": "VASScheduling",
               "verb": "drafts",
               "connector": "a",
               "phrase": "VAS schedule",
@@ -163,7 +163,7 @@
           "id": "scenario_16",
           "trigger": {
             "type": "domain_listen",
-            "domain": "VASScheduling",
+            "context": "VASScheduling",
             "event": "VAS Addition Request Approved",
             "description": "when VASScheduling listens \"VAS Addition Request Approved\""
           },
@@ -171,8 +171,8 @@
             {
               "id": "action_17",
               "type": "sync_action",
-              "domain": "VASScheduling",
-              "targetDomain": "OrderManagement",
+              "context": "VASScheduling",
+              "targetContext": "OrderManagement",
               "connector": "to",
               "phrase": "create an Order",
               "description": "VASScheduling asks OrderManagement to create an Order",
@@ -181,7 +181,7 @@
             {
               "id": "action_18",
               "type": "async_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "event": "Order Created",
               "description": "OrderManagement notifies \"Order Created\"",
               "line": 27
@@ -189,7 +189,7 @@
             {
               "id": "action_19",
               "type": "internal_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "verb": "marks",
               "connector": "the",
               "phrase": "Order as payment deferred",
@@ -199,7 +199,7 @@
             {
               "id": "action_20",
               "type": "async_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "event": "Order payment deferred",
               "description": "OrderManagement notifies \"Order payment deferred\"",
               "line": 29
@@ -210,7 +210,7 @@
           "id": "scenario_21",
           "trigger": {
             "type": "domain_listen",
-            "domain": "OrderFulfilment",
+            "context": "OrderFulfilment",
             "event": "Order payment deferred",
             "description": "when OrderFulfilment listens \"Order payment deferred\""
           },
@@ -218,8 +218,8 @@
             {
               "id": "action_22",
               "type": "sync_action",
-              "domain": "OrderFulfilment",
-              "targetDomain": "WalletItemAddition",
+              "context": "OrderFulfilment",
+              "targetContext": "WalletItemAddition",
               "connector": "to",
               "phrase": "fulfil the addition request",
               "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
@@ -228,8 +228,8 @@
             {
               "id": "action_23",
               "type": "sync_action",
-              "domain": "WalletItemAddition",
-              "targetDomain": "Wallet",
+              "context": "WalletItemAddition",
+              "targetContext": "Wallet",
               "connector": "to",
               "phrase": "add VAS",
               "description": "WalletItemAddition asks Wallet to add VAS",
@@ -238,7 +238,7 @@
             {
               "id": "action_24",
               "type": "async_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "event": "VAS added",
               "description": "Wallet notifies \"VAS added\"",
               "line": 34
@@ -249,7 +249,7 @@
           "id": "scenario_25",
           "trigger": {
             "type": "domain_listen",
-            "domain": "OrderFulfilment",
+            "context": "OrderFulfilment",
             "event": "VAS added",
             "description": "when OrderFulfilment listens \"VAS added\""
           },
@@ -257,8 +257,8 @@
             {
               "id": "action_26",
               "type": "sync_action",
-              "domain": "OrderFulfilment",
-              "targetDomain": "OrderManagement",
+              "context": "OrderFulfilment",
+              "targetContext": "OrderManagement",
               "connector": "to",
               "phrase": "mark the Order as fulfiled",
               "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
@@ -267,7 +267,7 @@
             {
               "id": "action_27",
               "type": "async_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "event": "Order completed",
               "description": "OrderManagement notifies \"Order completed\"",
               "line": 38
@@ -292,8 +292,8 @@
             {
               "id": "action_29",
               "type": "sync_action",
-              "domain": "VASScheduling",
-              "targetDomain": "Wallet",
+              "context": "VASScheduling",
+              "targetContext": "Wallet",
               "connector": "to",
               "phrase": "reserve a VAS",
               "description": "VASScheduling asks Wallet to reserve a VAS",
@@ -302,7 +302,7 @@
             {
               "id": "action_30",
               "type": "internal_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "verb": "reserves",
               "connector": "a",
               "phrase": "VAS",
@@ -312,7 +312,7 @@
             {
               "id": "action_31",
               "type": "async_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "event": "VAS Reserved",
               "description": "Wallet notifies \"VAS Reserved\"",
               "line": 45
@@ -320,7 +320,7 @@
             {
               "id": "action_32",
               "type": "internal_action",
-              "domain": "VASScheduling",
+              "context": "VASScheduling",
               "verb": "creates",
               "connector": "a",
               "phrase": "VAS schedule",
@@ -347,8 +347,8 @@
             {
               "id": "action_34",
               "type": "sync_action",
-              "domain": "VASScheduling",
-              "targetDomain": "Wallet",
+              "context": "VASScheduling",
+              "targetContext": "Wallet",
               "connector": "to",
               "phrase": "cancel the VAS reservation",
               "description": "VASScheduling asks Wallet to cancel the VAS reservation",
@@ -357,7 +357,7 @@
             {
               "id": "action_35",
               "type": "internal_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "verb": "cancels",
               "phrase": "VAS reservation",
               "description": "Wallet cancels VAS reservation",
@@ -366,7 +366,7 @@
             {
               "id": "action_36",
               "type": "async_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "event": "VAS Reservation Canceled",
               "description": "Wallet notifies \"VAS Reservation Canceled\"",
               "line": 53
@@ -374,7 +374,7 @@
             {
               "id": "action_37",
               "type": "internal_action",
-              "domain": "VASScheduling",
+              "context": "VASScheduling",
               "verb": "cancels",
               "connector": "the",
               "phrase": "VAS schedule",
@@ -401,7 +401,7 @@
             {
               "id": "action_39",
               "type": "internal_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "verb": "removes",
               "phrase": "VAS",
               "description": "Wallet removes VAS",
@@ -410,7 +410,7 @@
             {
               "id": "action_40",
               "type": "async_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "event": "VAS Expired",
               "description": "Wallet notifies \"VAS Expired\"",
               "line": 60
@@ -435,7 +435,7 @@
             {
               "id": "action_42",
               "type": "internal_action",
-              "domain": "OrderMgmt",
+              "context": "OrderMgmt",
               "verb": "creates",
               "connector": "an",
               "phrase": "Order with two items to fulfil: VAS and VAS Subscription",
@@ -445,7 +445,7 @@
             {
               "id": "action_43",
               "type": "async_action",
-              "domain": "OrderMgmt",
+              "context": "OrderMgmt",
               "event": "Order Created",
               "description": "OrderMgmt notifies \"Order Created\"",
               "line": 68
@@ -453,7 +453,7 @@
             {
               "id": "action_44",
               "type": "internal_action",
-              "domain": "OrderMgmt",
+              "context": "OrderMgmt",
               "verb": "marks",
               "connector": "the",
               "phrase": "Order as payment deferred",
@@ -463,7 +463,7 @@
             {
               "id": "action_45",
               "type": "async_action",
-              "domain": "OrderMgmt",
+              "context": "OrderMgmt",
               "event": "Order payment deferred",
               "description": "OrderMgmt notifies \"Order payment deferred\"",
               "line": 70
@@ -474,7 +474,7 @@
           "id": "scenario_46",
           "trigger": {
             "type": "domain_listen",
-            "domain": "OrderFulfilment",
+            "context": "OrderFulfilment",
             "event": "Order payment deferred",
             "description": "when OrderFulfilment listens \"Order payment deferred\""
           },
@@ -482,8 +482,8 @@
             {
               "id": "action_47",
               "type": "sync_action",
-              "domain": "OrderFulfilment",
-              "targetDomain": "VASMgmt",
+              "context": "OrderFulfilment",
+              "targetContext": "VASMgmt",
               "connector": "to",
               "phrase": "schedule the VAS",
               "description": "OrderFulfilment asks VASMgmt to schedule the VAS",
@@ -492,7 +492,7 @@
             {
               "id": "action_48",
               "type": "internal_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "verb": "schedules",
               "connector": "the",
               "phrase": "VAS for future application",
@@ -502,7 +502,7 @@
             {
               "id": "action_49",
               "type": "async_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "event": "VAS scheduled",
               "description": "VASMgmt notifies \"VAS scheduled\"",
               "line": 75
@@ -513,7 +513,7 @@
           "id": "scenario_50",
           "trigger": {
             "type": "domain_listen",
-            "domain": "OrderFulfilment",
+            "context": "OrderFulfilment",
             "event": "VAS scheduled",
             "description": "when OrderFulfilment listens \"VAS scheduled\""
           },
@@ -521,8 +521,8 @@
             {
               "id": "action_51",
               "type": "sync_action",
-              "domain": "OrderFulfilment",
-              "targetDomain": "Subscription",
+              "context": "OrderFulfilment",
+              "targetContext": "Subscription",
               "connector": "to",
               "phrase": "create a VAS Subscription",
               "description": "OrderFulfilment asks Subscription to create a VAS Subscription",
@@ -531,7 +531,7 @@
             {
               "id": "action_52",
               "type": "internal_action",
-              "domain": "Subscription",
+              "context": "Subscription",
               "verb": "creates",
               "connector": "a",
               "phrase": "VAS Subscription with the details",
@@ -541,7 +541,7 @@
             {
               "id": "action_53",
               "type": "internal_action",
-              "domain": "OrderFulfilment",
+              "context": "OrderFulfilment",
               "verb": "marks",
               "connector": "the",
               "phrase": "vas subscription item as Fulfiled",
@@ -568,7 +568,7 @@
             {
               "id": "action_55",
               "type": "internal_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "verb": "schedules",
               "connector": "a",
               "phrase": "VAS for future application",
@@ -578,7 +578,7 @@
             {
               "id": "action_56",
               "type": "async_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "event": "VAS scheduled with subscription included",
               "description": "VASMgmt notifies \"VAS scheduled with subscription included\"",
               "line": 86
@@ -589,7 +589,7 @@
           "id": "scenario_57",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Subscription",
+            "context": "Subscription",
             "event": "VAS scheduled with subscription included",
             "description": "when Subscription listens \"VAS scheduled with subscription included\""
           },
@@ -597,7 +597,7 @@
             {
               "id": "action_58",
               "type": "internal_action",
-              "domain": "Subscription",
+              "context": "Subscription",
               "verb": "creates",
               "connector": "a",
               "phrase": "VAS Subscription with the details",
@@ -624,7 +624,7 @@
             {
               "id": "action_60",
               "type": "internal_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "verb": "applies",
               "connector": "a",
               "phrase": "VAS and stores details until when its valid",
@@ -634,7 +634,7 @@
             {
               "id": "action_61",
               "type": "async_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "event": "VAS Applied",
               "description": "VASMgmt notifies \"VAS Applied\"",
               "line": 95
@@ -659,7 +659,7 @@
             {
               "id": "action_63",
               "type": "internal_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "verb": "marks",
               "connector": "the",
               "phrase": "VAS as expired",
@@ -669,7 +669,7 @@
             {
               "id": "action_64",
               "type": "async_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "event": "VAS expired",
               "description": "VASMgmt notifies \"VAS expired\"",
               "line": 101
@@ -680,7 +680,7 @@
           "id": "scenario_65",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Subscription",
+            "context": "Subscription",
             "event": "VAS expired",
             "description": "when Subscription listens \"VAS expired\""
           },
@@ -688,7 +688,7 @@
             {
               "id": "action_66",
               "type": "internal_action",
-              "domain": "Subscription",
+              "context": "Subscription",
               "verb": "checks",
               "phrase": "if VAS has active associated subscription",
               "description": "Subscription checks if VAS has active associated subscription",
@@ -697,8 +697,8 @@
             {
               "id": "action_67",
               "type": "sync_action",
-              "domain": "Subscription",
-              "targetDomain": "VASMgmt",
+              "context": "Subscription",
+              "targetContext": "VASMgmt",
               "connector": "to",
               "phrase": "schedule/apply a new VAS",
               "description": "Subscription asks VASMgmt to schedule/apply a new VAS",
@@ -707,7 +707,7 @@
             {
               "id": "action_68",
               "type": "internal_action",
-              "domain": "Subscription",
+              "context": "Subscription",
               "verb": "renews",
               "connector": "the",
               "phrase": "VAS Subscription with the VAS",
@@ -717,7 +717,7 @@
             {
               "id": "action_69",
               "type": "async_action",
-              "domain": "Susbscription",
+              "context": "Susbscription",
               "event": "VAS Subscription Renewed",
               "description": "Susbscription notifies \"VAS Subscription Renewed\"",
               "line": 107
@@ -742,7 +742,7 @@
             {
               "id": "action_71",
               "type": "internal_action",
-              "domain": "Subscription",
+              "context": "Subscription",
               "verb": "cancels",
               "connector": "the",
               "phrase": "subscription",

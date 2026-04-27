@@ -101,7 +101,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "validates",
               "phrase": "email format",
               "description": "Authentication validates email format",
@@ -110,8 +110,8 @@
             {
               "id": "action_3",
               "type": "sync_action",
-              "domain": "Authentication",
-              "targetDomain": "Database",
+              "context": "Authentication",
+              "targetContext": "Database",
               "connector": "to",
               "phrase": "check email uniqueness",
               "description": "Authentication asks Database to check email uniqueness",
@@ -120,7 +120,7 @@
             {
               "id": "action_4",
               "type": "internal_action",
-              "domain": "Profile",
+              "context": "Profile",
               "verb": "creates",
               "phrase": "user profile",
               "description": "Profile creates user profile",
@@ -129,7 +129,7 @@
             {
               "id": "action_5",
               "type": "async_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "event": "User Registered",
               "description": "Authentication notifies \"User Registered\"",
               "line": 45
@@ -140,7 +140,7 @@
           "id": "scenario_6",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Profile",
+            "context": "Profile",
             "event": "User Registered",
             "description": "when Profile listens \"User Registered\""
           },
@@ -148,8 +148,8 @@
             {
               "id": "action_7",
               "type": "sync_action",
-              "domain": "Profile",
-              "targetDomain": "Database",
+              "context": "Profile",
+              "targetContext": "Database",
               "connector": "to",
               "phrase": "store profile data",
               "description": "Profile asks Database to store profile data",
@@ -158,8 +158,8 @@
             {
               "id": "action_8",
               "type": "sync_action",
-              "domain": "Profile",
-              "targetDomain": "Notifier",
+              "context": "Profile",
+              "targetContext": "Notifier",
               "connector": "to",
               "phrase": "send welcome email",
               "description": "Profile asks Notifier to send welcome email",

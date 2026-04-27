@@ -16,8 +16,8 @@
             {
               "id": "action_2",
               "type": "sync_action",
-              "domain": "AccountService",
-              "targetDomain": "BalanceService",
+              "context": "AccountService",
+              "targetContext": "BalanceService",
               "connector": "to",
               "phrase": "get current balance",
               "description": "AccountService asks BalanceService to get current balance",
@@ -26,7 +26,7 @@
             {
               "id": "action_3",
               "type": "return_action",
-              "domain": "BalanceService",
+              "context": "BalanceService",
               "phrase": "balance information",
               "description": "BalanceService returns balance information",
               "line": 4
@@ -34,8 +34,8 @@
             {
               "id": "action_4",
               "type": "return_action",
-              "domain": "AccountService",
-              "targetDomain": "Customer",
+              "context": "AccountService",
+              "targetContext": "Customer",
               "phrase": "balance details",
               "description": "AccountService returns balance details to Customer",
               "line": 5

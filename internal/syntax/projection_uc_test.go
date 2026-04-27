@@ -63,8 +63,8 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
 	if sc2.Trigger.Type != "domain_listen" {
 		t.Errorf("expected domain_listen, got %q", sc2.Trigger.Type)
 	}
-	if sc2.Trigger.Domain != "PaymentProcessing" {
-		t.Errorf("expected domain=PaymentProcessing, got %q", sc2.Trigger.Domain)
+	if sc2.Trigger.Context != "PaymentProcessing" {
+		t.Errorf("expected domain=PaymentProcessing, got %q", sc2.Trigger.Context)
 	}
 	if sc2.Trigger.Event != "Funds Reserved" {
 		t.Errorf("expected event='Funds Reserved', got %q", sc2.Trigger.Event)

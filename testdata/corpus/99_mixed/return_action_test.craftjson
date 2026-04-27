@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "PaymentService",
+              "context": "PaymentService",
               "verb": "validates",
               "phrase": "payment data",
               "description": "PaymentService validates payment data",
@@ -25,8 +25,8 @@
             {
               "id": "action_3",
               "type": "sync_action",
-              "domain": "PaymentService",
-              "targetDomain": "BankGateway",
+              "context": "PaymentService",
+              "targetContext": "BankGateway",
               "connector": "to",
               "phrase": "process payment",
               "description": "PaymentService asks BankGateway to process payment",
@@ -35,8 +35,8 @@
             {
               "id": "action_4",
               "type": "return_action",
-              "domain": "BankGateway",
-              "targetDomain": "PaymentService",
+              "context": "BankGateway",
+              "targetContext": "PaymentService",
               "phrase": "payment result",
               "description": "BankGateway returns payment result to PaymentService",
               "line": 5
@@ -44,8 +44,8 @@
             {
               "id": "action_5",
               "type": "return_action",
-              "domain": "PaymentService",
-              "targetDomain": "User",
+              "context": "PaymentService",
+              "targetContext": "User",
               "phrase": "confirmation status",
               "description": "PaymentService returns confirmation status to User",
               "line": 6
@@ -53,7 +53,7 @@
             {
               "id": "action_6",
               "type": "async_action",
-              "domain": "PaymentService",
+              "context": "PaymentService",
               "event": "payment_processed",
               "description": "PaymentService notifies \"payment_processed\"",
               "line": 7
@@ -78,7 +78,7 @@
             {
               "id": "action_8",
               "type": "internal_action",
-              "domain": "UserService",
+              "context": "UserService",
               "verb": "validates",
               "phrase": "user data",
               "description": "UserService validates user data",
@@ -87,8 +87,8 @@
             {
               "id": "action_9",
               "type": "sync_action",
-              "domain": "UserService",
-              "targetDomain": "EmailService",
+              "context": "UserService",
+              "targetContext": "EmailService",
               "connector": "to",
               "phrase": "send verification",
               "description": "UserService asks EmailService to send verification",
@@ -97,7 +97,7 @@
             {
               "id": "action_10",
               "type": "return_action",
-              "domain": "EmailService",
+              "context": "EmailService",
               "phrase": "email status",
               "description": "EmailService returns email status",
               "line": 14
@@ -105,8 +105,8 @@
             {
               "id": "action_11",
               "type": "return_action",
-              "domain": "UserService",
-              "targetDomain": "User",
+              "context": "UserService",
+              "targetContext": "User",
               "phrase": "registration result",
               "description": "UserService returns registration result to User",
               "line": 15

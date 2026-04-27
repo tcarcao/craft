@@ -306,23 +306,23 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 					Line: sc.Trigger.Line,
 				})
 			}
-			if sc.Trigger.Domain != "" {
+			if sc.Trigger.Context != "" {
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-					Name: sc.Trigger.Domain,
+					Name: sc.Trigger.Context,
 					Line: sc.Trigger.Line,
 				})
 			}
 			// Action parties.
 			for _, action := range sc.Actions {
-				if action.Domain != "" {
+				if action.Context != "" {
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-						Name: action.Domain,
+						Name: action.Context,
 						Line: action.Line,
 					})
 				}
-				if action.TargetDomain != "" {
+				if action.TargetContext != "" {
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-						Name: action.TargetDomain,
+						Name: action.TargetContext,
 						Line: action.Line,
 					})
 				}
@@ -443,7 +443,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 	// Resolve use-case reference sites (S6).
 	// For each ref, try to find a matching actor, domain, bounded-context, or service.
 	// Unknown references emit craft/sema/unresolved-reference diagnostics.
-	// References that name an actor in action.TargetDomain are valid (actors can be targets).
+	// References that name an actor in action.TargetContext are valid (actors can be targets).
 	for uri, syms := range perFile {
 		for _, ref := range syms.UseCaseRefs {
 			key := useCaseRefKey{URI: uri, Line: ref.Line, Name: ref.Name}

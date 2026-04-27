@@ -829,7 +829,7 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		desc := fmt.Sprintf("when %s listens %q", subject, event)
 		return ast.TriggerDecl{
 			TriggerType: "domain_listen",
-			Domain:      subject,
+			Context: subject,
 			Event:       event,
 			Description: desc,
 			Line:        whenLine,
@@ -897,7 +897,7 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 		return &ast.ActionDecl{
 			ActionType:  "internal_action",
 			ActionID:    *counter,
-			Domain:      subject,
+			Context: subject,
 			Description: subject,
 			Line:        actionLine,
 		}, diags
@@ -935,7 +935,7 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 		return &ast.ActionDecl{
 			ActionType:  "internal_action",
 			ActionID:    id,
-			Domain:      subject,
+			Context: subject,
 			Verb:        verb,
 			Connector:   connector,
 			Phrase:      phrase,
@@ -971,8 +971,8 @@ func (p *Parser) parseAsksAction(id int, subject string, line int, diags *[]craf
 	return &ast.ActionDecl{
 		ActionType:   "sync_action",
 		ActionID:     id,
-		Domain:       subject,
-		TargetDomain: target,
+		Context: subject,
+		TargetContext: target,
 		Connector:    connector,
 		Phrase:       phrase,
 		Description:  desc,
@@ -996,7 +996,7 @@ func (p *Parser) parseNotifiesAction(id int, subject string, line int, diags *[]
 	return &ast.ActionDecl{
 		ActionType:  "async_action",
 		ActionID:    id,
-		Domain:      subject,
+		Context: subject,
 		Event:       event,
 		Description: desc,
 		Line:        line,
@@ -1038,8 +1038,8 @@ func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]c
 	return &ast.ActionDecl{
 		ActionType:   "return_action",
 		ActionID:     id,
-		Domain:       subject,
-		TargetDomain: target,
+		Context: subject,
+		TargetContext: target,
 		Connector:    connector,
 		Phrase:       phrase,
 		Description:  desc,

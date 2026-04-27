@@ -90,7 +90,7 @@ type Trigger struct {
 	Actor       string      `json:"actor,omitempty"`
 	Verb        string      `json:"verb,omitempty"`
 	Phrase      string      `json:"phrase,omitempty"`
-	Domain      string      `json:"domain,omitempty"`
+	Context     string      `json:"context,omitempty"`
 	Event       string      `json:"event,omitempty"`
 	Description string      `json:"description"`
 }
@@ -108,9 +108,9 @@ const (
 type Action struct {
 	ID           string     `json:"id"`
 	Type         ActionType `json:"type"`
-	Domain       string     `json:"domain"`
+	Context      string     `json:"context"`
 	Verb         string     `json:"verb,omitempty"`
-	TargetDomain string     `json:"targetDomain,omitempty"`
+	TargetContext string    `json:"targetContext,omitempty"`
 	Event        string     `json:"event,omitempty"`
 	Connector    string     `json:"connector,omitempty"`
 	Phrase       string     `json:"phrase,omitempty"`

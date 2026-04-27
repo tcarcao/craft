@@ -16,8 +16,8 @@
             {
               "id": "action_2",
               "type": "sync_action",
-              "domain": "VASScheduling",
-              "targetDomain": "Wallet",
+              "context": "VASScheduling",
+              "targetContext": "Wallet",
               "connector": "to",
               "phrase": "cancel the VAS reservation",
               "description": "VASScheduling asks Wallet to cancel the VAS reservation",
@@ -26,7 +26,7 @@
             {
               "id": "action_3",
               "type": "internal_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "verb": "cancels",
               "phrase": "VAS reservation",
               "description": "Wallet cancels VAS reservation",
@@ -35,7 +35,7 @@
             {
               "id": "action_4",
               "type": "async_action",
-              "domain": "Wallet",
+              "context": "Wallet",
               "event": "VAS Reservation Canceled",
               "description": "Wallet notifies \"VAS Reservation Canceled\"",
               "line": 5
@@ -43,7 +43,7 @@
             {
               "id": "action_5",
               "type": "internal_action",
-              "domain": "VASScheduling",
+              "context": "VASScheduling",
               "verb": "cancels",
               "connector": "the",
               "phrase": "VAS schedule",
@@ -70,7 +70,7 @@
             {
               "id": "action_7",
               "type": "internal_action",
-              "domain": "VASMgmt",
+              "context": "VASMgmt",
               "verb": "applies",
               "connector": "a",
               "phrase": "VAS and stores details until when its valid",

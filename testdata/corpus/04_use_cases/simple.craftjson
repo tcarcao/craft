@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "validates",
               "phrase": "email format",
               "description": "Authentication validates email format",
@@ -25,7 +25,7 @@
             {
               "id": "action_3",
               "type": "async_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "event": "User Registered",
               "description": "Authentication notifies \"User Registered\"",
               "line": 4

@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "SyncService",
+              "context": "SyncService",
               "verb": "fetches",
               "phrase": "remote data",
               "description": "SyncService fetches remote data",
@@ -25,7 +25,7 @@
             {
               "id": "action_3",
               "type": "internal_action",
-              "domain": "SyncService",
+              "context": "SyncService",
               "verb": "transforms",
               "phrase": "data format",
               "description": "SyncService transforms data format",
@@ -34,7 +34,7 @@
             {
               "id": "action_4",
               "type": "internal_action",
-              "domain": "SyncService",
+              "context": "SyncService",
               "verb": "persists",
               "phrase": "updated records",
               "description": "SyncService persists updated records",
@@ -43,7 +43,7 @@
             {
               "id": "action_5",
               "type": "async_action",
-              "domain": "SyncService",
+              "context": "SyncService",
               "event": "Sync Completed",
               "description": "SyncService notifies \"Sync Completed\"",
               "line": 6

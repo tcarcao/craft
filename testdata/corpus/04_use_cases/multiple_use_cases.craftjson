@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "AuthService",
+              "context": "AuthService",
               "verb": "validates",
               "phrase": "credentials",
               "description": "AuthService validates credentials",
@@ -25,7 +25,7 @@
             {
               "id": "action_3",
               "type": "async_action",
-              "domain": "AuthService",
+              "context": "AuthService",
               "event": "User Logged In",
               "description": "AuthService notifies \"User Logged In\"",
               "line": 4
@@ -50,7 +50,7 @@
             {
               "id": "action_5",
               "type": "internal_action",
-              "domain": "AuthService",
+              "context": "AuthService",
               "verb": "invalidates",
               "phrase": "session",
               "description": "AuthService invalidates session",
@@ -59,7 +59,7 @@
             {
               "id": "action_6",
               "type": "async_action",
-              "domain": "AuthService",
+              "context": "AuthService",
               "event": "User Logged Out",
               "description": "AuthService notifies \"User Logged Out\"",
               "line": 10

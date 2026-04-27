@@ -48,7 +48,7 @@ func TestCraftDocRoundTrip(t *testing.T) {
 							{
 								ID:          "validate-cart",
 								Type:        craft.ActionTypeSync,
-								Domain:      "ordering",
+								Context: "ordering",
 								Verb:        "validates",
 								Description: "Validate cart contents",
 								Line:        20,
@@ -56,7 +56,7 @@ func TestCraftDocRoundTrip(t *testing.T) {
 							{
 								ID:          "emit-order-placed",
 								Type:        craft.ActionTypeAsync,
-								Domain:      "ordering",
+								Context: "ordering",
 								Event:       "OrderPlaced",
 								Description: "Emit OrderPlaced event",
 								Line:        21,

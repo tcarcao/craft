@@ -14,7 +14,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "notification",
+              "context": "notification",
               "verb": "sends",
               "phrase": "confirmation email",
               "description": "notification sends confirmation email",
@@ -23,7 +23,7 @@
             {
               "id": "action_3",
               "type": "internal_action",
-              "domain": "analytics",
+              "context": "analytics",
               "verb": "tracks",
               "phrase": "order event",
               "description": "analytics tracks order event",

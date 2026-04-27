@@ -353,8 +353,8 @@ func TestParse_ReturnWithTarget(t *testing.T) {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
 	a := f.UseCases[0].Scenarios[0].Actions[0]
-	if a.TargetDomain != "User" {
-		t.Errorf("targetDomain: got %q want User", a.TargetDomain)
+	if a.TargetContext != "User" {
+		t.Errorf("targetDomain: got %q want User", a.TargetContext)
 	}
 	if a.Phrase != "confirmation status" {
 		t.Errorf("phrase: got %q want %q", a.Phrase, "confirmation status")
@@ -372,8 +372,8 @@ func TestParse_ReturnWithoutTarget(t *testing.T) {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
 	a := f.UseCases[0].Scenarios[0].Actions[0]
-	if a.TargetDomain != "" {
-		t.Errorf("targetDomain: got %q want empty", a.TargetDomain)
+	if a.TargetContext != "" {
+		t.Errorf("targetDomain: got %q want empty", a.TargetContext)
 	}
 	if a.Phrase != "confirmation status" {
 		t.Errorf("phrase: got %q want %q", a.Phrase, "confirmation status")

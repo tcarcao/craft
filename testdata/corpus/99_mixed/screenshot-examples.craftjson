@@ -147,7 +147,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "validates",
               "phrase": "email format",
               "description": "Authentication validates email format",
@@ -156,8 +156,8 @@
             {
               "id": "action_3",
               "type": "sync_action",
-              "domain": "Authentication",
-              "targetDomain": "user_db",
+              "context": "Authentication",
+              "targetContext": "user_db",
               "connector": "to",
               "phrase": "check email uniqueness",
               "description": "Authentication asks user_db to check email uniqueness",
@@ -166,7 +166,7 @@
             {
               "id": "action_4",
               "type": "internal_action",
-              "domain": "Profile",
+              "context": "Profile",
               "verb": "creates",
               "phrase": "user profile",
               "description": "Profile creates user profile",
@@ -175,8 +175,8 @@
             {
               "id": "action_5",
               "type": "sync_action",
-              "domain": "Profile",
-              "targetDomain": "user_db",
+              "context": "Profile",
+              "targetContext": "user_db",
               "connector": "to",
               "phrase": "store profile data",
               "description": "Profile asks user_db to store profile data",
@@ -185,7 +185,7 @@
             {
               "id": "action_6",
               "type": "async_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "event": "UserRegistered",
               "description": "Authentication notifies \"UserRegistered\"",
               "line": 104
@@ -196,7 +196,7 @@
           "id": "scenario_7",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Profile",
+            "context": "Profile",
             "event": "UserRegistered",
             "description": "when Profile listens \"UserRegistered\""
           },
@@ -204,7 +204,7 @@
             {
               "id": "action_8",
               "type": "internal_action",
-              "domain": "Preferences",
+              "context": "Preferences",
               "verb": "creates",
               "phrase": "default preferences",
               "description": "Preferences creates default preferences",
@@ -213,8 +213,8 @@
             {
               "id": "action_9",
               "type": "sync_action",
-              "domain": "Preferences",
-              "targetDomain": "user_db",
+              "context": "Preferences",
+              "targetContext": "user_db",
               "connector": "to",
               "phrase": "save preferences",
               "description": "Preferences asks user_db to save preferences",
@@ -223,7 +223,7 @@
             {
               "id": "action_10",
               "type": "internal_action",
-              "domain": "EmailNotifier",
+              "context": "EmailNotifier",
               "verb": "sends",
               "phrase": "welcome email",
               "description": "EmailNotifier sends welcome email",
@@ -249,7 +249,7 @@
             {
               "id": "action_12",
               "type": "return_action",
-              "domain": "Catalog",
+              "context": "Catalog",
               "phrase": "product details",
               "description": "Catalog returns product details",
               "line": 119
@@ -257,7 +257,7 @@
             {
               "id": "action_13",
               "type": "internal_action",
-              "domain": "Pricing",
+              "context": "Pricing",
               "verb": "calculates",
               "phrase": "current price",
               "description": "Pricing calculates current price",
@@ -266,7 +266,7 @@
             {
               "id": "action_14",
               "type": "internal_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "verb": "checks",
               "phrase": "availability",
               "description": "Inventory checks availability",
@@ -287,7 +287,7 @@
             {
               "id": "action_16",
               "type": "internal_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "verb": "creates",
               "phrase": "draft order",
               "description": "OrderManagement creates draft order",
@@ -296,8 +296,8 @@
             {
               "id": "action_17",
               "type": "sync_action",
-              "domain": "OrderManagement",
-              "targetDomain": "order_db",
+              "context": "OrderManagement",
+              "targetContext": "order_db",
               "connector": "to",
               "phrase": "save draft",
               "description": "OrderManagement asks order_db to save draft",
@@ -306,7 +306,7 @@
             {
               "id": "action_18",
               "type": "internal_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "verb": "reserves",
               "phrase": "stock",
               "description": "Inventory reserves stock",
@@ -315,7 +315,7 @@
             {
               "id": "action_19",
               "type": "internal_action",
-              "domain": "Pricing",
+              "context": "Pricing",
               "verb": "applies",
               "phrase": "discounts",
               "description": "Pricing applies discounts",
@@ -324,7 +324,7 @@
             {
               "id": "action_20",
               "type": "return_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "phrase": "cart summary",
               "description": "OrderManagement returns cart summary",
               "line": 128
@@ -344,7 +344,7 @@
             {
               "id": "action_22",
               "type": "internal_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "verb": "validates",
               "phrase": "order",
               "description": "OrderManagement validates order",
@@ -353,7 +353,7 @@
             {
               "id": "action_23",
               "type": "internal_action",
-              "domain": "Payment",
+              "context": "Payment",
               "verb": "processes",
               "phrase": "payment",
               "description": "Payment processes payment",
@@ -362,8 +362,8 @@
             {
               "id": "action_24",
               "type": "sync_action",
-              "domain": "Payment",
-              "targetDomain": "payment_gateway",
+              "context": "Payment",
+              "targetContext": "payment_gateway",
               "connector": "to",
               "phrase": "charge card",
               "description": "Payment asks payment_gateway to charge card",
@@ -372,7 +372,7 @@
             {
               "id": "action_25",
               "type": "async_action",
-              "domain": "Payment",
+              "context": "Payment",
               "event": "PaymentCompleted",
               "description": "Payment notifies \"PaymentCompleted\"",
               "line": 134
@@ -383,7 +383,7 @@
           "id": "scenario_26",
           "trigger": {
             "type": "domain_listen",
-            "domain": "OrderManagement",
+            "context": "OrderManagement",
             "event": "PaymentCompleted",
             "description": "when OrderManagement listens \"PaymentCompleted\""
           },
@@ -391,7 +391,7 @@
             {
               "id": "action_27",
               "type": "internal_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "verb": "marks",
               "phrase": "order as paid",
               "description": "OrderManagement marks order as paid",
@@ -400,7 +400,7 @@
             {
               "id": "action_28",
               "type": "internal_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "verb": "confirms",
               "phrase": "stock allocation",
               "description": "Inventory confirms stock allocation",
@@ -409,7 +409,7 @@
             {
               "id": "action_29",
               "type": "internal_action",
-              "domain": "Shipping",
+              "context": "Shipping",
               "verb": "creates",
               "phrase": "shipment",
               "description": "Shipping creates shipment",
@@ -418,8 +418,8 @@
             {
               "id": "action_30",
               "type": "sync_action",
-              "domain": "Shipping",
-              "targetDomain": "shipping_provider",
+              "context": "Shipping",
+              "targetContext": "shipping_provider",
               "connector": "to",
               "phrase": "schedule pickup",
               "description": "Shipping asks shipping_provider to schedule pickup",
@@ -428,7 +428,7 @@
             {
               "id": "action_31",
               "type": "async_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "event": "OrderConfirmed",
               "description": "OrderManagement notifies \"OrderConfirmed\"",
               "line": 141
@@ -439,7 +439,7 @@
           "id": "scenario_32",
           "trigger": {
             "type": "domain_listen",
-            "domain": "EmailNotifier",
+            "context": "EmailNotifier",
             "event": "OrderConfirmed",
             "description": "when EmailNotifier listens \"OrderConfirmed\""
           },
@@ -447,7 +447,7 @@
             {
               "id": "action_33",
               "type": "internal_action",
-              "domain": "EmailNotifier",
+              "context": "EmailNotifier",
               "verb": "sends",
               "phrase": "order confirmation",
               "description": "EmailNotifier sends order confirmation",
@@ -456,7 +456,7 @@
             {
               "id": "action_34",
               "type": "internal_action",
-              "domain": "SMSNotifier",
+              "context": "SMSNotifier",
               "verb": "sends",
               "phrase": "tracking notification",
               "description": "SMSNotifier sends tracking notification",
@@ -482,7 +482,7 @@
             {
               "id": "action_36",
               "type": "internal_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "verb": "fetches",
               "phrase": "stock levels",
               "description": "Inventory fetches stock levels",
@@ -491,8 +491,8 @@
             {
               "id": "action_37",
               "type": "sync_action",
-              "domain": "Inventory",
-              "targetDomain": "inventory_system",
+              "context": "Inventory",
+              "targetContext": "inventory_system",
               "connector": "to",
               "phrase": "get current stock",
               "description": "Inventory asks inventory_system to get current stock",
@@ -501,7 +501,7 @@
             {
               "id": "action_38",
               "type": "async_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "event": "StockLevelsUpdated",
               "description": "Inventory notifies \"StockLevelsUpdated\"",
               "line": 157
@@ -512,7 +512,7 @@
           "id": "scenario_39",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Catalog",
+            "context": "Catalog",
             "event": "StockLevelsUpdated",
             "description": "when Catalog listens \"StockLevelsUpdated\""
           },
@@ -520,7 +520,7 @@
             {
               "id": "action_40",
               "type": "internal_action",
-              "domain": "Catalog",
+              "context": "Catalog",
               "verb": "updates",
               "phrase": "product availability",
               "description": "Catalog updates product availability",
@@ -529,8 +529,8 @@
             {
               "id": "action_41",
               "type": "sync_action",
-              "domain": "Catalog",
-              "targetDomain": "product_db",
+              "context": "Catalog",
+              "targetContext": "product_db",
               "connector": "to",
               "phrase": "update stock status",
               "description": "Catalog asks product_db to update stock status",
@@ -539,7 +539,7 @@
             {
               "id": "action_42",
               "type": "async_action",
-              "domain": "Catalog",
+              "context": "Catalog",
               "event": "CatalogUpdated",
               "description": "Catalog notifies \"CatalogUpdated\"",
               "line": 162
@@ -550,7 +550,7 @@
           "id": "scenario_43",
           "trigger": {
             "type": "domain_listen",
-            "domain": "PushNotifier",
+            "context": "PushNotifier",
             "event": "CatalogUpdated",
             "description": "when PushNotifier listens \"CatalogUpdated\""
           },
@@ -558,7 +558,7 @@
             {
               "id": "action_44",
               "type": "internal_action",
-              "domain": "PushNotifier",
+              "context": "PushNotifier",
               "verb": "sends",
               "phrase": "restock notifications",
               "description": "PushNotifier sends restock notifications",
@@ -567,8 +567,8 @@
             {
               "id": "action_45",
               "type": "sync_action",
-              "domain": "PushNotifier",
-              "targetDomain": "notification_queue",
+              "context": "PushNotifier",
+              "targetContext": "notification_queue",
               "connector": "to",
               "phrase": "queue messages",
               "description": "PushNotifier asks notification_queue to queue messages",
@@ -594,7 +594,7 @@
             {
               "id": "action_47",
               "type": "internal_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "verb": "fetches",
               "phrase": "order details",
               "description": "OrderManagement fetches order details",
@@ -603,8 +603,8 @@
             {
               "id": "action_48",
               "type": "sync_action",
-              "domain": "OrderManagement",
-              "targetDomain": "order_db",
+              "context": "OrderManagement",
+              "targetContext": "order_db",
               "connector": "to",
               "phrase": "retrieve order",
               "description": "OrderManagement asks order_db to retrieve order",
@@ -613,7 +613,7 @@
             {
               "id": "action_49",
               "type": "internal_action",
-              "domain": "Payment",
+              "context": "Payment",
               "verb": "retrieves",
               "phrase": "payment history",
               "description": "Payment retrieves payment history",
@@ -622,7 +622,7 @@
             {
               "id": "action_50",
               "type": "internal_action",
-              "domain": "Shipping",
+              "context": "Shipping",
               "verb": "retrieves",
               "phrase": "shipment status",
               "description": "Shipping retrieves shipment status",
@@ -631,7 +631,7 @@
             {
               "id": "action_51",
               "type": "return_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "phrase": "complete order view",
               "description": "OrderManagement returns complete order view",
               "line": 180
@@ -651,7 +651,7 @@
             {
               "id": "action_53",
               "type": "internal_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "verb": "validates",
               "phrase": "changes",
               "description": "OrderManagement validates changes",
@@ -660,8 +660,8 @@
             {
               "id": "action_54",
               "type": "sync_action",
-              "domain": "OrderManagement",
-              "targetDomain": "order_db",
+              "context": "OrderManagement",
+              "targetContext": "order_db",
               "connector": "to",
               "phrase": "update order",
               "description": "OrderManagement asks order_db to update order",
@@ -670,7 +670,7 @@
             {
               "id": "action_55",
               "type": "async_action",
-              "domain": "OrderManagement",
+              "context": "OrderManagement",
               "event": "OrderUpdated",
               "description": "OrderManagement notifies \"OrderUpdated\"",
               "line": 185
@@ -681,7 +681,7 @@
           "id": "scenario_56",
           "trigger": {
             "type": "domain_listen",
-            "domain": "EmailNotifier",
+            "context": "EmailNotifier",
             "event": "OrderUpdated",
             "description": "when EmailNotifier listens \"OrderUpdated\""
           },
@@ -689,7 +689,7 @@
             {
               "id": "action_57",
               "type": "internal_action",
-              "domain": "EmailNotifier",
+              "context": "EmailNotifier",
               "verb": "sends",
               "phrase": "update notification to customer",
               "description": "EmailNotifier sends update notification to customer",
@@ -715,7 +715,7 @@
             {
               "id": "action_59",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "validates",
               "phrase": "email",
               "description": "Authentication validates email",
@@ -724,7 +724,7 @@
             {
               "id": "action_60",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "generates",
               "phrase": "reset token",
               "description": "Authentication generates reset token",
@@ -733,8 +733,8 @@
             {
               "id": "action_61",
               "type": "sync_action",
-              "domain": "Authentication",
-              "targetDomain": "user_db",
+              "context": "Authentication",
+              "targetContext": "user_db",
               "connector": "to",
               "phrase": "store token",
               "description": "Authentication asks user_db to store token",
@@ -743,7 +743,7 @@
             {
               "id": "action_62",
               "type": "internal_action",
-              "domain": "EmailNotifier",
+              "context": "EmailNotifier",
               "verb": "sends",
               "phrase": "reset email",
               "description": "EmailNotifier sends reset email",
@@ -764,7 +764,7 @@
             {
               "id": "action_64",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "validates",
               "phrase": "reset token",
               "description": "Authentication validates reset token",
@@ -773,8 +773,8 @@
             {
               "id": "action_65",
               "type": "sync_action",
-              "domain": "Authentication",
-              "targetDomain": "user_db",
+              "context": "Authentication",
+              "targetContext": "user_db",
               "connector": "to",
               "phrase": "verify token",
               "description": "Authentication asks user_db to verify token",
@@ -783,7 +783,7 @@
             {
               "id": "action_66",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "updates",
               "phrase": "password",
               "description": "Authentication updates password",
@@ -792,7 +792,7 @@
             {
               "id": "action_67",
               "type": "async_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "event": "PasswordChanged",
               "description": "Authentication notifies \"PasswordChanged\"",
               "line": 208
@@ -803,7 +803,7 @@
           "id": "scenario_68",
           "trigger": {
             "type": "domain_listen",
-            "domain": "EmailNotifier",
+            "context": "EmailNotifier",
             "event": "PasswordChanged",
             "description": "when EmailNotifier listens \"PasswordChanged\""
           },
@@ -811,7 +811,7 @@
             {
               "id": "action_69",
               "type": "internal_action",
-              "domain": "EmailNotifier",
+              "context": "EmailNotifier",
               "verb": "sends",
               "phrase": "confirmation email",
               "description": "EmailNotifier sends confirmation email",
@@ -836,7 +836,7 @@
             {
               "id": "action_71",
               "type": "internal_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "verb": "validates",
               "phrase": "credentials",
               "description": "Authentication validates credentials",
@@ -845,7 +845,7 @@
             {
               "id": "action_72",
               "type": "return_action",
-              "domain": "Authentication",
+              "context": "Authentication",
               "phrase": "access token",
               "description": "Authentication returns access token",
               "line": 222

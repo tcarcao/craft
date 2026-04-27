@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "PaymentService",
+              "context": "PaymentService",
               "verb": "validates",
               "phrase": "payment data",
               "description": "PaymentService validates payment data",
@@ -25,8 +25,8 @@
             {
               "id": "action_3",
               "type": "sync_action",
-              "domain": "PaymentService",
-              "targetDomain": "BankGateway",
+              "context": "PaymentService",
+              "targetContext": "BankGateway",
               "connector": "to",
               "phrase": "process payment",
               "description": "PaymentService asks BankGateway to process payment",
@@ -35,7 +35,7 @@
             {
               "id": "action_4",
               "type": "return_action",
-              "domain": "BankGateway",
+              "context": "BankGateway",
               "phrase": "payment result",
               "description": "BankGateway returns payment result",
               "line": 5
@@ -43,8 +43,8 @@
             {
               "id": "action_5",
               "type": "sync_action",
-              "domain": "PaymentService",
-              "targetDomain": "NotificationService",
+              "context": "PaymentService",
+              "targetContext": "NotificationService",
               "connector": "to",
               "phrase": "send confirmation",
               "description": "PaymentService asks NotificationService to send confirmation",
@@ -53,7 +53,7 @@
             {
               "id": "action_6",
               "type": "return_action",
-              "domain": "NotificationService",
+              "context": "NotificationService",
               "phrase": "delivery status",
               "description": "NotificationService returns delivery status",
               "line": 7
@@ -61,8 +61,8 @@
             {
               "id": "action_7",
               "type": "return_action",
-              "domain": "PaymentService",
-              "targetDomain": "User",
+              "context": "PaymentService",
+              "targetContext": "User",
               "phrase": "final confirmation",
               "description": "PaymentService returns final confirmation to User",
               "line": 8
@@ -87,8 +87,8 @@
             {
               "id": "action_9",
               "type": "sync_action",
-              "domain": "ReportService",
-              "targetDomain": "DatabaseService",
+              "context": "ReportService",
+              "targetContext": "DatabaseService",
               "connector": "for",
               "phrase": "data",
               "description": "ReportService asks DatabaseService for data",
@@ -97,8 +97,8 @@
             {
               "id": "action_10",
               "type": "sync_action",
-              "domain": "DatabaseService",
-              "targetDomain": "CacheService",
+              "context": "DatabaseService",
+              "targetContext": "CacheService",
               "connector": "to",
               "phrase": "check cache",
               "description": "DatabaseService asks CacheService to check cache",
@@ -107,7 +107,7 @@
             {
               "id": "action_11",
               "type": "return_action",
-              "domain": "CacheService",
+              "context": "CacheService",
               "phrase": "cache miss",
               "description": "CacheService returns cache miss",
               "line": 15
@@ -115,7 +115,7 @@
             {
               "id": "action_12",
               "type": "internal_action",
-              "domain": "DatabaseService",
+              "context": "DatabaseService",
               "verb": "queries",
               "phrase": "main database",
               "description": "DatabaseService queries main database",
@@ -124,7 +124,7 @@
             {
               "id": "action_13",
               "type": "return_action",
-              "domain": "DatabaseService",
+              "context": "DatabaseService",
               "phrase": "report data",
               "description": "DatabaseService returns report data",
               "line": 17
@@ -132,7 +132,7 @@
             {
               "id": "action_14",
               "type": "internal_action",
-              "domain": "ReportService",
+              "context": "ReportService",
               "verb": "formats",
               "connector": "the",
               "phrase": "data",
@@ -142,7 +142,7 @@
             {
               "id": "action_15",
               "type": "return_action",
-              "domain": "ReportService",
+              "context": "ReportService",
               "phrase": "formatted report",
               "description": "ReportService returns formatted report",
               "line": 19

@@ -100,8 +100,8 @@ func (g *C4DiagramGenerator) analyzeServiceCapabilities() map[string]string {
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
-				if action.Domain != "" {
-					service := g.findServiceForDomain(action.Domain)
+				if action.Context != "" {
+					service := g.findServiceForDomain(action.Context)
 					if service != "" {
 						// TODO: Extract capability from action (authentication, profile, notification, etc.)
 						capability := "business logic"
@@ -178,23 +178,23 @@ func (g *C4DiagramGenerator) createServiceRelationships() {
 
 // handleSyncAction processes synchronous actions between domains/services
 func (g *C4DiagramGenerator) handleSyncAction(action craft.Action) {
-	if action.Domain == "" || action.TargetDomain == "" {
+	if action.Context == "" || action.TargetContext == "" {
 		return
 	}
 
 	// Handle "asks Database" pattern
-	if action.TargetDomain == "Database" {
-		g.createDatabaseRelationship(action.Domain, action.Phrase)
+	if action.TargetContext == "Database" {
+		g.createDatabaseRelationship(action.Context, action.Phrase)
 		return
 	}
 
-	fromService := g.findServiceForDomain(action.Domain)
-	toService := g.findServiceForDomain(action.TargetDomain)
+	fromService := g.findServiceForDomain(action.Context)
+	toService := g.findServiceForDomain(action.TargetContext)
 
 	// Only create relationships for domains that belong to services
 	if fromService != "" && toService != "" && fromService != toService {
-		fromContainer := g.findDomainContainer(action.Domain)
-		toContainer := g.findDomainContainer(action.TargetDomain)
+		fromContainer := g.findDomainContainer(action.Context)
+		toContainer := g.findDomainContainer(action.TargetContext)
 
 		if fromContainer != "" && toContainer != "" {
 			relation := C4Relation{
@@ -211,21 +211,21 @@ func (g *C4DiagramGenerator) handleSyncAction(action craft.Action) {
 
 // handleReturnAction processes return actions between domains/services
 func (g *C4DiagramGenerator) handleReturnAction(action craft.Action) {
-	if action.Domain == "" {
+	if action.Context == "" {
 		return
 	}
 
-	fromService := g.findServiceForDomain(action.Domain)
+	fromService := g.findServiceForDomain(action.Context)
 	if fromService == "" {
 		return
 	}
 
-	if action.TargetDomain != "" {
+	if action.TargetContext != "" {
 		// Return to specific domain
-		toService := g.findServiceForDomain(action.TargetDomain)
+		toService := g.findServiceForDomain(action.TargetContext)
 		if toService != "" && fromService != toService {
-			fromContainer := g.findDomainContainer(action.Domain)
-			toContainer := g.findDomainContainer(action.TargetDomain)
+			fromContainer := g.findDomainContainer(action.Context)
+			toContainer := g.findDomainContainer(action.TargetContext)
 
 			relation := C4Relation{
 				From:        fromContainer,
@@ -315,8 +315,8 @@ func (g *C4DiagramGenerator) createEventRelationships() {
 	for _, useCase := range g.model.UseCases {
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
-				if action.Type == craft.ActionTypeAsync && action.Domain != "" {
-					fromContainer := g.findDomainContainer(action.Domain)
+				if action.Type == craft.ActionTypeAsync && action.Context != "" {
+					fromContainer := g.findDomainContainer(action.Context)
 					if fromContainer != "" {
 						relation := C4Relation{
 							From:        fromContainer,
@@ -337,7 +337,7 @@ func (g *C4DiagramGenerator) createEventRelationships() {
 		for _, scenario := range useCase.Scenarios {
 			if scenario.Trigger.Type == craft.TriggerTypeDomainListen {
 				// Extract the listening domain from the trigger
-				listeningDomain := scenario.Trigger.Domain
+				listeningDomain := scenario.Trigger.Context
 				if listeningDomain != "" {
 					toContainer := g.findDomainContainer(listeningDomain)
 					if toContainer != "" {
@@ -912,11 +912,11 @@ func (g *C4DiagramGenerator) addComponentRelationships(sb *strings.Builder, doma
 		for _, scenario := range useCase.Scenarios {
 			for _, action := range scenario.Actions {
 				if action.Type == craft.ActionTypeSync &&
-					g.containsString(domains, action.Domain) &&
-					g.containsString(domains, action.TargetDomain) {
+					g.containsString(domains, action.Context) &&
+					g.containsString(domains, action.TargetContext) {
 					sb.WriteString(fmt.Sprintf("Rel(%s, %s, \"%s\")\n",
-						g.sanitizeIdentifier(action.Domain),
-						g.sanitizeIdentifier(action.TargetDomain),
+						g.sanitizeIdentifier(action.Context),
+						g.sanitizeIdentifier(action.TargetContext),
 						action.Phrase))
 				}
 			}

@@ -127,7 +127,7 @@ func projectTrigger(t ast.TriggerDecl) craft.Trigger {
 		Actor:       t.Actor,
 		Verb:        t.Verb,
 		Phrase:      t.Phrase,
-		Domain:      t.Domain,
+		Context: t.Context,
 		Event:       t.Event,
 		Description: t.Description,
 	}
@@ -204,9 +204,9 @@ func projectAction(a *ast.ActionDecl, _ int) craft.Action {
 	return craft.Action{
 		ID:           fmt.Sprintf("action_%d", a.ActionID),
 		Type:         craft.ActionType(a.ActionType),
-		Domain:       a.Domain,
+		Context: a.Context,
 		Verb:         a.Verb,
-		TargetDomain: a.TargetDomain,
+		TargetContext: a.TargetContext,
 		Event:        a.Event,
 		Connector:    a.Connector,
 		Phrase:       a.Phrase,

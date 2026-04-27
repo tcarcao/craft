@@ -16,7 +16,7 @@
             {
               "id": "action_2",
               "type": "internal_action",
-              "domain": "OrderService",
+              "context": "OrderService",
               "verb": "validates",
               "phrase": "order details",
               "description": "OrderService validates order details",
@@ -25,7 +25,7 @@
             {
               "id": "action_3",
               "type": "async_action",
-              "domain": "OrderService",
+              "context": "OrderService",
               "event": "Order Placed",
               "description": "OrderService notifies \"Order Placed\"",
               "line": 4
@@ -36,7 +36,7 @@
           "id": "scenario_4",
           "trigger": {
             "type": "domain_listen",
-            "domain": "Inventory",
+            "context": "Inventory",
             "event": "Order Placed",
             "description": "when Inventory listens \"Order Placed\""
           },
@@ -44,7 +44,7 @@
             {
               "id": "action_5",
               "type": "internal_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "verb": "checks",
               "phrase": "stock availability",
               "description": "Inventory checks stock availability",
@@ -53,7 +53,7 @@
             {
               "id": "action_6",
               "type": "async_action",
-              "domain": "Inventory",
+              "context": "Inventory",
               "event": "Stock Reserved",
               "description": "Inventory notifies \"Stock Reserved\"",
               "line": 8

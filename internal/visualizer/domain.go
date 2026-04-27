@@ -209,8 +209,8 @@ func (g *PlantUMLArchitectureGenerator) GenerateArchitecturePlantUML(model *craf
 func (g *PlantUMLGenerator) collectEventPublishers(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		for _, action := range scenario.Actions {
-			if action.Type == craft.ActionTypeAsync && action.Domain != "" && action.Event != "" {
-				g.eventPublishers[action.Event] = action.Domain
+			if action.Type == craft.ActionTypeAsync && action.Context != "" && action.Event != "" {
+				g.eventPublishers[action.Event] = action.Context
 			}
 		}
 	}
@@ -272,14 +272,14 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario craft.Sc
 			// Find the first domain in the actions to connect to
 			if len(scenario.Actions) > 0 {
 				firstAction := scenario.Actions[0]
-				if firstAction.Domain != "" {
-					g.domains[firstAction.Domain] = true
+				if firstAction.Context != "" {
+					g.domains[firstAction.Context] = true
 
 					description := fmt.Sprintf("%s %s", trigger.Verb, trigger.Phrase)
 					g.flows = append(g.flows, FlowStep{
 						StepNumber:  g.stepCounter,
 						From:        trigger.Actor,
-						To:          firstAction.Domain,
+						To:          firstAction.Context,
 						Description: description,
 						Type:        "trigger",
 						UseCase:     useCaseName,
@@ -295,8 +295,8 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario craft.Sc
 		}
 	case craft.TriggerTypeDomainListen:
 		// Domain listening to event - create flow from publishing domain's queue to listening domain
-		if trigger.Domain != "" && trigger.Event != "" {
-			g.domains[trigger.Domain] = true
+		if trigger.Context != "" && trigger.Event != "" {
+			g.domains[trigger.Context] = true
 			g.events[trigger.Event] = true
 			g.stepCounter++
 
@@ -307,7 +307,7 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario craft.Sc
 				g.flows = append(g.flows, FlowStep{
 					StepNumber:  g.stepCounter,
 					From:        domainQueue,
-					To:          trigger.Domain,
+					To:          trigger.Context,
 					Description: trigger.Event,
 					Type:        "event_listen",
 					UseCase:     useCaseName,
@@ -323,19 +323,19 @@ func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID s
 	switch action.Type {
 	case craft.ActionTypeSync:
 		// Synchronous call between domains - push caller to stack
-		if action.Domain != "" && action.TargetDomain != "" {
-			g.domains[action.Domain] = true
-			g.domains[action.TargetDomain] = true
+		if action.Context != "" && action.TargetContext != "" {
+			g.domains[action.Context] = true
+			g.domains[action.TargetContext] = true
 			g.stepCounter++
 
 			// Push the calling domain onto the stack
-			*callStack = append(*callStack, action.Domain)
+			*callStack = append(*callStack, action.Context)
 
 			description := g.buildActionDescription(action)
 			g.flows = append(g.flows, FlowStep{
 				StepNumber:  g.stepCounter,
-				From:        action.Domain,
-				To:          action.TargetDomain,
+				From:        action.Context,
+				To:          action.TargetContext,
 				Description: description,
 				Type:        "sync",
 				UseCase:     useCaseName,
@@ -344,17 +344,17 @@ func (g *PlantUMLGenerator) processActionWithCallStack(useCaseName, scenarioID s
 		}
 	case craft.ActionTypeReturn:
 		// Return action - flow back to caller
-		if action.Domain != "" {
-			g.domains[action.Domain] = true
+		if action.Context != "" {
+			g.domains[action.Context] = true
 			g.stepCounter++
 
 			description := g.buildActionDescription(action)
-			from := action.Domain
+			from := action.Context
 			var to string
 
 			// If target domain is specified, use it
-			if action.TargetDomain != "" {
-				to = action.TargetDomain
+			if action.TargetContext != "" {
+				to = action.TargetContext
 				g.domains[to] = true
 			} else if len(*callStack) > 0 {
 				// Pop from call stack to find the caller
@@ -386,16 +386,16 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 	switch action.Type {
 	case craft.ActionTypeSync:
 		// Synchronous call between domains
-		if action.Domain != "" && action.TargetDomain != "" {
-			g.domains[action.Domain] = true
-			g.domains[action.TargetDomain] = true
+		if action.Context != "" && action.TargetContext != "" {
+			g.domains[action.Context] = true
+			g.domains[action.TargetContext] = true
 			g.stepCounter++
 
 			description := g.buildActionDescription(action)
 			g.flows = append(g.flows, FlowStep{
 				StepNumber:  g.stepCounter,
-				From:        action.Domain,
-				To:          action.TargetDomain,
+				From:        action.Context,
+				To:          action.TargetContext,
 				Description: description,
 				Type:        "sync",
 				UseCase:     useCaseName,
@@ -404,16 +404,16 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 		}
 	case craft.ActionTypeAsync:
 		// Asynchronous notification (domain to its own queue)
-		if action.Domain != "" && action.Event != "" {
-			g.domains[action.Domain] = true
+		if action.Context != "" && action.Event != "" {
+			g.domains[action.Context] = true
 			g.events[action.Event] = true
 			g.stepCounter++
 
 			// Domain publishes to its own queue, not an event-specific queue
-			domainQueue := g.getDomainQueueName(action.Domain)
+			domainQueue := g.getDomainQueueName(action.Context)
 			g.flows = append(g.flows, FlowStep{
 				StepNumber:  g.stepCounter,
-				From:        action.Domain,
+				From:        action.Context,
 				To:          domainQueue,
 				Description: action.Event,
 				Type:        "async",
@@ -423,15 +423,15 @@ func (g *PlantUMLGenerator) processAction(useCaseName, scenarioID string, action
 		}
 	case craft.ActionTypeInternal:
 		// Internal domain action - shown as self-loops
-		if action.Domain != "" {
-			g.domains[action.Domain] = true
+		if action.Context != "" {
+			g.domains[action.Context] = true
 			g.stepCounter++
 
 			description := g.buildActionDescription(action)
 			g.flows = append(g.flows, FlowStep{
 				StepNumber:  g.stepCounter,
-				From:        action.Domain,
-				To:          action.Domain,
+				From:        action.Context,
+				To:          action.Context,
 				Description: description,
 				Type:        "internal",
 				UseCase:     useCaseName,
@@ -463,11 +463,11 @@ func (g *PlantUMLGenerator) buildActionDescription(action craft.Action) string {
 		return phrase
 	case craft.ActionTypeReturn:
 		phrase := action.Phrase
-		if action.TargetDomain != "" {
+		if action.TargetContext != "" {
 			if action.Connector != "" {
-				return "returns " + phrase + " " + action.Connector + " " + action.TargetDomain
+				return "returns " + phrase + " " + action.Connector + " " + action.TargetContext
 			}
-			return "returns " + phrase + " to " + action.TargetDomain
+			return "returns " + phrase + " to " + action.TargetContext
 		}
 		return "returns " + phrase
 	}
@@ -712,8 +712,8 @@ func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *cr
 func (g *PlantUMLArchitectureGenerator) collectEventPublishersForArchitecture(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		for _, action := range scenario.Actions {
-			if action.Type == craft.ActionTypeAsync && action.Domain != "" && action.Event != "" {
-				g.eventPublishers[action.Event] = action.Domain
+			if action.Type == craft.ActionTypeAsync && action.Context != "" && action.Event != "" {
+				g.eventPublishers[action.Event] = action.Context
 				g.events[action.Event] = true
 			}
 		}
@@ -734,42 +734,42 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 		switch action.Type {
 		case craft.ActionTypeSync:
 			// Synchronous call between subdomains
-			if action.Domain != "" && action.TargetDomain != "" {
-				g.subDomains[action.Domain] = true
-				g.subDomains[action.TargetDomain] = true
+			if action.Context != "" && action.TargetContext != "" {
+				g.subDomains[action.Context] = true
+				g.subDomains[action.TargetContext] = true
 
 				// Create connection key to avoid duplicates
-				connectionKey := action.Domain + "->" + action.TargetDomain
+				connectionKey := action.Context + "->" + action.TargetContext
 				g.connections[connectionKey] = true
 			}
 		case craft.ActionTypeAsync:
 			// Async events - domain publishes to its own queue
-			if action.Domain != "" && action.Event != "" {
-				g.subDomains[action.Domain] = true
+			if action.Context != "" && action.Event != "" {
+				g.subDomains[action.Context] = true
 				g.events[action.Event] = true
 
 				// Create connection from domain to its queue
-				domainQueue := g.getDomainQueueNameForArchitecture(action.Domain)
-				connectionKey := action.Domain + "->" + domainQueue
+				domainQueue := g.getDomainQueueNameForArchitecture(action.Context)
+				connectionKey := action.Context + "->" + domainQueue
 				g.connections[connectionKey] = true
 			}
 		case craft.ActionTypeInternal:
 			// Internal subdomain action - self-connection
-			if action.Domain != "" {
-				g.subDomains[action.Domain] = true
+			if action.Context != "" {
+				g.subDomains[action.Context] = true
 				// Create self-connection for internal actions
-				connectionKey := action.Domain + "->" + action.Domain
+				connectionKey := action.Context + "->" + action.Context
 				g.connections[connectionKey] = true
 			}
 		case craft.ActionTypeReturn:
 			// Return action - data flowing back
-			if action.Domain != "" {
-				g.subDomains[action.Domain] = true
+			if action.Context != "" {
+				g.subDomains[action.Context] = true
 
-				if action.TargetDomain != "" {
-					g.subDomains[action.TargetDomain] = true
+				if action.TargetContext != "" {
+					g.subDomains[action.TargetContext] = true
 					// Create return connection
-					connectionKey := action.Domain + "->" + action.TargetDomain
+					connectionKey := action.Context + "->" + action.TargetContext
 					g.connections[connectionKey] = true
 				}
 			}
@@ -781,15 +781,15 @@ func (g *PlantUMLArchitectureGenerator) processScenarioForArchitecture(scenario 
 	switch trigger.Type {
 	case craft.TriggerTypeDomainListen:
 		// Domain listening to event - create flow from publishing domain's queue to listening domain
-		if trigger.Domain != "" && trigger.Event != "" {
-			g.subDomains[trigger.Domain] = true
+		if trigger.Context != "" && trigger.Event != "" {
+			g.subDomains[trigger.Context] = true
 			g.events[trigger.Event] = true
 
 			// Find which domain published this event
 			publishingDomain := g.findEventPublisherForArchitecture(trigger.Event)
 			if publishingDomain != "" {
 				domainQueue := g.getDomainQueueNameForArchitecture(publishingDomain)
-				connectionKey := domainQueue + "->" + trigger.Domain
+				connectionKey := domainQueue + "->" + trigger.Context
 				g.connections[connectionKey] = true
 			}
 		}

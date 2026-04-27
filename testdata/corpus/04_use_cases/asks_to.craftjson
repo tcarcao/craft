@@ -16,8 +16,8 @@
             {
               "id": "action_2",
               "type": "sync_action",
-              "domain": "PaymentService",
-              "targetDomain": "AccountService",
+              "context": "PaymentService",
+              "targetContext": "AccountService",
               "connector": "to",
               "phrase": "verify source account",
               "description": "PaymentService asks AccountService to verify source account",
@@ -26,8 +26,8 @@
             {
               "id": "action_3",
               "type": "sync_action",
-              "domain": "PaymentService",
-              "targetDomain": "AccountService",
+              "context": "PaymentService",
+              "targetContext": "AccountService",
               "connector": "to",
               "phrase": "verify destination account",
               "description": "PaymentService asks AccountService to verify destination account",
@@ -36,7 +36,7 @@
             {
               "id": "action_4",
               "type": "async_action",
-              "domain": "AccountService",
+              "context": "AccountService",
               "event": "Transfer Completed",
               "description": "AccountService notifies \"Transfer Completed\"",
               "line": 5

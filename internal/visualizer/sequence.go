@@ -59,8 +59,8 @@ func (g *PlantUMLSequenceGenerator) GenerateSequenceDiagram(model *craft.CraftDo
 func (g *PlantUMLSequenceGenerator) collectEventPublishersForSequence(useCase craft.UseCase) {
 	for _, scenario := range useCase.Scenarios {
 		for _, action := range scenario.Actions {
-			if action.Type == craft.ActionTypeAsync && action.Domain != "" && action.Event != "" {
-				g.eventPublishers[action.Event] = action.Domain
+			if action.Type == craft.ActionTypeAsync && action.Context != "" && action.Event != "" {
+				g.eventPublishers[action.Event] = action.Context
 			}
 		}
 	}
@@ -78,19 +78,19 @@ func (g *PlantUMLSequenceGenerator) processScenarioForSequence(sb *strings.Build
 		if trigger.Actor != "" && len(scenario.Actions) > 0 {
 			g.actors[trigger.Actor] = true
 			firstAction := scenario.Actions[0]
-			if firstAction.Domain != "" {
-				g.participants[firstAction.Domain] = true
+			if firstAction.Context != "" {
+				g.participants[firstAction.Context] = true
 				description := fmt.Sprintf("%s %s", trigger.Verb, trigger.Phrase)
-				sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", trigger.Actor, firstAction.Domain, description))
+				sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", trigger.Actor, firstAction.Context, description))
 				callStack = append(callStack, trigger.Actor)
 			}
 		}
 	case craft.TriggerTypeDomainListen:
-		if trigger.Domain != "" && trigger.Event != "" {
-			g.participants[trigger.Domain] = true
+		if trigger.Context != "" && trigger.Event != "" {
+			g.participants[trigger.Context] = true
 			publishingDomain := g.eventPublishers[trigger.Event]
 			if publishingDomain != "" {
-				sb.WriteString(fmt.Sprintf("[-> %s : %s\n", trigger.Domain, trigger.Event))
+				sb.WriteString(fmt.Sprintf("[-> %s : %s\n", trigger.Context, trigger.Event))
 			}
 		}
 	}
@@ -107,27 +107,27 @@ func (g *PlantUMLSequenceGenerator) processScenarioForSequence(sb *strings.Build
 func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder, action craft.Action, callStack *[]string) {
 	switch action.Type {
 	case craft.ActionTypeSync:
-		if action.Domain != "" && action.TargetDomain != "" {
-			g.participants[action.Domain] = true
-			g.participants[action.TargetDomain] = true
+		if action.Context != "" && action.TargetContext != "" {
+			g.participants[action.Context] = true
+			g.participants[action.TargetContext] = true
 
 			// Push caller to stack
-			*callStack = append(*callStack, action.Domain)
+			*callStack = append(*callStack, action.Context)
 
 			description := action.Phrase
 			if action.Connector != "" && description != "" {
 				description = action.Connector + " " + description
 			}
-			sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", action.Domain, action.TargetDomain, description))
+			sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", action.Context, action.TargetContext, description))
 		}
 	case craft.ActionTypeAsync:
-		if action.Domain != "" && action.Event != "" {
-			g.participants[action.Domain] = true
-			sb.WriteString(fmt.Sprintf("%s ->> %s : notifies \"%s\"\n", action.Domain, action.Domain, action.Event))
+		if action.Context != "" && action.Event != "" {
+			g.participants[action.Context] = true
+			sb.WriteString(fmt.Sprintf("%s ->> %s : notifies \"%s\"\n", action.Context, action.Context, action.Event))
 		}
 	case craft.ActionTypeInternal:
-		if action.Domain != "" {
-			g.participants[action.Domain] = true
+		if action.Context != "" {
+			g.participants[action.Context] = true
 			description := action.Phrase
 			if action.Verb != "" {
 				description = action.Verb + " " + description
@@ -135,16 +135,16 @@ func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder
 			if action.Connector != "" && action.Phrase != "" {
 				description = action.Connector + " " + action.Phrase
 			}
-			sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", action.Domain, action.Domain, description))
+			sb.WriteString(fmt.Sprintf("%s -> %s : %s\n", action.Context, action.Context, description))
 		}
 	case craft.ActionTypeReturn:
-		if action.Domain != "" {
-			g.participants[action.Domain] = true
+		if action.Context != "" {
+			g.participants[action.Context] = true
 			description := "returns " + action.Phrase
 
 			var to string
-			if action.TargetDomain != "" {
-				to = action.TargetDomain
+			if action.TargetContext != "" {
+				to = action.TargetContext
 				g.participants[to] = true
 			} else if len(*callStack) > 0 {
 				to = (*callStack)[len(*callStack)-1]
@@ -152,7 +152,7 @@ func (g *PlantUMLSequenceGenerator) processActionForSequence(sb *strings.Builder
 			}
 
 			if to != "" {
-				sb.WriteString(fmt.Sprintf("%s --> %s : %s\n", action.Domain, to, description))
+				sb.WriteString(fmt.Sprintf("%s --> %s : %s\n", action.Context, to, description))
 			}
 		}
 	}
