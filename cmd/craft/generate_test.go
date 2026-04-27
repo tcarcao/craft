@@ -166,8 +166,12 @@ services {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(data), "ServiceA") {
+		content := string(data)
+		if !strings.Contains(content, "ServiceA") {
 			t.Error("expected focused service ServiceA to appear")
+		}
+		if strings.Contains(content, "System_Boundary(ServiceB_boundary") {
+			t.Error("expected unfocused service ServiceB to not appear as System_Boundary when focusing on ServiceA")
 		}
 	})
 }
