@@ -7,11 +7,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is set at build time via -ldflags "-X main.version=<tag>".
+var version = "dev"
+
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "craft",
-		Short: "Craft — DDD modeling CLI",
-		Long:  "Parse, lint, inspect, and generate diagrams from .craft files.",
+		Use:     "craft",
+		Short:   "Craft — DDD modeling CLI",
+		Long:    "Parse, lint, inspect, and generate diagrams from .craft files.",
+		Version: version,
 	}
 	root.AddCommand(validateCmd(), generateCmd(), inspectCmd(), checkCmd(), lspCmd())
 	return root
