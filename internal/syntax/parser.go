@@ -1090,6 +1090,12 @@ func (p *Parser) collectPhrase(actionLine int) string {
 			// Use the raw value without re-quoting to match ANTLR phrase output.
 			parts = append(parts, tok.Value)
 			p.consume()
+		case lexer.TokenNumber:
+			if tok.Line != startLine {
+				return strings.Join(parts, " ")
+			}
+			parts = append(parts, tok.Value)
+			p.consume()
 		default:
 			// Keywords that act as identifiers in phrase context (e.g. `user`, `system`,
 			// `service`, `domain`, `arch`) are valid phrase_words per the ANTLR grammar.

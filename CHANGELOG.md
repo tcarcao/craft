@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2] — 2026-04-27
+
+### Fixed
+- Numbers are now valid in action phrases. `asks X to check 3 transfer limits` previously produced a parse error on the numeric token; `collectPhrase` now collects `TokenNumber` alongside identifiers and strings.
+
+---
+
 ## [2.4.0] — 2026-04-24
 
 ### Removed

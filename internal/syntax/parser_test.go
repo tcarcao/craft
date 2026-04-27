@@ -380,6 +380,24 @@ func TestParse_ReturnWithoutTarget(t *testing.T) {
 	}
 }
 
+func TestParse_NumberInActionPhrase(t *testing.T) {
+	src := `use_case "Test" {
+    when Customer initiates transfer
+        PaymentProcessing asks TransactionValidation to check 3 transfer limits
+}`
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	a := f.UseCases[0].Scenarios[0].Actions[0]
+	if a.ActionType != "sync_action" {
+		t.Errorf("type: got %q want sync_action", a.ActionType)
+	}
+	if a.Phrase != "check 3 transfer limits" {
+		t.Errorf("phrase: got %q want %q", a.Phrase, "check 3 transfer limits")
+	}
+}
+
 // Q3: single-line services block parses identically to multi-line
 func TestParse_SingleLineServicesEquivalent(t *testing.T) {
 	multi := `services {

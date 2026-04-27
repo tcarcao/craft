@@ -19,7 +19,7 @@ services {
 use_case "Money Transfer" {
   when Customer initiates transfer
     PaymentProcessing asks AccountManagement to verify source account
-    PaymentProcessing asks TransactionValidation to check transfer limits
+    PaymentProcessing asks TransactionValidation to check 3 transfer limits
     TransactionValidation validates transaction rules
     PaymentProcessing asks BalanceTracking to reserve funds
     BalanceTracking notifies "Funds Reserved"
