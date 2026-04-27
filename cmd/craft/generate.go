@@ -12,10 +12,21 @@ import (
 	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
+type c4Options struct {
+	boundaries    string
+	showDatabases bool
+	focusServices []string
+	focusContexts []string
+}
+
 func generateCmd() *cobra.Command {
 	var diagType string
 	var mode string
 	var outputDir string
+	var boundaries string
+	var noDatabases bool
+	var focusServices []string
+	var focusContexts []string
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -58,7 +69,13 @@ func generateCmd() *cobra.Command {
 
 				base := baseName(file)
 
-				if err := generateForFile(v, doc, base, outDir, diagType, mode); err != nil {
+				opts := c4Options{
+					boundaries:    boundaries,
+					showDatabases: !noDatabases,
+					focusServices: focusServices,
+					focusContexts: focusContexts,
+				}
+				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts); err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 			}
@@ -69,10 +86,14 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&diagType, "type", "all", "diagram type: c4|domain|sequence|all")
 	cmd.Flags().StringVar(&mode, "mode", "detailed", "domain diagram mode: detailed|architecture")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "output directory (default: same as input file)")
+	cmd.Flags().StringVar(&boundaries, "boundaries", "boundaries", "C4 boundaries mode: boundaries|transparent")
+	cmd.Flags().BoolVar(&noDatabases, "no-databases", false, "hide data-store containers from C4 diagram")
+	cmd.Flags().StringSliceVar(&focusServices, "focus", nil, "comma-separated services to focus on in C4 diagram")
+	cmd.Flags().StringSliceVar(&focusContexts, "focus-context", nil, "comma-separated bounded contexts to focus on in C4 diagram")
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string) error {
+func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options) error {
 	domainMode := visualizer.DomainModeDetailed
 	if strings.ToLower(mode) == "architecture" {
 		domainMode = visualizer.DomainModeArchitecture
