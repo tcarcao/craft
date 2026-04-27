@@ -107,7 +107,11 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 
 		switch t {
 		case "c4":
-			data, _, err := v.GenerateC4WithFormat(model, visualizer.C4ModeBoundaries, true, visualizer.FormatPUML)
+			boundariesMode := visualizer.C4ModeBoundaries
+			if strings.ToLower(opts.boundaries) == string(visualizer.C4ModeTransparent) {
+				boundariesMode = visualizer.C4ModeTransparent
+			}
+			data, _, err := v.GenerateC4WithFormat(model, boundariesMode, opts.showDatabases, visualizer.FormatPUML)
 			if err != nil {
 				return fmt.Errorf("c4: %w", err)
 			}

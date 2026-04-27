@@ -80,3 +80,43 @@ func TestGenerateCmd_C4BoundariesFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateCmd_C4NoDatabases(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	// Service with a data-store so the flag has something to hide
+	craftSrc := []byte("actor user Foo\n\nservices {\n  MyService {\n    contexts: Ctx\n    data-stores: my_db\n  }\n}\n")
+	if err := os.WriteFile(src, craftSrc, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("databases shown by default", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "c4", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate default: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, "test-c4.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "my_db") {
+			t.Error("expected data-store to appear when --no-databases is not set")
+		}
+	})
+
+	t.Run("databases hidden with --no-databases", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "c4", "--no-databases", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate --no-databases: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, "test-c4.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "my_db") {
+			t.Error("expected data-store to be hidden when --no-databases is set")
+		}
+	})
+}
