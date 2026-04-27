@@ -272,7 +272,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Actor, sc.Trigger.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Domain, sc.Trigger.Line); ok {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Context, sc.Trigger.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
 			}
@@ -281,11 +281,11 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 					continue
 				}
 				// Try domain (the "from" party) first.
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.Domain, action.Line); ok {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.Context, action.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
 				// Then targetDomain (the "to" party).
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetDomain, action.Line); ok {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
 			}
@@ -565,16 +565,6 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 		})
 	}
 
-	for _, uc := range wsSym.UseCases {
-		result.UseCases = append(result.UseCases, craftUseCaseEntry{
-			Name:          uc.Name,
-			URI:           uc.URI,
-			StartLine:     uc.Line,
-			EndLine:       uc.EndLine,
-			InCurrentFile: currentFileURI != "" && uc.URI == currentFileURI,
-		})
-	}
-
 	for _, actor := range wsSym.Actors {
 		result.Actors = append(result.Actors, craftActorEntry{
 			Name:          actor.Name,
@@ -589,6 +579,18 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	for _, f := range s.ws.AllFiles() {
 		if f.AST == nil {
 			continue
+		}
+		for _, uc := range f.AST.UseCases {
+			entryPoint, involved := extractUseCaseContexts(uc)
+			result.UseCases = append(result.UseCases, craftUseCaseEntry{
+				Name:              uc.Name,
+				URI:               f.URI,
+				StartLine:         uc.Line,
+				EndLine:           uc.EndLine,
+				InCurrentFile:     currentFileURI != "" && f.URI == currentFileURI,
+				EntryPointContext: entryPoint,
+				InvolvedContexts:  involved,
+			})
 		}
 		for _, blockRange := range f.AST.ActorBlocks {
 			result.ActorBlocks = append(result.ActorBlocks, craftBlockRef{
@@ -609,6 +611,37 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	}
 
 	return result
+}
+
+// extractUseCaseContexts derives the entry-point bounded context and all involved contexts
+// from a use case declaration by inspecting its scenario triggers and actions.
+// The entry point is the first domain that appears (trigger domain for domain_listen,
+// otherwise the first action Domain). Involved is the deduplicated set of all Domain
+// and TargetDomain values across every scenario.
+func extractUseCaseContexts(uc *ast.UseCaseDecl) (entryPoint string, involved []string) {
+	seen := make(map[string]struct{})
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			involved = append(involved, name)
+		}
+		if entryPoint == "" {
+			entryPoint = name
+		}
+	}
+	for _, sc := range uc.Scenarios {
+		if sc.Trigger.TriggerType == "domain_listen" {
+			add(sc.Trigger.Context)
+		}
+		for _, action := range sc.Actions {
+			add(action.Context)
+			add(action.TargetContext)
+		}
+	}
+	return entryPoint, involved
 }
 
 // extractPartialDslFromBlockRanges reconstructs well-formed DSL for the given block ranges.
@@ -835,11 +868,13 @@ type craftBCEntry struct {
 }
 
 type craftUseCaseEntry struct {
-	Name          string `json:"name"`
-	URI           string `json:"uri"`
-	StartLine     int    `json:"startLine"`
-	EndLine       int    `json:"endLine"`
-	InCurrentFile bool   `json:"inCurrentFile,omitempty"`
+	Name              string   `json:"name"`
+	URI               string   `json:"uri"`
+	StartLine         int      `json:"startLine"`
+	EndLine           int      `json:"endLine"`
+	InCurrentFile     bool     `json:"inCurrentFile,omitempty"`
+	EntryPointContext string   `json:"entryPointContext,omitempty"`
+	InvolvedContexts  []string `json:"involvedContexts,omitempty"`
 }
 
 type craftActorEntry struct {
@@ -1014,7 +1049,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			if sc.Trigger.Line == cursorLine {
 				name := sc.Trigger.Actor
 				if name == "" {
-					name = sc.Trigger.Domain
+					name = sc.Trigger.Context
 				}
 				if name != "" {
 					if val := hoverForUseCaseRef(rm, uri, name, sc.Trigger.Line); val != "" {
@@ -1030,7 +1065,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 					continue
 				}
 				// Show hover for the "from" domain first.
-				if val := hoverForUseCaseRef(rm, uri, action.Domain, action.Line); val != "" {
+				if val := hoverForUseCaseRef(rm, uri, action.Context, action.Line); val != "" {
 					return &protocol.Hover{
 						Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 					}, nil
@@ -1290,7 +1325,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			// Trigger subject.
 			triggerName := sc.Trigger.Actor
 			if triggerName == "" {
-				triggerName = sc.Trigger.Domain
+				triggerName = sc.Trigger.Context
 			}
 			if triggerName != "" && sc.Trigger.Line > 0 {
 				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, sc.Trigger.Line); ok {
@@ -1307,12 +1342,12 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 				if action.Line <= 0 {
 					continue
 				}
-				if action.Domain != "" {
-					if tt, ok := useCaseRefTokenType(rm, uri, action.Domain, action.Line); ok {
+				if action.Context != "" {
+					if tt, ok := useCaseRefTokenType(rm, uri, action.Context, action.Line); ok {
 						tokens = append(tokens, semanticToken{
 							line:      uint32(action.Line - 1),
 							startChar: 0,
-							length:    uint32(len([]rune(action.Domain))),
+							length:    uint32(len([]rune(action.Context))),
 							tokenType: tt,
 						})
 					}
