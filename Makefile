@@ -1,4 +1,4 @@
-.PHONY: docker-build docker-run docker-publish docker-clean test vet help
+.PHONY: docker-build docker-run docker-publish docker-clean test vet test-release help
 
 # Auto-detect container runtime (docker preferred, podman fallback)
 CONTAINER_RUNTIME := $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
@@ -46,6 +46,9 @@ vet:
 		github.com/tcarcao/craft/internal/lsp \
 		github.com/tcarcao/craft/pkg/craft
 
+test-release: ## Download and smoke-test the latest GitHub release binary for the current platform
+	./scripts/test-release.sh
+
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help:
@@ -59,6 +62,9 @@ help:
 	@echo "Other:"
 	@echo "  test                     - Run tests"
 	@echo "  vet                      - Run go vet on hand-written packages"
+	@echo "  test-release             - Download and smoke-test the latest GitHub release (current platform)"
+	@echo "                             Example: make test-release  (uses latest tag)"
+	@echo "                             Example: ./scripts/test-release.sh 0.1.0  (specific version)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  IMAGE_TAG                - Image tag for docker-publish (default: latest)"
