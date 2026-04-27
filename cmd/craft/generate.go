@@ -111,9 +111,21 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			if strings.ToLower(opts.boundaries) == string(visualizer.C4ModeTransparent) {
 				boundariesMode = visualizer.C4ModeTransparent
 			}
-			data, _, err := v.GenerateC4WithFormat(model, boundariesMode, opts.showDatabases, visualizer.FormatPUML)
-			if err != nil {
-				return fmt.Errorf("c4: %w", err)
+
+			hasFocus := len(opts.focusServices) > 0 || len(opts.focusContexts) > 0
+			var data []byte
+			if hasFocus {
+				var err error
+				data, _, err = v.GenerateC4WithFocusContextsAndFormat(model, opts.focusServices, opts.focusContexts, boundariesMode, opts.showDatabases, visualizer.FormatPUML)
+				if err != nil {
+					return fmt.Errorf("c4: %w", err)
+				}
+			} else {
+				var err error
+				data, _, err = v.GenerateC4WithFormat(model, boundariesMode, opts.showDatabases, visualizer.FormatPUML)
+				if err != nil {
+					return fmt.Errorf("c4: %w", err)
+				}
 			}
 			content = data
 			outFile = filepath.Join(outDir, base+"-c4.puml")

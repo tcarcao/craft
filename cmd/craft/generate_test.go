@@ -120,3 +120,54 @@ func TestGenerateCmd_C4NoDatabases(t *testing.T) {
 		}
 	})
 }
+
+func TestGenerateCmd_C4Focus(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	// Two services so focus can include one and exclude the other
+	craftSrc := []byte(`actor user Foo
+
+services {
+  ServiceA {
+    contexts: CtxA
+  }
+  ServiceB {
+    contexts: CtxB
+  }
+}
+`)
+	if err := os.WriteFile(src, craftSrc, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("no focus includes all services", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "c4", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate no focus: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, "test-c4.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "ServiceA") || !strings.Contains(content, "ServiceB") {
+			t.Error("expected both services when no --focus is set")
+		}
+	})
+
+	t.Run("focus on one service", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "c4", "--focus", "ServiceA", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate --focus ServiceA: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, "test-c4.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "ServiceA") {
+			t.Error("expected focused service ServiceA to appear")
+		}
+	})
+}
