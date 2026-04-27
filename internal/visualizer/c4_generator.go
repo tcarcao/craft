@@ -165,7 +165,9 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 				}
 
 				// Only add actors that interact with focused services (or all if no focus)
-				if scenario.Trigger.Actor != "" && !strings.HasPrefix(strings.ToUpper(scenario.Trigger.Actor), "CRON") {
+				// Skip actors that are actually bounded contexts defined in a service
+				if scenario.Trigger.Actor != "" && !strings.HasPrefix(strings.ToUpper(scenario.Trigger.Actor), "CRON") &&
+					g.findServiceForDomain(scenario.Trigger.Actor) == "" {
 					shouldAddActor := !g.hasFocus // No focus - add all actors
 
 					if g.hasFocus {
@@ -317,6 +319,9 @@ func (g *C4DiagramGenerator) createPresentationSystem() {
 	for _, arch := range g.model.Architectures {
 		for i, component := range arch.Presentation {
 			containerName := g.generatePresentationContainerName(component, i)
+			if _, exists := g.containers[containerName]; exists {
+				continue
+			}
 			container := &C4Container{
 				Name:        containerName,
 				System:      "Presentation",
@@ -347,6 +352,9 @@ func (g *C4DiagramGenerator) createGatewaySystem() {
 	for _, arch := range g.model.Architectures {
 		for i, component := range arch.Gateway {
 			containerName := g.generateGatewayContainerName(component, i)
+			if _, exists := g.containers[containerName]; exists {
+				continue
+			}
 			container := &C4Container{
 				Name:        containerName,
 				System:      "Gateway",
@@ -381,15 +389,15 @@ func (g *C4DiagramGenerator) createEventSystemIfNeeded() {
 					}
 
 					// Focus mode - only include if action involves focused services
-					actionService := g.findServiceForDomain(action.Domain)
+					actionService := g.findServiceForDomain(action.Context)
 					if actionService != "" && g.focusedServices[actionService] {
 						hasRelevantAsyncActions = true
 						break
 					}
 
 					// Also check target domain
-					if action.TargetDomain != "" {
-						targetService := g.findServiceForDomain(action.TargetDomain)
+					if action.TargetContext != "" {
+						targetService := g.findServiceForDomain(action.TargetContext)
 						if targetService != "" && g.focusedServices[targetService] {
 							hasRelevantAsyncActions = true
 							break
@@ -512,13 +520,13 @@ func (g *C4DiagramGenerator) extractDomainsFromActions(actions []craft.Action) [
 	seen := make(map[string]bool)
 
 	for _, action := range actions {
-		if action.Domain != "" && !seen[action.Domain] {
-			domains = append(domains, action.Domain)
-			seen[action.Domain] = true
+		if action.Context != "" && !seen[action.Context] {
+			domains = append(domains, action.Context)
+			seen[action.Context] = true
 		}
-		if action.TargetDomain != "" && !seen[action.TargetDomain] {
-			domains = append(domains, action.TargetDomain)
-			seen[action.TargetDomain] = true
+		if action.TargetContext != "" && !seen[action.TargetContext] {
+			domains = append(domains, action.TargetContext)
+			seen[action.TargetContext] = true
 		}
 	}
 
@@ -543,15 +551,15 @@ func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario craft.Sce
 	// Find the first domain that is actually triggered by user action
 	// This is typically the first action in the scenario
 	for _, action := range scenario.Actions {
-		if action.Domain != "" {
+		if action.Context != "" {
 			// Only the first domain encountered should be externally accessible
-			service := g.findServiceForDomain(action.Domain)
+			service := g.findServiceForDomain(action.Context)
 			if service != "" {
-				if g.userInteractionMap[action.Domain] == nil {
-					g.userInteractionMap[action.Domain] = make([]string, 0)
+				if g.userInteractionMap[action.Context] == nil {
+					g.userInteractionMap[action.Context] = make([]string, 0)
 				}
-				if !g.containsString(g.userInteractionMap[action.Domain], service) {
-					g.userInteractionMap[action.Domain] = append(g.userInteractionMap[action.Domain], service)
+				if !g.containsString(g.userInteractionMap[action.Context], service) {
+					g.userInteractionMap[action.Context] = append(g.userInteractionMap[action.Context], service)
 				}
 			}
 			// Only process the first domain, break after that
