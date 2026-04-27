@@ -33,6 +33,13 @@ func generateCmd() *cobra.Command {
 		Short: "Generate PlantUML diagram files from .craft files",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			switch strings.ToLower(boundaries) {
+			case "boundaries", "transparent":
+				// valid
+			default:
+				return fmt.Errorf("--boundaries must be 'boundaries' or 'transparent', got %q", boundaries)
+			}
+
 			files, err := resolveFiles(args)
 			if err != nil {
 				return err

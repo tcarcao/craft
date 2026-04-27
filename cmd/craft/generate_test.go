@@ -175,3 +175,18 @@ services {
 		}
 	})
 }
+
+func TestGenerateCmd_C4InvalidBoundaries(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	if err := os.WriteFile(src, []byte("actor user Foo\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", src, "--type", "c4", "--boundaries", "invalid", "--output", tmp})
+	err := root.Execute()
+	if err == nil {
+		t.Error("expected error for --boundaries invalid, got nil")
+	}
+}
