@@ -326,8 +326,55 @@ func bcSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 }
 func domainBodyCompletions() *protocol.CompletionList                          { return nil }
 func actorTypeCompletions() *protocol.CompletionList                           { return nil }
-func whenKeywordCompletion() *protocol.CompletionList                          { return nil }
-func allSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList     { return nil }
+func whenKeywordCompletion() *protocol.CompletionList {
+	snip := protocol.InsertTextFormatSnippet
+	return &protocol.CompletionList{
+		IsIncomplete: false,
+		Items: []protocol.CompletionItem{
+			{
+				Label:            "when",
+				Kind:             protocol.CompletionItemKindKeyword,
+				Detail:           "scenario trigger",
+				InsertText:       "when ${1:Actor} ${2:initiates} ${3:action}\n\t${4:Context} ${5:validates} ${6:request}",
+				InsertTextFormat: snip,
+			},
+		},
+	}
+}
+
+func allSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
+	wsSym := ws.WorkspaceSymbols()
+	var items []protocol.CompletionItem
+	for name, actor := range wsSym.Actors {
+		items = append(items, protocol.CompletionItem{
+			Label:  name,
+			Kind:   protocol.CompletionItemKindVariable,
+			Detail: "actor (" + string(actor.Type) + ")",
+		})
+	}
+	for name := range wsSym.Services {
+		items = append(items, protocol.CompletionItem{
+			Label:  name,
+			Kind:   protocol.CompletionItemKindModule,
+			Detail: "service",
+		})
+	}
+	for domName, dom := range wsSym.Domains {
+		items = append(items, protocol.CompletionItem{
+			Label:  domName,
+			Kind:   protocol.CompletionItemKindModule,
+			Detail: "domain",
+		})
+		for _, bc := range dom.BoundedContexts {
+			items = append(items, protocol.CompletionItem{
+				Label:  bc,
+				Kind:   protocol.CompletionItemKindModule,
+				Detail: "bounded context (domain: " + domName + ")",
+			})
+		}
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
 func exposeFieldCompletions() *protocol.CompletionList                         { return nil }
 func actorSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList   { return nil }
 func serviceSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList { return nil }

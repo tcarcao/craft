@@ -213,3 +213,68 @@ func TestCompletion_TopLevelKeywords(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletion_UseCase_WhenKeyword(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	// use_case body with blank line — cursor inside
+	const src = "use_case \"Foo\" {\n  \n}"
+	const uri = "file:///uc_when.craft"
+	p, _ := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: p}) //nolint:errcheck
+	time.Sleep(200 * time.Millisecond)
+
+	items := sendCompletion(t, testOut, br, &id, uri, 1, 2)
+	if !hasLabel(items, "when") {
+		t.Errorf("expected 'when' in use_case body completions, got: %v", labelList(items))
+	}
+}
+
+func TestCompletion_UseCase_ActionSymbols(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	// Workspace: actor, domain (+ BC), service — all in one file
+	const src = "actor user Alice\ndomain Commerce {\n  Orders\n}\nservices {\n  OrderSvc {\n    contexts: Orders\n  }\n}\nuse_case \"Checkout\" {\n  when Alice initiates x\n    Orders \n}"
+	const uri = "file:///uc_action.craft"
+	p, _ := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: p}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Line 11: "    Orders " — cursor at col 10 (past first word, so isActionLine=true)
+	items := sendCompletion(t, testOut, br, &id, uri, 11, 10)
+	for _, sym := range []string{"Alice", "Commerce", "Orders", "OrderSvc"} {
+		if !hasLabel(items, sym) {
+			t.Errorf("expected symbol %q in use_case action completions, got: %v", sym, labelList(items))
+		}
+	}
+}
