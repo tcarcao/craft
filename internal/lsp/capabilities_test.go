@@ -56,8 +56,8 @@ func TestServerCapabilities_S5(t *testing.T) {
 			SemanticTokensProvider interface{} `json:"semanticTokensProvider"`
 			DefinitionProvider     interface{} `json:"definitionProvider"`
 			ExecuteCommandProvider interface{} `json:"executeCommandProvider"`
+			CompletionProvider     interface{} `json:"completionProvider"`
 			// Capabilities that MUST NOT be declared yet (not yet implemented).
-			CompletionProvider   interface{} `json:"completionProvider"`
 			FoldingRangeProvider interface{} `json:"foldingRangeProvider"`
 		} `json:"capabilities"`
 	}
@@ -87,13 +87,13 @@ func TestServerCapabilities_S5(t *testing.T) {
 	if result.Capabilities.ExecuteCommandProvider == nil {
 		t.Error("executeCommandProvider must be declared (S5, Q20)")
 	}
+	// Task 1: completions capability — added alongside Completion handler.
+	if result.Capabilities.CompletionProvider == nil {
+		t.Error("completionProvider must be declared (Task 1, Q20)")
+	}
 	// S7 capability — added alongside FoldingRanges handler.
 	if result.Capabilities.FoldingRangeProvider == nil {
 		t.Error("foldingRangeProvider must be declared (S7, Q20)")
-	}
-	// Future capabilities — must not be declared yet.
-	if result.Capabilities.CompletionProvider != nil {
-		t.Error("completionProvider must not be declared yet (Q20)")
 	}
 
 	testOut.Close()

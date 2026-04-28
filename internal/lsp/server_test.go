@@ -112,8 +112,8 @@ func TestServeLifecycle(t *testing.T) {
 	if result.Capabilities.TextDocumentSync == nil {
 		t.Error("textDocumentSync capability missing")
 	}
-	if result.Capabilities.CompletionProvider != nil {
-		t.Error("completionProvider must not be declared (Q20)")
+	if result.Capabilities.CompletionProvider == nil {
+		t.Error("completionProvider must be declared")
 	}
 	// S3 capabilities (Q20 rule: declare alongside handler).
 	if result.Capabilities.DocumentSymbolProvider == nil {

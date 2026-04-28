@@ -127,6 +127,10 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
+			// CompletionProvider advertises ':' as a completion trigger character.
+			CompletionProvider: &protocol.CompletionOptions{
+				TriggerCharacters: []string{":"},
+			},
 			// ExecuteCommandProvider lists the custom LSP commands we handle.
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
 				Commands: []string{
