@@ -425,3 +425,62 @@ func TestAnalyzeFile_DomainIsGrouped_TopLevel(t *testing.T) {
 		t.Error("expected IsGrouped=false for top-level domain")
 	}
 }
+
+func TestMergeWorkspaceSymbols_BCPositions(t *testing.T) {
+	// domain Auth {\n  Login\n  Logout\n}
+	// Login at line 2, col 3; Logout at line 3, col 3
+	src := "domain Auth {\n  Login\n  Logout\n}"
+	f, parseDiags := syntax.Parse(src)
+	if len(parseDiags) != 0 {
+		t.Fatalf("parse diagnostics: %v", parseDiags)
+	}
+	syms, _ := sema.AnalyzeFile("file:///test.craft", f)
+	ws, _ := sema.MergeWorkspaceSymbols(map[string]sema.Symbols{"file:///test.craft": syms})
+
+	for _, tc := range []struct {
+		name string
+		line int
+		col  int
+	}{
+		{"Login", 2, 3},
+		{"Logout", 3, 3},
+	} {
+		pos, ok := ws.BCPositions[tc.name]
+		if !ok {
+			t.Errorf("BCPositions missing %q", tc.name)
+			continue
+		}
+		if pos.Line != tc.line {
+			t.Errorf("BCPositions[%q].Line: got %d want %d", tc.name, pos.Line, tc.line)
+		}
+		if pos.Column != tc.col {
+			t.Errorf("BCPositions[%q].Column: got %d want %d", tc.name, pos.Column, tc.col)
+		}
+		if pos.URI != "file:///test.craft" {
+			t.Errorf("BCPositions[%q].URI: got %q", tc.name, pos.URI)
+		}
+	}
+}
+
+func TestResolveUseCaseRef_BoundedContextCarriesBCPosition(t *testing.T) {
+	// BC "Login" is inside domain "Auth". When resolved via a use-case ref,
+	// the target must carry BCLine/BCColumn/BCURI pointing at the Login line.
+	src := "domain Auth {\n  Login\n}\nuse_case \"T\" {\n  when Login initiates x\n    Login validates y\n}"
+	f, _ := syntax.Parse(src)
+	perFile := map[string]sema.Symbols{"file:///t.craft": func() sema.Symbols { s, _ := sema.AnalyzeFile("file:///t.craft", f); return s }()}
+	rm, _ := sema.AnalyzeWorkspace(perFile, func() sema.WorkspaceSymbols { ws, _ := sema.MergeWorkspaceSymbols(perFile); return ws }())
+
+	target, ok := sema.ResolveUseCaseRef(rm, "file:///t.craft", "Login", 6)
+	if !ok {
+		t.Fatal("ResolveUseCaseRef: Login not resolved")
+	}
+	if target.Kind != "bounded_context" {
+		t.Fatalf("Kind: got %q want bounded_context", target.Kind)
+	}
+	if target.BCLine != 2 {
+		t.Errorf("BCLine: got %d want 2", target.BCLine)
+	}
+	if target.BCURI != "file:///t.craft" {
+		t.Errorf("BCURI: got %q want file:///t.craft", target.BCURI)
+	}
+}

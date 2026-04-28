@@ -18,12 +18,23 @@ import (
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
+// colToLSP converts a 1-based source column to a 0-based LSP character offset.
+// Returns 0 for any non-positive input.
+func colToLSP(col int) int {
+	if col <= 0 {
+		return 0
+	}
+	return col - 1
+}
+
 // ActorSymbol holds collected information about an actor declaration.
 type ActorSymbol struct {
 	Name string
 	Type ast.ActorType
 	// Line is the 1-based source line of the actor name.
 	Line int
+	// Column is the 1-based column where the actor name starts.
+	Column int
 	// URI is the file that contains this declaration.
 	URI string
 }
@@ -35,6 +46,8 @@ type DomainSymbol struct {
 	BoundedContexts []string
 	// Line is the 1-based source line of the domain name.
 	Line int
+	// Column is the 1-based column where the domain name starts.
+	Column int
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int
 	// IsGrouped is true when the domain was declared inside a domains { } block.
@@ -51,6 +64,8 @@ type ServiceSymbol struct {
 	Language   string
 	// Line is the 1-based source line of the service name.
 	Line int
+	// Column is the 1-based column where the service name starts.
+	Column int
 	// EndLine is the 1-based source line of the closing `}`, for folding.
 	EndLine int
 	// IsGrouped is true when the service was declared inside a services { } block.
@@ -82,6 +97,16 @@ type ExposureSymbol struct {
 	URI string
 }
 
+// BCPosition holds the source position of a bounded context declaration.
+type BCPosition struct {
+	// Line is the 1-based line of the bounded context name token.
+	Line int
+	// Column is the 1-based column of the bounded context name token.
+	Column int
+	// URI is the file that contains this bounded context.
+	URI string
+}
+
 // UseCaseRef captures a single reference site from within a use-case body.
 // Each actor/domain/service name that appears in a trigger subject, action
 // domain, or action target is recorded here for cross-resolution in S6.
@@ -102,6 +127,9 @@ type Symbols struct {
 	// UseCaseRefs collects all name references from within use-case bodies
 	// so AnalyzeWorkspace can resolve them cross-file.
 	UseCaseRefs []UseCaseRef
+	// BCPositions maps bounded-context name → its declaration position.
+	// Populated by AnalyzeFile so MergeWorkspaceSymbols can propagate it.
+	BCPositions map[string]BCPosition
 }
 
 // WorkspaceSymbols merges per-file symbol tables for cross-file resolution.
@@ -112,6 +140,8 @@ type WorkspaceSymbols struct {
 	Domains map[string]DomainSymbol
 	// BoundedContexts maps bounded-context name → owning DomainSymbol.
 	BoundedContexts map[string]DomainSymbol
+	// BCPositions maps bounded-context name → its source position.
+	BCPositions map[string]BCPosition
 	// Services maps name → symbol across all workspace files.
 	Services map[string]ServiceSymbol
 	// UseCases maps name → symbol across all workspace files.
@@ -161,6 +191,11 @@ type UseCaseRefTarget struct {
 	Actor  *ActorSymbol
 	Domain *DomainSymbol
 	Service *ServiceSymbol
+	// BCLine, BCColumn, BCURI carry the position of the bounded context's own
+	// declaration token (inside its parent domain body). Set when Kind == "bounded_context".
+	BCLine   int
+	BCColumn int
+	BCURI    string
 }
 
 // AnalyzeFile collects symbols from a single file's AST and runs validation
@@ -188,15 +223,16 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 	seenServices := make(map[string]ServiceSymbol)
 
 	for _, a := range f.Actors {
-		sym := ActorSymbol{Name: a.Name, Type: a.Type, Line: a.Line, URI: uri}
+		sym := ActorSymbol{Name: a.Name, Type: a.Type, Line: a.Line, Column: a.Column, URI: uri}
 		if prev, dup := seenActors[a.Name]; dup {
+			startChar := colToLSP(a.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", a.Name, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(a.Line)},
-					End:   craft.Position{Line: ast.LineToLSP(a.Line), Character: len(a.Name)},
+					Start: craft.Position{Line: ast.LineToLSP(a.Line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(a.Line), Character: startChar + len(a.Name)},
 				},
 			})
 			continue
@@ -214,24 +250,38 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 			Name:            d.Name,
 			BoundedContexts: bcNames,
 			Line:            d.Line,
+			Column:          d.Column,
 			EndLine:         d.EndLine,
 			IsGrouped:       d.IsGrouped,
 			URI:             uri,
 		}
 		if prev, dup := seenDomains[d.Name]; dup {
+			startChar := colToLSP(d.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", d.Name, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(d.Line)},
-					End:   craft.Position{Line: ast.LineToLSP(d.Line), Character: len(d.Name)},
+					Start: craft.Position{Line: ast.LineToLSP(d.Line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(d.Line), Character: startChar + len(d.Name)},
 				},
 			})
 			continue
 		}
 		seenDomains[d.Name] = sym
 		syms.Domains = append(syms.Domains, sym)
+
+		// Collect bounded context positions for each BC in this domain.
+		for _, bc := range d.BoundedContexts {
+			if syms.BCPositions == nil {
+				syms.BCPositions = make(map[string]BCPosition)
+			}
+			syms.BCPositions[bc.Name] = BCPosition{
+				Line:   bc.Line,
+				Column: bc.Column,
+				URI:    uri,
+			}
+		}
 	}
 
 	for _, s := range f.Services {
@@ -241,18 +291,20 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 			DataStores: s.DataStores,
 			Language:   s.Language,
 			Line:       s.Line,
+			Column:     s.Column,
 			EndLine:    s.EndLine,
 			IsGrouped:  s.IsGrouped,
 			URI:        uri,
 		}
 		if prev, dup := seenServices[s.Name]; dup {
+			startChar := colToLSP(s.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", s.Name, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(s.Line)},
-					End:   craft.Position{Line: ast.LineToLSP(s.Line), Character: len(s.Name)},
+					Start: craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar + len(s.Name)},
 				},
 			})
 			continue
@@ -264,6 +316,7 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 	// Cross-kind name reuse check (Q4b, Q23).
 	for name, actorSym := range seenActors {
 		if domSym, clash := seenDomains[name]; clash {
+			startChar := colToLSP(domSym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code: "craft/sema/cross-kind-name-reuse",
 				Message: fmt.Sprintf(
@@ -273,8 +326,8 @@ func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnosti
 				),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(domSym.Line)},
-					End:   craft.Position{Line: ast.LineToLSP(domSym.Line), Character: len(name)},
+					Start: craft.Position{Line: ast.LineToLSP(domSym.Line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(domSym.Line), Character: startChar + len(name)},
 				},
 			})
 		}
@@ -359,6 +412,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 		Actors:          make(map[string]ActorSymbol),
 		Domains:         make(map[string]DomainSymbol),
 		BoundedContexts: make(map[string]DomainSymbol),
+		BCPositions:     make(map[string]BCPosition),
 		Services:        make(map[string]ServiceSymbol),
 		UseCases:        make(map[string]UseCaseSymbol),
 	}
@@ -375,6 +429,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 		}
 		for _, s := range syms.Services {
 			if prev, dup := ws.Services[s.Name]; dup && prev.URI != s.URI {
+				startChar := colToLSP(s.Column)
 				diags = append(diags, craft.Diagnostic{
 					Code: "craft/sema/duplicate-name",
 					Message: fmt.Sprintf(
@@ -384,8 +439,8 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 					Severity:  craft.SeverityWarning,
 					SourceURI: s.URI,
 					Range: craft.Range{
-						Start: craft.Position{Line: ast.LineToLSP(s.Line)},
-						End:   craft.Position{Line: ast.LineToLSP(s.Line), Character: len(s.Name)},
+						Start: craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar},
+						End:   craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar + len(s.Name)},
 					},
 				})
 				// Keep the first declaration in the map so resolution is stable.
@@ -395,6 +450,9 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 		}
 		for _, uc := range syms.UseCases {
 			ws.UseCases[uc.Name] = uc
+		}
+		for name, pos := range syms.BCPositions {
+			ws.BCPositions[name] = pos
 		}
 	}
 	return ws, diags
@@ -424,6 +482,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 						rm.ServiceContexts[key] = domByName
 						continue
 					}
+				startChar := colToLSP(svc.Column)
 				diags = append(diags, craft.Diagnostic{
 					Code: "craft/sema/unresolved-reference",
 					Message: fmt.Sprintf(
@@ -433,8 +492,8 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					Severity:  craft.SeverityError,
 					SourceURI: uri,
 					Range: craft.Range{
-						Start: craft.Position{Line: ast.LineToLSP(svc.Line)},
-						End:   craft.Position{Line: ast.LineToLSP(svc.Line), Character: len(svc.Name)},
+						Start: craft.Position{Line: ast.LineToLSP(svc.Line), Character: startChar},
+						End:   craft.Position{Line: ast.LineToLSP(svc.Line), Character: startChar + len(svc.Name)},
 					},
 				})
 					continue
@@ -563,7 +622,13 @@ func resolveUseCaseRef(ws WorkspaceSymbols, name string) (UseCaseRefTarget, bool
 		return UseCaseRefTarget{Kind: "domain", Domain: &d}, true
 	}
 	if bc, ok := ws.BoundedContexts[name]; ok {
-		return UseCaseRefTarget{Kind: "bounded_context", Domain: &bc}, true
+		t := UseCaseRefTarget{Kind: "bounded_context", Domain: &bc}
+		if pos, ok := ws.BCPositions[name]; ok {
+			t.BCLine = pos.Line
+			t.BCColumn = pos.Column
+			t.BCURI = pos.URI
+		}
+		return t, true
 	}
 	if s, ok := ws.Services[name]; ok {
 		return UseCaseRefTarget{Kind: "service", Service: &s}, true
