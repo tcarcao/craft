@@ -214,8 +214,11 @@ func (s *Server) ColorPresentation(_ context.Context, _ *protocol.ColorPresentat
 	return nil, nil
 }
 
-func (s *Server) Completion(_ context.Context, _ *protocol.CompletionParams) (*protocol.CompletionList, error) {
-	return nil, nil
+func (s *Server) Completion(_ context.Context, params *protocol.CompletionParams) (*protocol.CompletionList, error) {
+	if params == nil {
+		return nil, nil
+	}
+	return buildCompletions(s.ws, string(params.TextDocument.URI), params), nil
 }
 
 func (s *Server) CompletionResolve(_ context.Context, params *protocol.CompletionItem) (*protocol.CompletionItem, error) {
