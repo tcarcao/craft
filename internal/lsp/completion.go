@@ -324,8 +324,17 @@ func bcSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
-func domainBodyCompletions() *protocol.CompletionList                          { return nil }
-func actorTypeCompletions() *protocol.CompletionList                           { return nil }
+func domainBodyCompletions() *protocol.CompletionList {
+	return &protocol.CompletionList{IsIncomplete: false, Items: nil}
+}
+func actorTypeCompletions() *protocol.CompletionList {
+	items := []protocol.CompletionItem{
+		{Label: "user", Kind: protocol.CompletionItemKindKeyword, Detail: "human actor"},
+		{Label: "system", Kind: protocol.CompletionItemKindKeyword, Detail: "external system actor"},
+		{Label: "service", Kind: protocol.CompletionItemKindKeyword, Detail: "internal service actor"},
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
 func whenKeywordCompletion() *protocol.CompletionList {
 	snip := protocol.InsertTextFormatSnippet
 	return &protocol.CompletionList{
@@ -375,6 +384,35 @@ func allSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
-func exposeFieldCompletions() *protocol.CompletionList                         { return nil }
-func actorSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList   { return nil }
-func serviceSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList { return nil }
+func exposeFieldCompletions() *protocol.CompletionList {
+	items := []protocol.CompletionItem{
+		{Label: "to:", Kind: protocol.CompletionItemKindField, Detail: "target actors"},
+		{Label: "through:", Kind: protocol.CompletionItemKindField, Detail: "gateway services"},
+		{Label: "contexts:", Kind: protocol.CompletionItemKindField, Detail: "exposed bounded contexts"},
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
+func actorSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
+	wsSym := ws.WorkspaceSymbols()
+	var items []protocol.CompletionItem
+	for name, actor := range wsSym.Actors {
+		items = append(items, protocol.CompletionItem{
+			Label:  name,
+			Kind:   protocol.CompletionItemKindVariable,
+			Detail: "actor (" + string(actor.Type) + ")",
+		})
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
+func serviceSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
+	wsSym := ws.WorkspaceSymbols()
+	var items []protocol.CompletionItem
+	for name := range wsSym.Services {
+		items = append(items, protocol.CompletionItem{
+			Label:  name,
+			Kind:   protocol.CompletionItemKindModule,
+			Detail: "service",
+		})
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}

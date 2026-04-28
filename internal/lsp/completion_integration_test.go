@@ -278,3 +278,97 @@ func TestCompletion_UseCase_ActionSymbols(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletion_Expose(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	// Main file: actor Alice, service OrderSvc, domain Commerce with BC Orders
+	// expose block with to:, through:, contexts: lines
+	const src = "actor user Alice\nservices {\n  OrderSvc {\n    contexts: Orders\n  }\n}\ndomain Commerce {\n  Orders\n}\nexpose MyAPI {\n  to: \n  through: \n  contexts: \n}"
+	const uri = "file:///expose.craft"
+	p, _ := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: p}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Test expose field names: open a simple expose file with blank body
+	const expFieldSrc = "expose MyAPI {\n  \n}"
+	const expFieldURI = "file:///expose_fields.craft"
+	pf, _ := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": expFieldURI, "languageId": "craft", "version": 1, "text": expFieldSrc},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: pf}) //nolint:errcheck
+	time.Sleep(200 * time.Millisecond)
+
+	// Sub-test 1: expose field names
+	fieldItems := sendCompletion(t, testOut, br, &id, expFieldURI, 1, 2)
+	for _, field := range []string{"to:", "through:", "contexts:"} {
+		if !hasLabel(fieldItems, field) {
+			t.Errorf("expected expose field %q, got: %v", field, labelList(fieldItems))
+		}
+	}
+
+	// Sub-test 2: to: → actor names (line 10 of src, col 6 = after "  to: ")
+	toItems := sendCompletion(t, testOut, br, &id, uri, 10, 6)
+	if !hasLabel(toItems, "Alice") {
+		t.Errorf("expected actor 'Alice' in to: completions, got: %v", labelList(toItems))
+	}
+
+	// Sub-test 3: through: → service names (line 11, col 11 = after "  through: ")
+	throughItems := sendCompletion(t, testOut, br, &id, uri, 11, 11)
+	if !hasLabel(throughItems, "OrderSvc") {
+		t.Errorf("expected service 'OrderSvc' in through: completions, got: %v", labelList(throughItems))
+	}
+
+	// Sub-test 4: contexts: → BC names (line 12, col 12 = after "  contexts: ")
+	ctxItems := sendCompletion(t, testOut, br, &id, uri, 12, 12)
+	if !hasLabel(ctxItems, "Orders") {
+		t.Errorf("expected BC 'Orders' in expose contexts: completions, got: %v", labelList(ctxItems))
+	}
+}
+
+func TestCompletion_ActorsBlock(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const src = "actors {\n  \n}"
+	const uri = "file:///actors_block.craft"
+	p, _ := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: p}) //nolint:errcheck
+	time.Sleep(200 * time.Millisecond)
+
+	items := sendCompletion(t, testOut, br, &id, uri, 1, 2)
+	for _, actorType := range []string{"user", "system", "service"} {
+		if !hasLabel(items, actorType) {
+			t.Errorf("expected actor type %q in actors block completions, got: %v", actorType, labelList(items))
+		}
+	}
+}
