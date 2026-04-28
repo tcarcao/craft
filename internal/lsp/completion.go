@@ -293,7 +293,15 @@ func topLevelKeywordCompletions() *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
-func serviceFieldCompletions() *protocol.CompletionList                        { return nil }
+func serviceFieldCompletions() *protocol.CompletionList {
+	items := []protocol.CompletionItem{
+		{Label: "contexts:", Kind: protocol.CompletionItemKindField, Detail: "bounded context references"},
+		{Label: "data-stores:", Kind: protocol.CompletionItemKindField, Detail: "data store names"},
+		{Label: "language:", Kind: protocol.CompletionItemKindField, Detail: "implementation language"},
+		{Label: "deployment:", Kind: protocol.CompletionItemKindField, Detail: "deployment strategy"},
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
 func languageValueCompletions() *protocol.CompletionList                       { return nil }
 func bcSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList      { return nil }
 func domainBodyCompletions() *protocol.CompletionList                          { return nil }
