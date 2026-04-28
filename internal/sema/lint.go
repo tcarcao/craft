@@ -107,8 +107,18 @@ func lintUnusedActors(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []c
 	for _, f := range perFileASTs {
 		for _, uc := range f.UseCases {
 			for _, sc := range uc.Scenarios {
-				if sc.Trigger.TriggerType == "external" && sc.Trigger.Actor != "" {
-					used[sc.Trigger.Actor] = true
+				switch sc.Trigger.TriggerType {
+				case "external":
+					if sc.Trigger.Actor != "" {
+						used[sc.Trigger.Actor] = true
+					}
+				case "domain_listen":
+					// An actor can be the subject of a listens trigger; the parser
+					// stores the subject in Context regardless of whether it is an
+					// actor or a bounded context.
+					if sc.Trigger.Context != "" {
+						used[sc.Trigger.Context] = true
+					}
 				}
 			}
 		}

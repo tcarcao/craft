@@ -131,6 +131,31 @@ func TestLint_UnusedActor_UsedAsTrigger(t *testing.T) {
 	}
 }
 
+func TestLint_UnusedActor_UsedAsListensTrigger(t *testing.T) {
+	// Actors used as the subject of `when <Actor> listens "<event>"` must not
+	// be reported as unused. The parser stores the subject in Context for
+	// domain_listen triggers regardless of whether it is an actor or a context.
+	f := &ast.File{
+		Actors: []*ast.ActorDecl{{Name: "NotificationListener", Type: ast.ActorTypeSystem, Line: 1}},
+		UseCases: []*ast.UseCaseDecl{
+			{
+				Name: "Test",
+				Scenarios: []*ast.ScenarioDecl{
+					{Trigger: ast.TriggerDecl{TriggerType: "domain_listen", Context: "NotificationListener", Event: "Account Frozen"}},
+				},
+			},
+		},
+	}
+
+	ws := wsWithActors("NotificationListener")
+	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, ws)
+	for _, d := range diags {
+		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"NotificationListener"`) {
+			t.Errorf("unexpected craft/lint/unused-actor for actor used in listens trigger")
+		}
+	}
+}
+
 func TestLint_UnusedActor_NoActors_NoFire(t *testing.T) {
 	f := &ast.File{}
 	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, wsWithActors())
