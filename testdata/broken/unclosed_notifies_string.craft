@@ -1,0 +1,7 @@
+use_case "Scheduled Payment Processing" {
+  when CRON triggers scheduled payments
+    PaymentProcessing asks AccountManagement to get scheduled payments
+    PaymentProcessing processes each scheduled payment
+    BalanceTracking updates balances for processed payments
+    PaymentProcessing notifies "Scheduled Payments Processed
+}

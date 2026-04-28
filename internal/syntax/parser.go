@@ -1026,6 +1026,9 @@ func (p *Parser) parseNotifiesAction(id int, subject string, subjectCol int, lin
 		event = eventTok.Value
 		eventCol = eventTok.Column
 		p.consume()
+	} else if eventTok.Type == lexer.TokenError {
+		*diags = append(*diags, p.diagUnterminatedString(eventTok))
+		p.consume()
 	}
 
 	desc := fmt.Sprintf("%s notifies %q", subject, event)
@@ -1470,6 +1473,32 @@ func (p *Parser) diagUnexpected(tok lexer.Token, expected string) craft.Diagnost
 		Message:  fmt.Sprintf("unexpected %q, expected %s", tok.Value, expected),
 		Severity: craft.SeverityError,
 		Range:    tokenRange(tok),
+	}
+}
+
+// diagUnterminatedString produces a craft/syntax/unterminated-string diagnostic.
+// tok is the TokenError produced by the lexer; tok.Column is the 1-based column
+// of the opening `"`, and tok.Value is the partial content (no quotes).
+// The range spans from the opening `"` through the last consumed character.
+func (p *Parser) diagUnterminatedString(tok lexer.Token) craft.Diagnostic {
+	line := tok.Line - 1
+	if line < 0 {
+		line = 0
+	}
+	col := tok.Column - 1
+	if col < 0 {
+		col = 0
+	}
+	// +1 for the opening `"` that is part of the token but not in tok.Value.
+	end := col + 1 + len([]rune(tok.Value))
+	return craft.Diagnostic{
+		Code:     "craft/syntax/unterminated-string",
+		Message:  fmt.Sprintf("unterminated string literal %q", tok.Value),
+		Severity: craft.SeverityError,
+		Range: craft.Range{
+			Start: craft.Position{Line: line, Character: col},
+			End:   craft.Position{Line: line, Character: end},
+		},
 	}
 }
 

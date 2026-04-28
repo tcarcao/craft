@@ -203,6 +203,48 @@ func TestLexer_NumberTokens(t *testing.T) {
 	}
 }
 
+// TestLexer_UnterminatedString verifies that scanString stops at '\n',
+// stores the partial content (no quotes) in TokenError.Value, and leaves
+// the token after the newline intact in the stream.
+func TestLexer_UnterminatedString(t *testing.T) {
+	src := "\"OrderPlaced\n}"
+	l := lexer.New(src)
+	tok := l.Next()
+	if tok.Type != lexer.TokenError {
+		t.Fatalf("expected TokenError for unterminated string, got %v", tok.Type)
+	}
+	if tok.Value != "OrderPlaced" {
+		t.Errorf("partial content: got %q, want %q", tok.Value, "OrderPlaced")
+	}
+	if tok.Column != 1 {
+		t.Errorf("column: got %d, want 1 (opening quote)", tok.Column)
+	}
+	// The `}` on the next line must still be in the stream.
+	next := l.Next()
+	if next.Type != lexer.TokenRBrace {
+		t.Errorf("token after unterminated string: got %v, want TokenRBrace", next.Type)
+	}
+}
+
+// TestLexer_UnterminatedString_BackslashBeforeNewline verifies that a trailing
+// backslash before a newline also terminates the string rather than continuing.
+func TestLexer_UnterminatedString_BackslashBeforeNewline(t *testing.T) {
+	src := "\"Foo\\\n}"
+	l := lexer.New(src)
+	tok := l.Next()
+	if tok.Type != lexer.TokenError {
+		t.Fatalf("expected TokenError for backslash-at-EOL, got %v", tok.Type)
+	}
+	// Partial content is "Foo" (backslash not yet appended since we broke before consuming it).
+	if tok.Value != "Foo" {
+		t.Errorf("partial content: got %q, want %q", tok.Value, "Foo")
+	}
+	next := l.Next()
+	if next.Type != lexer.TokenRBrace {
+		t.Errorf("token after unterminated string: got %v, want TokenRBrace", next.Type)
+	}
+}
+
 func TestLexer_PunctuationTokens(t *testing.T) {
 	tests := []struct {
 		src      string

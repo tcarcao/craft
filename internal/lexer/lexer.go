@@ -227,7 +227,18 @@ func (l *Lexer) scanString() Token {
 			closed = true
 			break
 		}
+		if ch == '\n' {
+			// Craft strings are single-line; don't advance past the newline so
+			// the parser's token stream is not disrupted.
+			break
+		}
 		if ch == '\\' && l.pos+1 < len(l.src) {
+			if l.src[l.pos+1] == '\n' {
+				// Trailing backslash before newline — consume the backslash and
+				// treat as unterminated; '\n' is left for skipWhitespace.
+				l.advance()
+				break
+			}
 			l.advance() // consume backslash
 			next := l.src[l.pos]
 			l.advance() // consume escape char
@@ -251,7 +262,9 @@ func (l *Lexer) scanString() Token {
 		l.advance()
 	}
 	if !closed {
-		return Token{Type: TokenError, Value: "unterminated string literal", Line: startLine, Column: startCol}
+		// val contains partial content up to the newline (no quotes).
+		// Callers that compute a Range must add +1 for the opening `"`.
+		return Token{Type: TokenError, Value: string(val), Line: startLine, Column: startCol}
 	}
 	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol}
 }

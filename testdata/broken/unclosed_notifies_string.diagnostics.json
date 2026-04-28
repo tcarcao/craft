@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/unterminated-string",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 5,
+        "character": 31
+      },
+      "end": {
+        "line": 5,
+        "character": 60
+      }
+    }
+  }
+]
