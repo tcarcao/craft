@@ -1358,9 +1358,13 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			}
 			if triggerName != "" && sc.Trigger.Line > 0 {
 				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, sc.Trigger.Line); ok {
+					col := uint32(0)
+					if sc.Trigger.ActorColumn > 0 {
+						col = uint32(sc.Trigger.ActorColumn - 1)
+					}
 					tokens = append(tokens, semanticToken{
 						line:      uint32(sc.Trigger.Line - 1),
-						startChar: 0,
+						startChar: col,
 						length:    uint32(len([]rune(triggerName))),
 						tokenType: tt,
 					})
@@ -1373,10 +1377,28 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 				}
 				if action.Context != "" {
 					if tt, ok := useCaseRefTokenType(rm, uri, action.Context, action.Line); ok {
+						col := uint32(0)
+						if action.ContextColumn > 0 {
+							col = uint32(action.ContextColumn - 1)
+						}
 						tokens = append(tokens, semanticToken{
 							line:      uint32(action.Line - 1),
-							startChar: 0,
+							startChar: col,
 							length:    uint32(len([]rune(action.Context))),
+							tokenType: tt,
+						})
+					}
+				}
+				if action.TargetContext != "" {
+					if tt, ok := useCaseRefTokenType(rm, uri, action.TargetContext, action.Line); ok {
+						col := uint32(0)
+						if action.TargetContextColumn > 0 {
+							col = uint32(action.TargetContextColumn - 1)
+						}
+						tokens = append(tokens, semanticToken{
+							line:      uint32(action.Line - 1),
+							startChar: col,
+							length:    uint32(len([]rune(action.TargetContext))),
 							tokenType: tt,
 						})
 					}

@@ -1090,3 +1090,252 @@ func TestSemanticTokens_ColumnTracking(t *testing.T) {
 
 	cancel()
 }
+
+// TestSemanticTokens_TriggerAndActionColumns verifies that semantic tokens for
+// use-case trigger actors and action subjects have the correct startChar offset
+// (not hardcoded to column 0). This guards the fix for the bug where the token
+// started at the beginning of the line, overlapping the `when` keyword.
+func TestSemanticTokens_TriggerAndActionColumns(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Layout (1-based lines, 1-based columns):
+	// L1: actor user Alice          — Alice at col 11, len 5
+	// L2: domain Auth {             — Auth  at col 8,  len 4
+	// L3:   Login                   — Login at col 3 (bc)
+	// L4: }
+	// L5: use_case "Login" {
+	// L6:   when Alice initiates x  — Alice (trigger) at col 8, len 5
+	// L7:     Auth validates creds  — Auth  (action)  at col 5, len 4
+	// L8: }
+	const craftSrc = "actor user Alice\ndomain Auth {\n  Login\n}\nuse_case \"Login\" {\n  when Alice initiates x\n    Auth validates creds\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///trigger_cols.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///trigger_cols.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling semantic tokens result: %v", err)
+	}
+
+	// Decode the relative-encoded stream into absolute (line, startChar) tuples.
+	type tok struct {
+		line, startChar, length, tokenType uint32
+	}
+	var tokens []tok
+	var absLine, absChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		absLine += dl
+		if dl == 0 {
+			absChar += dc
+		} else {
+			absChar = dc
+		}
+		tokens = append(tokens, tok{absLine, absChar, ln, tt})
+	}
+
+	find := func(label string, wantLine, wantStart, wantLen uint32) {
+		t.Helper()
+		for _, tk := range tokens {
+			if tk.line == wantLine && tk.length == wantLen {
+				if tk.startChar != wantStart {
+					t.Errorf("%s: startChar = %d, want %d (line %d, len %d); all tokens: %v",
+						label, tk.startChar, wantStart, wantLine, wantLen, tokens)
+				}
+				return
+			}
+		}
+		t.Errorf("%s: no token found at 0-based line %d with length %d; all tokens: %v", label, wantLine, wantLen, tokens)
+	}
+
+	// "  when Alice initiates x" — "Alice" is at 1-based col 8 → 0-based startChar 7, on 0-based line 5.
+	find("Alice(trigger)", 5, 7, 5)
+	// "    Auth validates creds" — "Auth" is at 1-based col 5 → 0-based startChar 4, on 0-based line 6.
+	find("Auth(action)", 6, 4, 4)
+
+	cancel()
+}
+
+func TestSemanticTokens_TargetContext(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Layout (1-based lines, 1-based columns):
+	// L1:  actor user Alice            Alice at col 12, len 5, type=actor(0)
+	// L2:  domain Auth {               Auth  at col 8,  len 4, type=domain(1), mod=1(decl)
+	// L3:    Login                     Login at col 3,  len 5, type=domain(1), mod=0
+	// L4:  }
+	// L5:  domain Profile {            Profile at col 8, len 7, type=domain(1), mod=1(decl)
+	// L6:    UserData                  UserData at col 3, len 8, type=domain(1), mod=0
+	// L7:  }
+	// L8:  use_case "Validate" {
+	// L9:    when Alice initiates x    Alice (trigger) at col 8, len 5, type=actor(0)
+	// L10:   Auth asks Profile to y   Auth at col 5, len 4, type=domain(1)
+	//                                 Profile at col 15, len 7, type=domain(1)  ← NEW
+	// L11: }
+	const craftSrc = "actor user Alice\ndomain Auth {\n  Login\n}\ndomain Profile {\n  UserData\n}\nuse_case \"Validate\" {\n  when Alice initiates x\n    Auth asks Profile to y\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///target_ctx.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///target_ctx.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+
+	// Decode relative-encoded stream into absolute tokens.
+	type tok struct{ line, startChar, length, tokenType uint32 }
+	var tokens []tok
+	var absLine, absChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		absLine += dl
+		if dl == 0 {
+			absChar += dc
+		} else {
+			absChar = dc
+		}
+		tokens = append(tokens, tok{absLine, absChar, ln, tt})
+	}
+
+	// Verify Profile (TargetContext) appears on line 9 (0-based), col 14 (0-based), len 7, type=domain(1).
+	foundProfile := false
+	for _, tok := range tokens {
+		if tok.line == 9 && tok.startChar == 14 && tok.length == 7 && tok.tokenType == 1 {
+			foundProfile = true
+		}
+	}
+	if !foundProfile {
+		t.Errorf("expected Profile token at line=9 col=14 len=7 type=1; got tokens: %v", tokens)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                              //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
