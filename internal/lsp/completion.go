@@ -46,9 +46,9 @@ func detectContext(lines []string, cursorLine, cursorCol int) completionContext 
 		}
 	}
 
-	// Check if cursor is after a field name and colon (field-value context).
+	enclosing := findEnclosingKeyword(lines, cursorLine)
+
 	if field, ok := fieldBeforeCursor(linePrefix); ok {
-		enclosing := findEnclosingKeyword(lines, cursorLine)
 		switch field {
 		case "language":
 			if enclosing == "service" || enclosing == "services" {
@@ -72,7 +72,6 @@ func detectContext(lines []string, cursorLine, cursorCol int) completionContext 
 		}
 	}
 
-	enclosing := findEnclosingKeyword(lines, cursorLine)
 	switch enclosing {
 	case "":
 		return ctxTopLevel
@@ -209,6 +208,8 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return languageValueCompletions()
 	case ctxServiceContexts:
 		return bcSymbolCompletions(ws)
+	case ctxDomainBody:
+		return domainBodyCompletions()
 	case ctxActorsBlock:
 		return actorTypeCompletions()
 	case ctxUseCaseTop:
@@ -234,6 +235,7 @@ func topLevelKeywordCompletions() *protocol.CompletionList                     {
 func serviceFieldCompletions() *protocol.CompletionList                        { return nil }
 func languageValueCompletions() *protocol.CompletionList                       { return nil }
 func bcSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList      { return nil }
+func domainBodyCompletions() *protocol.CompletionList                          { return nil }
 func actorTypeCompletions() *protocol.CompletionList                           { return nil }
 func whenKeywordCompletion() *protocol.CompletionList                          { return nil }
 func allSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList     { return nil }
