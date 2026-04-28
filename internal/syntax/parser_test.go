@@ -698,3 +698,48 @@ func TestParse_GroupedServiceColumnTracking(t *testing.T) {
 		t.Errorf("service: want Column=3, got %d", svc.Column)
 	}
 }
+
+func TestParse_AsksAction_TargetContextColumn(t *testing.T) {
+	// "    Auth asks Profile to validate"
+	// Auth    at 1-based col 5  (4 spaces + 'A')
+	// Profile at 1-based col 15 (col5 + len("Auth") + len(" asks ") = 5+4+6 = 15)
+	src := "use_case \"Test\" {\n  when User initiates x\n    Auth asks Profile to validate\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	a := f.UseCases[0].Scenarios[0].Actions[0]
+	if a.Context != "Auth" {
+		t.Errorf("Context: got %q want Auth", a.Context)
+	}
+	if a.ContextColumn != 5 {
+		t.Errorf("ContextColumn: got %d want 5", a.ContextColumn)
+	}
+	if a.TargetContext != "Profile" {
+		t.Errorf("TargetContext: got %q want Profile", a.TargetContext)
+	}
+	if a.TargetContextColumn != 15 {
+		t.Errorf("TargetContextColumn: got %d want 15", a.TargetContextColumn)
+	}
+}
+
+func TestParse_ReturnsAction_TargetContextColumn(t *testing.T) {
+	// "    Auth returns to User confirmation"
+	// Auth at col 5
+	// "returns" = 7 chars, " to " = 4 chars => User at col 5+4+1+7+1+2+1 = col 21
+	// i.e. "    Auth returns to User..."
+	//       1234 5678 9012345 67 8901
+	// col:  1234 5   9       17 21
+	src := "use_case \"Test\" {\n  when User checks balance\n    Auth returns to User confirmation\n}"
+	f, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	a := f.UseCases[0].Scenarios[0].Actions[0]
+	if a.TargetContext != "User" {
+		t.Errorf("TargetContext: got %q want User", a.TargetContext)
+	}
+	if a.TargetContextColumn != 21 {
+		t.Errorf("TargetContextColumn: got %d want 21", a.TargetContextColumn)
+	}
+}

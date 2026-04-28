@@ -902,6 +902,7 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 		return nil, diags
 	}
 	subject := subjectTok.Value
+	subjectCol := subjectTok.Column
 	actionLine := subjectTok.Line
 	p.consume()
 
@@ -911,11 +912,12 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 		*counter++
 		*counter++
 		return &ast.ActionDecl{
-			ActionType:  "internal_action",
-			ActionID:    *counter,
-			Context: subject,
-			Description: subject,
-			Line:        actionLine,
+			ActionType:    "internal_action",
+			ActionID:      *counter,
+			Context:       subject,
+			ContextColumn: subjectCol,
+			Description:   subject,
+			Line:          actionLine,
 		}, diags
 	}
 	verb := verbTok.Value
@@ -926,11 +928,11 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 
 	switch verb {
 	case "asks":
-		return p.parseAsksAction(id, subject, actionLine, &diags)
+		return p.parseAsksAction(id, subject, subjectCol, actionLine, &diags)
 	case "notifies":
-		return p.parseNotifiesAction(id, subject, actionLine, &diags)
+		return p.parseNotifiesAction(id, subject, subjectCol, actionLine, &diags)
 	case "returns":
-		return p.parseReturnsAction(id, subject, actionLine, &diags)
+		return p.parseReturnsAction(id, subject, subjectCol, actionLine, &diags)
 	default:
 		// internal_action: <domain> <verb> [connector_word] <phrase>
 		// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
@@ -949,24 +951,27 @@ func (p *Parser) parseAction(counter *int) (*ast.ActionDecl, []craft.Diagnostic)
 			desc += " " + phrase
 		}
 		return &ast.ActionDecl{
-			ActionType:  "internal_action",
-			ActionID:    id,
-			Context: subject,
-			Verb:        verb,
-			Connector:   connector,
-			Phrase:      phrase,
-			Description: desc,
-			Line:        actionLine,
+			ActionType:    "internal_action",
+			ActionID:      id,
+			Context:       subject,
+			ContextColumn: subjectCol,
+			Verb:          verb,
+			Connector:     connector,
+			Phrase:        phrase,
+			Description:   desc,
+			Line:          actionLine,
 		}, diags
 	}
 }
 
 // parseAsksAction parses: <domain> asks <target> to|for <phrase>
-func (p *Parser) parseAsksAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
+func (p *Parser) parseAsksAction(id int, subject string, subjectCol int, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
 	targetTok := p.peek()
 	var target string
+	var targetCol int
 	if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
 		target = targetTok.Value
+		targetCol = targetTok.Column
 		p.consume()
 	}
 
@@ -985,19 +990,21 @@ func (p *Parser) parseAsksAction(id int, subject string, line int, diags *[]craf
 	}
 
 	return &ast.ActionDecl{
-		ActionType:   "sync_action",
-		ActionID:     id,
-		Context: subject,
-		TargetContext: target,
-		Connector:    connector,
-		Phrase:       phrase,
-		Description:  desc,
-		Line:         line,
+		ActionType:          "sync_action",
+		ActionID:            id,
+		Context:             subject,
+		ContextColumn:       subjectCol,
+		TargetContext:       target,
+		TargetContextColumn: targetCol,
+		Connector:           connector,
+		Phrase:              phrase,
+		Description:         desc,
+		Line:                line,
 	}, *diags
 }
 
 // parseNotifiesAction parses: <domain> notifies "<event>"
-func (p *Parser) parseNotifiesAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
+func (p *Parser) parseNotifiesAction(id int, subject string, subjectCol int, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
 	eventTok := p.peek()
 	var event string
 	if eventTok.Type == lexer.TokenString {
@@ -1010,24 +1017,27 @@ func (p *Parser) parseNotifiesAction(id int, subject string, line int, diags *[]
 
 	desc := fmt.Sprintf("%s notifies %q", subject, event)
 	return &ast.ActionDecl{
-		ActionType:  "async_action",
-		ActionID:    id,
-		Context: subject,
-		Event:       event,
-		Description: desc,
-		Line:        line,
+		ActionType:    "async_action",
+		ActionID:      id,
+		Context:       subject,
+		ContextColumn: subjectCol,
+		Event:         event,
+		Description:   desc,
+		Line:          line,
 	}, *diags
 }
 
 // parseReturnsAction parses: <domain> returns [to <target>] [connector_word] <phrase>
-func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
+func (p *Parser) parseReturnsAction(id int, subject string, subjectCol int, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
 	// Check for optional `to <target>`
 	var target string
+	var targetCol int
 	if p.peek().Type == lexer.TokenIdent && p.peek().Value == "to" {
 		p.consume() // consume `to`
 		targetTok := p.peek()
 		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
 			target = targetTok.Value
+			targetCol = targetTok.Column
 			p.consume()
 		}
 	}
@@ -1052,14 +1062,16 @@ func (p *Parser) parseReturnsAction(id int, subject string, line int, diags *[]c
 	}
 
 	return &ast.ActionDecl{
-		ActionType:   "return_action",
-		ActionID:     id,
-		Context: subject,
-		TargetContext: target,
-		Connector:    connector,
-		Phrase:       phrase,
-		Description:  desc,
-		Line:         line,
+		ActionType:          "return_action",
+		ActionID:            id,
+		Context:             subject,
+		ContextColumn:       subjectCol,
+		TargetContext:       target,
+		TargetContextColumn: targetCol,
+		Connector:           connector,
+		Phrase:              phrase,
+		Description:         desc,
+		Line:                line,
 	}, *diags
 }
 

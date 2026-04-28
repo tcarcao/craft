@@ -208,4 +208,13 @@ type ActionDecl struct {
 	Description string `json:"description"`
 	// Line is the 1-based source line of this action.
 	Line int `json:"line,omitempty"`
+	// ContextColumn is the 1-based column where the action subject (Context) starts.
+	ContextColumn int `json:"contextColumn,omitempty"`
+	// TargetContextColumn is the 1-based column where the target (TargetContext) starts.
+	// Only set for sync_action ("asks") and return_action ("returns to").
+	TargetContextColumn int `json:"targetContextColumn,omitempty"`
+	// EventColumn is the 1-based column where the event string token starts (async_action).
+	EventColumn int `json:"eventColumn,omitempty"`
+	// EventIsString is true when the event was a quoted string literal (affects range length).
+	EventIsString bool `json:"eventIsString,omitempty"`
 }
