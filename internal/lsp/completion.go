@@ -310,7 +310,20 @@ func languageValueCompletions() *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
-func bcSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList      { return nil }
+func bcSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
+	wsSym := ws.WorkspaceSymbols()
+	var items []protocol.CompletionItem
+	for domName, dom := range wsSym.Domains {
+		for _, bc := range dom.BoundedContexts {
+			items = append(items, protocol.CompletionItem{
+				Label:  bc,
+				Kind:   protocol.CompletionItemKindModule,
+				Detail: "bounded context (domain: " + domName + ")",
+			})
+		}
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
 func domainBodyCompletions() *protocol.CompletionList                          { return nil }
 func actorTypeCompletions() *protocol.CompletionList                           { return nil }
 func whenKeywordCompletion() *protocol.CompletionList                          { return nil }

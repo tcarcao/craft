@@ -136,6 +136,45 @@ func TestCompletion_LanguageValues(t *testing.T) {
 	}
 }
 
+func TestCompletion_ContextsField_BCSymbols(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	// Open two files: domain defines Commerce with Orders+Payments; service uses contexts:
+	const domainSrc = "domain Commerce {\n  Orders\n  Payments\n}"
+	const serviceSrc = "service OrderSvc {\n  contexts: \n}"
+	for uri, src := range map[string]string{
+		"file:///domain.craft":  domainSrc,
+		"file:///service.craft": serviceSrc,
+	} {
+		p, _ := json.Marshal(map[string]any{
+			"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
+		})
+		writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: p}) //nolint:errcheck
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	// cursor at line 1, col 12 — after "  contexts: " in service file
+	items := sendCompletion(t, testOut, br, &id, "file:///service.craft", 1, 12)
+	for _, bc := range []string{"Orders", "Payments"} {
+		if !hasLabel(items, bc) {
+			t.Errorf("expected BC %q in contexts: completions, got: %v", bc, labelList(items))
+		}
+	}
+}
+
 func TestCompletion_TopLevelKeywords(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
