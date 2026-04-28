@@ -1015,11 +1015,16 @@ func (p *Parser) parseAsksAction(id int, subject string, subjectCol int, line in
 func (p *Parser) parseNotifiesAction(id int, subject string, subjectCol int, line int, diags *[]craft.Diagnostic) (*ast.ActionDecl, []craft.Diagnostic) {
 	eventTok := p.peek()
 	var event string
+	var eventCol int
+	var eventIsString bool
 	if eventTok.Type == lexer.TokenString {
 		event = eventTok.Value
+		eventCol = eventTok.Column
+		eventIsString = true
 		p.consume()
 	} else if eventTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(eventTok.Type) {
 		event = eventTok.Value
+		eventCol = eventTok.Column
 		p.consume()
 	}
 
@@ -1030,6 +1035,8 @@ func (p *Parser) parseNotifiesAction(id int, subject string, subjectCol int, lin
 		Context:       subject,
 		ContextColumn: subjectCol,
 		Event:         event,
+		EventColumn:   eventCol,
+		EventIsString: eventIsString,
 		Description:   desc,
 		Line:          line,
 	}, *diags
