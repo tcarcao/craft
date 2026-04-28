@@ -302,7 +302,14 @@ func serviceFieldCompletions() *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
-func languageValueCompletions() *protocol.CompletionList                       { return nil }
+func languageValueCompletions() *protocol.CompletionList {
+	langs := []string{"golang", "python", "java", "typescript", "kotlin", "rust", "scala", "csharp", "ruby", "php"}
+	items := make([]protocol.CompletionItem, len(langs))
+	for i, l := range langs {
+		items[i] = protocol.CompletionItem{Label: l, Kind: protocol.CompletionItemKindValue}
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
 func bcSymbolCompletions(_ *workspace.Workspace) *protocol.CompletionList      { return nil }
 func domainBodyCompletions() *protocol.CompletionList                          { return nil }
 func actorTypeCompletions() *protocol.CompletionList                           { return nil }

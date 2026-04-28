@@ -103,6 +103,39 @@ func TestCompletion_ServiceFields(t *testing.T) {
 	}
 }
 
+func TestCompletion_LanguageValues(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const src = "service Foo {\n  language: \n}"
+	const uri = "file:///lang_values.craft"
+	openParams, _ := json.Marshal(map[string]any{
+		"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(200 * time.Millisecond)
+
+	// cursor at col 12 — after "  language: "
+	items := sendCompletion(t, testOut, br, &id, uri, 1, 12)
+	for _, lang := range []string{"golang", "python", "java", "typescript", "kotlin", "rust"} {
+		if !hasLabel(items, lang) {
+			t.Errorf("expected language %q in language completions, got: %v", lang, labelList(items))
+		}
+	}
+}
+
 func TestCompletion_TopLevelKeywords(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
