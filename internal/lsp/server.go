@@ -254,11 +254,15 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			if !ok {
 				continue
 			}
+			domStartChar := uint32(0)
+			if domSym.Column > 0 {
+				domStartChar = uint32(domSym.Column - 1)
+			}
 			return []protocol.Location{{
 				URI: protocol.DocumentURI(domSym.URI),
 				Range: protocol.Range{
-					Start: protocol.Position{Line: uint32(domSym.Line - 1)},
-					End:   protocol.Position{Line: uint32(domSym.Line - 1), Character: uint32(len(domSym.Name))},
+					Start: protocol.Position{Line: uint32(domSym.Line - 1), Character: domStartChar},
+					End:   protocol.Position{Line: uint32(domSym.Line - 1), Character: domStartChar + uint32(len([]rune(domSym.Name)))},
 				},
 			}}, nil
 		}
@@ -321,11 +325,15 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 		if sym.Line == 0 {
 			return protocol.Location{}, false
 		}
+		startChar := uint32(0)
+		if sym.Column > 0 {
+			startChar = uint32(sym.Column - 1)
+		}
 		return protocol.Location{
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
-				Start: protocol.Position{Line: uint32(sym.Line - 1)},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len([]rune(sym.Name)))},
 			},
 		}, true
 	case "domain":
@@ -333,11 +341,15 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 		if sym.Line == 0 {
 			return protocol.Location{}, false
 		}
+		startChar := uint32(0)
+		if sym.Column > 0 {
+			startChar = uint32(sym.Column - 1)
+		}
 		return protocol.Location{
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
-				Start: protocol.Position{Line: uint32(sym.Line - 1)},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len([]rune(sym.Name)))},
 			},
 		}, true
 	case "bounded_context":
@@ -359,11 +371,15 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 		if sym.Line == 0 {
 			return protocol.Location{}, false
 		}
+		domFbStartChar := uint32(0)
+		if sym.Column > 0 {
+			domFbStartChar = uint32(sym.Column - 1)
+		}
 		return protocol.Location{
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
-				Start: protocol.Position{Line: uint32(sym.Line - 1)},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: domFbStartChar},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: domFbStartChar + uint32(len([]rune(sym.Name)))},
 			},
 		}, true
 	case "service":
@@ -371,11 +387,15 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 		if sym.Line == 0 {
 			return protocol.Location{}, false
 		}
+		startChar := uint32(0)
+		if sym.Column > 0 {
+			startChar = uint32(sym.Column - 1)
+		}
 		return protocol.Location{
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
-				Start: protocol.Position{Line: uint32(sym.Line - 1)},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len([]rune(sym.Name)))},
 			},
 		}, true
 	}
@@ -1227,12 +1247,19 @@ func (s *Server) OutgoingCalls(_ context.Context, _ *protocol.CallHierarchyOutgo
 	return nil, nil
 }
 
-// Semantic token type constants for the three kinds in scope through S5.
+// Semantic token type constants matching the extension's craft-* custom types.
 // Their index in the legend slice is their numeric encoding in the data stream.
+// craft-actor-definition: actor name at the declaration site.
+// craft-actor-name: actor referenced inside a use_case body.
+// craft-domain-name: domain declaration and domain refs in use_case.
+// craft-context-name: bounded context declaration and BC refs in use_case.
+// craft-service-name: service declaration and service refs in use_case.
 const (
-	semanticTokenTypeActor   protocol.SemanticTokenTypes = "class"     // index 0
-	semanticTokenTypeDomain  protocol.SemanticTokenTypes = "namespace" // index 1
-	semanticTokenTypeService protocol.SemanticTokenTypes = "interface" // index 2
+	semanticTokenTypeActorDecl    protocol.SemanticTokenTypes = "craft-actor-definition" // index 0
+	semanticTokenTypeActorRef     protocol.SemanticTokenTypes = "craft-actor-name"        // index 1
+	semanticTokenTypeDomainName   protocol.SemanticTokenTypes = "craft-domain-name"       // index 2
+	semanticTokenTypeContextName  protocol.SemanticTokenTypes = "craft-context-name"      // index 3
+	semanticTokenTypeServiceName  protocol.SemanticTokenTypes = "craft-service-name"      // index 4
 )
 
 // semanticTokensOptions returns the capability descriptor for semantic tokens.
@@ -1251,7 +1278,13 @@ func semanticTokensOptions() interface{} {
 			TokenTypes     []string `json:"tokenTypes"`
 			TokenModifiers []string `json:"tokenModifiers"`
 		}{
-			TokenTypes:     []string{string(semanticTokenTypeActor), string(semanticTokenTypeDomain), string(semanticTokenTypeService)},
+			TokenTypes: []string{
+				string(semanticTokenTypeActorDecl),
+				string(semanticTokenTypeActorRef),
+				string(semanticTokenTypeDomainName),
+				string(semanticTokenTypeContextName),
+				string(semanticTokenTypeServiceName),
+			},
 			TokenModifiers: []string{string(protocol.SemanticTokenModifierDeclaration)},
 		},
 		Full: true,
@@ -1261,12 +1294,16 @@ func semanticTokensOptions() interface{} {
 // semanticTokenTypeIndex returns the legend index for a token type.
 func semanticTokenTypeIndex(t protocol.SemanticTokenTypes) uint32 {
 	switch t {
-	case semanticTokenTypeActor:
+	case semanticTokenTypeActorDecl:
 		return 0
-	case semanticTokenTypeDomain:
+	case semanticTokenTypeActorRef:
 		return 1
-	case semanticTokenTypeService:
+	case semanticTokenTypeDomainName:
 		return 2
+	case semanticTokenTypeContextName:
+		return 3
+	case semanticTokenTypeServiceName:
+		return 4
 	default:
 		return 0
 	}
@@ -1310,7 +1347,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 
 	var tokens []semanticToken
 
-	// Actors: token type index 0 ("class"), modifier 1 (declaration).
+	// Actors: craft-actor-definition, modifier 1 (declaration).
 	for _, a := range f.AST.Actors {
 		if a.Line <= 0 {
 			continue // individual `actor` stmts without position — skip for now
@@ -1323,12 +1360,12 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			line:      uint32(a.Line - 1),
 			startChar: col,
 			length:    uint32(len([]rune(a.Name))),
-			tokenType: semanticTokenTypeIndex(semanticTokenTypeActor),
+			tokenType: semanticTokenTypeIndex(semanticTokenTypeActorDecl),
 			modifiers: 1, // declaration
 		})
 	}
 
-	// Domains: token type index 1 ("namespace"), modifier 1 (declaration).
+	// Domains: craft-domain-name declaration; bounded contexts: craft-context-name declaration.
 	for _, d := range f.AST.Domains {
 		if d.Line <= 0 {
 			continue
@@ -1341,10 +1378,10 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			line:      uint32(d.Line - 1),
 			startChar: col,
 			length:    uint32(len([]rune(d.Name))),
-			tokenType: semanticTokenTypeIndex(semanticTokenTypeDomain),
+			tokenType: semanticTokenTypeIndex(semanticTokenTypeDomainName),
 			modifiers: 1, // declaration
 		})
-		// Bounded contexts within the domain also get namespace tokens.
+		// Each bounded context name inside the domain body is a declaration.
 		for _, bc := range d.BoundedContexts {
 			if bc.Line <= 0 {
 				continue
@@ -1357,13 +1394,13 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 				line:      uint32(bc.Line - 1),
 				startChar: bcCol,
 				length:    uint32(len([]rune(bc.Name))),
-				tokenType: semanticTokenTypeIndex(semanticTokenTypeDomain),
-				modifiers: 0,
+				tokenType: semanticTokenTypeIndex(semanticTokenTypeContextName),
+				modifiers: 1, // declaration
 			})
 		}
 	}
 
-	// Services: token type index 2 ("interface"), modifier 1 (declaration).
+	// Services: craft-service-name, modifier 1 (declaration).
 	for _, svc := range f.AST.Services {
 		if svc.Line <= 0 {
 			continue
@@ -1376,7 +1413,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			line:      uint32(svc.Line - 1),
 			startChar: col,
 			length:    uint32(len([]rune(svc.Name))),
-			tokenType: semanticTokenTypeIndex(semanticTokenTypeService),
+			tokenType: semanticTokenTypeIndex(semanticTokenTypeServiceName),
 			modifiers: 1, // declaration
 		})
 	}
@@ -1460,11 +1497,13 @@ func useCaseRefTokenType(rm sema.ResolutionMap, uri, name string, line int) (uin
 	}
 	switch target.Kind {
 	case "actor":
-		return semanticTokenTypeIndex(semanticTokenTypeActor), true
-	case "domain", "bounded_context":
-		return semanticTokenTypeIndex(semanticTokenTypeDomain), true
+		return semanticTokenTypeIndex(semanticTokenTypeActorRef), true
+	case "domain":
+		return semanticTokenTypeIndex(semanticTokenTypeDomainName), true
+	case "bounded_context":
+		return semanticTokenTypeIndex(semanticTokenTypeContextName), true
 	case "service":
-		return semanticTokenTypeIndex(semanticTokenTypeService), true
+		return semanticTokenTypeIndex(semanticTokenTypeServiceName), true
 	}
 	return 0, false
 }

@@ -1052,19 +1052,19 @@ func TestSemanticTokens_ColumnTracking(t *testing.T) {
 
 	// 6 tokens × 5 fields each = 30 uint32 values.
 	// Expected relative encoding (deltaLine, deltaChar, length, tokenType, modifiers):
-	//   Alice     → [1,  9, 5, 0, 1]  type=class(actor),     mod=declaration
-	//   Bob       → [1, 11, 3, 0, 1]  type=class(actor),     mod=declaration
-	//   Commerce  → [2,  7, 8, 1, 1]  type=namespace(domain), mod=declaration
-	//   Orders    → [1,  4, 6, 1, 0]  type=namespace(bc),     mod=0
-	//   Payments  → [1,  4, 8, 1, 0]  type=namespace(bc),     mod=0
-	//   MyService → [2,  8, 9, 2, 1]  type=interface(service),mod=declaration
+	//   Alice     → [1,  9, 5, 0, 1]  type=craft-actor-definition(0),  mod=declaration
+	//   Bob       → [1, 11, 3, 0, 1]  type=craft-actor-definition(0),  mod=declaration
+	//   Commerce  → [2,  7, 8, 2, 1]  type=craft-domain-name(2),       mod=declaration
+	//   Orders    → [1,  4, 6, 3, 1]  type=craft-context-name(3),      mod=declaration
+	//   Payments  → [1,  4, 8, 3, 1]  type=craft-context-name(3),      mod=declaration
+	//   MyService → [2,  8, 9, 4, 1]  type=craft-service-name(4),      mod=declaration
 	want := []uint32{
 		1, 9, 5, 0, 1,
 		1, 11, 3, 0, 1,
-		2, 7, 8, 1, 1,
-		1, 4, 6, 1, 0,
-		1, 4, 8, 1, 0,
-		2, 8, 9, 2, 1,
+		2, 7, 8, 2, 1,
+		1, 4, 6, 3, 1,
+		1, 4, 8, 3, 1,
+		2, 8, 9, 4, 1,
 	}
 
 	if len(result.Data) != len(want) {
@@ -1246,17 +1246,17 @@ func TestSemanticTokens_TargetContext(t *testing.T) {
 	}
 
 	// Layout (1-based lines, 1-based columns):
-	// L1:  actor user Alice            Alice at col 12, len 5, type=actor(0)
-	// L2:  domain Auth {               Auth  at col 8,  len 4, type=domain(1), mod=1(decl)
-	// L3:    Login                     Login at col 3,  len 5, type=domain(1), mod=0
+	// L1:  actor user Alice            Alice at col 12, len 5, type=craft-actor-definition(0), mod=1
+	// L2:  domain Auth {               Auth  at col 8,  len 4, type=craft-domain-name(2),      mod=1(decl)
+	// L3:    Login                     Login at col 3,  len 5, type=craft-context-name(3),      mod=1(decl)
 	// L4:  }
-	// L5:  domain Profile {            Profile at col 8, len 7, type=domain(1), mod=1(decl)
-	// L6:    UserData                  UserData at col 3, len 8, type=domain(1), mod=0
+	// L5:  domain Profile {            Profile at col 8, len 7, type=craft-domain-name(2),      mod=1(decl)
+	// L6:    UserData                  UserData at col 3, len 8, type=craft-context-name(3),    mod=1(decl)
 	// L7:  }
 	// L8:  use_case "Validate" {
-	// L9:    when Alice initiates x    Alice (trigger) at col 8, len 5, type=actor(0)
-	// L10:   Auth asks Profile to y   Auth at col 5, len 4, type=domain(1)
-	//                                 Profile at col 15, len 7, type=domain(1)  ← NEW
+	// L9:    when Alice initiates x    Alice (trigger) at col 8, len 5, type=craft-actor-name(1)
+	// L10:   Auth asks Profile to y   Auth at col 5, len 4, type=craft-domain-name(2)
+	//                                 Profile at col 15, len 7, type=craft-domain-name(2)  ← NEW
 	// L11: }
 	const craftSrc = "actor user Alice\ndomain Auth {\n  Login\n}\ndomain Profile {\n  UserData\n}\nuse_case \"Validate\" {\n  when Alice initiates x\n    Auth asks Profile to y\n}"
 
@@ -1323,15 +1323,15 @@ func TestSemanticTokens_TargetContext(t *testing.T) {
 		tokens = append(tokens, tok{absLine, absChar, ln, tt})
 	}
 
-	// Verify Profile (TargetContext) appears on line 9 (0-based), col 14 (0-based), len 7, type=domain(1).
+	// Verify Profile (TargetContext) appears on line 9 (0-based), col 14 (0-based), len 7, type=craft-domain-name(2).
 	foundProfile := false
 	for _, tok := range tokens {
-		if tok.line == 9 && tok.startChar == 14 && tok.length == 7 && tok.tokenType == 1 {
+		if tok.line == 9 && tok.startChar == 14 && tok.length == 7 && tok.tokenType == 2 {
 			foundProfile = true
 		}
 	}
 	if !foundProfile {
-		t.Errorf("expected Profile token at line=9 col=14 len=7 type=1; got tokens: %v", tokens)
+		t.Errorf("expected Profile token at line=9 col=14 len=7 type=2; got tokens: %v", tokens)
 	}
 
 	id2 := 99
@@ -1361,10 +1361,10 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 		wantLine   uint32 // 0-based LSP line of expected definition location
 		wantChar   uint32 // 0-based LSP start character of expected definition location
 	}{
-		// Cursor on "Auth" (col 4, 0-based) → navigate to Auth domain (line 0, char 0)
-		{name: "from-party", cursorLine: 8, cursorChar: 4, wantLine: 0, wantChar: 0},
-		// Cursor on "Profile" (col 14, 0-based) → navigate to Profile domain (line 3, char 0)
-		{name: "to-party", cursorLine: 8, cursorChar: 14, wantLine: 3, wantChar: 0},
+		// Cursor on "Auth" (col 4, 0-based) → navigate to Auth domain (line 0, char 7 — after "domain ")
+		{name: "from-party", cursorLine: 8, cursorChar: 4, wantLine: 0, wantChar: 7},
+		// Cursor on "Profile" (col 14, 0-based) → navigate to Profile domain (line 3, char 7 — after "domain ")
+		{name: "to-party", cursorLine: 8, cursorChar: 14, wantLine: 3, wantChar: 7},
 	}
 
 	for _, tc := range tests {

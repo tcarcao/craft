@@ -3,7 +3,8 @@
   "actors": [
     {
       "name": "PaymentGateway",
-      "type": "service"
+      "type": "service",
+      "line": 1
     }
   ]
 }

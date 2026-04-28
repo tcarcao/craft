@@ -3,7 +3,8 @@
   "actors": [
     {
       "name": "BackgroundWorker",
-      "type": "system"
+      "type": "system",
+      "line": 1
     }
   ]
 }

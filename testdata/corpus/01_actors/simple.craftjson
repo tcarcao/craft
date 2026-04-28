@@ -18,11 +18,13 @@
     },
     {
       "name": "Customer",
-      "type": "user"
+      "type": "user",
+      "line": 7
     },
     {
       "name": "BackgroundWorker",
-      "type": "system"
+      "type": "system",
+      "line": 8
     }
   ]
 }

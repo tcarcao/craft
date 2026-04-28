@@ -3,15 +3,18 @@
   "actors": [
     {
       "name": "EndUser",
-      "type": "user"
+      "type": "user",
+      "line": 1
     },
     {
       "name": "AutomatedJob",
-      "type": "system"
+      "type": "system",
+      "line": 2
     },
     {
       "name": "ThirdPartyService",
-      "type": "service"
+      "type": "service",
+      "line": 3
     }
   ]
 }

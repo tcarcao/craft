@@ -15,11 +15,13 @@
   "actors": [
     {
       "name": "Business_User",
-      "type": "user"
+      "type": "user",
+      "line": 1
     },
     {
       "name": "Customer_Support",
-      "type": "user"
+      "type": "user",
+      "line": 2
     }
   ]
 }

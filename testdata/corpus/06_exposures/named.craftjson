@@ -23,11 +23,13 @@
   "actors": [
     {
       "name": "Business_User",
-      "type": "user"
+      "type": "user",
+      "line": 1
     },
     {
       "name": "InternalSystem",
-      "type": "system"
+      "type": "system",
+      "line": 2
     }
   ]
 }

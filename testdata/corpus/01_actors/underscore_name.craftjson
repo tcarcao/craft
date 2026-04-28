@@ -3,7 +3,8 @@
   "actors": [
     {
       "name": "Long_Actor_Name_With_Underscores",
-      "type": "user"
+      "type": "user",
+      "line": 1
     }
   ]
 }

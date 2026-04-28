@@ -18,7 +18,8 @@
     },
     {
       "name": "Charlie",
-      "type": "user"
+      "type": "user",
+      "line": 10
     }
   ]
 }

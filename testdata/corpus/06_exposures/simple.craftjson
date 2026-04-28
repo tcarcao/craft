@@ -11,7 +11,8 @@
   "actors": [
     {
       "name": "Business_User",
-      "type": "user"
+      "type": "user",
+      "line": 1
     }
   ]
 }

@@ -130,13 +130,11 @@ func (p *Parser) parseActorStatement() (*ast.ActorDecl, []craft.Diagnostic) {
 	}
 	p.consume()
 
-	// Individual `actor` statements do not carry a source line in the golden
-	// contract (ANTLR VisitActor_def does not set Line). Match that behaviour
-	// so Harness A passes without a CraftDoc schema change.
 	return &ast.ActorDecl{
-		Name: nameTok.Value,
-		Type: at,
-		Line: 0,
+		Name:   nameTok.Value,
+		Type:   at,
+		Line:   nameTok.Line,
+		Column: nameTok.Column,
 	}, diags
 }
 
@@ -851,6 +849,7 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		return ast.TriggerDecl{
 			TriggerType:   "domain_listen",
 			Context:       subject,
+			ActorColumn:   subjectTok.Column,
 			Event:         event,
 			EventColumn:   eventTok.Column,
 			EventIsString: isString,
