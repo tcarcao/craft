@@ -232,7 +232,8 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		return nil, nil
 	}
 
-	cursorLine := int(params.Position.Line) + 1 // convert to 1-based
+	cursorLine := int(params.Position.Line) + 1     // convert to 1-based
+	cursorChar := int(params.Position.Character) + 1 // convert to 1-based
 	rm := s.ws.ResolutionMap()
 
 	// Walk services: match cursor against each context reference line so that
@@ -280,11 +281,16 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 				if action.Line != cursorLine {
 					continue
 				}
-				// Try domain (the "from" party) first.
+				// If cursor falls on or past TargetContextColumn, try TargetContext first.
+				if action.TargetContextColumn > 0 && action.TargetContext != "" &&
+					cursorChar >= action.TargetContextColumn {
+					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
+						return []protocol.Location{loc}, nil
+					}
+				}
 				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.Context, action.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
-				// Then targetDomain (the "to" party).
 				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
@@ -318,7 +324,33 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
 			},
 		}, true
-	case "domain", "bounded_context":
+	case "domain":
+		sym := target.Domain
+		if sym.Line == 0 {
+			return protocol.Location{}, false
+		}
+		return protocol.Location{
+			URI: protocol.DocumentURI(sym.URI),
+			Range: protocol.Range{
+				Start: protocol.Position{Line: uint32(sym.Line - 1)},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: uint32(len(sym.Name))},
+			},
+		}, true
+	case "bounded_context":
+		if target.BCLine > 0 {
+			col := uint32(0)
+			if target.BCColumn > 0 {
+				col = uint32(target.BCColumn - 1)
+			}
+			return protocol.Location{
+				URI: protocol.DocumentURI(target.BCURI),
+				Range: protocol.Range{
+					Start: protocol.Position{Line: uint32(target.BCLine - 1), Character: col},
+					End:   protocol.Position{Line: uint32(target.BCLine - 1), Character: col + uint32(len([]rune(name)))},
+				},
+			}, true
+		}
+		// Fallback: navigate to the parent domain if BC position is missing.
 		sym := target.Domain
 		if sym.Line == 0 {
 			return protocol.Location{}, false
