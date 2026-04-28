@@ -1359,11 +1359,12 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 		cursorLine uint32 // 0-based LSP
 		cursorChar uint32 // 0-based LSP
 		wantLine   uint32 // 0-based LSP line of expected definition location
+		wantChar   uint32 // 0-based LSP start character of expected definition location
 	}{
-		// Cursor on "Auth" (col 4, 0-based) → navigate to Auth domain (line 0)
-		{name: "from-party", cursorLine: 8, cursorChar: 4, wantLine: 0},
-		// Cursor on "Profile" (col 14, 0-based) → navigate to Profile domain (line 3)
-		{name: "to-party", cursorLine: 8, cursorChar: 14, wantLine: 3},
+		// Cursor on "Auth" (col 4, 0-based) → navigate to Auth domain (line 0, char 0)
+		{name: "from-party", cursorLine: 8, cursorChar: 4, wantLine: 0, wantChar: 0},
+		// Cursor on "Profile" (col 14, 0-based) → navigate to Profile domain (line 3, char 0)
+		{name: "to-party", cursorLine: 8, cursorChar: 14, wantLine: 3, wantChar: 0},
 	}
 
 	for _, tc := range tests {
@@ -1423,7 +1424,8 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 			var locs []struct {
 				Range struct {
 					Start struct {
-						Line uint32 `json:"line"`
+						Line      uint32 `json:"line"`
+						Character uint32 `json:"character"`
 					} `json:"start"`
 				} `json:"range"`
 			}
@@ -1435,6 +1437,9 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 			}
 			if locs[0].Range.Start.Line != tc.wantLine {
 				t.Errorf("definition line: got %d want %d", locs[0].Range.Start.Line, tc.wantLine)
+			}
+			if locs[0].Range.Start.Character != tc.wantChar {
+				t.Errorf("definition character: got %d want %d", locs[0].Range.Start.Character, tc.wantChar)
 			}
 
 			id2 := 99
@@ -1508,11 +1513,15 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 	if defResp.ID == nil {
 		t.Fatal("timed out waiting for definition response")
 	}
+	if defResp.Error != nil {
+		t.Fatalf("definition returned error: %s", defResp.Error)
+	}
 
 	var locs []struct {
 		Range struct {
 			Start struct {
-				Line uint32 `json:"line"`
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
 			} `json:"start"`
 		} `json:"range"`
 	}
@@ -1525,6 +1534,10 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 	// Session is on line 3 (1-based) = line 2 (0-based LSP).
 	if locs[0].Range.Start.Line != 2 {
 		t.Errorf("BC navigation line: got %d want 2 (Session's own line)", locs[0].Range.Start.Line)
+	}
+	// Session starts at column 3 (1-based, after 2-space indent) = character 2 (0-based LSP).
+	if locs[0].Range.Start.Character != 2 {
+		t.Errorf("BC navigation character: got %d want 2 (Session's own column)", locs[0].Range.Start.Character)
 	}
 
 	id2 := 99

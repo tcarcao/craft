@@ -287,12 +287,16 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
 						return []protocol.Location{loc}, nil
 					}
+					// TargetContext unresolved — fall through to "from" party.
 				}
 				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.Context, action.Line); ok {
 					return []protocol.Location{loc}, nil
 				}
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
-					return []protocol.Location{loc}, nil
+				// When no column info is available, also try TargetContext as a plain fallback.
+				if action.TargetContextColumn == 0 {
+					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
+						return []protocol.Location{loc}, nil
+					}
 				}
 			}
 		}
