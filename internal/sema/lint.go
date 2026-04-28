@@ -30,10 +30,21 @@ func LintWorkspace(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []craf
 // Warning: an event published via `notifies` but never consumed by any
 // `when … listens` or `when … "event"` trigger in any workspace file.
 
+// eventTokenLen returns the source length of an event token: len(name)+2 for
+// quoted strings (column starts at the opening `"`), len(name) for bare idents.
+func eventTokenLen(name string, isString bool) int {
+	if isString {
+		return len(name) + 2
+	}
+	return len(name)
+}
+
 func lintDeadEvents(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 	type pubSite struct {
-		uri  string
-		line int
+		uri      string
+		line     int
+		col      int // 1-based column of the event token
+		tokenLen int // source length of the event token (includes quotes if string)
 	}
 	published := map[string]pubSite{}
 	consumed := map[string]bool{}
@@ -51,7 +62,12 @@ func lintDeadEvents(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 				for _, a := range sc.Actions {
 					if a.ActionType == "async_action" && a.Event != "" {
 						if _, seen := published[a.Event]; !seen {
-							published[a.Event] = pubSite{uri: uri, line: a.Line}
+							published[a.Event] = pubSite{
+								uri:      uri,
+								line:     a.Line,
+								col:      a.EventColumn,
+								tokenLen: eventTokenLen(a.Event, a.EventIsString),
+							}
 						}
 					}
 				}
@@ -62,13 +78,14 @@ func lintDeadEvents(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 	var diags []craft.Diagnostic
 	for event, site := range published {
 		if !consumed[event] {
+			startChar := colToLSP(site.col)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/lint/dead-event",
 				Message:  fmt.Sprintf("event %q is published but never consumed", event),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(site.line)},
-					End:   craft.Position{Line: ast.LineToLSP(site.line)},
+					Start: craft.Position{Line: ast.LineToLSP(site.line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(site.line), Character: startChar + site.tokenLen},
 				},
 				SourceURI: site.uri,
 			})
@@ -100,13 +117,14 @@ func lintUnusedActors(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []c
 	var diags []craft.Diagnostic
 	for name, sym := range ws.Actors {
 		if !used[name] {
+			startChar := colToLSP(sym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/lint/unused-actor",
 				Message:  fmt.Sprintf("actor %q is defined but never used as a trigger subject", name),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(sym.Line)},
-					End:   craft.Position{Line: ast.LineToLSP(sym.Line), Character: len(name)},
+					Start: craft.Position{Line: ast.LineToLSP(sym.Line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(sym.Line), Character: startChar + len(name)},
 				},
 				SourceURI: sym.URI,
 			})
@@ -125,19 +143,20 @@ func lintEventPastTense(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 	reported := map[string]bool{}
 	var diags []craft.Diagnostic
 
-	check := func(event, uri string, line int) {
+	check := func(event, uri string, line, col int, isString bool) {
 		if event == "" || reported[event] {
 			return
 		}
 		reported[event] = true
 		if !pastTenseRe.MatchString(strings.ToLower(event)) {
+			startChar := colToLSP(col)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/lint/event-not-past-tense",
 				Message:  fmt.Sprintf("event %q does not appear to use past tense", event),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(line)},
-					End:   craft.Position{Line: ast.LineToLSP(line)},
+					Start: craft.Position{Line: ast.LineToLSP(line), Character: startChar},
+					End:   craft.Position{Line: ast.LineToLSP(line), Character: startChar + eventTokenLen(event, isString)},
 				},
 				SourceURI: uri,
 			})
@@ -148,11 +167,11 @@ func lintEventPastTense(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 		for _, uc := range f.UseCases {
 			for _, sc := range uc.Scenarios {
 				if sc.Trigger.TriggerType == "event" || sc.Trigger.TriggerType == "domain_listen" {
-					check(sc.Trigger.Event, uri, sc.Trigger.Line)
+					check(sc.Trigger.Event, uri, sc.Trigger.Line, sc.Trigger.EventColumn, sc.Trigger.EventIsString)
 				}
 				for _, a := range sc.Actions {
 					if a.ActionType == "async_action" {
-						check(a.Event, uri, a.Line)
+						check(a.Event, uri, a.Line, a.EventColumn, a.EventIsString)
 					}
 				}
 			}
