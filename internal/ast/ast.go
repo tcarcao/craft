@@ -184,6 +184,15 @@ type TriggerDecl struct {
 	Description string `json:"description"`
 	// Line is the 1-based source line of the `when` keyword.
 	Line int `json:"line,omitempty"`
+	// ActorColumn is the 1-based column where the actor/subject name starts.
+	// Set for "external" triggers only.
+	ActorColumn int `json:"actorColumn,omitempty"`
+	// EventColumn is the 1-based column where the event token starts.
+	// Set for "event" and "domain_listen" triggers.
+	EventColumn int `json:"eventColumn,omitempty"`
+	// EventIsString is true when the event was a quoted string literal.
+	// Set for "event" and "domain_listen" triggers.
+	EventIsString bool `json:"eventIsString,omitempty"`
 }
 
 // ActionDecl represents a single action statement within a scenario.

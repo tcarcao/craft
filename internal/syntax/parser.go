@@ -802,10 +802,12 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		eventTok := p.consume()
 		desc := fmt.Sprintf("when %q", eventTok.Value)
 		return ast.TriggerDecl{
-			TriggerType: "event",
-			Event:       eventTok.Value,
-			Description: desc,
-			Line:        whenLine,
+			TriggerType:   "event",
+			Event:         eventTok.Value,
+			EventColumn:   eventTok.Column,
+			EventIsString: true,
+			Description:   desc,
+			Line:          whenLine,
 		}, diags
 	}
 
@@ -825,6 +827,7 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		return ast.TriggerDecl{
 			TriggerType: "external",
 			Actor:       subject,
+			ActorColumn: subjectTok.Column,
 			Description: "when " + subject,
 		}, diags
 	}
@@ -835,8 +838,10 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		// domain_listen: when <domain> listens "<event>"
 		eventTok := p.peek()
 		var event string
+		isString := false
 		if eventTok.Type == lexer.TokenString {
 			event = eventTok.Value
+			isString = true
 			p.consume()
 		} else if eventTok.Type == lexer.TokenIdent {
 			event = eventTok.Value
@@ -844,11 +849,13 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 		}
 		desc := fmt.Sprintf("when %s listens %q", subject, event)
 		return ast.TriggerDecl{
-			TriggerType: "domain_listen",
-			Context: subject,
-			Event:       event,
-			Description: desc,
-			Line:        whenLine,
+			TriggerType:   "domain_listen",
+			Context:       subject,
+			Event:         event,
+			EventColumn:   eventTok.Column,
+			EventIsString: isString,
+			Description:   desc,
+			Line:          whenLine,
 		}, diags
 	}
 
@@ -865,6 +872,7 @@ func (p *Parser) parseTrigger(whenLine int) (ast.TriggerDecl, []craft.Diagnostic
 	return ast.TriggerDecl{
 		TriggerType: "external",
 		Actor:       subject,
+		ActorColumn: subjectTok.Column,
 		Verb:        verb,
 		Phrase:      phrase,
 		Description: fullDesc,
