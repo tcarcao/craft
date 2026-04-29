@@ -1050,40 +1050,70 @@ func TestSemanticTokens_ColumnTracking(t *testing.T) {
 		t.Fatalf("unmarshalling semantic tokens result: %v", err)
 	}
 
-	// 6 tokens × 5 fields each = 30 uint32 values.
-	// Expected relative encoding (deltaLine, deltaChar, length, tokenType, modifiers):
-	//   Alice     → [1,  9, 5, 0, 1]  type=craft-actor-definition(0),  mod=declaration
-	//   Bob       → [1, 11, 3, 0, 1]  type=craft-actor-definition(0),  mod=declaration
-	//   Commerce  → [2,  7, 8, 2, 1]  type=craft-domain-name(2),       mod=declaration
-	//   Orders    → [1,  4, 6, 3, 1]  type=craft-context-name(3),      mod=declaration
-	//   Payments  → [1,  4, 8, 3, 1]  type=craft-context-name(3),      mod=declaration
-	//   MyService → [2,  8, 9, 4, 1]  type=craft-service-name(4),      mod=declaration
-	want := []uint32{
-		1, 9, 5, 0, 1,
-		1, 11, 3, 0, 1,
-		2, 7, 8, 2, 1,
-		1, 4, 6, 3, 1,
-		1, 4, 8, 3, 1,
-		2, 8, 9, 4, 1,
+	if len(result.Data)%5 != 0 {
+		t.Fatalf("data length %d is not a multiple of 5", len(result.Data))
 	}
 
-	if len(result.Data) != len(want) {
-		t.Fatalf("expected %d uint32 values (6 tokens × 5), got %d: %v", len(want), len(result.Data), result.Data)
+	// Decode relative-encoded stream into absolute (line, startChar, length, tokenType, modifiers) tuples.
+	type absToken struct {
+		line, startChar, length, tokenType, modifiers uint32
+	}
+	var decoded []absToken
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		deltaLine := result.Data[i]
+		deltaChar := result.Data[i+1]
+		length := result.Data[i+2]
+		tokenType := result.Data[i+3]
+		modifiers := result.Data[i+4]
+		curLine += deltaLine
+		if deltaLine > 0 {
+			curChar = deltaChar
+		} else {
+			curChar += deltaChar
+		}
+		decoded = append(decoded, absToken{curLine, curChar, length, tokenType, modifiers})
 	}
 
-	type tokenFields struct {
-		deltaLine, deltaChar, length, tokenType, modifiers uint32
+	// Build a lookup map: (line, startChar) → absToken for quick assertions.
+	byPos := make(map[[2]uint32]absToken, len(decoded))
+	for _, tok := range decoded {
+		byPos[[2]uint32{tok.line, tok.startChar}] = tok
 	}
-	names := []string{"Alice", "Bob", "Commerce", "Orders(bc)", "Payments(bc)", "MyService"}
-	for i, name := range names {
-		base := i * 5
-		got := tokenFields{result.Data[base], result.Data[base+1], result.Data[base+2], result.Data[base+3], result.Data[base+4]}
-		exp := tokenFields{want[base], want[base+1], want[base+2], want[base+3], want[base+4]}
-		if got != exp {
-			t.Errorf("token %d (%s): got [%d,%d,%d,%d,%d] want [%d,%d,%d,%d,%d]",
-				i, name,
-				got.deltaLine, got.deltaChar, got.length, got.tokenType, got.modifiers,
-				exp.deltaLine, exp.deltaChar, exp.length, exp.tokenType, exp.modifiers,
+
+	// Expected ident tokens (absolute 0-based positions).
+	// Pass 1 now also emits keyword/punctuation tokens, so total count > 6.
+	// We assert only the 6 entity-name tokens produced by Pass 2.
+	//
+	//   Alice     line=1 col=9  len=5  type=0(craft-actor-definition) mod=1
+	//   Bob       line=2 col=11 len=3  type=0(craft-actor-definition) mod=1
+	//   Commerce  line=4 col=7  len=8  type=2(craft-domain-name)      mod=1
+	//   Orders    line=5 col=4  len=6  type=3(craft-context-name)     mod=1
+	//   Payments  line=6 col=4  len=8  type=3(craft-context-name)     mod=1
+	//   MyService line=8 col=8  len=9  type=4(craft-service-name)     mod=1
+	wantTokens := []struct {
+		name                              string
+		line, col, length, ttype, mods   uint32
+	}{
+		{"Alice", 1, 9, 5, 0, 1},
+		{"Bob", 2, 11, 3, 0, 1},
+		{"Commerce", 4, 7, 8, 2, 1},
+		{"Orders(bc)", 5, 4, 6, 3, 1},
+		{"Payments(bc)", 6, 4, 8, 3, 1},
+		{"MyService", 8, 8, 9, 4, 1},
+	}
+
+	for _, w := range wantTokens {
+		tok, ok := byPos[[2]uint32{w.line, w.col}]
+		if !ok {
+			t.Errorf("token %s (line=%d col=%d): not found in decoded stream (total tokens=%d)", w.name, w.line, w.col, len(decoded))
+			continue
+		}
+		if tok.length != w.length || tok.tokenType != w.ttype || tok.modifiers != w.mods {
+			t.Errorf("token %s (line=%d col=%d): got [len=%d type=%d mods=%d] want [len=%d type=%d mods=%d]",
+				w.name, w.line, w.col,
+				tok.length, tok.tokenType, tok.modifiers,
+				w.length, w.ttype, w.mods,
 			)
 		}
 	}

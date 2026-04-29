@@ -31,6 +31,7 @@ import (
 
 	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/workspace"
 	"github.com/tcarcao/craft/pkg/craft"
 )
@@ -1262,12 +1263,73 @@ func (s *Server) OutgoingCalls(_ context.Context, _ *protocol.CallHierarchyOutgo
 // craft-context-name: bounded context declaration and BC refs in use_case.
 // craft-service-name: service declaration and service refs in use_case.
 const (
-	semanticTokenTypeActorDecl    protocol.SemanticTokenTypes = "craft-actor-definition" // index 0
-	semanticTokenTypeActorRef     protocol.SemanticTokenTypes = "craft-actor-name"        // index 1
-	semanticTokenTypeDomainName   protocol.SemanticTokenTypes = "craft-domain-name"       // index 2
-	semanticTokenTypeContextName  protocol.SemanticTokenTypes = "craft-context-name"      // index 3
-	semanticTokenTypeServiceName  protocol.SemanticTokenTypes = "craft-service-name"      // index 4
+	semanticTokenTypeActorDecl   protocol.SemanticTokenTypes = "craft-actor-definition" // index 0
+	semanticTokenTypeActorRef    protocol.SemanticTokenTypes = "craft-actor-name"        // index 1
+	semanticTokenTypeDomainName  protocol.SemanticTokenTypes = "craft-domain-name"       // index 2
+	semanticTokenTypeContextName protocol.SemanticTokenTypes = "craft-context-name"      // index 3
+	semanticTokenTypeServiceName protocol.SemanticTokenTypes = "craft-service-name"      // index 4
 )
+
+// semanticTokenLegend is the ordered list of all craft-* token types.
+// The index of each entry is the numeric value emitted in the encoded token stream.
+// Entries 0-4 are the entity-name types used by Pass 2 (AST ident classification).
+// Entries 5+ are the keyword/punctuation types used by Pass 1 (syntax tree walk).
+var semanticTokenLegend = []string{
+	"craft-actor-definition",    // 0
+	"craft-actor-name",          // 1
+	"craft-domain-name",         // 2
+	"craft-context-name",        // 3
+	"craft-service-name",        // 4
+	"craft-component-name",      // 5
+	"craft-exposure-name",       // 6
+	"craft-data-store-name",     // 7
+	"craft-flow-keyword",        // 8
+	"craft-services-keyword",    // 9
+	"craft-arch-keyword",        // 10
+	"craft-exposure-keyword",    // 11
+	"craft-domain-keyword",      // 12
+	"craft-actor-keyword",       // 13
+	"craft-actors-keyword",      // 14
+	"craft-contexts-property",   // 15
+	"craft-language-property",   // 16
+	"craft-data-stores-property", // 17
+	"craft-deployment-property", // 18
+	"craft-to-property",         // 19
+	"craft-through-property",    // 20
+	"craft-presentation-section", // 21
+	"craft-gateway-section",     // 22
+	"craft-asks-verb",           // 23
+	"craft-notifies-verb",       // 24
+	"craft-listens-verb",        // 25
+	"craft-returns-verb",        // 26
+	"craft-regular-verb",        // 27
+	"craft-actor-type",          // 28
+	"craft-connector-word",      // 29
+	"craft-usecase-string",      // 30
+	"craft-event-string",        // 31
+	"craft-regular-string",      // 32
+	"craft-phrase-word",         // 33
+	"craft-comment",             // 34
+	"craft-boolean",             // 35
+	"craft-comma",               // 36
+	"craft-percentage",          // 37
+	"craft-parenthesis",         // 38
+	"craft-deployment-arrow",    // 39
+	"craft-braces",              // 40
+	"craft-deployment-type",     // 41
+	"craft-deployment-target",   // 42
+	"craft-domain-list",         // 43
+	"craft-language-value",      // 44
+}
+
+// semanticLegendIndex maps token type name → legend index for O(1) lookup.
+var semanticLegendIndex = func() map[string]int {
+	m := make(map[string]int, len(semanticTokenLegend))
+	for i, name := range semanticTokenLegend {
+		m[name] = i
+	}
+	return m
+}()
 
 // semanticTokensOptions returns the capability descriptor for semantic tokens.
 // The go.lsp.dev/protocol version we use has an incomplete SemanticTokensOptions
@@ -1285,35 +1347,31 @@ func semanticTokensOptions() interface{} {
 			TokenTypes     []string `json:"tokenTypes"`
 			TokenModifiers []string `json:"tokenModifiers"`
 		}{
-			TokenTypes: []string{
-				string(semanticTokenTypeActorDecl),
-				string(semanticTokenTypeActorRef),
-				string(semanticTokenTypeDomainName),
-				string(semanticTokenTypeContextName),
-				string(semanticTokenTypeServiceName),
-			},
+			TokenTypes:     semanticTokenLegend,
 			TokenModifiers: []string{string(protocol.SemanticTokenModifierDeclaration)},
 		},
 		Full: true,
 	}
 }
 
-// semanticTokenTypeIndex returns the legend index for a token type.
-func semanticTokenTypeIndex(t protocol.SemanticTokenTypes) uint32 {
-	switch t {
-	case semanticTokenTypeActorDecl:
-		return 0
-	case semanticTokenTypeActorRef:
-		return 1
-	case semanticTokenTypeDomainName:
-		return 2
-	case semanticTokenTypeContextName:
-		return 3
-	case semanticTokenTypeServiceName:
-		return 4
-	default:
+// semanticTokenTypeIndex returns the legend index for a token type name.
+// Returns -1 if the type is not in the legend.
+func (s *Server) semanticTokenTypeIndex(name string) int {
+	idx, ok := semanticLegendIndex[name]
+	if !ok {
+		return -1
+	}
+	return idx
+}
+
+// semanticTokenTypeIndexConst returns the legend index for a protocol.SemanticTokenTypes constant.
+// Used by Pass 2 (entity name classification).
+func semanticTokenTypeIndexConst(t protocol.SemanticTokenTypes) uint32 {
+	idx, ok := semanticLegendIndex[string(t)]
+	if !ok {
 		return 0
 	}
+	return uint32(idx)
 }
 
 // semanticToken records one token before encoding.
@@ -1343,6 +1401,51 @@ func encodeSemanticTokens(tokens []semanticToken) []uint32 {
 	return data
 }
 
+// syntaxKindToCraftToken maps SyntaxKind values for non-ident tokens to their
+// craft-* semantic token type names. SyntaxKindIdent is intentionally absent —
+// ident tokens are classified by the AST-walk Pass 2 (semanticIdentTokens).
+var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
+	syntax.SyntaxKindKwUseCase:      "craft-flow-keyword",
+	syntax.SyntaxKindKwWhen:         "craft-flow-keyword",
+	syntax.SyntaxKindKwActor:        "craft-actor-keyword",
+	syntax.SyntaxKindKwActors:       "craft-actors-keyword",
+	syntax.SyntaxKindKwDomain:       "craft-domain-keyword",
+	syntax.SyntaxKindKwDomains:      "craft-domain-keyword",
+	syntax.SyntaxKindKwServices:     "craft-services-keyword",
+	syntax.SyntaxKindKwArch:         "craft-arch-keyword",
+	syntax.SyntaxKindKwExposure:     "craft-exposure-keyword",
+	syntax.SyntaxKindKwUser:         "craft-actor-type",
+	syntax.SyntaxKindKwSystem:       "craft-actor-type",
+	syntax.SyntaxKindKwService:      "craft-actor-type",
+	syntax.SyntaxKindKwAsks:         "craft-asks-verb",
+	syntax.SyntaxKindKwNotifies:     "craft-notifies-verb",
+	syntax.SyntaxKindKwListens:      "craft-listens-verb",
+	syntax.SyntaxKindKwReturns:      "craft-returns-verb",
+	syntax.SyntaxKindKwTo:           "craft-connector-word",
+	syntax.SyntaxKindKwThrough:      "craft-through-property",
+	syntax.SyntaxKindKwContexts:     "craft-contexts-property",
+	syntax.SyntaxKindKwLanguage:     "craft-language-property",
+	syntax.SyntaxKindKwDataStores:   "craft-data-stores-property",
+	syntax.SyntaxKindKwDeployment:   "craft-deployment-property",
+	syntax.SyntaxKindKwPresentation: "craft-presentation-section",
+	syntax.SyntaxKindKwGateway:      "craft-gateway-section",
+	syntax.SyntaxKindKwTrue:         "craft-boolean",
+	syntax.SyntaxKindKwFalse:        "craft-boolean",
+	syntax.SyntaxKindString:         "craft-regular-string",
+	syntax.SyntaxKindLineComment:    "craft-comment",
+	syntax.SyntaxKindBlockComment:   "craft-comment",
+	syntax.SyntaxKindLBrace:         "craft-braces",
+	syntax.SyntaxKindRBrace:         "craft-braces",
+	syntax.SyntaxKindLBracket:       "craft-braces",
+	syntax.SyntaxKindRBracket:       "craft-braces",
+	syntax.SyntaxKindGT:             "craft-braces",
+	syntax.SyntaxKindLParen:         "craft-parenthesis",
+	syntax.SyntaxKindRParen:         "craft-parenthesis",
+	syntax.SyntaxKindComma:          "craft-comma",
+	syntax.SyntaxKindArrow:          "craft-deployment-arrow",
+	syntax.SyntaxKindPercentage:     "craft-percentage",
+}
+
 func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
 	if params == nil {
 		return nil, nil
@@ -1352,6 +1455,43 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		return &protocol.SemanticTokens{Data: []uint32{}}, nil
 	}
 
+	var tokens []semanticToken
+
+	// Pass 1: walk all tokens in the syntax tree, emit craft-* types for non-ident tokens.
+	if f.SyntaxTree != nil {
+		for _, tok := range f.SyntaxTree.AllTokens() {
+			craftType, ok := syntaxKindToCraftToken[tok.Kind]
+			if !ok {
+				continue // SyntaxKindIdent and others handled in Pass 2
+			}
+			idx := s.semanticTokenTypeIndex(craftType)
+			if idx < 0 {
+				continue
+			}
+			tokens = append(tokens, semanticToken{
+				line:      uint32(tok.Line - 1),
+				startChar: uint32(tok.Col - 1),
+				length:    uint32(tok.Length()),
+				tokenType: uint32(idx),
+			})
+		}
+	}
+
+	// Pass 2: entity name classification using AST walk.
+	// Classifies SyntaxKindIdent tokens as actor names, domain names, etc.
+	tokens = append(tokens, s.semanticIdentTokens(f, string(params.TextDocument.URI))...)
+
+	// Sort tokens by line, then character (required for relative encoding).
+	sortSemanticTokens(tokens)
+
+	return &protocol.SemanticTokens{
+		Data: encodeSemanticTokens(tokens),
+	}, nil
+}
+
+// semanticIdentTokens classifies identifier tokens by walking the AST and the
+// use-case resolution map. This is the existing Pass 2 logic extracted into a helper.
+func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticToken {
 	var tokens []semanticToken
 
 	// Actors: craft-actor-definition, modifier 1 (declaration).
@@ -1367,7 +1507,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			line:      uint32(a.Line - 1),
 			startChar: col,
 			length:    uint32(len([]rune(a.Name))),
-			tokenType: semanticTokenTypeIndex(semanticTokenTypeActorDecl),
+			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeActorDecl),
 			modifiers: 1, // declaration
 		})
 	}
@@ -1385,7 +1525,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			line:      uint32(d.Line - 1),
 			startChar: col,
 			length:    uint32(len([]rune(d.Name))),
-			tokenType: semanticTokenTypeIndex(semanticTokenTypeDomainName),
+			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeDomainName),
 			modifiers: 1, // declaration
 		})
 		// Each bounded context name inside the domain body is a declaration.
@@ -1401,7 +1541,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 				line:      uint32(bc.Line - 1),
 				startChar: bcCol,
 				length:    uint32(len([]rune(bc.Name))),
-				tokenType: semanticTokenTypeIndex(semanticTokenTypeContextName),
+				tokenType: semanticTokenTypeIndexConst(semanticTokenTypeContextName),
 				modifiers: 1, // declaration
 			})
 		}
@@ -1420,7 +1560,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			line:      uint32(svc.Line - 1),
 			startChar: col,
 			length:    uint32(len([]rune(svc.Name))),
-			tokenType: semanticTokenTypeIndex(semanticTokenTypeServiceName),
+			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeServiceName),
 			modifiers: 1, // declaration
 		})
 	}
@@ -1428,7 +1568,6 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 	// Use-case action parties: colour actors/domains/services referenced inside
 	// when clauses using their respective semantic token types (S6).
 	rm := s.ws.ResolutionMap()
-	uri := string(params.TextDocument.URI)
 	for _, uc := range f.AST.UseCases {
 		for _, sc := range uc.Scenarios {
 			// Trigger subject.
@@ -1487,12 +1626,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		}
 	}
 
-	// Sort tokens by line, then character (required for relative encoding).
-	sortSemanticTokens(tokens)
-
-	return &protocol.SemanticTokens{
-		Data: encodeSemanticTokens(tokens),
-	}, nil
+	return tokens
 }
 
 // useCaseRefTokenType resolves a use-case body reference name to its semantic
@@ -1504,13 +1638,13 @@ func useCaseRefTokenType(rm sema.ResolutionMap, uri, name string, line int) (uin
 	}
 	switch target.Kind {
 	case "actor":
-		return semanticTokenTypeIndex(semanticTokenTypeActorRef), true
+		return semanticTokenTypeIndexConst(semanticTokenTypeActorRef), true
 	case "domain":
-		return semanticTokenTypeIndex(semanticTokenTypeDomainName), true
+		return semanticTokenTypeIndexConst(semanticTokenTypeDomainName), true
 	case "bounded_context":
-		return semanticTokenTypeIndex(semanticTokenTypeContextName), true
+		return semanticTokenTypeIndexConst(semanticTokenTypeContextName), true
 	case "service":
-		return semanticTokenTypeIndex(semanticTokenTypeServiceName), true
+		return semanticTokenTypeIndexConst(semanticTokenTypeServiceName), true
 	}
 	return 0, false
 }

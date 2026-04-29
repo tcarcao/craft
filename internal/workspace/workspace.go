@@ -33,6 +33,7 @@ type File struct {
 	Content     string
 	ContentHash [32]byte
 	AST         *ast.File
+	SyntaxTree  *syntax.SyntaxNode
 	Diagnostics []craft.Diagnostic
 	// Symbols is the per-file symbol table, computed after parsing.
 	Symbols sema.Symbols
@@ -206,7 +207,7 @@ func (w *Workspace) parseAndStore(uri, content string) {
 				})
 			}
 		}()
-		file.AST, file.Diagnostics = syntax.Parse(content)
+		file.SyntaxTree, file.AST, file.Diagnostics = syntax.ParseTree(content)
 	}()
 
 	// On successful parse, advance LastGoodAST.
