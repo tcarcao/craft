@@ -1,5 +1,10 @@
 package syntax
 
+import (
+	"fmt"
+	"strings"
+)
+
 // isAstFieldSentinel returns true when tokens[i] is an ident followed by a colon —
 // the start of a new field definition.
 func isAstFieldSentinel(tokens []*SyntaxToken, i int) bool {
@@ -423,6 +428,101 @@ func (t TriggerDecl) Subject() *SyntaxToken { return t.node.ChildToken(SyntaxKin
 // Event returns the string token for event-style triggers (when "<EventName>").
 func (t TriggerDecl) Event() *SyntaxToken { return t.node.ChildToken(SyntaxKindString) }
 
+// Kind returns "external", "event", or "domain_listen" based on token structure.
+// Mirrors lowerTrigger classification in lower.go.
+func (t TriggerDecl) Kind() string {
+	tokens := t.node.Tokens()
+	if len(tokens) == 0 {
+		return "external"
+	}
+	// event trigger: first token is a string literal
+	if tokens[0].Kind == SyntaxKindString {
+		return "event"
+	}
+	// domain_listen: second token is `listens`
+	if len(tokens) >= 2 && tokens[1].Kind == SyntaxKindKwListens {
+		return "domain_listen"
+	}
+	return "external"
+}
+
+// ActorName returns the trigger subject for external triggers (the actor/domain name).
+func (t TriggerDecl) ActorName() string {
+	if t.Kind() != "external" {
+		return ""
+	}
+	tok := t.node.ChildToken(SyntaxKindIdent)
+	if tok == nil {
+		return ""
+	}
+	return tok.Value
+}
+
+// ActorCol returns the 1-based column of the actor/subject name token.
+func (t TriggerDecl) ActorCol() int {
+	tok := t.node.ChildToken(SyntaxKindIdent)
+	if tok == nil {
+		return 0
+	}
+	return tok.Col
+}
+
+// ContextName returns the subject name for domain_listen triggers.
+func (t TriggerDecl) ContextName() string {
+	if t.Kind() != "domain_listen" {
+		return ""
+	}
+	tok := t.node.ChildToken(SyntaxKindIdent)
+	if tok == nil {
+		return ""
+	}
+	return tok.Value
+}
+
+// EventValue returns the event name (for event and domain_listen triggers).
+func (t TriggerDecl) EventValue() string {
+	tokens := t.node.Tokens()
+	switch t.Kind() {
+	case "event":
+		if len(tokens) > 0 {
+			return tokens[0].Value
+		}
+	case "domain_listen":
+		if len(tokens) >= 3 {
+			return tokens[2].Value
+		}
+	}
+	return ""
+}
+
+// EventCol returns the 1-based column of the event token.
+func (t TriggerDecl) EventCol() int {
+	tokens := t.node.Tokens()
+	switch t.Kind() {
+	case "event":
+		if len(tokens) > 0 {
+			return tokens[0].Col
+		}
+	case "domain_listen":
+		if len(tokens) >= 3 {
+			return tokens[2].Col
+		}
+	}
+	return 0
+}
+
+// EventIsString returns true when the event token is a quoted string literal.
+func (t TriggerDecl) EventIsString() bool {
+	tokens := t.node.Tokens()
+	switch t.Kind() {
+	case "event":
+		return len(tokens) > 0 && tokens[0].Kind == SyntaxKindString
+	case "domain_listen":
+		return len(tokens) >= 3 && tokens[2].Kind == SyntaxKindString
+	}
+	return false
+}
+
 // ActionDecl is a typed view over a SyntaxKindAction node.
 type ActionDecl struct{ node *SyntaxNode }
 
@@ -439,6 +539,215 @@ func (a ActionDecl) Verb() *SyntaxToken {
 
 // Connector returns the 'to' keyword if present.
 func (a ActionDecl) Connector() *SyntaxToken { return a.node.ChildToken(SyntaxKindKwTo) }
+
+// Kind returns "sync_action", "async_action", "return_action", or "internal_action".
+// Mirrors lowerAction classification in lower.go.
+func (a ActionDecl) Kind() string {
+	verb := a.Verb()
+	if verb == nil {
+		return "internal_action"
+	}
+	switch verb.Kind {
+	case SyntaxKindKwAsks:
+		return "sync_action"
+	case SyntaxKindKwNotifies:
+		return "async_action"
+	case SyntaxKindKwReturns:
+		return "return_action"
+	default:
+		return "internal_action"
+	}
+}
+
+// SubjectName returns the action subject (the "from" party).
+func (a ActionDecl) SubjectName() string {
+	tok := a.Subject()
+	if tok == nil {
+		return ""
+	}
+	return tok.Value
+}
+
+// SubjectCol returns the 1-based column of the subject token.
+func (a ActionDecl) SubjectCol() int {
+	tok := a.Subject()
+	if tok == nil {
+		return 0
+	}
+	return tok.Col
+}
+
+// Line returns the 1-based source line of the action subject token.
+func (a ActionDecl) Line() int {
+	tok := a.Subject()
+	if tok == nil {
+		return 0
+	}
+	return tok.Line
+}
+
+// TargetName returns the target context for sync_action and return_action.
+func (a ActionDecl) TargetName() string {
+	tokens := a.node.Tokens()
+	switch a.Kind() {
+	case "sync_action":
+		if len(tokens) >= 3 && tokens[2].Kind == SyntaxKindIdent {
+			return tokens[2].Value
+		}
+	case "return_action":
+		for i, tok := range tokens {
+			if tok.Kind == SyntaxKindKwTo && i+1 < len(tokens) {
+				return tokens[i+1].Value
+			}
+		}
+	}
+	return ""
+}
+
+// TargetCol returns the 1-based column of the target name token.
+func (a ActionDecl) TargetCol() int {
+	tokens := a.node.Tokens()
+	switch a.Kind() {
+	case "sync_action":
+		if len(tokens) >= 3 && tokens[2].Kind == SyntaxKindIdent {
+			return tokens[2].Col
+		}
+	case "return_action":
+		for i, tok := range tokens {
+			if tok.Kind == SyntaxKindKwTo && i+1 < len(tokens) {
+				return tokens[i+1].Col
+			}
+		}
+	}
+	return 0
+}
+
+// EventValue returns the event name for async_action (notifies).
+func (a ActionDecl) EventValue() string {
+	if a.Kind() != "async_action" {
+		return ""
+	}
+	tokens := a.node.Tokens()
+	if len(tokens) >= 3 {
+		return tokens[2].Value
+	}
+	return ""
+}
+
+// EventCol returns the 1-based column of the event token for async_action.
+func (a ActionDecl) EventCol() int {
+	if a.Kind() != "async_action" {
+		return 0
+	}
+	tokens := a.node.Tokens()
+	if len(tokens) >= 3 {
+		return tokens[2].Col
+	}
+	return 0
+}
+
+// EventIsString returns true when the event was a quoted string literal.
+func (a ActionDecl) EventIsString() bool {
+	if a.Kind() != "async_action" {
+		return false
+	}
+	tokens := a.node.Tokens()
+	return len(tokens) >= 3 && tokens[2].Kind == SyntaxKindString
+}
+
+// VerbValue returns the verb text (e.g. "asks", "notifies", or an arbitrary internal verb).
+func (a ActionDecl) VerbValue() string {
+	tok := a.Verb()
+	if tok == nil {
+		return ""
+	}
+	return tok.Value
+}
+
+// ConnectorValue returns the connector word text (e.g. "to", "for"), or empty.
+func (a ActionDecl) ConnectorValue() string {
+	tok := a.Connector()
+	if tok == nil {
+		return ""
+	}
+	return tok.Value
+}
+
+// PhraseText returns the description phrase for the action.
+func (a ActionDecl) PhraseText() string {
+	tokens := a.node.Tokens()
+	if len(tokens) == 0 {
+		return ""
+	}
+	start := 2
+	switch a.Kind() {
+	case "sync_action":
+		start = 3 // subject, asks, target
+		if start < len(tokens) && (tokens[start].Kind == SyntaxKindKwTo || isConnectorWord(tokens[start].Value)) {
+			start++ // skip connector
+		}
+	case "return_action":
+		start = 2
+		if start < len(tokens) && tokens[start].Kind == SyntaxKindKwTo {
+			start += 2 // skip `to target`
+		}
+		if start < len(tokens) && isConnectorWord(tokens[start].Value) {
+			start++
+		}
+	case "internal_action":
+		start = 2 // subject, verb
+		if start < len(tokens) && isConnectorWord(tokens[start].Value) {
+			start++
+		}
+	case "async_action":
+		return "" // no phrase for notifies
+	}
+	var parts []string
+	for _, tok := range tokens[start:] {
+		parts = append(parts, tok.Value)
+	}
+	return strings.Join(parts, " ")
+}
+
+// Description returns the human-readable full action line.
+func (a ActionDecl) Description() string {
+	subject := a.SubjectName()
+	verb := a.VerbValue()
+	switch a.Kind() {
+	case "sync_action":
+		target := a.TargetName()
+		connector := a.ConnectorValue()
+		phrase := a.PhraseText()
+		desc := subject + " asks " + target
+		if connector != "" {
+			desc += " " + connector
+		}
+		if phrase != "" {
+			desc += " " + phrase
+		}
+		return desc
+	case "async_action":
+		return fmt.Sprintf("%s notifies %q", subject, a.EventValue())
+	case "return_action":
+		phrase := a.PhraseText()
+		target := a.TargetName()
+		if target != "" {
+			return fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
+		}
+		return fmt.Sprintf("%s returns %s", subject, phrase)
+	default:
+		connector := a.ConnectorValue()
+		phrase := a.PhraseText()
+		desc := subject + " " + verb
+		if connector != "" {
+			desc += " " + connector
+		}
+		if phrase != "" {
+			desc += " " + phrase
+		}
+		return desc
+	}
+}
 
 // ArchDecl is a typed view over a SyntaxKindArchDecl node.
 type ArchDecl struct{ node *SyntaxNode }

@@ -287,6 +287,78 @@ func TestDomainDecl_BodyAccessors(t *testing.T) {
 	}
 }
 
+func TestTriggerDecl_Kind(t *testing.T) {
+	cases := []struct {
+		src  string
+		kind string
+	}{
+		{`use_case "X" { when Business_User creates Account }`, "external"},
+		{`use_case "X" { when "User Registered" }`, "event"},
+		{`use_case "X" { when Auth listens "User Registered" }`, "domain_listen"},
+	}
+	for _, tc := range cases {
+		tree, _ := syntax.Parse(tc.src)
+		f := syntax.AsFile(tree)
+		ucs := f.UseCases()
+		if len(ucs) == 0 {
+			t.Fatalf("no use cases parsed: %q", tc.src)
+		}
+		scenarios := ucs[0].Scenarios()
+		if len(scenarios) == 0 {
+			t.Fatalf("no scenarios: %q", tc.src)
+		}
+		got := scenarios[0].Trigger().Kind()
+		if got != tc.kind {
+			t.Errorf("src=%q: want Kind=%q got %q", tc.src, tc.kind, got)
+		}
+	}
+}
+
+func TestActionDecl_Kind(t *testing.T) {
+	src := `use_case "X" {
+  when User creates Account
+    Auth asks DB to check email
+    Auth notifies "Account Created"
+    Auth returns result to User
+    Auth validates email format
+}`
+	tree, _ := syntax.Parse(src)
+	f := syntax.AsFile(tree)
+	actions := f.UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) != 4 {
+		t.Fatalf("want 4 actions, got %d", len(actions))
+	}
+	want := []string{"sync_action", "async_action", "return_action", "internal_action"}
+	for i, a := range actions {
+		if got := a.Kind(); got != want[i] {
+			t.Errorf("action[%d]: want %q got %q", i, want[i], got)
+		}
+	}
+}
+
+func TestActionDecl_SubjectAndTarget(t *testing.T) {
+	src := `use_case "X" {
+  when User creates Account
+    Auth asks DB to check email
+}`
+	tree, _ := syntax.Parse(src)
+	f := syntax.AsFile(tree)
+	actions := f.UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) == 0 {
+		t.Fatal("no actions")
+	}
+	a := actions[0]
+	if got := a.SubjectName(); got != "Auth" {
+		t.Errorf("SubjectName: got %q", got)
+	}
+	if got := a.TargetName(); got != "DB" {
+		t.Errorf("TargetName: got %q", got)
+	}
+	if got := a.Kind(); got != "sync_action" {
+		t.Errorf("Kind: got %q", got)
+	}
+}
+
 func TestArchDecl_LineAccessors(t *testing.T) {
 	src := `arch MyArch {
   presentation:
