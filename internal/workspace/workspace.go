@@ -1,8 +1,8 @@
 // Package workspace maintains the multi-file index for the Craft LSP server.
 // On initialize it scans the workspace root for all .craft files and builds a
 // URI-keyed store. Open/change/close/save lifecycle keeps each file's parse
-// result current. Per-file ASTs are cached by content hash and reused when
-// the content has not changed (Q21 compute model).
+// result current. Per-file syntax trees are cached by content hash and reused
+// when the content has not changed (Q21 compute model).
 //
 // S3: multi-file aware from day one (Q15). Only the single-file slice is used
 // by S3 handlers, but the index exists so S5+ can add cross-file resolution
