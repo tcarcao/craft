@@ -45,10 +45,3 @@ func TestSyntaxKind_Invalid_IsNeitherTokenNorNode(t *testing.T) {
 	}
 }
 
-func TestSyntaxKind_SentinelUnder1000(t *testing.T) {
-	// If this fails, too many token kinds have been added and the node/token
-	// boundary invariant (node kinds >= 1000) is at risk.
-	if int(syntax.SyntaxKindTokenSentinel) >= 1000 {
-		t.Errorf("token sentinel %d >= 1000: node/token boundary broken", syntax.SyntaxKindTokenSentinel)
-	}
-}

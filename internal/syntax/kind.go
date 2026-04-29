@@ -60,12 +60,12 @@ const (
 	SyntaxKindKwDeployment
 	SyntaxKindKwPresentation
 	SyntaxKindKwGateway
-	SyntaxKindKwTrue
-	SyntaxKindKwFalse
+	SyntaxKindKwTrue  // future: boolean values in modifier properties
+	SyntaxKindKwFalse // future: boolean values in modifier properties
 
-	// SyntaxKindTokenSentinel marks the end of token kinds.
+	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
-	SyntaxKindTokenSentinel
+	syntaxKindTokenSentinel
 )
 
 const (
