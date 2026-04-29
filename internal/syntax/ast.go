@@ -442,6 +442,115 @@ func (s ServiceDecl) DeploymentRules() []struct{ Percentage, Target string } {
 	return s.parseServiceBody().DeploymentRules
 }
 
+// DataStoreTokens returns the SyntaxToken for each data-store name in the service body.
+func (s ServiceDecl) DataStoreTokens() []*SyntaxToken {
+	tokens := scanBodyTokens(s.node)
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok.Kind == SyntaxKindRBrace {
+			break
+		}
+		if tok.Kind == SyntaxKindIdent && tok.Value == "data-stores" &&
+			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+			i += 2
+			var result []*SyntaxToken
+			for i < len(tokens) {
+				if tokens[i].Kind == SyntaxKindComma {
+					i++
+					continue
+				}
+				if tokens[i].Kind == SyntaxKindRBrace || isAstFieldSentinel(tokens, i) {
+					break
+				}
+				if tokens[i].Kind == SyntaxKindIdent {
+					result = append(result, tokens[i])
+					i++
+				} else {
+					break
+				}
+			}
+			return result
+		}
+	}
+	return nil
+}
+
+// LanguageToken returns the SyntaxToken for the language value in the service body, or nil.
+func (s ServiceDecl) LanguageToken() *SyntaxToken {
+	tokens := scanBodyTokens(s.node)
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok.Kind == SyntaxKindRBrace {
+			break
+		}
+		if tok.Kind == SyntaxKindIdent && tok.Value == "language" &&
+			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+			i += 2
+			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
+				return tokens[i]
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// DeploymentTypeToken returns the SyntaxToken for the deployment type (e.g. "canary"), or nil.
+func (s ServiceDecl) DeploymentTypeToken() *SyntaxToken {
+	tokens := scanBodyTokens(s.node)
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok.Kind == SyntaxKindRBrace {
+			break
+		}
+		if tok.Kind == SyntaxKindIdent && tok.Value == "deployment" &&
+			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+			i += 2
+			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
+				return tokens[i]
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// DeploymentTargetTokens returns the SyntaxToken for each deployment rule target.
+func (s ServiceDecl) DeploymentTargetTokens() []*SyntaxToken {
+	tokens := scanBodyTokens(s.node)
+	for i := 0; i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok.Kind == SyntaxKindRBrace {
+			break
+		}
+		if tok.Kind == SyntaxKindIdent && tok.Value == "deployment" &&
+			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+			i += 2
+			// Skip deployment type ident.
+			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
+				i++
+			}
+			// Enter parenthesised rule list.
+			if i < len(tokens) && tokens[i].Kind == SyntaxKindLParen {
+				i++
+			}
+			var result []*SyntaxToken
+			for i < len(tokens) && tokens[i].Kind != SyntaxKindRParen && tokens[i].Kind != SyntaxKindRBrace {
+				// Each rule: <percentage> -> <target>
+				if tokens[i].Kind == SyntaxKindArrow {
+					i++
+					if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
+						result = append(result, tokens[i])
+					}
+				}
+				i++
+			}
+			return result
+		}
+	}
+	return nil
+}
+
 // UseCaseDecl is a typed view over a SyntaxKindUseCaseDecl node.
 type UseCaseDecl struct{ node *SyntaxNode }
 

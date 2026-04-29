@@ -1636,6 +1636,91 @@ func TestSemanticTokens_ExposureAndArch(t *testing.T) {
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
+// TestSemanticTokens_ServiceBody verifies that data store names, language values,
+// deployment types, and deployment targets are classified correctly.
+func TestSemanticTokens_ServiceBody(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+	br := bufio.NewReader(testIn)
+	id := 1
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil { t.Fatal(err) }
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 1: service PaymentSvc {
+	// Line 2:   contexts: Billing
+	// Line 3:   data-stores: payment_db
+	// Line 4:   language: golang
+	// Line 5:   deployment: canary(50% -> stable, 50% -> canary)
+	// Line 6: }
+	craftSrc := "service PaymentSvc {\n  contexts: Billing\n  data-stores: payment_db\n  language: golang\n  deployment: canary(50% -> stable, 50% -> canary)\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(`{"textDocument":{"uri":"file:///svc.craft","languageId":"craft","version":1,"text":%s}}`, mustMarshalString(craftSrc)))}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &tokID, Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///svc.craft"}}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil { t.Fatalf("reading: %v", err) }
+		if msg.ID != nil && *msg.ID == tokID { resp = msg; break }
+	}
+	if resp.ID == nil { t.Fatal("timed out") }
+
+	var result struct{ Data []uint32 `json:"data"` }
+	if err := json.Unmarshal(resp.Result, &result); err != nil { t.Fatal(err) }
+
+	type absToken struct{ line, startChar, length, tokenType, modifiers uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt, mod := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3], result.Data[i+4]
+		curLine += dl
+		if dl > 0 { curChar = dc } else { curChar += dc }
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt, mod}
+	}
+
+	// payment_db at line 2, col 15, len 10 → tokenType 7 (craft-data-store-name)
+	if tok, ok := byPos[[2]uint32{2, 15}]; !ok {
+		t.Error("payment_db not found at line 2 col 15")
+	} else if tok.tokenType != 7 {
+		t.Errorf("payment_db: got tokenType %d, want 7 (craft-data-store-name)", tok.tokenType)
+	}
+
+	// golang at line 3, col 12, len 6 → tokenType 44 (craft-language-value)
+	if tok, ok := byPos[[2]uint32{3, 12}]; !ok {
+		t.Error("golang not found at line 3 col 12")
+	} else if tok.tokenType != 44 {
+		t.Errorf("golang: got tokenType %d, want 44 (craft-language-value)", tok.tokenType)
+	}
+
+	// canary at line 4, col 14, len 6 → tokenType 41 (craft-deployment-type)
+	if tok, ok := byPos[[2]uint32{4, 14}]; !ok {
+		t.Error("canary (deployment type) not found at line 4 col 14")
+	} else if tok.tokenType != 41 {
+		t.Errorf("canary: got tokenType %d, want 41 (craft-deployment-type)", tok.tokenType)
+	}
+}
+
 func TestDefinition_TargetContextColumnAware(t *testing.T) {
 	// Fixture (1-based lines):
 	// L1:  domain Auth {               — Auth domain at line 1
