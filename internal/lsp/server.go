@@ -236,9 +236,10 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	}
 	uri := string(params.TextDocument.URI)
 	f := s.ws.Get(uri)
-	if f == nil || f.AST == nil {
+	if f == nil {
 		return nil, nil
 	}
+	fileAST := syntax.Lower(f.SyntaxTree)
 
 	cursorLine := int(params.Position.Line) + 1     // convert to 1-based
 	cursorChar := int(params.Position.Character) + 1 // convert to 1-based
@@ -246,7 +247,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 
 	// Walk services: match cursor against each context reference line so that
 	// go-to-definition fires when the cursor is on a `contexts:` entry.
-	for _, svc := range f.AST.Services {
+	for _, svc := range fileAST.Services {
 		for i, ctxName := range svc.Contexts {
 			// Match by context token line when available; fall back to the
 			// service name line for services parsed without line tracking
@@ -278,7 +279,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 
 	// Walk use-case action parties: cursor on an action line resolves to the
 	// actor/domain/service declaration.
-	for _, uc := range f.AST.UseCases {
+	for _, uc := range fileAST.UseCases {
 		for _, sc := range uc.Scenarios {
 			// Check trigger subject line.
 			if sc.Trigger.Line == cursorLine {
@@ -483,12 +484,13 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		return nil, nil
 	}
 	f := s.ws.Get(string(params.TextDocument.URI))
-	if f == nil || f.AST == nil {
+	if f == nil {
 		return nil, nil
 	}
+	fileAST := syntax.Lower(f.SyntaxTree)
 
 	var syms []interface{}
-	for _, svc := range f.AST.Services {
+	for _, svc := range fileAST.Services {
 		line := 0
 		if svc.Line > 0 {
 			line = svc.Line - 1
@@ -501,7 +503,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
-	for _, a := range f.AST.Actors {
+	for _, a := range fileAST.Actors {
 		line := 0
 		if a.Line > 0 {
 			line = a.Line - 1
@@ -514,7 +516,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
-	for _, d := range f.AST.Domains {
+	for _, d := range fileAST.Domains {
 		line := 0
 		if d.Line > 0 {
 			line = d.Line - 1
@@ -527,7 +529,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
-	for _, uc := range f.AST.UseCases {
+	for _, uc := range fileAST.UseCases {
 		line := 0
 		if uc.Line > 0 {
 			line = uc.Line - 1
@@ -540,7 +542,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
-	for _, arch := range f.AST.Archs {
+	for _, arch := range fileAST.Archs {
 		line := 0
 		if arch.Line > 0 {
 			line = arch.Line - 1
@@ -557,7 +559,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
 		})
 	}
-	for _, exp := range f.AST.Exposures {
+	for _, exp := range fileAST.Exposures {
 		line := 0
 		if exp.Line > 0 {
 			line = exp.Line - 1
@@ -641,10 +643,11 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	}
 
 	for _, f := range s.ws.AllFiles() {
-		if f.AST == nil {
+		if f.SyntaxTree == nil {
 			continue
 		}
-		for _, uc := range f.AST.UseCases {
+		fAST := syntax.Lower(f.SyntaxTree)
+		for _, uc := range fAST.UseCases {
 			entryPoint, involved := extractUseCaseContexts(uc)
 			result.UseCases = append(result.UseCases, craftUseCaseEntry{
 				Name:              uc.Name,
@@ -656,14 +659,14 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 				InvolvedContexts:  involved,
 			})
 		}
-		for _, blockRange := range f.AST.ActorBlocks {
+		for _, blockRange := range fAST.ActorBlocks {
 			result.ActorBlocks = append(result.ActorBlocks, craftBlockRef{
 				FileURI:   f.URI,
 				StartLine: blockRange.Line,
 				EndLine:   blockRange.EndLine,
 			})
 		}
-		for _, arch := range f.AST.Archs {
+		for _, arch := range fAST.Archs {
 			result.Archs = append(result.Archs, craftArchEntry{
 				Name:          arch.Name,
 				URI:           f.URI,
@@ -753,13 +756,14 @@ func (s *Server) extractPartialDslFromBlockRanges(args []interface{}) interface{
 	var parts []string
 	for _, fileURI := range fileOrder {
 		f := s.ws.Get(fileURI)
-		if f == nil || f.AST == nil {
+		if f == nil {
 			continue
 		}
+		fAST := syntax.Lower(f.SyntaxTree)
 		contentLines := strings.Split(f.Content, "\n")
 
 		for _, r := range byFile[fileURI] {
-			part := reconstructDSLRange(f.AST, contentLines, r.startLine, r.endLine)
+			part := reconstructDSLRange(fAST, contentLines, r.startLine, r.endLine)
 			if part != "" {
 				parts = append(parts, part)
 			}
@@ -966,13 +970,14 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 		return nil, nil
 	}
 	f := s.ws.Get(string(params.TextDocument.URI))
-	if f == nil || f.AST == nil {
+	if f == nil {
 		return nil, nil
 	}
+	fileAST := syntax.Lower(f.SyntaxTree)
 
 	var ranges []protocol.FoldingRange
 
-	for _, arch := range f.AST.Archs {
+	for _, arch := range fileAST.Archs {
 		if arch.Line <= 0 || arch.EndLine <= arch.Line {
 			continue
 		}
@@ -1027,13 +1032,14 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		return nil, nil
 	}
 	f := s.ws.Get(string(params.TextDocument.URI))
-	if f == nil || f.AST == nil {
+	if f == nil {
 		return nil, nil
 	}
+	fileAST := syntax.Lower(f.SyntaxTree)
 
 	cursorLine := int(params.Position.Line) + 1 // convert to 1-based
 
-	for _, a := range f.AST.Actors {
+	for _, a := range fileAST.Actors {
 		declLine := a.Line
 		if declLine == 0 {
 			// Individual `actor` statements don't have a line recorded in AST;
@@ -1050,7 +1056,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		}
 	}
 
-	for _, d := range f.AST.Domains {
+	for _, d := range fileAST.Domains {
 		if d.Line == 0 {
 			continue
 		}
@@ -1064,7 +1070,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		}
 	}
 
-	for _, svc := range f.AST.Services {
+	for _, svc := range fileAST.Services {
 		if svc.Line == 0 {
 			continue
 		}
@@ -1082,7 +1088,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		}
 	}
 
-	for _, exp := range f.AST.Exposures {
+	for _, exp := range fileAST.Exposures {
 		if exp.Line == 0 || exp.Line != cursorLine {
 			continue
 		}
@@ -1098,7 +1104,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 	// Walk use-case bodies: hover on an action line shows the resolved declaration.
 	rm := s.ws.ResolutionMap()
 	uri := string(params.TextDocument.URI)
-	for _, uc := range f.AST.UseCases {
+	for _, uc := range fileAST.UseCases {
 		for _, sc := range uc.Scenarios {
 			// Hover on the use_case name itself (line of use_case keyword).
 			if uc.Line == cursorLine {
@@ -1451,7 +1457,7 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 		return nil, nil
 	}
 	f := s.ws.Get(string(params.TextDocument.URI))
-	if f == nil || f.AST == nil {
+	if f == nil {
 		return &protocol.SemanticTokens{Data: []uint32{}}, nil
 	}
 
@@ -1493,9 +1499,10 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 // use-case resolution map. This is the existing Pass 2 logic extracted into a helper.
 func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticToken {
 	var tokens []semanticToken
+	fileAST := syntax.Lower(f.SyntaxTree)
 
 	// Actors: craft-actor-definition, modifier 1 (declaration).
-	for _, a := range f.AST.Actors {
+	for _, a := range fileAST.Actors {
 		if a.Line <= 0 {
 			continue // individual `actor` stmts without position — skip for now
 		}
@@ -1513,7 +1520,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 	}
 
 	// Domains: craft-domain-name declaration; bounded contexts: craft-context-name declaration.
-	for _, d := range f.AST.Domains {
+	for _, d := range fileAST.Domains {
 		if d.Line <= 0 {
 			continue
 		}
@@ -1548,7 +1555,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 	}
 
 	// Services: craft-service-name, modifier 1 (declaration).
-	for _, svc := range f.AST.Services {
+	for _, svc := range fileAST.Services {
 		if svc.Line <= 0 {
 			continue
 		}
@@ -1568,7 +1575,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 	// Use-case action parties: colour actors/domains/services referenced inside
 	// when clauses using their respective semantic token types (S6).
 	rm := s.ws.ResolutionMap()
-	for _, uc := range f.AST.UseCases {
+	for _, uc := range fileAST.UseCases {
 		for _, sc := range uc.Scenarios {
 			// Trigger subject.
 			triggerName := sc.Trigger.Actor
