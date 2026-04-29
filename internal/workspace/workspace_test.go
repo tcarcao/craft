@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/workspace"
 )
 
@@ -18,11 +19,17 @@ func TestWorkspace_OpenAndGet(t *testing.T) {
 	if f == nil {
 		t.Fatal("file not found after Open")
 	}
-	if len(f.AST.Actors) != 1 {
-		t.Errorf("expected 1 actor, got %d", len(f.AST.Actors))
+	actors := syntax.AsFile(f.SyntaxTree).Actors()
+	if len(actors) != 1 {
+		t.Errorf("expected 1 actor, got %d", len(actors))
 	}
-	if f.AST.Actors[0].Name != "Alice" {
-		t.Errorf("got actor name %q", f.AST.Actors[0].Name)
+	nameTok := actors[0].Name()
+	if nameTok == nil || nameTok.Value != "Alice" {
+		name := ""
+		if nameTok != nil {
+			name = nameTok.Value
+		}
+		t.Errorf("got actor name %q", name)
 	}
 }
 
@@ -32,8 +39,17 @@ func TestWorkspace_Change(t *testing.T) {
 	w.Change("file:///a.craft", "actor user Bob")
 
 	f := w.Get("file:///a.craft")
-	if f.AST.Actors[0].Name != "Bob" {
-		t.Errorf("expected Bob after change, got %q", f.AST.Actors[0].Name)
+	actors := syntax.AsFile(f.SyntaxTree).Actors()
+	if len(actors) == 0 {
+		t.Fatal("expected 1 actor after change")
+	}
+	nameTok := actors[0].Name()
+	if nameTok == nil || nameTok.Value != "Bob" {
+		name := ""
+		if nameTok != nil {
+			name = nameTok.Value
+		}
+		t.Errorf("expected Bob after change, got %q", name)
 	}
 }
 
@@ -122,33 +138,34 @@ func TestWorkspace_PerformanceGate_S5(t *testing.T) {
 	}
 }
 
-// TestWorkspace_LastGoodAST verifies that after a successful parse the
-// LastGoodAST is populated, so that if a future change causes a parser panic
-// the semantic features can fall back to the previous good state.
-func TestWorkspace_LastGoodAST(t *testing.T) {
+// TestWorkspace_SyntaxTreeUpdated verifies that after a successful parse the
+// SyntaxTree is populated and updated on subsequent changes.
+func TestWorkspace_SyntaxTreeUpdated(t *testing.T) {
 	w := workspace.New(nil)
 
-	// Initial valid parse — LastGoodAST should be set.
+	// Initial valid parse — SyntaxTree should be set.
 	w.Open("file:///a.craft", "actor user Alice")
 	f := w.Get("file:///a.craft")
 	if f == nil {
 		t.Fatal("file not found")
 	}
-	if f.LastGoodAST == nil {
-		t.Fatal("LastGoodAST should be non-nil after successful parse")
+	if f.SyntaxTree == nil {
+		t.Fatal("SyntaxTree should be non-nil after successful parse")
 	}
-	if len(f.LastGoodAST.Actors) != 1 {
-		t.Errorf("LastGoodAST: expected 1 actor, got %d", len(f.LastGoodAST.Actors))
+	actors1 := syntax.AsFile(f.SyntaxTree).Actors()
+	if len(actors1) != 1 {
+		t.Errorf("SyntaxTree: expected 1 actor, got %d", len(actors1))
 	}
 
-	// After a content change that still parses successfully, LastGoodAST
+	// After a content change that still parses successfully, SyntaxTree
 	// reflects the new parse.
 	w.Change("file:///a.craft", "actor user Alice\nactor system Bob")
 	f2 := w.Get("file:///a.craft")
-	if f2.LastGoodAST == nil {
-		t.Fatal("LastGoodAST should still be set after second successful parse")
+	if f2.SyntaxTree == nil {
+		t.Fatal("SyntaxTree should still be set after second successful parse")
 	}
-	if len(f2.LastGoodAST.Actors) != 2 {
-		t.Errorf("LastGoodAST: expected 2 actors, got %d", len(f2.LastGoodAST.Actors))
+	actors2 := syntax.AsFile(f2.SyntaxTree).Actors()
+	if len(actors2) != 2 {
+		t.Errorf("SyntaxTree: expected 2 actors, got %d", len(actors2))
 	}
 }

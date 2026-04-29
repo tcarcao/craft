@@ -21,7 +21,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -32,15 +31,10 @@ type File struct {
 	URI         string
 	Content     string
 	ContentHash [32]byte
-	AST         *ast.File
 	SyntaxTree  *syntax.SyntaxNode
 	Diagnostics []craft.Diagnostic
 	// Symbols is the per-file symbol table, computed after parsing.
 	Symbols sema.Symbols
-	// LastGoodAST is the most recent parse result that succeeded without a
-	// panic. LSP handlers use this as a fallback when the current parse panicked
-	// so that hover, definition, and outline stay responsive on broken files.
-	LastGoodAST *ast.File
 }
 
 // Workspace is the multi-file index. It is safe for concurrent access.
@@ -172,34 +166,19 @@ func (w *Workspace) parseAndStore(uri, content string) {
 		return // nothing changed
 	}
 
-	// Preserve the previous last-good AST so we can fall back on panic.
-	var prevLastGood *ast.File
-	if existing, ok := w.files[uri]; ok {
-		prevLastGood = existing.LastGoodAST
-	}
-
 	file := &File{
 		URI:         uri,
 		Content:     content,
 		ContentHash: hash,
-		LastGoodAST: prevLastGood,
 	}
 
-	panicked := false
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				panicked = true
 				w.log.Error("workspace: parser panic recovered",
 					"uri", uri,
 					"panic", fmt.Sprintf("%v", r),
 				)
-				// Fall back to the previous good AST for semantic features.
-				if file.LastGoodAST != nil {
-					file.AST = file.LastGoodAST
-				} else {
-					file.AST = &ast.File{}
-				}
 				file.Diagnostics = append(file.Diagnostics, craft.Diagnostic{
 					Code:     "craft/internal/parser-panic",
 					Message:  fmt.Sprintf("internal parser error: %v", r),
@@ -208,13 +187,7 @@ func (w *Workspace) parseAndStore(uri, content string) {
 			}
 		}()
 		file.SyntaxTree, file.Diagnostics = syntax.Parse(content)
-		file.AST = syntax.Lower(file.SyntaxTree)
 	}()
-
-	// On successful parse, advance LastGoodAST.
-	if !panicked {
-		file.LastGoodAST = file.AST
-	}
 
 	// Collect per-file symbols (no cross-file resolution yet).
 	syms, semaDiags := sema.AnalyzeFile(uri, file.SyntaxTree)

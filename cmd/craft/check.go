@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -39,7 +38,6 @@ func checkCmd() *cobra.Command {
 
 			tree, parseDiags := syntax.Parse(string(content))
 			doc := syntax.ProjectFromTree(tree)
-			astFile := syntax.Lower(tree)
 
 			uri := "file://" + args[0]
 			_, semaDiags := sema.AnalyzeFile(uri, tree)
@@ -51,7 +49,7 @@ func checkCmd() *cobra.Command {
 
 			if lspJSON {
 				diagBytes, _ := json.Marshal(allDiags)
-				symbols := buildSymbolsJSON(astFile)
+				symbols := buildSymbolsJSON(tree)
 				symBytes, _ := json.Marshal(symbols)
 				return enc.Encode(lspJSONOutput{
 					CraftDoc:    doc,
@@ -74,14 +72,19 @@ type symbolInfo struct {
 	Type string `json:"type,omitempty"`
 }
 
-func buildSymbolsJSON(f *ast.File) []symbolInfo {
-	out := []symbolInfo{}
-	for _, a := range f.Actors {
+func buildSymbolsJSON(tree *syntax.SyntaxNode) []symbolInfo {
+	file := syntax.AsFile(tree)
+	var out []symbolInfo
+	for _, a := range file.Actors() {
+		nameTok := a.Name()
+		if nameTok == nil {
+			continue
+		}
 		out = append(out, symbolInfo{
-			Name: a.Name,
+			Name: nameTok.Value,
 			Kind: "actor",
-			Line: a.Line,
-			Type: string(a.Type),
+			Line: nameTok.Line,
+			Type: a.ActorTypeValue(),
 		})
 	}
 	return out
