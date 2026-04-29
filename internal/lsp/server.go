@@ -1773,8 +1773,13 @@ func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.F
 	type posKey struct{ line, startChar uint32 }
 	overrides := make(map[posKey]uint32)
 
-	ucStringIdx := uint32(s.semanticTokenTypeIndex("craft-usecase-string"))
-	evStringIdx := uint32(s.semanticTokenTypeIndex("craft-event-string"))
+	ucIdx := s.semanticTokenTypeIndex("craft-usecase-string")
+	evIdx := s.semanticTokenTypeIndex("craft-event-string")
+	if ucIdx < 0 || evIdx < 0 {
+		return
+	}
+	ucStringIdx := uint32(ucIdx)
+	evStringIdx := uint32(evIdx)
 
 	file := syntax.AsFile(f.SyntaxTree)
 
@@ -1782,15 +1787,11 @@ func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.F
 		if title := uc.Title(); title != nil && title.Line > 0 {
 			overrides[posKey{uint32(title.Line - 1), uint32(title.Col - 1)}] = ucStringIdx
 		}
-	}
-
-	for _, uc := range file.UseCases() {
 		for _, sc := range uc.Scenarios() {
 			trigger := sc.Trigger()
-			whenTok := sc.When()
-			if whenTok != nil && (trigger.Kind() == "event" || trigger.Kind() == "domain_listen") {
-				if trigger.EventIsString() && trigger.EventCol() > 0 {
-					overrides[posKey{uint32(whenTok.Line - 1), uint32(trigger.EventCol() - 1)}] = evStringIdx
+			if trigger.Kind() == "event" || trigger.Kind() == "domain_listen" {
+				if evTok := trigger.Event(); evTok != nil && evTok.Col > 0 && trigger.EventIsString() {
+					overrides[posKey{uint32(evTok.Line - 1), uint32(evTok.Col - 1)}] = evStringIdx
 				}
 			}
 			for _, action := range sc.Actions() {
