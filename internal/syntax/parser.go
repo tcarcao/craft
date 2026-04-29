@@ -1379,11 +1379,20 @@ func (p *Parser) parseModifierList() ([]ast.ArchModifier, []craft.Diagnostic) {
 	return mods, diags
 }
 
-// peekAt returns the token at pos+offset without advancing the lexer.
+// peekAt returns the Nth non-comment token at or after p.pos without advancing.
+// offset=0 is equivalent to peek(); offset=1 is the token after that, etc.
+// Comment tokens are skipped when counting.
 func (p *Parser) peekAt(offset int) lexer.Token {
-	idx := p.pos + offset
-	if idx < len(p.tokens) {
-		return p.tokens[idx]
+	count := 0
+	for i := p.pos; i < len(p.tokens); i++ {
+		tt := p.tokens[i].Type
+		if tt == lexer.TokenLineComment || tt == lexer.TokenBlockComment {
+			continue
+		}
+		if count == offset {
+			return p.tokens[i]
+		}
+		count++
 	}
 	return lexer.Token{Type: lexer.TokenEOF}
 }
@@ -1447,23 +1456,127 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 	return false
 }
 
+// peek returns the next non-comment token without advancing p.pos.
+// Comment tokens are skipped transparently for parse decisions.
 func (p *Parser) peek() lexer.Token {
-	if p.pos < len(p.tokens) {
-		return p.tokens[p.pos]
+	for i := p.pos; i < len(p.tokens); i++ {
+		tt := p.tokens[i].Type
+		if tt == lexer.TokenLineComment || tt == lexer.TokenBlockComment {
+			continue
+		}
+		return p.tokens[i]
 	}
 	return lexer.Token{Type: lexer.TokenEOF}
 }
 
+// consume advances past any comment tokens at p.pos, then consumes and returns
+// the next meaningful token (advancing p.pos past it as well).
 func (p *Parser) consume() lexer.Token {
-	tok := p.peek()
-	if p.pos < len(p.tokens) {
+	// skip leading comments
+	for p.pos < len(p.tokens) {
+		tt := p.tokens[p.pos].Type
+		if tt != lexer.TokenLineComment && tt != lexer.TokenBlockComment {
+			break
+		}
 		p.pos++
 	}
-	return tok
+	if p.pos < len(p.tokens) {
+		tok := p.tokens[p.pos]
+		p.pos++
+		return tok
+	}
+	return lexer.Token{Type: lexer.TokenEOF}
 }
 
 func (p *Parser) atEOF() bool {
 	return p.peek().Type == lexer.TokenEOF
+}
+
+// collectTrivia collects any comment tokens at p.pos and returns them as
+// []*SyntaxToken, advancing p.pos past each one collected.
+// Call this before consumeAs to capture leading trivia.
+func (p *Parser) collectTrivia() []*SyntaxToken {
+	var trivia []*SyntaxToken
+	for p.pos < len(p.tokens) {
+		tok := p.tokens[p.pos]
+		switch tok.Type {
+		case lexer.TokenLineComment:
+			trivia = append(trivia, &SyntaxToken{
+				Kind:  SyntaxKindLineComment,
+				Value: tok.Value,
+				Line:  tok.Line,
+				Col:   tok.Column,
+			})
+			p.pos++
+		case lexer.TokenBlockComment:
+			trivia = append(trivia, &SyntaxToken{
+				Kind:  SyntaxKindBlockComment,
+				Value: tok.Value,
+				Line:  tok.Line,
+				Col:   tok.Column,
+			})
+			p.pos++
+		default:
+			return trivia
+		}
+	}
+	return trivia
+}
+
+// consumeAs converts the current non-comment lexer token into a *SyntaxToken
+// with the given kind, advancing p.pos past it.
+// Any buffered comment tokens before the meaningful token are skipped
+// (they should be collected via collectTrivia beforehand).
+func (p *Parser) consumeAs(kind SyntaxKind) *SyntaxToken {
+	// skip any leading comments (trivia already collected by caller)
+	for p.pos < len(p.tokens) {
+		tt := p.tokens[p.pos].Type
+		if tt != lexer.TokenLineComment && tt != lexer.TokenBlockComment {
+			break
+		}
+		p.pos++
+	}
+	tok := p.consume()
+	return &SyntaxToken{
+		Kind:  kind,
+		Value: tok.Value,
+		Line:  tok.Line,
+		Col:   tok.Column,
+	}
+}
+
+// lexerKindToSyntaxKind maps hard lexer token types to SyntaxKind values.
+// Used in Tasks 5+6 when building SyntaxTokens from lexer tokens.
+var lexerKindToSyntaxKind = map[lexer.TokenType]SyntaxKind{
+	lexer.TokenKwActor:       SyntaxKindKwActor,
+	lexer.TokenKwActors:      SyntaxKindKwActors,
+	lexer.TokenKwUser:        SyntaxKindKwUser,
+	lexer.TokenKwSystem:      SyntaxKindKwSystem,
+	lexer.TokenKwService:     SyntaxKindKwService,
+	lexer.TokenKwDomain:      SyntaxKindKwDomain,
+	lexer.TokenKwDomains:     SyntaxKindKwDomains,
+	lexer.TokenKwServices:    SyntaxKindKwServices,
+	lexer.TokenKwUseCase:     SyntaxKindKwUseCase,
+	lexer.TokenKwArch:        SyntaxKindKwArch,
+	lexer.TokenKwExposure:    SyntaxKindKwExposure,
+	lexer.TokenIdent:         SyntaxKindIdent,
+	lexer.TokenString:        SyntaxKindString,
+	lexer.TokenNumber:        SyntaxKindNumber,
+	lexer.TokenPercentage:    SyntaxKindPercentage,
+	lexer.TokenLBrace:        SyntaxKindLBrace,
+	lexer.TokenRBrace:        SyntaxKindRBrace,
+	lexer.TokenLParen:        SyntaxKindLParen,
+	lexer.TokenRParen:        SyntaxKindRParen,
+	lexer.TokenLBracket:      SyntaxKindLBracket,
+	lexer.TokenRBracket:      SyntaxKindRBracket,
+	lexer.TokenColon:         SyntaxKindColon,
+	lexer.TokenComma:         SyntaxKindComma,
+	lexer.TokenGT:            SyntaxKindGT,
+	lexer.TokenArrow:         SyntaxKindArrow,
+	lexer.TokenError:         SyntaxKindError,
+	lexer.TokenEOF:           SyntaxKindEOF,
+	lexer.TokenLineComment:   SyntaxKindLineComment,
+	lexer.TokenBlockComment:  SyntaxKindBlockComment,
 }
 
 func (p *Parser) diagUnexpected(tok lexer.Token, expected string) craft.Diagnostic {

@@ -743,3 +743,25 @@ func TestParse_ReturnsAction_TargetContextColumn(t *testing.T) {
 		t.Errorf("TargetContextColumn: got %d want 21", a.TargetContextColumn)
 	}
 }
+
+// Task 4: peek() skips comment tokens for parse decisions.
+func TestParse_IgnoresLeadingComment(t *testing.T) {
+	file, diags := syntax.Parse("// a comment\nactor user Alice")
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got: %v", diags)
+	}
+	if len(file.Actors) != 1 || file.Actors[0].Name != "Alice" {
+		t.Errorf("expected actor Alice, got %+v", file.Actors)
+	}
+}
+
+// Task 4: peek() skips inline block comments.
+func TestParse_IgnoresInlineBlockComment(t *testing.T) {
+	file, diags := syntax.Parse("actor /* inline */ user Bob")
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got: %v", diags)
+	}
+	if len(file.Actors) != 1 || file.Actors[0].Name != "Bob" || file.Actors[0].Type != ast.ActorTypeUser {
+		t.Errorf("expected actor user Bob, got %+v", file.Actors)
+	}
+}
