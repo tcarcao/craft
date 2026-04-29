@@ -1319,71 +1319,6 @@ func (p *Parser) parseReturnsAction(id int, subject string, subjectCol int, line
 	}, *diags
 }
 
-// collectPhrase collects the remaining "phrase" tokens on the current logical line.
-// It stops before the next action line or scenario boundary.
-//
-// The phrase ends when we encounter a token on a **different source line** from
-// the current token (since the lexer preserves Line info even when skipping
-// whitespace). This correctly handles multi-word phrases without requiring
-// newline tokens.
-//
-// actionLine is the 1-based source line of the action/trigger that owns this phrase.
-// If the first available token is already on a different line, the phrase is empty.
-// Additionally, we stop on structural boundaries: `}` and EOF.
-func (p *Parser) collectPhrase(actionLine int) string {
-	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
-		return ""
-	}
-	// If the next token is already past the action's line, the phrase is empty.
-	if p.peek().Line != actionLine {
-		return ""
-	}
-	// The phrase starts at the current token's line (== actionLine).
-	startLine := actionLine
-	var parts []string
-	for {
-		tok := p.peek()
-		switch tok.Type {
-		case lexer.TokenRBrace, lexer.TokenEOF:
-			return strings.Join(parts, " ")
-		case lexer.TokenIdent:
-			// Stop when we've moved to a different source line.
-			// `when` on a new line is a scenario boundary; `when` on the same
-			// line is a valid phrase_word per the ANTLR grammar and is collected.
-			if tok.Line != startLine {
-				return strings.Join(parts, " ")
-			}
-			parts = append(parts, tok.Value)
-			p.consume()
-		case lexer.TokenString:
-			if tok.Line != startLine {
-				return strings.Join(parts, " ")
-			}
-			// Use the raw value without re-quoting to match ANTLR phrase output.
-			parts = append(parts, tok.Value)
-			p.consume()
-		case lexer.TokenNumber:
-			if tok.Line != startLine {
-				return strings.Join(parts, " ")
-			}
-			parts = append(parts, tok.Value)
-			p.consume()
-		default:
-			// Keywords that act as identifiers in phrase context (e.g. `user`, `system`,
-			// `service`, `domain`, `arch`) are valid phrase_words per the ANTLR grammar.
-			if isAnyKeywordAsIdent(tok.Type) {
-				if tok.Line != startLine {
-					return strings.Join(parts, " ")
-				}
-				parts = append(parts, tok.Value)
-				p.consume()
-				continue
-			}
-			return strings.Join(parts, " ")
-		}
-	}
-}
-
 
 // collectPhraseIntoNode collects phrase tokens on actionLine, appends them as
 // SyntaxToken children of node, and returns the phrase string (matching collectPhrase output).
@@ -1533,33 +1468,6 @@ func (p *Parser) parseArchBlock() (*SyntaxNode, *ast.ArchDecl, []craft.Diagnosti
 	return node, arch, diags
 }
 
-// parseArchComponentList parses a list of arch components until a section label
-// (ident followed by `:`), `}`, or EOF. Each component is on its own logical line.
-func (p *Parser) parseArchComponentList() ([]*ast.ArchComponent, []craft.Diagnostic) {
-	var components []*ast.ArchComponent
-	var diags []craft.Diagnostic
-
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
-		// Stop if we see the start of another section label (ident:).
-		if (p.peek().Type == lexer.TokenIdent || isAnyKeywordAsIdent(p.peek().Type)) &&
-			p.peekAt(1).Type == lexer.TokenColon {
-			break
-		}
-		// Skip unexpected non-ident tokens.
-		if p.peek().Type != lexer.TokenIdent && !isAnyKeywordAsIdent(p.peek().Type) {
-			diags = append(diags, p.diagUnexpected(p.peek(), "component name or section label"))
-			p.consume()
-			continue
-		}
-
-		comp, d := p.parseArchComponent()
-		diags = append(diags, d...)
-		if comp != nil {
-			components = append(components, comp)
-		}
-	}
-	return components, diags
-}
 
 // parseArchComponentListWithNodes is like parseArchComponentList but also returns SyntaxNodes.
 func (p *Parser) parseArchComponentListWithNodes() ([]*ast.ArchComponent, []*SyntaxNode, []craft.Diagnostic) {
@@ -1717,70 +1625,7 @@ func (p *Parser) parseModifierListWithNodes() ([]ast.ArchModifier, []*SyntaxNode
 	return mods, nodes, diags
 }
 
-// parseArchComponent parses a single component entry. May be a simple component
-// or a flow chain (A > B > C), each component optionally bearing modifiers.
-func (p *Parser) parseArchComponent() (*ast.ArchComponent, []craft.Diagnostic) {
-	var diags []craft.Diagnostic
 
-	first, d := p.parseComponentWithModifiers()
-	diags = append(diags, d...)
-	if first == nil {
-		return nil, diags
-	}
-
-	// Check for flow operator `>`.
-	if p.peek().Type != lexer.TokenGT {
-		first.Type = "simple"
-		return first, diags
-	}
-
-	// Flow chain: collect all components separated by `>`.
-	chain := []*ast.ArchComponent{first}
-	for p.peek().Type == lexer.TokenGT {
-		p.consume() // consume `>`
-		next, d := p.parseComponentWithModifiers()
-		diags = append(diags, d...)
-		if next != nil {
-			next.Type = "simple"
-			chain = append(chain, next)
-		}
-	}
-
-	return &ast.ArchComponent{
-		Type:  "flow",
-		Chain: chain,
-	}, diags
-}
-
-// parseComponentWithModifiers parses: <name> ('[' modifier_list ']')?
-func (p *Parser) parseComponentWithModifiers() (*ast.ArchComponent, []craft.Diagnostic) {
-	var diags []craft.Diagnostic
-
-	nameTok := p.peek()
-	if nameTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(nameTok.Type) {
-		diags = append(diags, p.diagUnexpected(nameTok, "component name"))
-		return nil, diags
-	}
-	name := nameTok.Value
-	p.consume()
-
-	comp := &ast.ArchComponent{Name: name, Type: "simple"}
-
-	if p.peek().Type == lexer.TokenLBracket {
-		p.consume() // consume `[`
-		mods, d := p.parseModifierList()
-		diags = append(diags, d...)
-		comp.Modifiers = mods
-
-		if p.peek().Type == lexer.TokenRBracket {
-			p.consume() // consume `]`
-		} else {
-			diags = append(diags, p.diagUnexpected(p.peek(), "]"))
-		}
-	}
-
-	return comp, diags
-}
 
 // parseModifierList parses: modifier (',' modifier)* inside `[...]`.
 // A modifier is: identifier (':' identifier)?
