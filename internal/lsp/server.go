@@ -1568,6 +1568,10 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 	// Classifies SyntaxKindIdent tokens as actor names, domain names, etc.
 	tokens = append(tokens, s.semanticIdentTokens(f, string(params.TextDocument.URI))...)
 
+	// Pass 3: reclassify string tokens that carry semantic meaning (use-case titles,
+	// event strings) by overriding the tokenType set in Pass 1.
+	s.applyStringTypeOverrides(tokens, f)
+
 	// Sort tokens by line, then character (required for relative encoding).
 	sortSemanticTokens(tokens)
 
@@ -1756,6 +1760,53 @@ func sortSemanticTokens(tokens []semanticToken) {
 		}
 		return a.startChar < b.startChar
 	})
+}
+
+// applyStringTypeOverrides reclassifies string tokens that carry semantic meaning:
+// use-case title strings → craft-usecase-string (index 30)
+// event strings in async actions and event/domain_listen triggers → craft-event-string (index 31)
+// All other SyntaxKindString tokens remain craft-regular-string (index 32) from Pass 1.
+func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.File) {
+	if f.SyntaxTree == nil {
+		return
+	}
+	type posKey struct{ line, startChar uint32 }
+	overrides := make(map[posKey]uint32)
+
+	ucStringIdx := uint32(s.semanticTokenTypeIndex("craft-usecase-string"))
+	evStringIdx := uint32(s.semanticTokenTypeIndex("craft-event-string"))
+
+	file := syntax.AsFile(f.SyntaxTree)
+
+	for _, uc := range file.UseCases() {
+		if title := uc.Title(); title != nil && title.Line > 0 {
+			overrides[posKey{uint32(title.Line - 1), uint32(title.Col - 1)}] = ucStringIdx
+		}
+	}
+
+	for _, uc := range file.UseCases() {
+		for _, sc := range uc.Scenarios() {
+			trigger := sc.Trigger()
+			whenTok := sc.When()
+			if whenTok != nil && (trigger.Kind() == "event" || trigger.Kind() == "domain_listen") {
+				if trigger.EventIsString() && trigger.EventCol() > 0 {
+					overrides[posKey{uint32(whenTok.Line - 1), uint32(trigger.EventCol() - 1)}] = evStringIdx
+				}
+			}
+			for _, action := range sc.Actions() {
+				if action.Kind() == "async_action" && action.EventIsString() && action.EventCol() > 0 && action.Line() > 0 {
+					overrides[posKey{uint32(action.Line() - 1), uint32(action.EventCol() - 1)}] = evStringIdx
+				}
+			}
+		}
+	}
+
+	for i := range tokens {
+		key := posKey{tokens[i].line, tokens[i].startChar}
+		if newType, ok := overrides[key]; ok {
+			tokens[i].tokenType = newType
+		}
+	}
 }
 
 func (s *Server) SemanticTokensFullDelta(_ context.Context, _ *protocol.SemanticTokensDeltaParams) (interface{}, error) {

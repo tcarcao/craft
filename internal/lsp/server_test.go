@@ -1370,6 +1370,138 @@ func TestSemanticTokens_TargetContext(t *testing.T) {
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
+// TestSemanticTokens_StringTypes verifies that use-case title strings are emitted
+// as craft-usecase-string (index 30) and event strings in notifies/listens actions
+// are emitted as craft-event-string (index 31), rather than craft-regular-string (32).
+func TestSemanticTokens_StringTypes(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0 (1-based: 1): use_case "Register User" {
+	//   "Register User" starts at col 9 (0-based), length 15 (including quotes)
+	// Line 1 (1-based: 2):   when SomeActor does Something
+	// Line 2 (1-based: 3):     SomeContext notifies "UserRegistered"
+	//   "UserRegistered" starts at col 22 (0-based), length 16 (including quotes)
+	// Line 3 (1-based: 4): }
+	const craftSrc = "use_case \"Register User\" {\n  when SomeActor does Something\n    SomeContext notifies \"UserRegistered\"\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///strtypes.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///strtypes.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling semantic tokens result: %v", err)
+	}
+
+	// Decode relative-encoded stream into absolute tokens.
+	type tok struct{ line, startChar, length, tokenType uint32 }
+	var tokens []tok
+	var absLine, absChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		absLine += dl
+		if dl == 0 {
+			absChar += dc
+		} else {
+			absChar = dc
+		}
+		tokens = append(tokens, tok{absLine, absChar, ln, tt})
+	}
+
+	// Build lookup map: (line, startChar) → tok.
+	byPos := make(map[[2]uint32]tok, len(tokens))
+	for _, tk := range tokens {
+		byPos[[2]uint32{tk.line, tk.startChar}] = tk
+	}
+
+	// use_case "Register User" {
+	// The lexer emits the string content token (without surrounding quotes) starting
+	// at the position of the opening quote. col=9 (0-based), length=13 ("Register User").
+	// Token type must be craft-usecase-string (index 30).
+	if tk, ok := byPos[[2]uint32{0, 9}]; !ok {
+		t.Errorf("expected token at line=0, col=9 (use-case title string); all tokens: %v", tokens)
+	} else if tk.tokenType != 30 {
+		t.Errorf("use-case title string: tokenType=%d, want 30 (craft-usecase-string); all tokens: %v", tk.tokenType, tokens)
+	}
+
+	//     SomeContext notifies "UserRegistered"
+	// The event string token starts at the opening quote col=25 (0-based after 4-space
+	// indent + "SomeContext notifies "), length=14 ("UserRegistered" without quotes).
+	// Token type must be craft-event-string (index 31).
+	if tk, ok := byPos[[2]uint32{2, 25}]; !ok {
+		t.Errorf("expected token at line=2, col=25 (event string); all tokens: %v", tokens)
+	} else if tk.tokenType != 31 {
+		t.Errorf("event string: tokenType=%d, want 31 (craft-event-string); all tokens: %v", tk.tokenType, tokens)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                              //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
 func TestDefinition_TargetContextColumnAware(t *testing.T) {
 	// Fixture (1-based lines):
 	// L1:  domain Auth {               — Auth domain at line 1
