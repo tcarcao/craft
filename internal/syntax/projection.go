@@ -45,7 +45,7 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 				if tok.Kind == SyntaxKindIdent {
 					if firstIdent == nil {
 						firstIdent = tok
-					} else if secondIdent == nil {
+					} else {
 						secondIdent = tok
 						break
 					}
