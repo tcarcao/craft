@@ -33,9 +33,9 @@ func TestLexer_Actors(t *testing.T) {
 			wantTypes: []lexer.TokenType{lexer.TokenKwActor, lexer.TokenKwService, lexer.TokenIdent, lexer.TokenEOF},
 		},
 		{
-			name:      "comment skipped",
+			name:      "line comment returned as token",
 			src:       "// a comment\nactor user Foo",
-			wantTypes: []lexer.TokenType{lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
+			wantTypes: []lexer.TokenType{lexer.TokenLineComment, lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
 		},
 		{
 			name:      "underscore name",
@@ -67,19 +67,19 @@ func TestLexer_BlockComment(t *testing.T) {
 		wantTypes []lexer.TokenType
 	}{
 		{
-			name:      "block comment skipped",
+			name:      "block comment returned as token",
 			src:       "/* this is a comment */ actor user Foo",
-			wantTypes: []lexer.TokenType{lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
+			wantTypes: []lexer.TokenType{lexer.TokenBlockComment, lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
 		},
 		{
 			name:      "multi-line block comment",
 			src:       "/* line1\nline2 */ domain Foo { }",
-			wantTypes: []lexer.TokenType{lexer.TokenKwDomain, lexer.TokenIdent, lexer.TokenLBrace, lexer.TokenRBrace, lexer.TokenEOF},
+			wantTypes: []lexer.TokenType{lexer.TokenBlockComment, lexer.TokenKwDomain, lexer.TokenIdent, lexer.TokenLBrace, lexer.TokenRBrace, lexer.TokenEOF},
 		},
 		{
 			name:      "unclosed block comment reaches EOF safely",
 			src:       "/* unclosed",
-			wantTypes: []lexer.TokenType{lexer.TokenEOF},
+			wantTypes: []lexer.TokenType{lexer.TokenBlockComment, lexer.TokenEOF},
 		},
 	}
 	for _, tc := range tests {

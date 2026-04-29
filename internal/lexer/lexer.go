@@ -70,6 +70,10 @@ const (
 	TokenRParen // )
 	TokenArrow  // ->
 
+	// Lossless syntax tree trivia tokens
+	TokenLineComment  // // ... single-line comment
+	TokenBlockComment // /* ... */ block comment
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -128,7 +132,7 @@ func (l *Lexer) All() []Token {
 
 // Next returns the next token, advancing the lexer.
 func (l *Lexer) Next() Token {
-	l.skipWhitespaceAndComments()
+	l.skipWhitespace()
 
 	if l.pos >= len(l.src) {
 		return l.token(TokenEOF, "")
@@ -137,6 +141,10 @@ func (l *Lexer) Next() Token {
 	ch := l.src[l.pos]
 
 	switch {
+	case ch == '/' && l.peek(1) == '/':
+		return l.scanLineComment()
+	case ch == '/' && l.peek(1) == '*':
+		return l.scanBlockComment()
 	case ch == '{':
 		return l.consume(TokenLBrace)
 	case ch == '}':
@@ -177,38 +185,49 @@ func (l *Lexer) Next() Token {
 	}
 }
 
-// skipWhitespaceAndComments advances past spaces, tabs, carriage returns, and
-// single-line comments (// ...).
-func (l *Lexer) skipWhitespaceAndComments() {
+// skipWhitespace advances past spaces, tabs, carriage returns, and newlines.
+func (l *Lexer) skipWhitespace() {
 	for l.pos < len(l.src) {
 		ch := l.src[l.pos]
 		switch {
 		case ch == ' ' || ch == '\t' || ch == '\r':
 			l.advance()
 		case ch == '\n':
-			// Only skip blank newlines; let the Next() see significant ones.
 			// For Craft's grammar all newlines are insignificant, so skip them all here.
 			l.advance()
-		case ch == '/' && l.peek(1) == '/':
-			// Single-line comment: consume until newline.
-			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
-				l.advance()
-			}
-		case ch == '/' && l.peek(1) == '*':
-			l.advance() // consume /
-			l.advance() // consume *
-			for l.pos < len(l.src) {
-				if l.src[l.pos] == '*' && l.peek(1) == '/' {
-					l.advance() // consume *
-					l.advance() // consume /
-					break
-				}
-				l.advance()
-			}
 		default:
 			return
 		}
 	}
+}
+
+// scanLineComment scans a // single-line comment and returns it as a token.
+func (l *Lexer) scanLineComment() Token {
+	startLine, startCol := l.line, l.col
+	start := l.pos
+	l.advance() // /
+	l.advance() // /
+	for l.pos < len(l.src) && l.src[l.pos] != '\n' {
+		l.advance()
+	}
+	return Token{Type: TokenLineComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
+}
+
+// scanBlockComment scans a /* ... */ block comment and returns it as a token.
+func (l *Lexer) scanBlockComment() Token {
+	startLine, startCol := l.line, l.col
+	start := l.pos
+	l.advance() // /
+	l.advance() // *
+	for l.pos < len(l.src) {
+		if l.src[l.pos] == '*' && l.peek(1) == '/' {
+			l.advance() // *
+			l.advance() // /
+			break
+		}
+		l.advance()
+	}
+	return Token{Type: TokenBlockComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
 }
 
 // scanString scans a double-quoted string literal. Supported escape sequences:
