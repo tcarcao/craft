@@ -236,14 +236,10 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 
 	for _, a := range file.Actors() {
 		nameTok := a.Name()
-		typeTok := a.ActorType()
 		if nameTok == nil {
 			continue
 		}
-		actorType := ""
-		if typeTok != nil {
-			actorType = typeTok.Value
-		}
+		actorType := a.ActorTypeValue()
 		sym := ActorSymbol{
 			Name:   nameTok.Value,
 			Type:   actorType,

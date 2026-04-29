@@ -174,6 +174,25 @@ func (a ActorDecl) ActorType() *SyntaxToken {
 	return a.node.ChildToken(SyntaxKindKwUser, SyntaxKindKwSystem, SyntaxKindKwService)
 }
 
+// ActorTypeValue returns the actor type as a string, handling both keyword types
+// (user/system/service) and open-taxonomy ident types (e.g. "actor partner PaymentGateway").
+func (a ActorDecl) ActorTypeValue() string {
+	if tok := a.ActorType(); tok != nil {
+		return tok.Value
+	}
+	// Open-taxonomy: first ident is type, second is name.
+	tokens := a.node.Tokens()
+	for i, tok := range tokens {
+		if tok.Kind == SyntaxKindIdent {
+			if i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindIdent {
+				return tok.Value
+			}
+			break
+		}
+	}
+	return ""
+}
+
 // Name returns the identifier token for the actor's name.
 func (a ActorDecl) Name() *SyntaxToken {
 	return a.node.ChildToken(SyntaxKindIdent)
