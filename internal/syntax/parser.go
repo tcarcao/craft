@@ -729,39 +729,6 @@ func (p *Parser) parseServiceBody(name string, nameLine, nameCol int, node *Synt
 	return svc, diags
 }
 
-// parseIdentListWithLines parses a comma-separated list of identifiers (or
-// strings) and returns both the values and their 1-based source lines.
-// Used for contexts: so go-to-definition can match the cursor line.
-// Per Q3, contextual keywords (e.g. user, domain, service) are valid
-// identifiers when they appear in list position — accept any keyword token.
-func (p *Parser) parseIdentListWithLines() ([]string, []int) {
-	var items []string
-	var lines []int
-	for {
-		tok := p.peek()
-		var val string
-		switch {
-		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
-			val = tok.Value
-			p.consume()
-		case isKeywordUsedAsIdent(tok.Type):
-			val = tok.Value
-			p.consume()
-		default:
-			return items, lines
-		}
-		items = append(items, val)
-		lines = append(lines, tok.Line)
-		// Optional comma separator.
-		if p.peek().Type == lexer.TokenComma {
-			p.consume()
-		} else {
-			break
-		}
-	}
-	return items, lines
-}
-
 // isKeywordUsedAsIdent returns true for keyword token types that the grammar
 // allows as plain identifiers in list and name positions (Q3: contextual
 // keywords are only keywords by position, not globally reserved).
