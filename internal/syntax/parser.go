@@ -1627,57 +1627,6 @@ func (p *Parser) parseModifierListWithNodes() ([]ast.ArchModifier, []*SyntaxNode
 
 
 
-// parseModifierList parses: modifier (',' modifier)* inside `[...]`.
-// A modifier is: identifier (':' identifier)?
-func (p *Parser) parseModifierList() ([]ast.ArchModifier, []craft.Diagnostic) {
-	var mods []ast.ArchModifier
-	var diags []craft.Diagnostic
-
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBracket {
-		keyTok := p.peek()
-		if keyTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(keyTok.Type) {
-			diags = append(diags, p.diagUnexpected(keyTok, "modifier key"))
-			p.consume()
-			continue
-		}
-		key := keyTok.Value
-		p.consume()
-
-		var value string
-		if p.peek().Type == lexer.TokenColon {
-			p.consume() // consume `:`
-			valTok := p.peek()
-			switch valTok.Type {
-			case lexer.TokenIdent:
-				value = valTok.Value
-				p.consume()
-			case lexer.TokenString:
-				value = valTok.Value // already unquoted by lexer
-				p.consume()
-			case lexer.TokenNumber, lexer.TokenPercentage:
-				value = valTok.Value
-				p.consume()
-			default:
-				if isAnyKeywordAsIdent(valTok.Type) {
-					value = valTok.Value
-					p.consume()
-				} else {
-					diags = append(diags, p.diagUnexpected(valTok, "modifier value (identifier, string, or number)"))
-				}
-			}
-		}
-
-		mods = append(mods, ast.ArchModifier{Key: key, Value: value})
-
-		if p.peek().Type == lexer.TokenComma {
-			p.consume() // consume `,`
-		} else {
-			break
-		}
-	}
-	return mods, diags
-}
-
 // peekAt returns the Nth non-comment token at or after p.pos without advancing.
 // offset=0 is equivalent to peek(); offset=1 is the token after that, etc.
 // Comment tokens are skipped when counting.
