@@ -888,6 +888,76 @@ func TestParseTree_ServiceSyntaxTree(t *testing.T) {
 	}
 }
 
+func TestParseTree_UseCaseSyntaxTree(t *testing.T) {
+	// "when Customer initiates payment" is the trigger (Customer=actor, initiates=verb, payment=phrase).
+	// "PaymentService asks Bank to process" is an action line (asks=action verb).
+	src := "use_case \"Pay\" {\n    when Customer initiates payment\n        PaymentService asks Bank to process\n}"
+	tree, _, diags := syntax.ParseTree(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	ucNodes := tree.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	scenarios := ucNodes[0].ChildNodes(syntax.SyntaxKindScenario)
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	whenTok := scenarios[0].ChildToken(syntax.SyntaxKindKwWhen)
+	if whenTok == nil {
+		t.Error("expected when keyword token in scenario")
+	}
+	actions := scenarios[0].ChildNodes(syntax.SyntaxKindAction)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	verbTok := actions[0].ChildToken(syntax.SyntaxKindKwAsks)
+	if verbTok == nil {
+		t.Error("expected asks verb token in action")
+	}
+}
+
+func TestParseTree_ArchSyntaxTree(t *testing.T) {
+	src := "arch MyArch {\n    presentation: ComponentA\n}"
+	tree, _, diags := syntax.ParseTree(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	archNodes := tree.ChildNodes(syntax.SyntaxKindArchDecl)
+	if len(archNodes) != 1 {
+		t.Fatalf("expected 1 arch node, got %d", len(archNodes))
+	}
+	sections := archNodes[0].ChildNodes(syntax.SyntaxKindArchSection)
+	if len(sections) != 1 {
+		t.Fatalf("expected 1 arch section, got %d", len(sections))
+	}
+	presentationKw := sections[0].ChildToken(syntax.SyntaxKindKwPresentation)
+	if presentationKw == nil {
+		t.Error("expected presentation keyword token")
+	}
+}
+
+func TestParseTree_ExposureSyntaxTree(t *testing.T) {
+	src := "exposure MyExposure {\n    to: Business_User\n    through: rest\n}"
+	tree, _, diags := syntax.ParseTree(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	exposures := tree.ChildNodes(syntax.SyntaxKindExposureDecl)
+	if len(exposures) != 1 {
+		t.Fatalf("expected 1 exposure node, got %d", len(exposures))
+	}
+	rules := exposures[0].ChildNodes(syntax.SyntaxKindDeploymentRule)
+	if len(rules) < 1 {
+		t.Fatalf("expected at least 1 deployment rule, got %d", len(rules))
+	}
+	throughTok := rules[0].ChildToken(syntax.SyntaxKindKwThrough)
+	if throughTok == nil {
+		t.Error("expected through keyword token")
+	}
+}
+
 func TestParseTree_ActorsBlockSyntaxTree(t *testing.T) {
 	src := "actors {\n    user Alice\n    system Bob\n}"
 	tree, file, diags := syntax.ParseTree(src)
