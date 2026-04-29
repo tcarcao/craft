@@ -773,8 +773,14 @@ func (a ActionDecl) Description() string {
 	switch a.Kind() {
 	case "sync_action":
 		target := a.TargetName()
-		connector := a.ConnectorValue()
 		phrase := a.PhraseText()
+		// Read connector from tokens[3] directly: ConnectorValue() only finds KwTo,
+		// missing "for" ident connectors.
+		var connector string
+		tokens := a.node.Tokens()
+		if len(tokens) > 3 && (tokens[3].Kind == SyntaxKindKwTo || isConnectorWord(tokens[3].Value)) && tokens[3].Line == a.Line() {
+			connector = tokens[3].Value
+		}
 		desc := subject + " asks " + target
 		if connector != "" {
 			desc += " " + connector

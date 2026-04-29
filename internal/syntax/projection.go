@@ -25,40 +25,13 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 		if nameTok == nil {
 			continue
 		}
-		typeTok := a.ActorType()
-		var actorType craft.ActorType
-		if typeTok != nil {
-			actorType = craft.ActorType(typeTok.Value)
-		} else {
-			// Open-taxonomy: type is an ident token before the name token.
-			// Mirrors lowerActorDecl: first ident child is type, second is name.
-			var firstIdent, secondIdent *SyntaxToken
-			for _, child := range a.node.Children {
-				tok, ok := child.(*SyntaxToken)
-				if !ok {
-					continue
-				}
-				if tok.Kind == SyntaxKindKwActor {
-					continue
-				}
-				if tok.Kind == SyntaxKindIdent {
-					if firstIdent == nil {
-						firstIdent = tok
-					} else {
-						secondIdent = tok
-						break
-					}
-				}
-			}
-			if firstIdent == nil || secondIdent == nil {
-				// Can't determine type — skip malformed node.
-				continue
-			}
-			actorType = craft.ActorType(firstIdent.Value)
+		typeVal := a.ActorTypeValue()
+		if typeVal == "" {
+			continue // malformed — skip
 		}
 		doc.Actors = append(doc.Actors, craft.Actor{
 			Name: nameTok.Value,
-			Type: actorType,
+			Type: craft.ActorType(typeVal),
 			Line: nameTok.Line,
 		})
 	}
@@ -103,9 +76,16 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 				Actions: []craft.Action{},
 			}
 			for _, action := range sc.Actions() {
-				// Mirror lowerAction: error-node actions increment counter twice and are skipped.
+				// Mirror lowerAction: two paths increment counter twice and skip the action.
+				// Path 1: no subject — first token is SyntaxKindError.
+				// Path 2: subject present but no verb — exactly one non-error token.
 				tokens := action.node.Tokens()
 				if len(tokens) > 0 && tokens[0].Kind == SyntaxKindError {
+					counter++
+					counter++
+					continue
+				}
+				if len(tokens) == 1 {
 					counter++
 					counter++
 					continue
