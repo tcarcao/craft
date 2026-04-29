@@ -54,6 +54,22 @@ func TestDomainDecl_View(t *testing.T) {
 	}
 }
 
+func TestFile_Actors_DocumentOrder(t *testing.T) {
+	src := "actor user Alice\nactors { system Bob }\nactor user Carol"
+	tree, _, _ := syntax.ParseTree(src)
+	actors := syntax.AsFile(tree).Actors()
+	if len(actors) != 3 {
+		t.Fatalf("expected 3 actors, got %d", len(actors))
+	}
+	names := []string{actors[0].Name().Value, actors[1].Name().Value, actors[2].Name().Value}
+	expected := []string{"Alice", "Bob", "Carol"}
+	for i, n := range names {
+		if n != expected[i] {
+			t.Errorf("actor[%d]: expected %q, got %q", i, expected[i], n)
+		}
+	}
+}
+
 func TestFile_SyntaxTree(t *testing.T) {
 	tree, _, _ := syntax.ParseTree("actor user Alice")
 	file := syntax.AsFile(tree)

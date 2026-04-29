@@ -7,52 +7,70 @@ func AsFile(node *SyntaxNode) File { return File{node: node} }
 // File is a typed view over a SyntaxKindFile node.
 type File struct{ node *SyntaxNode }
 
-// Actors returns all ActorDecl views — both standalone and those inside actors{} blocks.
+// Actors returns all ActorDecl views — both standalone and those inside actors{} blocks,
+// in document order.
 func (f File) Actors() []ActorDecl {
 	if f.node == nil {
 		return nil
 	}
 	var result []ActorDecl
-	for _, n := range f.node.ChildNodes(SyntaxKindActorDecl) {
-		result = append(result, ActorDecl{node: n})
-	}
-	for _, block := range f.node.ChildNodes(SyntaxKindActorsBlock) {
-		for _, n := range block.ChildNodes(SyntaxKindActorDecl) {
-			result = append(result, ActorDecl{node: n})
+	for _, child := range f.node.Children {
+		switch c := child.(type) {
+		case *SyntaxNode:
+			switch c.Kind {
+			case SyntaxKindActorDecl:
+				result = append(result, ActorDecl{node: c})
+			case SyntaxKindActorsBlock:
+				for _, n := range c.ChildNodes(SyntaxKindActorDecl) {
+					result = append(result, ActorDecl{node: n})
+				}
+			}
 		}
 	}
 	return result
 }
 
-// Domains returns all DomainDecl views — both standalone and those inside domains{} blocks.
+// Domains returns all DomainDecl views — both standalone and those inside domains{} blocks,
+// in document order.
 func (f File) Domains() []DomainDecl {
 	if f.node == nil {
 		return nil
 	}
 	var result []DomainDecl
-	for _, n := range f.node.ChildNodes(SyntaxKindDomainDecl) {
-		result = append(result, DomainDecl{node: n})
-	}
-	for _, block := range f.node.ChildNodes(SyntaxKindDomainsBlock) {
-		for _, n := range block.ChildNodes(SyntaxKindDomainDecl) {
-			result = append(result, DomainDecl{node: n})
+	for _, child := range f.node.Children {
+		switch c := child.(type) {
+		case *SyntaxNode:
+			switch c.Kind {
+			case SyntaxKindDomainDecl:
+				result = append(result, DomainDecl{node: c})
+			case SyntaxKindDomainsBlock:
+				for _, n := range c.ChildNodes(SyntaxKindDomainDecl) {
+					result = append(result, DomainDecl{node: n})
+				}
+			}
 		}
 	}
 	return result
 }
 
-// Services returns all ServiceDecl views — both standalone and those inside services{} blocks.
+// Services returns all ServiceDecl views — both standalone and those inside services{} blocks,
+// in document order.
 func (f File) Services() []ServiceDecl {
 	if f.node == nil {
 		return nil
 	}
 	var result []ServiceDecl
-	for _, n := range f.node.ChildNodes(SyntaxKindServiceDecl) {
-		result = append(result, ServiceDecl{node: n})
-	}
-	for _, block := range f.node.ChildNodes(SyntaxKindServicesBlock) {
-		for _, n := range block.ChildNodes(SyntaxKindServiceDecl) {
-			result = append(result, ServiceDecl{node: n})
+	for _, child := range f.node.Children {
+		switch c := child.(type) {
+		case *SyntaxNode:
+			switch c.Kind {
+			case SyntaxKindServiceDecl:
+				result = append(result, ServiceDecl{node: c})
+			case SyntaxKindServicesBlock:
+				for _, n := range c.ChildNodes(SyntaxKindServiceDecl) {
+					result = append(result, ServiceDecl{node: n})
+				}
+			}
 		}
 	}
 	return result
