@@ -614,7 +614,7 @@ type exposureBodyFields struct {
 }
 
 // collectAstExposureIdentList collects idents for exposure fields.
-func collectAstExposureIdentList(tokens []*SyntaxToken, i int) ([]string, []int, int) {
+func collectAstExposureIdentList(tokens []*SyntaxToken, i int) ([]string, int) {
 	var names []string
 	for i < len(tokens) {
 		tok := tokens[i]
@@ -635,7 +635,7 @@ func collectAstExposureIdentList(tokens []*SyntaxToken, i int) ([]string, []int,
 		}
 		i++
 	}
-	return names, nil, i
+	return names, i
 }
 
 func (e ExposureDecl) parseExposureBody() exposureBodyFields {
@@ -667,7 +667,7 @@ func (e ExposureDecl) parseExposureBody() exposureBodyFields {
 		}
 		i += 2
 		var names []string
-		names, _, i = collectAstExposureIdentList(tokens, i)
+		names, i = collectAstExposureIdentList(tokens, i)
 		switch fieldName {
 		case "to":
 			f.To = names
@@ -692,8 +692,8 @@ func (e ExposureDecl) Line() int {
 // To returns the `to:` target names.
 func (e ExposureDecl) To() []string { return e.parseExposureBody().To }
 
-// ExposureContexts returns the `contexts:` names.
-func (e ExposureDecl) ExposureContexts() []string { return e.parseExposureBody().Contexts }
+// Contexts returns the `contexts:` names.
+func (e ExposureDecl) Contexts() []string { return e.parseExposureBody().Contexts }
 
 // Through returns the `through:` names.
 func (e ExposureDecl) Through() []string { return e.parseExposureBody().Through }
