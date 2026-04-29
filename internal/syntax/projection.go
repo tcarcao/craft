@@ -23,13 +23,43 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 	// Actors
 	for _, a := range file.Actors() {
 		nameTok := a.Name()
-		typeTok := a.ActorType()
-		if nameTok == nil || typeTok == nil {
+		if nameTok == nil {
 			continue
+		}
+		typeTok := a.ActorType()
+		var actorType craft.ActorType
+		if typeTok != nil {
+			actorType = craft.ActorType(typeTok.Value)
+		} else {
+			// Open-taxonomy: type is an ident token before the name token.
+			// Mirrors lowerActorDecl: first ident child is type, second is name.
+			var firstIdent, secondIdent *SyntaxToken
+			for _, child := range a.node.Children {
+				tok, ok := child.(*SyntaxToken)
+				if !ok {
+					continue
+				}
+				if tok.Kind == SyntaxKindKwActor {
+					continue
+				}
+				if tok.Kind == SyntaxKindIdent {
+					if firstIdent == nil {
+						firstIdent = tok
+					} else if secondIdent == nil {
+						secondIdent = tok
+						break
+					}
+				}
+			}
+			if firstIdent == nil || secondIdent == nil {
+				// Can't determine type — skip malformed node.
+				continue
+			}
+			actorType = craft.ActorType(firstIdent.Value)
 		}
 		doc.Actors = append(doc.Actors, craft.Actor{
 			Name: nameTok.Value,
-			Type: craft.ActorType(typeTok.Value),
+			Type: actorType,
 			Line: nameTok.Line,
 		})
 	}
@@ -74,6 +104,13 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 				Actions: []craft.Action{},
 			}
 			for _, action := range sc.Actions() {
+				// Mirror lowerAction: error-node actions increment counter twice and are skipped.
+				tokens := action.node.Tokens()
+				if len(tokens) > 0 && tokens[0].Kind == SyntaxKindError {
+					counter++
+					counter++
+					continue
+				}
 				counter++
 				actID := fmt.Sprintf("action_%d", counter)
 				outSc.Actions = append(outSc.Actions, projectActionFromView(action, actID))
