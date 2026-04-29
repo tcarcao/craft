@@ -1,6 +1,7 @@
 package syntax_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/tcarcao/craft/internal/syntax"
@@ -218,5 +219,98 @@ func TestActionDecl_Notifies(t *testing.T) {
 	verb := actions[0].Verb()
 	if verb == nil || verb.Kind != syntax.SyntaxKindKwNotifies {
 		t.Errorf("expected SyntaxKindKwNotifies, got %v", verb)
+	}
+}
+
+func TestServiceDecl_BodyAccessors(t *testing.T) {
+	src := `services {
+  PaymentService {
+    contexts: Billing, Checkout
+    data-stores: payments_db
+    language: golang
+  }
+}`
+	tree, _ := syntax.Parse(src)
+	f := syntax.AsFile(tree)
+	svcs := f.Services()
+	if len(svcs) != 1 {
+		t.Fatalf("want 1 service, got %d", len(svcs))
+	}
+	svc := svcs[0]
+	if !svc.IsGrouped() {
+		t.Error("want IsGrouped=true for service inside services{}")
+	}
+	if got := svc.Contexts(); !reflect.DeepEqual(got, []string{"Billing", "Checkout"}) {
+		t.Errorf("Contexts: got %v", got)
+	}
+	if got := svc.DataStores(); !reflect.DeepEqual(got, []string{"payments_db"}) {
+		t.Errorf("DataStores: got %v", got)
+	}
+	if got := svc.Language(); got != "golang" {
+		t.Errorf("Language: got %q", got)
+	}
+}
+
+func TestServiceDecl_StandaloneIsGrouped(t *testing.T) {
+	src := `service UserService {
+  contexts: Auth
+  language: golang
+}`
+	tree, _ := syntax.Parse(src)
+	f := syntax.AsFile(tree)
+	svcs := f.Services()
+	if len(svcs) == 0 {
+		t.Fatal("want at least 1 service")
+	}
+	if svcs[0].IsGrouped() {
+		t.Error("want IsGrouped=false for standalone service")
+	}
+}
+
+func TestDomainDecl_BodyAccessors(t *testing.T) {
+	src := `domain Payments {
+  Billing
+  Checkout
+}`
+	tree, _ := syntax.Parse(src)
+	f := syntax.AsFile(tree)
+	doms := f.Domains()
+	if len(doms) != 1 {
+		t.Fatalf("want 1 domain, got %d", len(doms))
+	}
+	d := doms[0]
+	if d.IsGrouped() {
+		t.Error("want IsGrouped=false for standalone domain")
+	}
+	if got := d.EndLine(); got == 0 {
+		t.Error("want EndLine > 0")
+	}
+}
+
+func TestArchDecl_LineAccessors(t *testing.T) {
+	src := `arch MyArch {
+  presentation:
+    WebApp
+  gateway:
+    APIGateway
+}`
+	tree, _ := syntax.Parse(src)
+	f := syntax.AsFile(tree)
+	archs := f.Archs()
+	if len(archs) != 1 {
+		t.Fatalf("want 1 arch, got %d", len(archs))
+	}
+	a := archs[0]
+	if a.Line() == 0 {
+		t.Error("Line should be non-zero")
+	}
+	if a.EndLine() == 0 {
+		t.Error("EndLine should be non-zero")
+	}
+	if a.PresentationLine() == 0 {
+		t.Error("PresentationLine should be non-zero")
+	}
+	if a.GatewayLine() == 0 {
+		t.Error("GatewayLine should be non-zero")
 	}
 }
