@@ -19,6 +19,7 @@ func Lower(node *SyntaxNode) *ast.File {
 	file := &ast.File{}
 	// Global counter for scenario_N / action_N IDs across all use_cases,
 	// matching ANTLR/parser numbering scheme.
+	// Assumes use-cases appear in document order (guaranteed by parser).
 	ucCounter := 0
 
 	for _, child := range node.Children {

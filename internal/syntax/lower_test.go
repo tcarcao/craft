@@ -18,7 +18,6 @@ func TestLower_ParityWithParse(t *testing.T) {
 		`use_case "Pay" { when Customer asks PaymentService }`,
 	}
 	for _, src := range fixtures {
-		src := src
 		t.Run(src, func(t *testing.T) {
 			// Legacy: Parse() output (current gold standard)
 			legacyFile, _ := syntax.Parse(src)
