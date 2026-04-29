@@ -458,8 +458,11 @@ func (t TriggerDecl) ActorName() string {
 	return tok.Value
 }
 
-// ActorCol returns the 1-based column of the actor/subject name token.
+// ActorCol returns the 1-based column of the actor token, or 0 if not an external trigger.
 func (t TriggerDecl) ActorCol() int {
+	if t.Kind() != "external" {
+		return 0
+	}
 	tok := t.node.ChildToken(SyntaxKindIdent)
 	if tok == nil {
 		return 0
@@ -655,13 +658,18 @@ func (a ActionDecl) EventIsString() bool {
 	return len(tokens) >= 3 && tokens[2].Kind == SyntaxKindString
 }
 
-// VerbValue returns the verb text (e.g. "asks", "notifies", or an arbitrary internal verb).
+// VerbValue returns the verb text.
 func (a ActionDecl) VerbValue() string {
 	tok := a.Verb()
-	if tok == nil {
-		return ""
+	if tok != nil {
+		return tok.Value
 	}
-	return tok.Value
+	// internal_action: verb is the ident at tokens[1]
+	tokens := a.node.Tokens()
+	if len(tokens) >= 2 {
+		return tokens[1].Value
+	}
+	return ""
 }
 
 // ConnectorValue returns the connector word text (e.g. "to", "for"), or empty.
@@ -683,7 +691,7 @@ func (a ActionDecl) PhraseText() string {
 	switch a.Kind() {
 	case "sync_action":
 		start = 3 // subject, asks, target
-		if start < len(tokens) && (tokens[start].Kind == SyntaxKindKwTo || isConnectorWord(tokens[start].Value)) {
+		if start < len(tokens) && (tokens[start].Kind == SyntaxKindKwTo || isConnectorWord(tokens[start].Value)) && tokens[start].Line == a.Line() {
 			start++ // skip connector
 		}
 	case "return_action":
@@ -691,12 +699,12 @@ func (a ActionDecl) PhraseText() string {
 		if start < len(tokens) && tokens[start].Kind == SyntaxKindKwTo {
 			start += 2 // skip `to target`
 		}
-		if start < len(tokens) && isConnectorWord(tokens[start].Value) {
+		if start < len(tokens) && isConnectorWord(tokens[start].Value) && tokens[start].Line == a.Line() {
 			start++
 		}
 	case "internal_action":
 		start = 2 // subject, verb
-		if start < len(tokens) && isConnectorWord(tokens[start].Value) {
+		if start < len(tokens) && isConnectorWord(tokens[start].Value) && tokens[start].Line == a.Line() {
 			start++
 		}
 	case "async_action":
