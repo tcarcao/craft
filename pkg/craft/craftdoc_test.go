@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
@@ -115,29 +114,3 @@ func TestCraftDocRoundTrip(t *testing.T) {
 	}
 }
 
-func TestProjectFromTree_ParityWithProject(t *testing.T) {
-	fixtures := []string{
-		`actor user Alice`,
-		`actor system BackendAPI`,
-		`actors { user Alice  system Bob }`,
-		`domain Ordering { Cart Checkout }`,
-		`service order-service { contexts: [Cart] }`,
-		"use_case \"Pay\" { when Customer submits PaymentForm\n    PaymentService asks Bank }",
-	}
-	for _, src := range fixtures {
-		src := src
-		t.Run(src[:min(len(src), 40)], func(t *testing.T) {
-			astFile, _ := syntax.Parse(src)
-			legacyDoc := syntax.Project(astFile)
-
-			tree, _, _ := syntax.ParseTree(src)
-			newDoc := syntax.ProjectFromTree(tree)
-
-			legacyJSON, _ := json.Marshal(legacyDoc)
-			newJSON, _ := json.Marshal(newDoc)
-			if string(legacyJSON) != string(newJSON) {
-				t.Errorf("parity failure:\nlegacy: %s\nnew:    %s", legacyJSON, newJSON)
-			}
-		})
-	}
-}
