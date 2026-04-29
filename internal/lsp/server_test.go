@@ -1535,7 +1535,10 @@ func TestSemanticTokens_ExposureAndArch(t *testing.T) {
 	// Line 4:   presentation:
 	// Line 5:     Gateway             — Gateway at col 4 (0-based), length 7
 	// Line 6: }
-	const craftSrc = "exposure PaymentAPI {\n  to: external\n}\narch MyArch {\n  presentation:\n    Gateway\n}"
+	// Line 7: actors {
+	// Line 8:   partner Alice        — partner (open-taxonomy actor type) at col 2, length 7 → tokenType 28 (craft-actor-type)
+	// Line 9: }
+	const craftSrc = "exposure PaymentAPI {\n  to: external\n}\narch MyArch {\n  presentation:\n    Gateway\n}\nactors {\n  partner Alice\n}"
 
 	id++
 	if err := writeMsg(testOut, lspMsg{
@@ -1618,6 +1621,13 @@ func TestSemanticTokens_ExposureAndArch(t *testing.T) {
 		t.Errorf("expected token at line=5, col=4 (arch component Gateway); all tokens: %v", tokens)
 	} else if tk.tokenType != 5 {
 		t.Errorf("arch component name: tokenType=%d, want 5 (craft-component-name); all tokens: %v", tk.tokenType, tokens)
+	}
+
+	// partner (open-taxonomy actor type) at line=8, col=2, len=7 → tokenType 28 (craft-actor-type)
+	if tok, ok := byPos[[2]uint32{8, 2}]; !ok {
+		t.Error("partner not found at expected position (line=8, col=2)")
+	} else if tok.tokenType != 28 {
+		t.Errorf("partner: got tokenType %d, want 28 (craft-actor-type)", tok.tokenType)
 	}
 
 	id2 := 99
