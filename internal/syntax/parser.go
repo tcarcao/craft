@@ -29,8 +29,8 @@ type Parser struct {
 // A non-nil File is always returned even when diagnostics are present (island
 // parsing: each top-level block is parsed independently).
 func Parse(src string) (*ast.File, []craft.Diagnostic) {
-	_, file, diags := ParseTree(src)
-	return file, diags
+	tree, _, diags := ParseTree(src)
+	return Lower(tree), diags
 }
 
 // ParseTree parses the given source text, returning both a lossless syntax tree
@@ -581,7 +581,7 @@ func (p *Parser) parseServicesBlock() (*SyntaxNode, []*ast.ServiceDecl, []craft.
 		}
 		svcNode.Children = append(svcNode.Children, p.consumeAs(SyntaxKindLBrace))
 
-		svc, d := p.parseServiceBody(name, nameLine, nameCol)
+		svc, d := p.parseServiceBody(name, nameLine, nameCol, svcNode)
 		diags = append(diags, d...)
 		svc.IsGrouped = true
 		services = append(services, svc)
@@ -654,7 +654,7 @@ func (p *Parser) parseServiceStatement() (*SyntaxNode, *ast.ServiceDecl, []craft
 	}
 	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
 
-	svc, d := p.parseServiceBody(name, nameLine, nameCol)
+	svc, d := p.parseServiceBody(name, nameLine, nameCol, node)
 	diags = append(diags, d...)
 
 	if p.atEOF() {
@@ -675,7 +675,8 @@ func (p *Parser) parseServiceStatement() (*SyntaxNode, *ast.ServiceDecl, []craft
 }
 
 // parseServiceBody parses the fields inside a service { ... } block.
-func (p *Parser) parseServiceBody(name string, nameLine, nameCol int) (*ast.ServiceDecl, []craft.Diagnostic) {
+// node receives all consumed tokens as children for lossless tree reconstruction.
+func (p *Parser) parseServiceBody(name string, nameLine, nameCol int, node *SyntaxNode) (*ast.ServiceDecl, []craft.Diagnostic) {
 	svc := &ast.ServiceDecl{Name: name, Line: nameLine, Column: nameCol}
 	var diags []craft.Diagnostic
 
@@ -692,29 +693,29 @@ func (p *Parser) parseServiceBody(name string, nameLine, nameCol int) (*ast.Serv
 		}
 
 		fieldName := tok.Value
-		p.consume() // consume field name
+		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent)) // field name
 
 		// Expect colon after field name.
 		if p.peek().Type != lexer.TokenColon {
 			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
 			continue
 		}
-		p.consume() // consume `:`
+		node.Children = append(node.Children, p.consumeAs(SyntaxKindColon))
 
 		switch fieldName {
 		case "contexts":
-			svc.Contexts, svc.ContextLines = p.parseIdentListWithLines()
+			svc.Contexts, svc.ContextLines = p.parseIdentListWithLinesIntoNode(node)
 		case "data-stores":
-			svc.DataStores = p.parseIdentList()
+			svc.DataStores = p.parseIdentListIntoNode(node)
 		case "language":
 			if p.peek().Type == lexer.TokenIdent {
 				svc.Language = p.peek().Value
-				p.consume()
+				node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
 			} else {
 				diags = append(diags, p.diagUnexpected(p.peek(), "language identifier"))
 			}
 		case "deployment":
-			dt, rules, dd := p.parseDeploymentSpec()
+			dt, rules, dd := p.parseDeploymentSpecIntoNode(node)
 			diags = append(diags, dd...)
 			svc.DeploymentType = dt
 			svc.DeploymentRules = rules
@@ -1957,9 +1958,9 @@ func (p *Parser) parseExposureBlock() (*SyntaxNode, *ast.ExposureDecl, []craft.D
 
 		switch fieldName {
 		case "to":
-			exp.To = p.parseIdentList()
+			exp.To = p.parseIdentListIntoNode(node)
 		case "contexts":
-			exp.Contexts = p.parseIdentList()
+			exp.Contexts = p.parseIdentListIntoNode(node)
 		case "through":
 			// Build a DeploymentRule node containing the `through` keyword token (already added)
 			// and value tokens.
@@ -2019,4 +2020,100 @@ func (p *Parser) parseIdentListIntoNode(node *SyntaxNode) []string {
 		}
 	}
 	return items
+}
+
+// parseIdentListWithLinesIntoNode parses a comma-separated ident list, appends tokens to node,
+// and returns both the values and their 1-based source lines.
+// Used for service contexts: field so that go-to-definition can match the cursor line.
+func (p *Parser) parseIdentListWithLinesIntoNode(node *SyntaxNode) ([]string, []int) {
+	var items []string
+	var lines []int
+	for {
+		tok := p.peek()
+		var val string
+		switch {
+		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
+			val = tok.Value
+			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		case isKeywordUsedAsIdent(tok.Type):
+			val = tok.Value
+			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		default:
+			return items, lines
+		}
+		items = append(items, val)
+		lines = append(lines, tok.Line)
+		if p.peek().Type == lexer.TokenComma {
+			node.Children = append(node.Children, p.consumeAs(SyntaxKindComma))
+		} else {
+			break
+		}
+	}
+	return items, lines
+}
+
+// parseDeploymentSpecIntoNode parses deployment spec and appends tokens to node.
+func (p *Parser) parseDeploymentSpecIntoNode(node *SyntaxNode) (string, []ast.DeploymentRule, []craft.Diagnostic) {
+	var diags []craft.Diagnostic
+
+	typeTok := p.peek()
+	var dt string
+	if typeTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(typeTok.Type) {
+		dt = typeTok.Value
+		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+	} else {
+		diags = append(diags, p.diagUnexpected(typeTok, "deployment type identifier"))
+		return "", nil, diags
+	}
+
+	if p.peek().Type != lexer.TokenLParen {
+		return dt, nil, diags
+	}
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindLParen))
+
+	var rules []ast.DeploymentRule
+	for !p.atEOF() && p.peek().Type != lexer.TokenRParen {
+		pctTok := p.peek()
+		if pctTok.Type != lexer.TokenPercentage {
+			diags = append(diags, p.diagUnexpected(pctTok, "percentage (e.g. 90%)"))
+			p.consume()
+			continue
+		}
+		pct := pctTok.Value
+		node.Children = append(node.Children, p.consumeAs(SyntaxKindPercentage))
+
+		if p.peek().Type != lexer.TokenArrow {
+			diags = append(diags, p.diagUnexpected(p.peek(), "->"))
+			p.consume()
+			continue
+		}
+		node.Children = append(node.Children, p.consumeAs(SyntaxKindArrow))
+
+		targetTok := p.peek()
+		var target string
+		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
+			target = targetTok.Value
+			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		} else {
+			diags = append(diags, p.diagUnexpected(targetTok, "deployment target identifier"))
+		}
+
+		rules = append(rules, ast.DeploymentRule{Percentage: pct, Target: target})
+
+		if p.peek().Type == lexer.TokenComma {
+			node.Children = append(node.Children, p.consumeAs(SyntaxKindComma))
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed deployment rule list (missing `)`)",
+			Severity: craft.SeverityError,
+			Range:    tokenRange(typeTok),
+		})
+		return dt, rules, diags
+	}
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindRParen))
+	return dt, rules, diags
 }
