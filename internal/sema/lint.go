@@ -1,8 +1,8 @@
-// Package sema — lint rules for Craft DSL (v2 AST, B5).
+// Package sema — lint rules for Craft DSL (v2 typed views, B5).
 // These rules mirror the heuristics in internal/linter/ but operate on
-// the v2 AST (internal/ast) and the workspace symbol table rather than
-// the ANTLR parser.DSLModel. The old linter package remains intact until
-// ANTLR is deleted in S12.
+// the syntax tree typed views (internal/syntax/ast.go) and the workspace
+// symbol table rather than the ANTLR parser.DSLModel. The old linter
+// package remains intact until ANTLR is deleted in S12.
 package sema
 
 import (
@@ -10,28 +10,19 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // LintWorkspace runs style and consistency checks across all workspace files.
 // It accepts the per-file syntax tree map and the merged workspace symbol table.
-// Each syntax tree is lowered internally to *ast.File so callers do not need to
-// hold a separate *ast.File reference. Returns diagnostics with SourceURI
-// populated so callers can route each finding to the correct file.
+// Returns diagnostics with SourceURI populated so callers can route each
+// finding to the correct file.
 func LintWorkspace(perFileTrees map[string]*syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
-	// Lower each syntax tree to *ast.File for the lint rules, which still
-	// access the full semantic data (TriggerType, EventColumn, etc.) that the
-	// typed views do not yet expose.
-	perFileASTs := make(map[string]*ast.File, len(perFileTrees))
-	for uri, tree := range perFileTrees {
-		perFileASTs[uri] = syntax.Lower(tree)
-	}
 	var diags []craft.Diagnostic
-	diags = append(diags, lintDeadEvents(perFileASTs)...)
-	diags = append(diags, lintUnusedActors(perFileASTs, ws)...)
-	diags = append(diags, lintEventPastTense(perFileASTs)...)
+	diags = append(diags, lintDeadEvents(perFileTrees)...)
+	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
+	diags = append(diags, lintEventPastTense(perFileTrees)...)
 	return diags
 }
 
@@ -48,34 +39,37 @@ func eventTokenLen(name string, isString bool) int {
 	return len(name)
 }
 
-func lintDeadEvents(perFileASTs map[string]*ast.File) []craft.Diagnostic {
+func lintDeadEvents(perFileTrees map[string]*syntax.SyntaxNode) []craft.Diagnostic {
 	type pubSite struct {
-		uri      string
-		line     int
-		col      int // 1-based column of the event token
-		tokenLen int // source length of the event token (includes quotes if string)
+		uri, event string
+		line, col  int
+		tokenLen   int
 	}
 	published := map[string]pubSite{}
 	consumed := map[string]bool{}
 
-	for uri, f := range perFileASTs {
-		for _, uc := range f.UseCases {
-			for _, sc := range uc.Scenarios {
-				// Consume: event-trigger or domain-listen trigger
-				if sc.Trigger.TriggerType == "event" || sc.Trigger.TriggerType == "domain_listen" {
-					if sc.Trigger.Event != "" {
-						consumed[sc.Trigger.Event] = true
+	for uri, tree := range perFileTrees {
+		file := syntax.AsFile(tree)
+		for _, uc := range file.UseCases() {
+			for _, sc := range uc.Scenarios() {
+				trigger := sc.Trigger()
+				if trigger.Kind() == "event" || trigger.Kind() == "domain_listen" {
+					if ev := trigger.EventValue(); ev != "" {
+						consumed[ev] = true
 					}
 				}
-				// Publish: async actions (notifies)
-				for _, a := range sc.Actions {
-					if a.ActionType == "async_action" && a.Event != "" {
-						if _, seen := published[a.Event]; !seen {
-							published[a.Event] = pubSite{
-								uri:      uri,
-								line:     a.Line,
-								col:      a.EventColumn,
-								tokenLen: eventTokenLen(a.Event, a.EventIsString),
+				for _, action := range sc.Actions() {
+					if action.Kind() == "async_action" {
+						ev := action.EventValue()
+						if ev != "" {
+							if _, seen := published[ev]; !seen {
+								published[ev] = pubSite{
+									uri:      uri,
+									event:    ev,
+									line:     action.Line(),
+									col:      action.EventCol(),
+									tokenLen: eventTokenLen(ev, action.EventIsString()),
+								}
 							}
 						}
 					}
@@ -93,8 +87,8 @@ func lintDeadEvents(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 				Message:  fmt.Sprintf("event %q is published but never consumed", event),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(site.line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(site.line), Character: startChar + site.tokenLen},
+					Start: craft.Position{Line: lineToLSP(site.line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(site.line), Character: startChar + site.tokenLen},
 				},
 				SourceURI: site.uri,
 			})
@@ -107,26 +101,28 @@ func lintDeadEvents(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 // Warning: an actor is declared but never appears as the subject of any
 // external trigger (`when <Actor> …`) in any workspace file.
 
-func lintUnusedActors(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []craft.Diagnostic {
+func lintUnusedActors(perFileTrees map[string]*syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
 	if len(ws.Actors) == 0 {
 		return nil
 	}
 
 	used := map[string]bool{}
-	for _, f := range perFileASTs {
-		for _, uc := range f.UseCases {
-			for _, sc := range uc.Scenarios {
-				switch sc.Trigger.TriggerType {
+	for _, tree := range perFileTrees {
+		file := syntax.AsFile(tree)
+		for _, uc := range file.UseCases() {
+			for _, sc := range uc.Scenarios() {
+				trigger := sc.Trigger()
+				switch trigger.Kind() {
 				case "external":
-					if sc.Trigger.Actor != "" {
-						used[sc.Trigger.Actor] = true
+					if actor := trigger.ActorName(); actor != "" {
+						used[actor] = true
 					}
 				case "domain_listen":
 					// An actor can be the subject of a listens trigger; the parser
 					// stores the subject in Context regardless of whether it is an
 					// actor or a bounded context.
-					if sc.Trigger.Context != "" {
-						used[sc.Trigger.Context] = true
+					if ctx := trigger.ContextName(); ctx != "" {
+						used[ctx] = true
 					}
 				}
 			}
@@ -142,8 +138,8 @@ func lintUnusedActors(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []c
 				Message:  fmt.Sprintf("actor %q is defined but never used as a trigger subject", name),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(sym.Line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(sym.Line), Character: startChar + len(name)},
+					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(name)},
 				},
 				SourceURI: sym.URI,
 			})
@@ -158,7 +154,7 @@ func lintUnusedActors(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []c
 
 var pastTenseRe = regexp.MustCompile(`(?i)\b\w+(ed|en)\b`)
 
-func lintEventPastTense(perFileASTs map[string]*ast.File) []craft.Diagnostic {
+func lintEventPastTense(perFileTrees map[string]*syntax.SyntaxNode) []craft.Diagnostic {
 	reported := map[string]bool{}
 	var diags []craft.Diagnostic
 
@@ -174,23 +170,30 @@ func lintEventPastTense(perFileASTs map[string]*ast.File) []craft.Diagnostic {
 				Message:  fmt.Sprintf("event %q does not appear to use past tense", event),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(line), Character: startChar + eventTokenLen(event, isString)},
+					Start: craft.Position{Line: lineToLSP(line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(line), Character: startChar + eventTokenLen(event, isString)},
 				},
 				SourceURI: uri,
 			})
 		}
 	}
 
-	for uri, f := range perFileASTs {
-		for _, uc := range f.UseCases {
-			for _, sc := range uc.Scenarios {
-				if sc.Trigger.TriggerType == "event" || sc.Trigger.TriggerType == "domain_listen" {
-					check(sc.Trigger.Event, uri, sc.Trigger.Line, sc.Trigger.EventColumn, sc.Trigger.EventIsString)
+	for uri, tree := range perFileTrees {
+		file := syntax.AsFile(tree)
+		for _, uc := range file.UseCases() {
+			for _, sc := range uc.Scenarios() {
+				trigger := sc.Trigger()
+				whenTok := sc.When()
+				triggerLine := 0
+				if whenTok != nil {
+					triggerLine = whenTok.Line
 				}
-				for _, a := range sc.Actions {
-					if a.ActionType == "async_action" {
-						check(a.Event, uri, a.Line, a.EventColumn, a.EventIsString)
+				if k := trigger.Kind(); k == "event" || k == "domain_listen" {
+					check(trigger.EventValue(), uri, triggerLine, trigger.EventCol(), trigger.EventIsString())
+				}
+				for _, action := range sc.Actions() {
+					if action.Kind() == "async_action" {
+						check(action.EventValue(), uri, action.Line(), action.EventCol(), action.EventIsString())
 					}
 				}
 			}
