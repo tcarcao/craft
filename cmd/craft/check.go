@@ -37,11 +37,11 @@ func checkCmd() *cobra.Command {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 
-			astFile, parseDiags := syntax.Parse(string(content))
+			tree, astFile, parseDiags := syntax.ParseTree(string(content))
 			doc := syntax.Project(astFile)
 
 			uri := "file://" + args[0]
-			_, semaDiags := sema.AnalyzeFile(uri, astFile)
+			_, semaDiags := sema.AnalyzeFile(uri, tree)
 
 			allDiags := append(parseDiags, semaDiags...)
 			if allDiags == nil {

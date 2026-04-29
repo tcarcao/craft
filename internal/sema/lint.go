@@ -11,14 +11,23 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/internal/ast"
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // LintWorkspace runs style and consistency checks across all workspace files.
-// It accepts the per-file AST map and the merged workspace symbol table.
-// Returns diagnostics with SourceURI populated so callers can route each
-// finding to the correct file.
-func LintWorkspace(perFileASTs map[string]*ast.File, ws WorkspaceSymbols) []craft.Diagnostic {
+// It accepts the per-file syntax tree map and the merged workspace symbol table.
+// Each syntax tree is lowered internally to *ast.File so callers do not need to
+// hold a separate *ast.File reference. Returns diagnostics with SourceURI
+// populated so callers can route each finding to the correct file.
+func LintWorkspace(perFileTrees map[string]*syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
+	// Lower each syntax tree to *ast.File for the lint rules, which still
+	// access the full semantic data (TriggerType, EventColumn, etc.) that the
+	// typed views do not yet expose.
+	perFileASTs := make(map[string]*ast.File, len(perFileTrees))
+	for uri, tree := range perFileTrees {
+		perFileASTs[uri] = syntax.Lower(tree)
+	}
 	var diags []craft.Diagnostic
 	diags = append(diags, lintDeadEvents(perFileASTs)...)
 	diags = append(diags, lintUnusedActors(perFileASTs, ws)...)

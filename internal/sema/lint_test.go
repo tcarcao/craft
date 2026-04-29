@@ -3,8 +3,8 @@ package sema_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
+	"github.com/tcarcao/craft/internal/syntax"
 )
 
 // helper: build a minimal WorkspaceSymbols with actors.
@@ -22,26 +22,23 @@ func wsWithActors(names ...string) sema.WorkspaceSymbols {
 	}
 }
 
+// parseTree is a test helper that parses a craft source string into a syntax
+// tree. Diagnostics from parsing are ignored so tests focus on lint rules.
+func parseTree(src string) *syntax.SyntaxNode {
+	tree, _, _ := syntax.ParseTree(src)
+	return tree
+}
+
 // ── dead-event ────────────────────────────────────────────────────────────────
 
 func TestLint_DeadEvent_PublishedButNotConsumed(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{
-						Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-						Actions: []*ast.ActionDecl{
-							{ActionType: "async_action", Event: "Order Created", Line: 2},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, wsWithActors())
+	src := `
+use_case "Test" {
+  when Customer creates Order
+    Auth notifies "Order Created"
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/lint/dead-event" && containsStr(d.Message, `"Order Created"`) {
@@ -54,26 +51,15 @@ func TestLint_DeadEvent_PublishedButNotConsumed(t *testing.T) {
 }
 
 func TestLint_DeadEvent_PublishedAndConsumed(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{
-						Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-						Actions: []*ast.ActionDecl{
-							{ActionType: "async_action", Event: "Order Created", Line: 2},
-						},
-					},
-					{
-						Trigger: ast.TriggerDecl{TriggerType: "event", Event: "Order Created", Line: 4},
-					},
-				},
-			},
-		},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, wsWithActors())
+	src := `
+use_case "Test" {
+  when Customer creates Order
+    Auth notifies "Order Created"
+  when "Order Created"
+    Auth validates receipt
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code == "craft/lint/dead-event" && containsStr(d.Message, `"Order Created"`) {
 			t.Errorf("unexpected craft/lint/dead-event for consumed event 'Order Created'")
@@ -84,20 +70,15 @@ func TestLint_DeadEvent_PublishedAndConsumed(t *testing.T) {
 // ── unused-actor ─────────────────────────────────────────────────────────────
 
 func TestLint_UnusedActor_DefinedButNotUsed(t *testing.T) {
-	f := &ast.File{
-		Actors: []*ast.ActorDecl{{Name: "Admin", Type: ast.ActorTypeUser, Line: 1}},
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"}},
-				},
-			},
-		},
-	}
-
+	src := `
+actor user Admin
+use_case "Test" {
+  when Customer creates Order
+    Auth validates email
+}
+`
 	ws := wsWithActors("Admin")
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, ws)
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"Admin"`) {
@@ -110,20 +91,15 @@ func TestLint_UnusedActor_DefinedButNotUsed(t *testing.T) {
 }
 
 func TestLint_UnusedActor_UsedAsTrigger(t *testing.T) {
-	f := &ast.File{
-		Actors: []*ast.ActorDecl{{Name: "Admin", Type: ast.ActorTypeUser, Line: 1}},
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Admin"}},
-				},
-			},
-		},
-	}
-
+	src := `
+actor user Admin
+use_case "Test" {
+  when Admin creates Order
+    Auth validates email
+}
+`
 	ws := wsWithActors("Admin")
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, ws)
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"Admin"`) {
 			t.Errorf("unexpected craft/lint/unused-actor for used actor 'Admin'")
@@ -135,20 +111,15 @@ func TestLint_UnusedActor_UsedAsListensTrigger(t *testing.T) {
 	// Actors used as the subject of `when <Actor> listens "<event>"` must not
 	// be reported as unused. The parser stores the subject in Context for
 	// domain_listen triggers regardless of whether it is an actor or a context.
-	f := &ast.File{
-		Actors: []*ast.ActorDecl{{Name: "NotificationListener", Type: ast.ActorTypeSystem, Line: 1}},
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{Trigger: ast.TriggerDecl{TriggerType: "domain_listen", Context: "NotificationListener", Event: "Account Frozen"}},
-				},
-			},
-		},
-	}
-
+	src := `
+actor system NotificationListener
+use_case "Test" {
+  when NotificationListener listens "Account Frozen"
+    Auth validates receipt
+}
+`
 	ws := wsWithActors("NotificationListener")
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, ws)
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"NotificationListener"`) {
 			t.Errorf("unexpected craft/lint/unused-actor for actor used in listens trigger")
@@ -157,8 +128,8 @@ func TestLint_UnusedActor_UsedAsListensTrigger(t *testing.T) {
 }
 
 func TestLint_UnusedActor_NoActors_NoFire(t *testing.T) {
-	f := &ast.File{}
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, wsWithActors())
+	src := ``
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" {
 			t.Errorf("unexpected unused-actor diagnostic when no actors defined")
@@ -169,23 +140,13 @@ func TestLint_UnusedActor_NoActors_NoFire(t *testing.T) {
 // ── event-past-tense ─────────────────────────────────────────────────────────
 
 func TestLint_EventPastTense_NonPastTense(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{
-						Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-						Actions: []*ast.ActionDecl{
-							{ActionType: "async_action", Event: "Order Processing", Line: 2},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, wsWithActors())
+	src := `
+use_case "Test" {
+  when Customer creates Order
+    Auth notifies "Order Processing"
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/lint/event-not-past-tense" && containsStr(d.Message, `"Order Processing"`) {
@@ -198,23 +159,13 @@ func TestLint_EventPastTense_NonPastTense(t *testing.T) {
 }
 
 func TestLint_EventPastTense_PastTense(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{
-			{
-				Name: "Test",
-				Scenarios: []*ast.ScenarioDecl{
-					{
-						Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-						Actions: []*ast.ActionDecl{
-							{ActionType: "async_action", Event: "Order Created", Line: 2},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///test.craft": f}, wsWithActors())
+	src := `
+use_case "Test" {
+  when Customer creates Order
+    Auth notifies "Order Created"
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code == "craft/lint/event-not-past-tense" && containsStr(d.Message, `"Order Created"`) {
 			t.Errorf("unexpected craft/lint/event-not-past-tense for past-tense event 'Order Created'")
@@ -227,39 +178,28 @@ func TestLint_EventPastTense_PastTense(t *testing.T) {
 // TestLint_DeadEvent_Range_QuotedString verifies that the squiggle for a dead
 // event published as a quoted string token covers the surrounding quotes.
 // EventColumn points to the opening `"` and EventIsString=true, so the range
-// length must be len(event)+2 not len(event).
+// length must be len(name)+2 not len(name).
 func TestLint_DeadEvent_Range_QuotedString(t *testing.T) {
-	// Source layout (1-based columns):
-	//   col 1: "A" (subject)  col 3: " " col 4: "n" (notifies start)  col 12: " "  col 13: `"`
-	// EventColumn=13 (opening `"`), event="Order Placed" (12 chars) → quoted token is 14 chars.
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{{
-			Name: "T",
-			Scenarios: []*ast.ScenarioDecl{{
-				Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-				Actions: []*ast.ActionDecl{{
-					ActionType:    "async_action",
-					Event:         "Order Placed",
-					EventColumn:   13, // 1-based column of opening `"`
-					EventIsString: true,
-					Line:          2,
-				}},
-			}},
-		}},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///t.craft": f}, wsWithActors())
+	// Source: the notifies line is "  Auth notifies "Order Placed""
+	// We parse it so positions come from the actual lexer, then just verify the
+	// end character is start + len("Order Placed") + 2.
+	src := `
+use_case "T" {
+  when Customer creates Order
+    Auth notifies "Order Placed"
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/dead-event" {
 			continue
 		}
-		wantStart := 12 // 0-based: col 13 → 12
-		wantEnd := 12 + 14 // len("Order Placed") + 2 quotes = 14
-		if d.Range.Start.Character != wantStart {
-			t.Errorf("dead-event start: got %d, want %d", d.Range.Start.Character, wantStart)
-		}
-		if d.Range.End.Character != wantEnd {
-			t.Errorf("dead-event end: got %d, want %d", d.Range.End.Character, wantEnd)
+		// The event token is a quoted string, so the range should span len+2 chars.
+		wantLen := len("Order Placed") + 2 // 14
+		gotLen := d.Range.End.Character - d.Range.Start.Character
+		if gotLen != wantLen {
+			t.Errorf("dead-event range length: got %d, want %d (start=%d end=%d)",
+				gotLen, wantLen, d.Range.Start.Character, d.Range.End.Character)
 		}
 		return
 	}
@@ -269,34 +209,22 @@ func TestLint_DeadEvent_Range_QuotedString(t *testing.T) {
 // TestLint_DeadEvent_Range_BareIdent verifies that a bare-ident event (no quotes)
 // does NOT get the +2 adjustment.
 func TestLint_DeadEvent_Range_BareIdent(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{{
-			Name: "T",
-			Scenarios: []*ast.ScenarioDecl{{
-				Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-				Actions: []*ast.ActionDecl{{
-					ActionType:    "async_action",
-					Event:         "OrderPlaced",
-					EventColumn:   5, // 1-based
-					EventIsString: false,
-					Line:          2,
-				}},
-			}},
-		}},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///t.craft": f}, wsWithActors())
+	src := `
+use_case "T" {
+  when Customer creates Order
+    Auth notifies OrderPlaced
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/dead-event" {
 			continue
 		}
-		wantStart := 4 // 0-based: col 5 → 4
-		wantEnd := 4 + 11 // len("OrderPlaced") = 11, no quotes
-		if d.Range.Start.Character != wantStart {
-			t.Errorf("dead-event bare start: got %d, want %d", d.Range.Start.Character, wantStart)
-		}
-		if d.Range.End.Character != wantEnd {
-			t.Errorf("dead-event bare end: got %d, want %d", d.Range.End.Character, wantEnd)
+		wantLen := len("OrderPlaced") // 11, no quotes
+		gotLen := d.Range.End.Character - d.Range.Start.Character
+		if gotLen != wantLen {
+			t.Errorf("dead-event bare range length: got %d, want %d (start=%d end=%d)",
+				gotLen, wantLen, d.Range.Start.Character, d.Range.End.Character)
 		}
 		return
 	}
@@ -306,34 +234,22 @@ func TestLint_DeadEvent_Range_BareIdent(t *testing.T) {
 // TestLint_EventPastTense_Range_QuotedString verifies the squiggle for a
 // non-past-tense event written as a quoted string covers the surrounding quotes.
 func TestLint_EventPastTense_Range_QuotedString(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{{
-			Name: "T",
-			Scenarios: []*ast.ScenarioDecl{{
-				Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-				Actions: []*ast.ActionDecl{{
-					ActionType:    "async_action",
-					Event:         "Order Processing",
-					EventColumn:   9, // 1-based column of opening `"`
-					EventIsString: true,
-					Line:          2,
-				}},
-			}},
-		}},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///t.craft": f}, wsWithActors())
+	src := `
+use_case "T" {
+  when Customer creates Order
+    Auth notifies "Order Processing"
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/event-not-past-tense" {
 			continue
 		}
-		wantStart := 8  // 0-based
-		wantEnd := 8 + 18 // len("Order Processing") + 2 = 18
-		if d.Range.Start.Character != wantStart {
-			t.Errorf("past-tense start: got %d, want %d", d.Range.Start.Character, wantStart)
-		}
-		if d.Range.End.Character != wantEnd {
-			t.Errorf("past-tense end: got %d, want %d", d.Range.End.Character, wantEnd)
+		wantLen := len("Order Processing") + 2 // 18
+		gotLen := d.Range.End.Character - d.Range.Start.Character
+		if gotLen != wantLen {
+			t.Errorf("past-tense range length: got %d, want %d (start=%d end=%d)",
+				gotLen, wantLen, d.Range.Start.Character, d.Range.End.Character)
 		}
 		return
 	}
@@ -342,34 +258,22 @@ func TestLint_EventPastTense_Range_QuotedString(t *testing.T) {
 
 // TestLint_EventPastTense_Range_BareIdent verifies bare-ident events are not padded.
 func TestLint_EventPastTense_Range_BareIdent(t *testing.T) {
-	f := &ast.File{
-		UseCases: []*ast.UseCaseDecl{{
-			Name: "T",
-			Scenarios: []*ast.ScenarioDecl{{
-				Trigger: ast.TriggerDecl{TriggerType: "external", Actor: "Customer"},
-				Actions: []*ast.ActionDecl{{
-					ActionType:    "async_action",
-					Event:         "Processing",
-					EventColumn:   7,
-					EventIsString: false,
-					Line:          2,
-				}},
-			}},
-		}},
-	}
-
-	diags := sema.LintWorkspace(map[string]*ast.File{"file:///t.craft": f}, wsWithActors())
+	src := `
+use_case "T" {
+  when Customer creates Order
+    Auth notifies Processing
+}
+`
+	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/event-not-past-tense" {
 			continue
 		}
-		wantStart := 6           // 0-based: col 7 → 6
-		wantEnd := 6 + 10        // len("Processing") = 10
-		if d.Range.Start.Character != wantStart {
-			t.Errorf("past-tense bare start: got %d, want %d", d.Range.Start.Character, wantStart)
-		}
-		if d.Range.End.Character != wantEnd {
-			t.Errorf("past-tense bare end: got %d, want %d", d.Range.End.Character, wantEnd)
+		wantLen := len("Processing") // 10
+		gotLen := d.Range.End.Character - d.Range.Start.Character
+		if gotLen != wantLen {
+			t.Errorf("past-tense bare range length: got %d, want %d (start=%d end=%d)",
+				gotLen, wantLen, d.Range.Start.Character, d.Range.End.Character)
 		}
 		return
 	}

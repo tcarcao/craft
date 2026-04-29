@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -33,7 +32,7 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
-			perFileASTs := make(map[string]*ast.File)
+			perFileTrees := make(map[string]*syntax.SyntaxNode)
 			perFileSyms := make(map[string]sema.Symbols)
 			var results []validateResult
 
@@ -49,8 +48,8 @@ func validateCmd() *cobra.Command {
 				}
 
 				uri := "file://" + file
-				astFile, parseDiags := syntax.Parse(string(content))
-				perFileASTs[uri] = astFile
+				tree, _, parseDiags := syntax.ParseTree(string(content))
+				perFileTrees[uri] = tree
 
 				for _, d := range parseDiags {
 					results = append(results, validateResult{
@@ -61,7 +60,7 @@ func validateCmd() *cobra.Command {
 					})
 				}
 
-				syms, semaDiags := sema.AnalyzeFile(uri, astFile)
+				syms, semaDiags := sema.AnalyzeFile(uri, tree)
 				perFileSyms[uri] = syms
 				for _, d := range semaDiags {
 					results = append(results, validateResult{
@@ -95,7 +94,7 @@ func validateCmd() *cobra.Command {
 					})
 				}
 
-				for _, d := range sema.LintWorkspace(perFileASTs, ws) {
+				for _, d := range sema.LintWorkspace(perFileTrees, ws) {
 					results = append(results, validateResult{
 						File:     d.SourceURI,
 						Line:     d.Range.Start.Line + 1,

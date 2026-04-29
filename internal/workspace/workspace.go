@@ -216,7 +216,7 @@ func (w *Workspace) parseAndStore(uri, content string) {
 	}
 
 	// Collect per-file symbols (no cross-file resolution yet).
-	syms, semaDiags := sema.AnalyzeFile(uri, file.AST)
+	syms, semaDiags := sema.AnalyzeFile(uri, file.SyntaxTree)
 	file.Symbols = syms
 	file.Diagnostics = append(file.Diagnostics, semaDiags...)
 
@@ -228,14 +228,14 @@ func (w *Workspace) parseAndStore(uri, content string) {
 // Must be called with w.mu held.
 func (w *Workspace) recomputeResolution() {
 	perFile := make(map[string]sema.Symbols, len(w.files))
-	perFileASTs := make(map[string]*ast.File, len(w.files))
+	perFileTrees := make(map[string]*syntax.SyntaxNode, len(w.files))
 	for uri, f := range w.files {
 		perFile[uri] = f.Symbols
-		perFileASTs[uri] = f.AST
+		perFileTrees[uri] = f.SyntaxTree
 	}
 	ws, mergeDiags := sema.MergeWorkspaceSymbols(perFile)
 	rm, resolveDiags := sema.AnalyzeWorkspace(perFile, ws)
-	lintDiags := sema.LintWorkspace(perFileASTs, ws)
+	lintDiags := sema.LintWorkspace(perFileTrees, ws)
 	w.resolution.ws = ws
 	w.resolution.rm = rm
 

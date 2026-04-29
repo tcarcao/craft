@@ -15,6 +15,7 @@ import (
 	"runtime/debug"
 
 	"github.com/tcarcao/craft/internal/ast"
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
@@ -198,10 +199,14 @@ type UseCaseRefTarget struct {
 	BCURI    string
 }
 
-// AnalyzeFile collects symbols from a single file's AST and runs validation
-// rules for constructs present through S5 (actors + domains + services).
+// AnalyzeFile collects symbols from a single file's syntax tree and runs
+// validation rules for constructs present through S5 (actors + domains + services).
+// It accepts the lossless syntax tree produced by syntax.ParseTree; the typed
+// ast.File is reconstructed internally via syntax.Lower so callers do not need
+// to hold a separate *ast.File reference.
 // Returns the symbol table and any semantic diagnostics.
-func AnalyzeFile(uri string, f *ast.File) (syms Symbols, diags []craft.Diagnostic) {
+func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []craft.Diagnostic) {
+	f := syntax.Lower(tree)
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("craft sema: panic recovered",
