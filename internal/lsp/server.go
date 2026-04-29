@@ -487,67 +487,91 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 	if f == nil {
 		return nil, nil
 	}
-	fileAST := syntax.Lower(f.SyntaxTree)
+	file := syntax.AsFile(f.SyntaxTree)
 
 	var syms []interface{}
-	for _, svc := range fileAST.Services {
-		line := 0
-		if svc.Line > 0 {
-			line = svc.Line - 1
+	for _, svc := range file.Services() {
+		nameTok := svc.Name()
+		if nameTok == nil {
+			continue
+		}
+		line := uint32(0)
+		if nameTok.Line > 0 {
+			line = uint32(nameTok.Line - 1)
 		}
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           svc.Name,
+			Name:           nameTok.Value,
 			Kind:           protocol.SymbolKindModule,
 			Detail:         "service",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
-			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
 		})
 	}
-	for _, a := range fileAST.Actors {
-		line := 0
-		if a.Line > 0 {
-			line = a.Line - 1
+	for _, a := range file.Actors() {
+		nameTok := a.Name()
+		if nameTok == nil {
+			continue
+		}
+		line := uint32(0)
+		if nameTok.Line > 0 {
+			line = uint32(nameTok.Line - 1)
 		}
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           a.Name,
+			Name:           nameTok.Value,
 			Kind:           protocol.SymbolKindObject,
-			Detail:         "actor: " + string(a.Type),
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
-			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			Detail:         "actor: " + a.ActorTypeValue(),
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
 		})
 	}
-	for _, d := range fileAST.Domains {
-		line := 0
-		if d.Line > 0 {
-			line = d.Line - 1
+	for _, d := range file.Domains() {
+		nameTok := d.Name()
+		if nameTok == nil {
+			continue
+		}
+		line := uint32(0)
+		if nameTok.Line > 0 {
+			line = uint32(nameTok.Line - 1)
 		}
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           d.Name,
+			Name:           nameTok.Value,
 			Kind:           protocol.SymbolKindNamespace,
 			Detail:         "domain",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
-			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
 		})
 	}
-	for _, uc := range fileAST.UseCases {
-		line := 0
-		if uc.Line > 0 {
-			line = uc.Line - 1
+	for _, uc := range file.UseCases() {
+		kwTok := uc.Keyword()
+		if kwTok == nil {
+			continue
+		}
+		line := uint32(0)
+		if kwTok.Line > 0 {
+			line = uint32(kwTok.Line - 1)
+		}
+		name := ""
+		if titleTok := uc.Title(); titleTok != nil {
+			name = titleTok.Value
 		}
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:   uc.Name,
+			Name:   name,
 			Kind:   protocol.SymbolKindEvent, // closest match for use-case-level interactions
 			Detail: "use_case",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
-			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
 		})
 	}
-	for _, arch := range fileAST.Archs {
-		line := 0
-		if arch.Line > 0 {
-			line = arch.Line - 1
+	for _, arch := range file.Archs() {
+		archLine := arch.Line()
+		line := uint32(0)
+		if archLine > 0 {
+			line = uint32(archLine - 1)
 		}
-		name := arch.Name
+		name := ""
+		if nameTok := arch.Name(); nameTok != nil {
+			name = nameTok.Value
+		}
 		if name == "" {
 			name = "arch"
 		}
@@ -555,21 +579,26 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Name:           name,
 			Kind:           protocol.SymbolKindPackage,
 			Detail:         "arch",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
-			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
 		})
 	}
-	for _, exp := range fileAST.Exposures {
-		line := 0
-		if exp.Line > 0 {
-			line = exp.Line - 1
+	for _, exp := range file.Exposures() {
+		nameTok := exp.Name()
+		if nameTok == nil {
+			continue
+		}
+		expLine := exp.Line()
+		line := uint32(0)
+		if expLine > 0 {
+			line = uint32(expLine - 1)
 		}
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           exp.Name,
+			Name:           nameTok.Value,
 			Kind:           protocol.SymbolKindInterface,
 			Detail:         "exposure",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
-			Range:          protocol.Range{Start: protocol.Position{Line: uint32(line)}, End: protocol.Position{Line: uint32(line)}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
 		})
 	}
 	return syms, nil
@@ -973,17 +1002,17 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 	if f == nil {
 		return nil, nil
 	}
-	fileAST := syntax.Lower(f.SyntaxTree)
+	file := syntax.AsFile(f.SyntaxTree)
 
 	var ranges []protocol.FoldingRange
 
-	for _, arch := range fileAST.Archs {
-		if arch.Line <= 0 || arch.EndLine <= arch.Line {
+	for _, arch := range file.Archs() {
+		if arch.Line() <= 0 || arch.EndLine() <= arch.Line() {
 			continue
 		}
 		// One fold for the entire arch block.
-		startLine := uint32(arch.Line - 1)
-		endLine := uint32(arch.EndLine - 1)
+		startLine := uint32(arch.Line() - 1)
+		endLine := uint32(arch.EndLine() - 1)
 		ranges = append(ranges, protocol.FoldingRange{
 			StartLine: startLine,
 			EndLine:   endLine,
@@ -992,11 +1021,11 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 
 		// One fold per labelled section inside arch.
 		// presentation: folds from its label line to the line before gateway: (or arch end).
-		if arch.PresentationLine > 0 {
-			sectionStart := uint32(arch.PresentationLine - 1)
+		if pl := arch.PresentationLine(); pl > 0 {
+			sectionStart := uint32(pl - 1)
 			sectionEnd := endLine - 1 // default: end just before closing `}`
-			if arch.GatewayLine > 0 && arch.GatewayLine > arch.PresentationLine {
-				sectionEnd = uint32(arch.GatewayLine - 2) // end line before gateway label
+			if gl := arch.GatewayLine(); gl > 0 && gl > pl {
+				sectionEnd = uint32(gl - 2) // end line before gateway label
 			}
 			if sectionEnd > sectionStart {
 				ranges = append(ranges, protocol.FoldingRange{
@@ -1006,8 +1035,8 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 				})
 			}
 		}
-		if arch.GatewayLine > 0 {
-			sectionStart := uint32(arch.GatewayLine - 1)
+		if gl := arch.GatewayLine(); gl > 0 {
+			sectionStart := uint32(gl - 1)
 			sectionEnd := endLine - 1
 			if sectionEnd > sectionStart {
 				ranges = append(ranges, protocol.FoldingRange{
@@ -1035,49 +1064,51 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 	if f == nil {
 		return nil, nil
 	}
-	fileAST := syntax.Lower(f.SyntaxTree)
+	file := syntax.AsFile(f.SyntaxTree)
 
 	cursorLine := int(params.Position.Line) + 1 // convert to 1-based
 
-	for _, a := range fileAST.Actors {
-		declLine := a.Line
-		if declLine == 0 {
+	for _, a := range file.Actors() {
+		nameTok := a.Name()
+		if nameTok == nil || nameTok.Line == 0 {
 			// Individual `actor` statements don't have a line recorded in AST;
 			// hover will not resolve them until full position tracking lands.
 			continue
 		}
-		if declLine == cursorLine {
+		if nameTok.Line == cursorLine {
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
-					Value: "actor: " + a.Name + " (" + string(a.Type) + ")",
+					Value: "actor: " + nameTok.Value + " (" + a.ActorTypeValue() + ")",
 				},
 			}, nil
 		}
 	}
 
-	for _, d := range fileAST.Domains {
-		if d.Line == 0 {
+	for _, d := range file.Domains() {
+		nameTok := d.Name()
+		if nameTok == nil || nameTok.Line == 0 {
 			continue
 		}
-		if d.Line == cursorLine {
+		if nameTok.Line == cursorLine {
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
-					Value: "domain: " + d.Name,
+					Value: "domain: " + nameTok.Value,
 				},
 			}, nil
 		}
 	}
 
-	for _, svc := range fileAST.Services {
-		if svc.Line == 0 {
+	for _, svc := range file.Services() {
+		nameTok := svc.Name()
+		if nameTok == nil || nameTok.Line == 0 {
 			continue
 		}
-		if svc.Line == cursorLine {
-			detail := "service: " + svc.Name
-			if svc.Language != "" {
-				detail += " (" + svc.Language + ")"
+		if nameTok.Line == cursorLine {
+			detail := "service: " + nameTok.Value
+			if lang := svc.Language(); lang != "" {
+				detail += " (" + lang + ")"
 			}
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
@@ -1088,13 +1119,19 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		}
 	}
 
-	for _, exp := range fileAST.Exposures {
-		if exp.Line == 0 || exp.Line != cursorLine {
+	for _, exp := range file.Exposures() {
+		expLine := exp.Line()
+		if expLine == 0 || expLine != cursorLine {
 			continue
 		}
-		detail := "exposure: " + exp.Name
-		if len(exp.To) > 0 {
-			detail += " → " + strings.Join(exp.To, ", ")
+		nameTok := exp.Name()
+		name := ""
+		if nameTok != nil {
+			name = nameTok.Value
+		}
+		detail := "exposure: " + name
+		if to := exp.To(); len(to) > 0 {
+			detail += " → " + strings.Join(to, ", ")
 		}
 		return &protocol.Hover{
 			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: detail},
@@ -1104,25 +1141,40 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 	// Walk use-case bodies: hover on an action line shows the resolved declaration.
 	rm := s.ws.ResolutionMap()
 	uri := string(params.TextDocument.URI)
-	for _, uc := range fileAST.UseCases {
-		for _, sc := range uc.Scenarios {
+	for _, uc := range file.UseCases() {
+		kwTok := uc.Keyword()
+		ucLine := 0
+		if kwTok != nil {
+			ucLine = kwTok.Line
+		}
+		for _, sc := range uc.Scenarios() {
 			// Hover on the use_case name itself (line of use_case keyword).
-			if uc.Line == cursorLine {
+			if ucLine == cursorLine {
+				name := ""
+				if titleTok := uc.Title(); titleTok != nil {
+					name = titleTok.Value
+				}
 				return &protocol.Hover{
 					Contents: protocol.MarkupContent{
 						Kind:  protocol.PlainText,
-						Value: "use_case: " + uc.Name,
+						Value: "use_case: " + name,
 					},
 				}, nil
 			}
 			// Hover on trigger line.
-			if sc.Trigger.Line == cursorLine {
-				name := sc.Trigger.Actor
+			trigger := sc.Trigger()
+			whenTok := sc.When()
+			triggerLine := 0
+			if whenTok != nil {
+				triggerLine = whenTok.Line
+			}
+			if triggerLine == cursorLine {
+				name := trigger.ActorName()
 				if name == "" {
-					name = sc.Trigger.Context
+					name = trigger.ContextName()
 				}
 				if name != "" {
-					if val := hoverForUseCaseRef(rm, uri, name, sc.Trigger.Line); val != "" {
+					if val := hoverForUseCaseRef(rm, uri, name, triggerLine); val != "" {
 						return &protocol.Hover{
 							Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 						}, nil
@@ -1130,12 +1182,12 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 				}
 			}
 			// Hover on action lines.
-			for _, action := range sc.Actions {
-				if action.Line != cursorLine {
+			for _, action := range sc.Actions() {
+				if action.Line() != cursorLine {
 					continue
 				}
 				// Show hover for the "from" domain first.
-				if val := hoverForUseCaseRef(rm, uri, action.Context, action.Line); val != "" {
+				if val := hoverForUseCaseRef(rm, uri, action.SubjectName(), action.Line()); val != "" {
 					return &protocol.Hover{
 						Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 					}, nil
@@ -1499,55 +1551,58 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 // use-case resolution map. This is the existing Pass 2 logic extracted into a helper.
 func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticToken {
 	var tokens []semanticToken
-	fileAST := syntax.Lower(f.SyntaxTree)
+	file := syntax.AsFile(f.SyntaxTree)
 
 	// Actors: craft-actor-definition, modifier 1 (declaration).
-	for _, a := range fileAST.Actors {
-		if a.Line <= 0 {
+	for _, a := range file.Actors() {
+		nameTok := a.Name()
+		if nameTok == nil || nameTok.Line <= 0 {
 			continue // individual `actor` stmts without position — skip for now
 		}
 		col := uint32(0)
-		if a.Column > 0 {
-			col = uint32(a.Column - 1)
+		if nameTok.Col > 0 {
+			col = uint32(nameTok.Col - 1)
 		}
 		tokens = append(tokens, semanticToken{
-			line:      uint32(a.Line - 1),
+			line:      uint32(nameTok.Line - 1),
 			startChar: col,
-			length:    uint32(len([]rune(a.Name))),
+			length:    uint32(len([]rune(nameTok.Value))),
 			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeActorDecl),
 			modifiers: 1, // declaration
 		})
 	}
 
 	// Domains: craft-domain-name declaration; bounded contexts: craft-context-name declaration.
-	for _, d := range fileAST.Domains {
-		if d.Line <= 0 {
+	for _, d := range file.Domains() {
+		nameTok := d.Name()
+		if nameTok == nil || nameTok.Line <= 0 {
 			continue
 		}
 		col := uint32(0)
-		if d.Column > 0 {
-			col = uint32(d.Column - 1)
+		if nameTok.Col > 0 {
+			col = uint32(nameTok.Col - 1)
 		}
 		tokens = append(tokens, semanticToken{
-			line:      uint32(d.Line - 1),
+			line:      uint32(nameTok.Line - 1),
 			startChar: col,
-			length:    uint32(len([]rune(d.Name))),
+			length:    uint32(len([]rune(nameTok.Value))),
 			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeDomainName),
 			modifiers: 1, // declaration
 		})
 		// Each bounded context name inside the domain body is a declaration.
-		for _, bc := range d.BoundedContexts {
-			if bc.Line <= 0 {
+		for _, bc := range d.BoundedContexts() {
+			bcTok := bc.Name()
+			if bcTok == nil || bcTok.Line <= 0 {
 				continue
 			}
 			bcCol := uint32(0)
-			if bc.Column > 0 {
-				bcCol = uint32(bc.Column - 1)
+			if bcTok.Col > 0 {
+				bcCol = uint32(bcTok.Col - 1)
 			}
 			tokens = append(tokens, semanticToken{
-				line:      uint32(bc.Line - 1),
+				line:      uint32(bcTok.Line - 1),
 				startChar: bcCol,
-				length:    uint32(len([]rune(bc.Name))),
+				length:    uint32(len([]rune(bcTok.Value))),
 				tokenType: semanticTokenTypeIndexConst(semanticTokenTypeContextName),
 				modifiers: 1, // declaration
 			})
@@ -1555,18 +1610,19 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 	}
 
 	// Services: craft-service-name, modifier 1 (declaration).
-	for _, svc := range fileAST.Services {
-		if svc.Line <= 0 {
+	for _, svc := range file.Services() {
+		nameTok := svc.Name()
+		if nameTok == nil || nameTok.Line <= 0 {
 			continue
 		}
 		col := uint32(0)
-		if svc.Column > 0 {
-			col = uint32(svc.Column - 1)
+		if nameTok.Col > 0 {
+			col = uint32(nameTok.Col - 1)
 		}
 		tokens = append(tokens, semanticToken{
-			line:      uint32(svc.Line - 1),
+			line:      uint32(nameTok.Line - 1),
 			startChar: col,
-			length:    uint32(len([]rune(svc.Name))),
+			length:    uint32(len([]rune(nameTok.Value))),
 			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeServiceName),
 			modifiers: 1, // declaration
 		})
@@ -1575,21 +1631,27 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 	// Use-case action parties: colour actors/domains/services referenced inside
 	// when clauses using their respective semantic token types (S6).
 	rm := s.ws.ResolutionMap()
-	for _, uc := range fileAST.UseCases {
-		for _, sc := range uc.Scenarios {
+	for _, uc := range file.UseCases() {
+		for _, sc := range uc.Scenarios() {
 			// Trigger subject.
-			triggerName := sc.Trigger.Actor
-			if triggerName == "" {
-				triggerName = sc.Trigger.Context
+			trigger := sc.Trigger()
+			whenTok := sc.When()
+			triggerLine := 0
+			if whenTok != nil {
+				triggerLine = whenTok.Line
 			}
-			if triggerName != "" && sc.Trigger.Line > 0 {
-				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, sc.Trigger.Line); ok {
+			triggerName := trigger.ActorName()
+			if triggerName == "" {
+				triggerName = trigger.ContextName()
+			}
+			if triggerName != "" && triggerLine > 0 {
+				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, triggerLine); ok {
 					col := uint32(0)
-					if sc.Trigger.ActorColumn > 0 {
-						col = uint32(sc.Trigger.ActorColumn - 1)
+					if trigger.ActorCol() > 0 {
+						col = uint32(trigger.ActorCol() - 1)
 					}
 					tokens = append(tokens, semanticToken{
-						line:      uint32(sc.Trigger.Line - 1),
+						line:      uint32(triggerLine - 1),
 						startChar: col,
 						length:    uint32(len([]rune(triggerName))),
 						tokenType: tt,
@@ -1597,34 +1659,34 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 				}
 			}
 			// Action domain and targetDomain.
-			for _, action := range sc.Actions {
-				if action.Line <= 0 {
+			for _, action := range sc.Actions() {
+				if action.Line() <= 0 {
 					continue
 				}
-				if action.Context != "" {
-					if tt, ok := useCaseRefTokenType(rm, uri, action.Context, action.Line); ok {
+				if subj := action.SubjectName(); subj != "" {
+					if tt, ok := useCaseRefTokenType(rm, uri, subj, action.Line()); ok {
 						col := uint32(0)
-						if action.ContextColumn > 0 {
-							col = uint32(action.ContextColumn - 1)
+						if action.SubjectCol() > 0 {
+							col = uint32(action.SubjectCol() - 1)
 						}
 						tokens = append(tokens, semanticToken{
-							line:      uint32(action.Line - 1),
+							line:      uint32(action.Line() - 1),
 							startChar: col,
-							length:    uint32(len([]rune(action.Context))),
+							length:    uint32(len([]rune(subj))),
 							tokenType: tt,
 						})
 					}
 				}
-				if action.TargetContext != "" {
-					if tt, ok := useCaseRefTokenType(rm, uri, action.TargetContext, action.Line); ok {
+				if target := action.TargetName(); target != "" {
+					if tt, ok := useCaseRefTokenType(rm, uri, target, action.Line()); ok {
 						col := uint32(0)
-						if action.TargetContextColumn > 0 {
-							col = uint32(action.TargetContextColumn - 1)
+						if action.TargetCol() > 0 {
+							col = uint32(action.TargetCol() - 1)
 						}
 						tokens = append(tokens, semanticToken{
-							line:      uint32(action.Line - 1),
+							line:      uint32(action.Line() - 1),
 							startChar: col,
-							length:    uint32(len([]rune(action.TargetContext))),
+							length:    uint32(len([]rune(target))),
 							tokenType: tt,
 						})
 					}
