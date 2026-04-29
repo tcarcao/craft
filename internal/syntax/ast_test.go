@@ -151,6 +151,62 @@ func TestActionDecl_VerbPosition(t *testing.T) {
 	}
 }
 
+func TestArchDecl_View(t *testing.T) {
+	src := "arch MyArch {\n    presentation: ComponentA\n    gateway: ComponentB\n}"
+	tree, _, diags := syntax.ParseTree(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	archs := syntax.AsFile(tree).Archs()
+	if len(archs) != 1 {
+		t.Fatalf("expected 1 arch, got %d", len(archs))
+	}
+	arch := archs[0]
+	if arch.Name() == nil || arch.Name().Value != "MyArch" {
+		t.Errorf("expected arch name MyArch, got %v", arch.Name())
+	}
+	sections := arch.Sections()
+	if len(sections) != 2 {
+		t.Fatalf("expected 2 sections, got %d", len(sections))
+	}
+	// First section should be presentation
+	kw := sections[0].Keyword()
+	if kw == nil || kw.Kind != syntax.SyntaxKindKwPresentation {
+		t.Errorf("expected presentation keyword, got %v", kw)
+	}
+	components := sections[0].Components()
+	if len(components) != 1 {
+		t.Errorf("expected 1 component, got %d", len(components))
+	}
+	if components[0].Name() == nil || components[0].Name().Value != "ComponentA" {
+		t.Errorf("expected ComponentA, got %v", components[0].Name())
+	}
+}
+
+func TestExposureDecl_View(t *testing.T) {
+	src := "exposure MyExposure {\n    to: Customer\n    through: rest\n}"
+	tree, _, diags := syntax.ParseTree(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	exposures := syntax.AsFile(tree).Exposures()
+	if len(exposures) != 1 {
+		t.Fatalf("expected 1 exposure, got %d", len(exposures))
+	}
+	e := exposures[0]
+	if e.Name() == nil || e.Name().Value != "MyExposure" {
+		t.Errorf("expected name MyExposure, got %v", e.Name())
+	}
+	rules := e.Rules()
+	if len(rules) < 1 {
+		t.Fatalf("expected at least 1 rule, got %d", len(rules))
+	}
+	through := rules[0].Through()
+	if through == nil || through.Kind != syntax.SyntaxKindKwThrough {
+		t.Errorf("expected through keyword, got %v", through)
+	}
+}
+
 func TestActionDecl_Notifies(t *testing.T) {
 	src := "use_case \"Notify\" {\n    when Customer submits NotifyForm\n    EmailService notifies \"UserNotified\"\n}"
 	tree, _, _ := syntax.ParseTree(src)

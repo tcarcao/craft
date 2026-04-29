@@ -235,9 +235,139 @@ func (a ActionDecl) Verb() *SyntaxToken {
 func (a ActionDecl) Connector() *SyntaxToken { return a.node.ChildToken(SyntaxKindKwTo) }
 
 // ArchDecl is a typed view over a SyntaxKindArchDecl node.
-// Methods will be implemented in a later task.
 type ArchDecl struct{ node *SyntaxNode }
 
+// Keyword returns the 'arch' keyword token.
+func (a ArchDecl) Keyword() *SyntaxToken { return a.node.ChildToken(SyntaxKindKwArch) }
+
+// Name returns the identifier token for the arch's name (optional).
+func (a ArchDecl) Name() *SyntaxToken { return a.node.ChildToken(SyntaxKindIdent) }
+
+// Sections returns all ArchSection views within this arch block.
+func (a ArchDecl) Sections() []ArchSection {
+	var result []ArchSection
+	for _, n := range a.node.ChildNodes(SyntaxKindArchSection) {
+		result = append(result, ArchSection{node: n})
+	}
+	return result
+}
+
+// ArchSection is a typed view over a SyntaxKindArchSection node.
+type ArchSection struct{ node *SyntaxNode }
+
+// Keyword returns the section label keyword token (presentation or gateway).
+func (s ArchSection) Keyword() *SyntaxToken {
+	if s.node == nil {
+		return nil
+	}
+	return s.node.ChildToken(SyntaxKindKwPresentation, SyntaxKindKwGateway, SyntaxKindIdent)
+}
+
+// Components returns all ArchComponent views within this section.
+func (s ArchSection) Components() []ArchComponent {
+	if s.node == nil {
+		return nil
+	}
+	var result []ArchComponent
+	for _, n := range s.node.ChildNodes(SyntaxKindArchComponent) {
+		result = append(result, ArchComponent{node: n})
+	}
+	return result
+}
+
+// ArchComponent is a typed view over a SyntaxKindArchComponent node.
+type ArchComponent struct{ node *SyntaxNode }
+
+// Name returns the identifier token for the component's name.
+func (c ArchComponent) Name() *SyntaxToken {
+	if c.node == nil {
+		return nil
+	}
+	return c.node.ChildToken(SyntaxKindIdent)
+}
+
+// Modifiers returns all ArchModifier views within this component.
+func (c ArchComponent) Modifiers() []ArchModifier {
+	if c.node == nil {
+		return nil
+	}
+	var result []ArchModifier
+	for _, n := range c.node.ChildNodes(SyntaxKindArchModifier) {
+		result = append(result, ArchModifier{node: n})
+	}
+	return result
+}
+
+// ArchModifier is a typed view over a SyntaxKindArchModifier node.
+type ArchModifier struct{ node *SyntaxNode }
+
+// Key returns the identifier token for the modifier key.
+func (m ArchModifier) Key() *SyntaxToken {
+	if m.node == nil {
+		return nil
+	}
+	return m.node.ChildToken(SyntaxKindIdent)
+}
+
+// Value returns the value token for the modifier (ident, string, or number).
+// Returns nil if the modifier has no value (key-only modifier).
+func (m ArchModifier) Value() *SyntaxToken {
+	if m.node == nil {
+		return nil
+	}
+	// The modifier node children are: Ident (key), optional Colon, optional value token.
+	// The value token follows the Colon and may be Ident, String, or Number.
+	colonSeen := false
+	for _, child := range m.node.Children {
+		tok, ok := child.(*SyntaxToken)
+		if !ok {
+			continue
+		}
+		if tok.Kind == SyntaxKindColon {
+			colonSeen = true
+			continue
+		}
+		if colonSeen {
+			return tok
+		}
+	}
+	return nil
+}
+
 // ExposureDecl is a typed view over a SyntaxKindExposureDecl node.
-// Methods will be implemented in a later task.
 type ExposureDecl struct{ node *SyntaxNode }
+
+// Keyword returns the 'exposure' keyword token.
+func (e ExposureDecl) Keyword() *SyntaxToken { return e.node.ChildToken(SyntaxKindKwExposure) }
+
+// Name returns the identifier token for the exposure's name.
+func (e ExposureDecl) Name() *SyntaxToken { return e.node.ChildToken(SyntaxKindIdent) }
+
+// Rules returns all DeploymentRule views within this exposure block.
+func (e ExposureDecl) Rules() []DeploymentRule {
+	var result []DeploymentRule
+	for _, n := range e.node.ChildNodes(SyntaxKindDeploymentRule) {
+		result = append(result, DeploymentRule{node: n})
+	}
+	return result
+}
+
+// DeploymentRule is a typed view over a SyntaxKindDeploymentRule node.
+// In exposure blocks this wraps the 'through: <value>' clause.
+type DeploymentRule struct{ node *SyntaxNode }
+
+// Through returns the 'through' keyword token.
+func (r DeploymentRule) Through() *SyntaxToken {
+	if r.node == nil {
+		return nil
+	}
+	return r.node.ChildToken(SyntaxKindKwThrough)
+}
+
+// Arrow returns the '->' token (present in service deployment rules).
+func (r DeploymentRule) Arrow() *SyntaxToken {
+	if r.node == nil {
+		return nil
+	}
+	return r.node.ChildToken(SyntaxKindArrow)
+}
