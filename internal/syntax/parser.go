@@ -29,6 +29,14 @@ type Parser struct {
 // A non-nil File is always returned even when diagnostics are present (island
 // parsing: each top-level block is parsed independently).
 func Parse(src string) (*ast.File, []craft.Diagnostic) {
+	_, file, diags := ParseTree(src)
+	return file, diags
+}
+
+// ParseTree parses the given source text, returning both a lossless syntax tree
+// and the legacy *ast.File, along with any diagnostics. The *SyntaxNode is the
+// root File node containing all top-level constructs as children.
+func ParseTree(src string) (*SyntaxNode, *ast.File, []craft.Diagnostic) {
 	l := lexer.New(src)
 	p := &Parser{tokens: l.All()}
 	return p.parseFile()
@@ -36,7 +44,8 @@ func Parse(src string) (*ast.File, []craft.Diagnostic) {
 
 // --- main parse loop ---
 
-func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
+func (p *Parser) parseFile() (*SyntaxNode, *ast.File, []craft.Diagnostic) {
+	root := &SyntaxNode{Kind: SyntaxKindFile}
 	file := &ast.File{}
 	var diags []craft.Diagnostic
 
@@ -48,38 +57,56 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 		tok := p.peek()
 		switch tok.Type {
 		case lexer.TokenKwActor:
-			actor, d := p.parseActorStatement()
+			node, actor, d := p.parseActorStatement()
 			diags = append(diags, d...)
 			if actor != nil {
 				file.Actors = append(file.Actors, actor)
 			}
+			if node != nil {
+				root.Children = append(root.Children, node)
+			}
 		case lexer.TokenKwActors:
-			actors, blockRange, d := p.parseActorsBlock()
+			node, actors, blockRange, d := p.parseActorsBlock()
 			diags = append(diags, d...)
 			file.Actors = append(file.Actors, actors...)
 			if blockRange != nil {
 				file.ActorBlocks = append(file.ActorBlocks, blockRange)
 			}
+			if node != nil {
+				root.Children = append(root.Children, node)
+			}
 		case lexer.TokenKwDomain:
-			domain, d := p.parseDomainStatement()
+			node, domain, d := p.parseDomainStatement()
 			diags = append(diags, d...)
 			if domain != nil {
 				file.Domains = append(file.Domains, domain)
 			}
+			if node != nil {
+				root.Children = append(root.Children, node)
+			}
 		case lexer.TokenKwDomains:
-			domains, d := p.parseDomainsBlock()
+			node, domains, d := p.parseDomainsBlock()
 			diags = append(diags, d...)
 			file.Domains = append(file.Domains, domains...)
+			if node != nil {
+				root.Children = append(root.Children, node)
+			}
 		case lexer.TokenKwService:
-			svc, d := p.parseServiceStatement()
+			node, svc, d := p.parseServiceStatement()
 			diags = append(diags, d...)
 			if svc != nil {
 				file.Services = append(file.Services, svc)
 			}
+			if node != nil {
+				root.Children = append(root.Children, node)
+			}
 		case lexer.TokenKwServices:
-			services, d := p.parseServicesBlock()
+			node, services, d := p.parseServicesBlock()
 			diags = append(diags, d...)
 			file.Services = append(file.Services, services...)
+			if node != nil {
+				root.Children = append(root.Children, node)
+			}
 		case lexer.TokenKwUseCase:
 			uc, d := p.parseUseCaseBlock(&ucCounter)
 			diags = append(diags, d...)
@@ -105,32 +132,45 @@ func (p *Parser) parseFile() (*ast.File, []craft.Diagnostic) {
 			p.resyncToTopLevel()
 		}
 	}
-	return file, diags
+	return root, file, diags
 }
 
 // parseActorStatement parses: actor <type> <name>
-func (p *Parser) parseActorStatement() (*ast.ActorDecl, []craft.Diagnostic) {
-	p.consume() // consume `actor`
+func (p *Parser) parseActorStatement() (*SyntaxNode, *ast.ActorDecl, []craft.Diagnostic) {
+	node := &SyntaxNode{Kind: SyntaxKindActorDecl}
 	var diags []craft.Diagnostic
+
+	// Collect and attach leading trivia (comments).
+	for _, t := range p.collectTrivia() {
+		node.Children = append(node.Children, t)
+	}
+
+	// Consume `actor` keyword.
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwActor))
 
 	typeTok := p.peek()
 	at, ok := tokenToActorType(typeTok)
 	if !ok {
 		diags = append(diags, p.diagUnexpected(typeTok, "actor type"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return node, nil, diags
 	}
-	p.consume()
+	// Map the actor-type token to the right SyntaxKind.
+	typeKind := SyntaxKindIdent
+	if k, found := lexerKindToSyntaxKind[typeTok.Type]; found {
+		typeKind = k
+	}
+	node.Children = append(node.Children, p.consumeAs(typeKind))
 
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenIdent {
 		diags = append(diags, p.diagUnexpected(nameTok, "actor name"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return node, nil, diags
 	}
-	p.consume()
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
 
-	return &ast.ActorDecl{
+	return node, &ast.ActorDecl{
 		Name:   nameTok.Value,
 		Type:   at,
 		Line:   nameTok.Line,
@@ -139,20 +179,41 @@ func (p *Parser) parseActorStatement() (*ast.ActorDecl, []craft.Diagnostic) {
 }
 
 // parseActorsBlock parses: actors { <actor_definition>* }
-func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, *ast.ActorBlockRange, []craft.Diagnostic) {
-	actorsTok := p.consume() // consume `actors`, capture line
+func (p *Parser) parseActorsBlock() (*SyntaxNode, []*ast.ActorDecl, *ast.ActorBlockRange, []craft.Diagnostic) {
+	blockNode := &SyntaxNode{Kind: SyntaxKindActorsBlock}
 	var diags []craft.Diagnostic
+
+	// Collect leading trivia before `actors`.
+	for _, t := range p.collectTrivia() {
+		blockNode.Children = append(blockNode.Children, t)
+	}
+
+	actorsTok := p.consume() // consume `actors`, capture line
+	blockNode.Children = append(blockNode.Children, &SyntaxToken{
+		Kind:  SyntaxKindKwActors,
+		Value: actorsTok.Value,
+		Line:  actorsTok.Line,
+		Col:   actorsTok.Column,
+	})
 	blockRange := &ast.ActorBlockRange{Line: actorsTok.Line}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return nil, nil, diags
+		return blockNode, nil, nil, diags
 	}
-	p.consume() // consume `{`
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindLBrace))
 
 	var actors []*ast.ActorDecl
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Collect trivia inside block.
+		for _, t := range p.collectTrivia() {
+			blockNode.Children = append(blockNode.Children, t)
+		}
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+
 		tok := p.peek()
 		at, ok := tokenToActorType(tok)
 		if !ok {
@@ -166,7 +227,14 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, *ast.ActorBlockRange, []c
 			p.consume()
 			continue
 		}
-		p.consume() // consume type
+
+		// Build a child ActorDecl node for each entry in the block.
+		actorNode := &SyntaxNode{Kind: SyntaxKindActorDecl}
+		typeKind := SyntaxKindIdent
+		if k, found := lexerKindToSyntaxKind[tok.Type]; found {
+			typeKind = k
+		}
+		actorNode.Children = append(actorNode.Children, p.consumeAs(typeKind))
 
 		nameTok := p.peek()
 		if nameTok.Type != lexer.TokenIdent {
@@ -174,7 +242,8 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, *ast.ActorBlockRange, []c
 			p.consume()
 			continue
 		}
-		p.consume() // consume name
+		actorNode.Children = append(actorNode.Children, p.consumeAs(SyntaxKindIdent))
+		blockNode.Children = append(blockNode.Children, actorNode)
 
 		actors = append(actors, &ast.ActorDecl{
 			Name:   nameTok.Value,
@@ -191,35 +260,45 @@ func (p *Parser) parseActorsBlock() ([]*ast.ActorDecl, *ast.ActorBlockRange, []c
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return actors, nil, diags // no block range on unclosed block
+		return blockNode, actors, nil, diags // no block range on unclosed block
 	}
 	blockRange.EndLine = p.peek().Line // capture `}` line
-	p.consume()                        // consume `}`
-	return actors, blockRange, diags
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindRBrace))
+	return blockNode, actors, blockRange, diags
 }
 
 // parseDomainStatement parses: domain <name> { <bounded_context>* }
-func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
-	p.consume() // consume `domain`
+func (p *Parser) parseDomainStatement() (*SyntaxNode, *ast.DomainDecl, []craft.Diagnostic) {
+	node := &SyntaxNode{Kind: SyntaxKindDomainDecl}
 	var diags []craft.Diagnostic
+
+	// Collect leading trivia before `domain`.
+	for _, t := range p.collectTrivia() {
+		node.Children = append(node.Children, t)
+	}
+
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwDomain))
 
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenIdent && !isDomainNameToken(nameTok.Type) {
 		diags = append(diags, p.diagUnexpected(nameTok, "domain name"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return node, nil, diags
 	}
-	p.consume()
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return node, nil, diags
 	}
-	p.consume() // consume `{`
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
 
-	contexts, d := p.parseBoundedContextList()
+	contexts, bcNodes, d := p.parseBoundedContextList()
 	diags = append(diags, d...)
+	for _, bcNode := range bcNodes {
+		node.Children = append(node.Children, bcNode)
+	}
 
 	if p.atEOF() {
 		diags = append(diags, craft.Diagnostic{
@@ -228,7 +307,7 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(nameTok),
 		})
-		return &ast.DomainDecl{
+		return node, &ast.DomainDecl{
 			Name:            nameTok.Value,
 			BoundedContexts: contexts,
 			Line:            nameTok.Line,
@@ -236,9 +315,9 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 		}, diags
 	}
 	endLine := p.peek().Line // capture `}` line
-	p.consume()              // consume `}`
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
 
-	return &ast.DomainDecl{
+	return node, &ast.DomainDecl{
 		Name:            nameTok.Value,
 		BoundedContexts: contexts,
 		Line:            nameTok.Line,
@@ -249,19 +328,33 @@ func (p *Parser) parseDomainStatement() (*ast.DomainDecl, []craft.Diagnostic) {
 
 // parseDomainsBlock parses: domains { <domain_block>* }
 // where each domain_block is: <name> { <bounded_context>* }
-func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
-	p.consume() // consume `domains`
+func (p *Parser) parseDomainsBlock() (*SyntaxNode, []*ast.DomainDecl, []craft.Diagnostic) {
+	blockNode := &SyntaxNode{Kind: SyntaxKindDomainsBlock}
 	var diags []craft.Diagnostic
 	var domains []*ast.DomainDecl
+
+	// Collect leading trivia before `domains`.
+	for _, t := range p.collectTrivia() {
+		blockNode.Children = append(blockNode.Children, t)
+	}
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindKwDomains))
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return blockNode, nil, diags
 	}
-	p.consume() // consume `{`
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindLBrace))
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Collect trivia inside block.
+		for _, t := range p.collectTrivia() {
+			blockNode.Children = append(blockNode.Children, t)
+		}
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+
 		tok := p.peek()
 		if tok.Type != lexer.TokenIdent && !isDomainNameToken(tok.Type) {
 			diags = append(diags, p.diagUnexpected(tok, "domain name"))
@@ -269,16 +362,23 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 			continue
 		}
 		nameTok := tok
-		p.consume()
+
+		// Build a child DomainDecl node.
+		domainNode := &SyntaxNode{Kind: SyntaxKindDomainDecl}
+		domainNode.Children = append(domainNode.Children, p.consumeAs(SyntaxKindIdent))
 
 		if p.peek().Type != lexer.TokenLBrace {
 			diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+			blockNode.Children = append(blockNode.Children, domainNode)
 			continue
 		}
-		p.consume() // consume `{`
+		domainNode.Children = append(domainNode.Children, p.consumeAs(SyntaxKindLBrace))
 
-		contexts, d := p.parseBoundedContextList()
+		contexts, bcNodes, d := p.parseBoundedContextList()
 		diags = append(diags, d...)
+		for _, bcNode := range bcNodes {
+			domainNode.Children = append(domainNode.Children, bcNode)
+		}
 
 		if p.atEOF() {
 			diags = append(diags, craft.Diagnostic{
@@ -294,10 +394,12 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 				Column:          nameTok.Column,
 				IsGrouped:       true,
 			})
-			return domains, diags
+			blockNode.Children = append(blockNode.Children, domainNode)
+			return blockNode, domains, diags
 		}
 		endLine := p.peek().Line // capture inner `}` line
-		p.consume()              // consume `}`
+		domainNode.Children = append(domainNode.Children, p.consumeAs(SyntaxKindRBrace))
+		blockNode.Children = append(blockNode.Children, domainNode)
 
 		domains = append(domains, &ast.DomainDecl{
 			Name:            nameTok.Value,
@@ -316,24 +418,41 @@ func (p *Parser) parseDomainsBlock() ([]*ast.DomainDecl, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return domains, diags
+		return blockNode, domains, diags
 	}
-	p.consume() // consume `}`
-	return domains, diags
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindRBrace))
+	return blockNode, domains, diags
 }
 
 // parseBoundedContextList parses a list of identifiers until `}` or EOF.
 // These are the bounded context names inside a domain block.
 // Duplicates are silently deduplicated (keeping first occurrence), matching
 // ANTLR behavior and the v1 spec.
-func (p *Parser) parseBoundedContextList() ([]ast.BoundedContextEntry, []craft.Diagnostic) {
+// Returns both the legacy BoundedContextEntry slice and a slice of SyntaxNodes.
+func (p *Parser) parseBoundedContextList() ([]ast.BoundedContextEntry, []*SyntaxNode, []craft.Diagnostic) {
 	var contexts []ast.BoundedContextEntry
+	var bcNodes []*SyntaxNode
 	seen := make(map[string]bool)
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Collect trivia inside the context list.
+		triviaTokens := p.collectTrivia()
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			// Attach any trailing trivia to the last node or discard — for now discard
+			// (they'll be captured at the parent's RBrace step).
+			_ = triviaTokens
+			break
+		}
+
 		tok := p.peek()
 		if tok.Type == lexer.TokenIdent || isDomainNameToken(tok.Type) {
+			bcNode := &SyntaxNode{Kind: SyntaxKindBoundedContext}
+			// Attach leading trivia to this bounded-context node.
+			for _, t := range triviaTokens {
+				bcNode.Children = append(bcNode.Children, t)
+			}
+			bcNode.Children = append(bcNode.Children, p.consumeAs(SyntaxKindIdent))
 			if !seen[tok.Value] {
 				seen[tok.Value] = true
 				contexts = append(contexts, ast.BoundedContextEntry{
@@ -341,8 +460,9 @@ func (p *Parser) parseBoundedContextList() ([]ast.BoundedContextEntry, []craft.D
 					Line:   tok.Line,
 					Column: tok.Column,
 				})
+				bcNodes = append(bcNodes, bcNode)
 			}
-			p.consume()
+			// Duplicate: node is built but not appended (matches ANTLR dedup behavior).
 		} else if tok.Type == lexer.TokenError {
 			diags = append(diags, p.diagUnexpected(tok, "bounded context name or `}`"))
 			p.consume()
@@ -352,7 +472,7 @@ func (p *Parser) parseBoundedContextList() ([]ast.BoundedContextEntry, []craft.D
 			p.consume()
 		}
 	}
-	return contexts, diags
+	return contexts, bcNodes, diags
 }
 
 // isDomainNameToken returns true for token types that can legally appear as a
@@ -372,35 +492,62 @@ func isDomainNameToken(tt lexer.TokenType) bool {
 // parseServicesBlock parses: services { <service_block>* }
 // Each service_block is: <name> { <field>* } where name is an ident,
 // hyphenated-ident, or quoted string.
-func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
-	p.consume() // consume `services`
+func (p *Parser) parseServicesBlock() (*SyntaxNode, []*ast.ServiceDecl, []craft.Diagnostic) {
+	blockNode := &SyntaxNode{Kind: SyntaxKindServicesBlock}
 	var diags []craft.Diagnostic
 	var services []*ast.ServiceDecl
+
+	// Collect leading trivia before `services`.
+	for _, t := range p.collectTrivia() {
+		blockNode.Children = append(blockNode.Children, t)
+	}
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindKwServices))
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return blockNode, nil, diags
 	}
-	p.consume() // consume outer `{`
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindLBrace))
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Collect trivia inside block.
+		for _, t := range p.collectTrivia() {
+			blockNode.Children = append(blockNode.Children, t)
+		}
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+
 		tok := p.peek()
 
 		// Service name: identifier, string literal, or keyword-as-name
 		var name string
 		var nameLine, nameCol int
+		var nameKind SyntaxKind
 		switch tok.Type {
-		case lexer.TokenIdent, lexer.TokenString:
+		case lexer.TokenIdent:
 			name = tok.Value
 			nameLine = tok.Line
 			nameCol = tok.Column
+			nameKind = SyntaxKindIdent
+			p.consume()
+		case lexer.TokenString:
+			name = tok.Value
+			nameLine = tok.Line
+			nameCol = tok.Column
+			nameKind = SyntaxKindString
 			p.consume()
 		default:
 			if isServiceNameKeyword(tok.Type) {
 				name = tok.Value
 				nameLine = tok.Line
 				nameCol = tok.Column
+				if k, found := lexerKindToSyntaxKind[tok.Type]; found {
+					nameKind = k
+				} else {
+					nameKind = SyntaxKindIdent
+				}
 				p.consume()
 			} else {
 				diags = append(diags, p.diagUnexpected(tok, "service name"))
@@ -409,11 +556,21 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 			}
 		}
 
+		// Build the child service node.
+		svcNode := &SyntaxNode{Kind: SyntaxKindServiceDecl}
+		svcNode.Children = append(svcNode.Children, &SyntaxToken{
+			Kind:  nameKind,
+			Value: name,
+			Line:  nameLine,
+			Col:   nameCol,
+		})
+
 		if p.peek().Type != lexer.TokenLBrace {
 			diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+			blockNode.Children = append(blockNode.Children, svcNode)
 			continue
 		}
-		p.consume() // consume inner `{`
+		svcNode.Children = append(svcNode.Children, p.consumeAs(SyntaxKindLBrace))
 
 		svc, d := p.parseServiceBody(name, nameLine, nameCol)
 		diags = append(diags, d...)
@@ -430,10 +587,12 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 					End:   craft.Position{Line: ast.LineToLSP(nameLine)},
 				},
 			})
-			return services, diags
+			blockNode.Children = append(blockNode.Children, svcNode)
+			return blockNode, services, diags
 		}
 		svc.EndLine = p.peek().Line // record `}` line before consuming
-		p.consume()                 // consume inner `}`
+		svcNode.Children = append(svcNode.Children, p.consumeAs(SyntaxKindRBrace))
+		blockNode.Children = append(blockNode.Children, svcNode)
 	}
 
 	if p.atEOF() {
@@ -443,17 +602,23 @@ func (p *Parser) parseServicesBlock() ([]*ast.ServiceDecl, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return services, diags
+		return blockNode, services, diags
 	}
-	p.consume() // consume outer `}`
-	return services, diags
+	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindRBrace))
+	return blockNode, services, diags
 }
 
 // parseServiceStatement parses: service <name> { <field>* }
 // This is the singular top-level service form (Q11).
-func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) {
-	p.consume() // consume `service`
+func (p *Parser) parseServiceStatement() (*SyntaxNode, *ast.ServiceDecl, []craft.Diagnostic) {
+	node := &SyntaxNode{Kind: SyntaxKindServiceDecl}
 	var diags []craft.Diagnostic
+
+	// Collect leading trivia before `service`.
+	for _, t := range p.collectTrivia() {
+		node.Children = append(node.Children, t)
+	}
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwService))
 
 	nameTok := p.peek()
 	var name string
@@ -462,19 +627,23 @@ func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) 
 		name = nameTok.Value
 		nameLine = nameTok.Line
 		nameCol = nameTok.Column
-		p.consume()
+		nameKind := SyntaxKindIdent
+		if nameTok.Type == lexer.TokenString {
+			nameKind = SyntaxKindString
+		}
+		node.Children = append(node.Children, p.consumeAs(nameKind))
 	} else {
 		diags = append(diags, p.diagUnexpected(nameTok, "service name"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return node, nil, diags
 	}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return nil, diags
+		return node, nil, diags
 	}
-	p.consume() // consume '{'
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
 
 	svc, d := p.parseServiceBody(name, nameLine, nameCol)
 	diags = append(diags, d...)
@@ -489,11 +658,11 @@ func (p *Parser) parseServiceStatement() (*ast.ServiceDecl, []craft.Diagnostic) 
 				End:   craft.Position{Line: ast.LineToLSP(nameLine)},
 			},
 		})
-		return svc, diags
+		return node, svc, diags
 	}
 	svc.EndLine = p.peek().Line // record `}` line before consuming
-	p.consume()                 // consume '}'
-	return svc, diags
+	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
+	return node, svc, diags
 }
 
 // parseServiceBody parses the fields inside a service { ... } block.

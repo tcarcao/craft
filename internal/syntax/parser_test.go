@@ -765,3 +765,149 @@ func TestParse_IgnoresInlineBlockComment(t *testing.T) {
 		t.Errorf("expected actor user Bob, got %+v", file.Actors)
 	}
 }
+
+// --- Task 5: ParseTree tests ---
+
+func TestParseTree_ActorSyntaxTree(t *testing.T) {
+	tree, _, diags := syntax.ParseTree("actor user Alice")
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorNodes) != 1 {
+		t.Fatalf("expected 1 actor node, got %d", len(actorNodes))
+	}
+	a := actorNodes[0]
+	kw := a.ChildToken(syntax.SyntaxKindKwActor)
+	if kw == nil || kw.Value != "actor" {
+		t.Errorf("missing actor keyword token")
+	}
+	actorType := a.ChildToken(syntax.SyntaxKindKwUser, syntax.SyntaxKindKwSystem, syntax.SyntaxKindKwService)
+	if actorType == nil || actorType.Value != "user" {
+		t.Errorf("missing actor type token, got %v", actorType)
+	}
+	name := a.ChildToken(syntax.SyntaxKindIdent)
+	if name == nil || name.Value != "Alice" {
+		t.Errorf("missing name token, got %v", name)
+	}
+}
+
+func TestParseTree_DomainSyntaxTree(t *testing.T) {
+	tree, _, diags := syntax.ParseTree("domain Ordering { Cart Checkout }")
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	domainNodes := tree.ChildNodes(syntax.SyntaxKindDomainDecl)
+	if len(domainNodes) != 1 {
+		t.Fatalf("expected 1 domain node, got %d", len(domainNodes))
+	}
+	d := domainNodes[0]
+	name := d.ChildToken(syntax.SyntaxKindIdent)
+	if name == nil || name.Value != "Ordering" {
+		t.Errorf("expected domain name Ordering, got %v", name)
+	}
+	bcs := d.ChildNodes(syntax.SyntaxKindBoundedContext)
+	if len(bcs) != 2 {
+		t.Errorf("expected 2 bounded context nodes, got %d", len(bcs))
+	}
+}
+
+func TestParseTree_ActorCommentPreserved(t *testing.T) {
+	tree, _, _ := syntax.ParseTree("// leading comment\nactor user Alice")
+	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorNodes) != 1 {
+		t.Fatalf("expected 1 actor node")
+	}
+	// The comment should appear as a child of the actor node (trivia).
+	allToks := actorNodes[0].AllTokens()
+	hasComment := false
+	for _, tok := range allToks {
+		if tok.Kind == syntax.SyntaxKindLineComment {
+			hasComment = true
+		}
+	}
+	if !hasComment {
+		t.Error("expected leading comment to appear in actor node's AllTokens()")
+	}
+}
+
+func TestParseTree_LegacyParity(t *testing.T) {
+	src := `actor user Alice
+actor system Bob
+domain Commerce { Orders Payments }`
+
+	legacyFile, legacyDiags := syntax.Parse(src)
+	_, treeFile, treeDiags := syntax.ParseTree(src)
+
+	if len(legacyDiags) != len(treeDiags) {
+		t.Errorf("diag count mismatch: Parse=%d ParseTree=%d", len(legacyDiags), len(treeDiags))
+	}
+	if len(legacyFile.Actors) != len(treeFile.Actors) {
+		t.Errorf("actor count: Parse=%d ParseTree=%d", len(legacyFile.Actors), len(treeFile.Actors))
+	}
+	for i, a := range legacyFile.Actors {
+		b := treeFile.Actors[i]
+		if a.Name != b.Name || a.Type != b.Type {
+			t.Errorf("actor[%d]: Parse=%+v ParseTree=%+v", i, a, b)
+		}
+	}
+	if len(legacyFile.Domains) != len(treeFile.Domains) {
+		t.Errorf("domain count: Parse=%d ParseTree=%d", len(legacyFile.Domains), len(treeFile.Domains))
+	}
+	for i, d := range legacyFile.Domains {
+		e := treeFile.Domains[i]
+		if d.Name != e.Name {
+			t.Errorf("domain[%d] name: Parse=%q ParseTree=%q", i, d.Name, e.Name)
+		}
+		if len(d.BoundedContexts) != len(e.BoundedContexts) {
+			t.Errorf("domain[%d] bc count: Parse=%d ParseTree=%d", i, len(d.BoundedContexts), len(e.BoundedContexts))
+		}
+	}
+}
+
+func TestParseTree_ServiceSyntaxTree(t *testing.T) {
+	tree, file, diags := syntax.ParseTree("service UserService {\n    contexts: Auth\n}")
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if len(file.Services) != 1 || file.Services[0].Name != "UserService" {
+		t.Fatalf("legacy file missing service, got %+v", file.Services)
+	}
+	svcNodes := tree.ChildNodes(syntax.SyntaxKindServiceDecl)
+	if len(svcNodes) != 1 {
+		t.Fatalf("expected 1 service node, got %d", len(svcNodes))
+	}
+	svc := svcNodes[0]
+	kw := svc.ChildToken(syntax.SyntaxKindKwService)
+	if kw == nil || kw.Value != "service" {
+		t.Errorf("missing service keyword token")
+	}
+	name := svc.ChildToken(syntax.SyntaxKindIdent)
+	if name == nil || name.Value != "UserService" {
+		t.Errorf("missing service name token, got %v", name)
+	}
+}
+
+func TestParseTree_ActorsBlockSyntaxTree(t *testing.T) {
+	src := "actors {\n    user Alice\n    system Bob\n}"
+	tree, file, diags := syntax.ParseTree(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if len(file.Actors) != 2 {
+		t.Fatalf("expected 2 actors in legacy file, got %d", len(file.Actors))
+	}
+	blockNodes := tree.ChildNodes(syntax.SyntaxKindActorsBlock)
+	if len(blockNodes) != 1 {
+		t.Fatalf("expected 1 actors block node, got %d", len(blockNodes))
+	}
+	block := blockNodes[0]
+	kw := block.ChildToken(syntax.SyntaxKindKwActors)
+	if kw == nil || kw.Value != "actors" {
+		t.Errorf("missing actors keyword token")
+	}
+	actorDecls := block.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorDecls) != 2 {
+		t.Errorf("expected 2 actor decl nodes inside block, got %d", len(actorDecls))
+	}
+}
