@@ -168,12 +168,71 @@ func (db DomainsBlock) Domains() []DomainDecl {
 }
 
 // ServiceDecl is a typed view over a SyntaxKindServiceDecl node.
-// Methods will be implemented in a later task.
 type ServiceDecl struct{ node *SyntaxNode }
 
+func (s ServiceDecl) Keyword() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwService) }
+func (s ServiceDecl) Name() *SyntaxToken    { return s.node.ChildToken(SyntaxKindIdent) }
+
 // UseCaseDecl is a typed view over a SyntaxKindUseCaseDecl node.
-// Methods will be implemented in a later task.
 type UseCaseDecl struct{ node *SyntaxNode }
+
+func (u UseCaseDecl) Keyword() *SyntaxToken { return u.node.ChildToken(SyntaxKindKwUseCase) }
+func (u UseCaseDecl) Title() *SyntaxToken   { return u.node.ChildToken(SyntaxKindString) }
+
+// Scenarios returns all ScenarioDecl views within this use case.
+func (u UseCaseDecl) Scenarios() []ScenarioDecl {
+	var result []ScenarioDecl
+	for _, n := range u.node.ChildNodes(SyntaxKindScenario) {
+		result = append(result, ScenarioDecl{node: n})
+	}
+	return result
+}
+
+// ScenarioDecl is a typed view over a SyntaxKindScenario node.
+type ScenarioDecl struct{ node *SyntaxNode }
+
+// When returns the 'when' keyword token that starts this scenario.
+func (s ScenarioDecl) When() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwWhen) }
+
+// Trigger returns the trigger sub-node of this scenario.
+func (s ScenarioDecl) Trigger() TriggerDecl {
+	return TriggerDecl{node: s.node.ChildNode(SyntaxKindTrigger)}
+}
+
+// Actions returns all action nodes in this scenario.
+func (s ScenarioDecl) Actions() []ActionDecl {
+	var result []ActionDecl
+	for _, n := range s.node.ChildNodes(SyntaxKindAction) {
+		result = append(result, ActionDecl{node: n})
+	}
+	return result
+}
+
+// TriggerDecl is a typed view over a SyntaxKindTrigger node.
+type TriggerDecl struct{ node *SyntaxNode }
+
+// Subject returns the subject identifier token of the trigger (actor/domain name).
+func (t TriggerDecl) Subject() *SyntaxToken { return t.node.ChildToken(SyntaxKindIdent) }
+
+// Event returns the string token for event-style triggers (when "<EventName>").
+func (t TriggerDecl) Event() *SyntaxToken { return t.node.ChildToken(SyntaxKindString) }
+
+// ActionDecl is a typed view over a SyntaxKindAction node.
+type ActionDecl struct{ node *SyntaxNode }
+
+// Subject returns the subject identifier token (domain/service name).
+func (a ActionDecl) Subject() *SyntaxToken { return a.node.ChildToken(SyntaxKindIdent) }
+
+// Verb returns the action verb token (asks/notifies/listens/returns).
+func (a ActionDecl) Verb() *SyntaxToken {
+	return a.node.ChildToken(
+		SyntaxKindKwAsks, SyntaxKindKwNotifies,
+		SyntaxKindKwListens, SyntaxKindKwReturns,
+	)
+}
+
+// Connector returns the 'to' keyword if present.
+func (a ActionDecl) Connector() *SyntaxToken { return a.node.ChildToken(SyntaxKindKwTo) }
 
 // ArchDecl is a typed view over a SyntaxKindArchDecl node.
 // Methods will be implemented in a later task.

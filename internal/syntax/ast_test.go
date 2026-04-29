@@ -80,3 +80,87 @@ func TestFile_SyntaxTree(t *testing.T) {
 	}
 	_ = file
 }
+
+func TestServiceDecl_View(t *testing.T) {
+	tree, _, _ := syntax.ParseTree("service order-service { contexts: [Cart] }")
+	file := syntax.AsFile(tree)
+	services := file.Services()
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+	s := services[0]
+	if s.Name() == nil || s.Name().Value != "order-service" {
+		t.Errorf("expected name order-service, got %v", s.Name())
+	}
+	if s.Keyword() == nil {
+		t.Error("expected service keyword")
+	}
+}
+
+func TestUseCaseDecl_View(t *testing.T) {
+	src := "use_case \"Pay\" {\n    when Customer submits PaymentForm\n    PaymentService asks Bank to process\n}"
+	tree, _, _ := syntax.ParseTree(src)
+	file := syntax.AsFile(tree)
+	ucs := file.UseCases()
+	if len(ucs) != 1 {
+		t.Fatalf("expected 1 use_case, got %d", len(ucs))
+	}
+	uc := ucs[0]
+	if uc.Title() == nil || uc.Title().Value != "Pay" {
+		t.Errorf("expected title Pay, got %v", uc.Title())
+	}
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+}
+
+func TestScenarioDecl_View(t *testing.T) {
+	src := "use_case \"Pay\" {\n    when Customer submits PaymentForm\n    PaymentService asks Bank to process\n}"
+	tree, _, _ := syntax.ParseTree(src)
+	uc := syntax.AsFile(tree).UseCases()[0]
+	scenario := uc.Scenarios()[0]
+
+	when := scenario.When()
+	if when == nil || when.Kind != syntax.SyntaxKindKwWhen {
+		t.Errorf("expected when token, got %v", when)
+	}
+	actions := scenario.Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+}
+
+func TestActionDecl_VerbPosition(t *testing.T) {
+	src := "use_case \"Pay\" {\n    when Customer submits PaymentForm\n    PaymentService asks Bank to process\n}"
+	tree, _, _ := syntax.ParseTree(src)
+	scenario := syntax.AsFile(tree).UseCases()[0].Scenarios()[0]
+	actions := scenario.Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action")
+	}
+	verb := actions[0].Verb()
+	if verb == nil {
+		t.Fatal("expected verb token")
+	}
+	if verb.Kind != syntax.SyntaxKindKwAsks {
+		t.Errorf("expected SyntaxKindKwAsks, got %v", verb.Kind)
+	}
+	if verb.Line <= 0 || verb.Col <= 0 {
+		t.Errorf("verb position not set: line=%d col=%d", verb.Line, verb.Col)
+	}
+}
+
+func TestActionDecl_Notifies(t *testing.T) {
+	src := "use_case \"Notify\" {\n    when Customer submits NotifyForm\n    EmailService notifies \"UserNotified\"\n}"
+	tree, _, _ := syntax.ParseTree(src)
+	scenario := syntax.AsFile(tree).UseCases()[0].Scenarios()[0]
+	actions := scenario.Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action")
+	}
+	verb := actions[0].Verb()
+	if verb == nil || verb.Kind != syntax.SyntaxKindKwNotifies {
+		t.Errorf("expected SyntaxKindKwNotifies, got %v", verb)
+	}
+}
