@@ -66,7 +66,7 @@ func TestHarnessA_V2vsGoldens(t *testing.T) {
 				return
 			}
 
-			astFile, parserDiags := syntax.Parse(string(content))
+			tree, parserDiags := syntax.Parse(string(content))
 			if len(parserDiags) > 0 {
 				for _, d := range parserDiags {
 					if d.Severity == "error" {
@@ -75,7 +75,7 @@ func TestHarnessA_V2vsGoldens(t *testing.T) {
 				}
 			}
 
-			doc := syntax.Project(astFile)
+			doc := syntax.ProjectFromTree(tree)
 
 			gotBytes, err := json.Marshal(doc)
 			if err != nil {

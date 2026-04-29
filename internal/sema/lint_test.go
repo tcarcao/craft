@@ -25,7 +25,7 @@ func wsWithActors(names ...string) sema.WorkspaceSymbols {
 // parseTree is a test helper that parses a craft source string into a syntax
 // tree. Diagnostics from parsing are ignored so tests focus on lint rules.
 func parseTree(src string) *syntax.SyntaxNode {
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	return tree
 }
 

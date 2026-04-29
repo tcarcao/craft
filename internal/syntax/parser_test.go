@@ -8,7 +8,8 @@ import (
 )
 
 func TestParse_IndividualActor(t *testing.T) {
-	f, diags := syntax.Parse("actor user Customer_Support")
+	fTree, diags := syntax.Parse("actor user Customer_Support")
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -27,7 +28,8 @@ func TestParse_ActorsBlock(t *testing.T) {
     system Bob
     service DB
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -43,7 +45,8 @@ func TestParse_MixedActors(t *testing.T) {
 }
 
 actor service DB`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -58,7 +61,8 @@ func TestParse_UseCaseParsedWithActor(t *testing.T) {
 use_case "DoSomething" {
     when User does something
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(f.Actors) != 1 {
 		t.Errorf("expected 1 actor, got %d", len(f.Actors))
 	}
@@ -83,7 +87,8 @@ func TestParse_IndividualDomain(t *testing.T) {
     Product
     Order
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -109,7 +114,8 @@ func TestParse_DomainsBlock(t *testing.T) {
         Invoice
     }
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -127,7 +133,8 @@ domain User {
     Authentication
     Profile
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -143,7 +150,8 @@ exposure default {
     to: Business_User
 }
 `
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	for _, d := range diags {
 		if d.Severity == "error" {
 			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
@@ -167,7 +175,8 @@ func TestParse_ExposureWithThrough(t *testing.T) {
     through: APIGateway
 }
 `
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	for _, d := range diags {
 		if d.Severity == "error" {
 			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
@@ -195,7 +204,8 @@ func TestParse_ExposureWithContexts(t *testing.T) {
     through: LoadBalancer
 }
 `
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	for _, d := range diags {
 		if d.Severity == "error" {
 			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
@@ -221,7 +231,8 @@ exposure InternalAPI {
     through: InternalGateway
 }
 `
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	for _, d := range diags {
 		if d.Severity == "error" {
 			t.Fatalf("unexpected error: [%s] %s", d.Code, d.Message)
@@ -246,7 +257,8 @@ func TestParse_OpenActorType(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.wantType, func(t *testing.T) {
-			f, diags := syntax.Parse(tc.src)
+			fTree, diags := syntax.Parse(tc.src)
+	f := syntax.Lower(fTree)
 			if len(diags) != 0 {
 				t.Fatalf("unexpected diagnostics: %v", diags)
 			}
@@ -266,7 +278,8 @@ func TestParse_OpenActorTypeInBlock(t *testing.T) {
     bot SlackBot
     integration ExternalCRM
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -282,7 +295,8 @@ func TestParse_DeploymentRules(t *testing.T) {
         deployment: canary(90% -> stable, 10% -> experimental)
     }
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -306,7 +320,8 @@ func TestParse_DeploymentRules(t *testing.T) {
 
 func TestParse_DeploymentTypeOnly(t *testing.T) {
 	src := `services { UserService { deployment: blue_green } }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -323,7 +338,8 @@ func TestParse_SingleServiceForm(t *testing.T) {
     contexts: Auth, Profile
     language: golang
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -348,7 +364,8 @@ func TestParse_ReturnWithTarget(t *testing.T) {
     when User checks balance
         AccountManagement returns to User confirmation status
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -367,7 +384,8 @@ func TestParse_ReturnWithoutTarget(t *testing.T) {
     when User checks balance
         AccountManagement returns confirmation status
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -385,7 +403,8 @@ func TestParse_NumberInActionPhrase(t *testing.T) {
     when Customer initiates transfer
         PaymentProcessing asks TransactionValidation to check 3 transfer limits
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -405,8 +424,10 @@ func TestParse_SingleLineServicesEquivalent(t *testing.T) {
     B { contexts: Y }
 }`
 	single := `services { A { contexts: X } B { contexts: Y } }`
-	f1, d1 := syntax.Parse(multi)
-	f2, d2 := syntax.Parse(single)
+	f1Tree, d1 := syntax.Parse(multi)
+	f1 := syntax.Lower(f1Tree)
+	f2Tree, d2 := syntax.Parse(single)
+	f2 := syntax.Lower(f2Tree)
 	if len(d1) != 0 || len(d2) != 0 {
 		t.Fatalf("diagnostics: multi=%v single=%v", d1, d2)
 	}
@@ -423,7 +444,8 @@ services {
         contexts: Auth
     }
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -435,7 +457,8 @@ services {
 // Q10: use_case name with escaped quotes
 func TestParse_UseCaseEscapedName(t *testing.T) {
 	src := "use_case \"He said \\\"hello\\\"\" {\n    when User greets\n        System confirms greeting\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -450,7 +473,8 @@ func TestParse_SubjectlessTrigger(t *testing.T) {
     when "DailyCron"
         PaymentProcessing processes payments
 }`
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -465,7 +489,8 @@ func TestParse_SubjectlessTrigger(t *testing.T) {
 
 func TestParse_ServiceEndLine(t *testing.T) {
 	src := "services {\n  MyService {\n    contexts: Foo\n  }\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -479,7 +504,8 @@ func TestParse_ServiceEndLine(t *testing.T) {
 
 func TestParse_DomainEndLine(t *testing.T) {
 	src := "domain Commerce {\n  Orders\n  Payments\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -493,7 +519,8 @@ func TestParse_DomainEndLine(t *testing.T) {
 
 func TestParse_UseCaseEndLine(t *testing.T) {
 	src := "actor user Foo\nuse_case \"DoThing\" {\n  when Foo does something\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -507,7 +534,8 @@ func TestParse_UseCaseEndLine(t *testing.T) {
 
 func TestParse_ActorBlockRange(t *testing.T) {
 	src := "actors {\n  user Alice\n  system Bob\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -524,7 +552,8 @@ func TestParse_ActorBlockRange(t *testing.T) {
 
 func TestParse_ServiceIsGrouped_InsideBlock(t *testing.T) {
 	src := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -538,7 +567,8 @@ func TestParse_ServiceIsGrouped_InsideBlock(t *testing.T) {
 
 func TestParse_ServiceIsGrouped_TopLevel(t *testing.T) {
 	src := "service OrderSvc {\n  contexts: Orders\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -552,7 +582,8 @@ func TestParse_ServiceIsGrouped_TopLevel(t *testing.T) {
 
 func TestParse_DomainIsGrouped_InsideBlock(t *testing.T) {
 	src := "domains {\n  Commerce {\n    Orders\n  }\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -566,7 +597,8 @@ func TestParse_DomainIsGrouped_InsideBlock(t *testing.T) {
 
 func TestParse_DomainIsGrouped_TopLevel(t *testing.T) {
 	src := "domain Commerce {\n  Orders\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -585,7 +617,8 @@ func TestParse_DomainIsGrouped_TopLevel(t *testing.T) {
 func TestParse_ActorColumnTracking(t *testing.T) {
 	// Line 2: "    user Alice" — Alice starts at column 10 (1-based)
 	src := "actors {\n    user Alice\n    system Bob\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -611,7 +644,8 @@ func TestParse_ActorColumnTracking(t *testing.T) {
 func TestParse_DomainNameColumnTracking(t *testing.T) {
 	// "domain ECommerce {" — ECommerce starts at column 8 (after "domain ")
 	src := "domain ECommerce {\n    Auth\n    Profile\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -631,7 +665,8 @@ func TestParse_BoundedContextPositionTracking(t *testing.T) {
 	// Line 2: "    Auth"   — Auth starts at column 5
 	// Line 3: "    Profile" — Profile starts at column 5
 	src := "domain ECommerce {\n    Auth\n    Profile\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -664,7 +699,8 @@ func TestParse_BoundedContextPositionTracking(t *testing.T) {
 func TestParse_ServiceColumnTracking(t *testing.T) {
 	// "service MyService {" — MyService starts at column 9 (after "service ")
 	src := "service MyService {\n    contexts: Auth\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -683,7 +719,8 @@ func TestParse_ServiceColumnTracking(t *testing.T) {
 func TestParse_GroupedServiceColumnTracking(t *testing.T) {
 	// Inside services block: "  OrderSvc {" — OrderSvc starts at column 3
 	src := "services {\n  OrderSvc {\n    contexts: Orders\n  }\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -704,7 +741,8 @@ func TestParse_AsksAction_TargetContextColumn(t *testing.T) {
 	// Auth    at 1-based col 5  (4 spaces + 'A')
 	// Profile at 1-based col 15 (col5 + len("Auth") + len(" asks ") = 5+4+6 = 15)
 	src := "use_case \"Test\" {\n  when User initiates x\n    Auth asks Profile to validate\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -731,7 +769,8 @@ func TestParse_ReturnsAction_TargetContextColumn(t *testing.T) {
 	//       1234 5678 9012345 67 8901
 	// col:  1234 5   9       17 21
 	src := "use_case \"Test\" {\n  when User checks balance\n    Auth returns to User confirmation\n}"
-	f, diags := syntax.Parse(src)
+	fTree, diags := syntax.Parse(src)
+	f := syntax.Lower(fTree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -746,7 +785,8 @@ func TestParse_ReturnsAction_TargetContextColumn(t *testing.T) {
 
 // Task 4: peek() skips comment tokens for parse decisions.
 func TestParse_IgnoresLeadingComment(t *testing.T) {
-	file, diags := syntax.Parse("// a comment\nactor user Alice")
+	fileTree, diags := syntax.Parse("// a comment\nactor user Alice")
+	file := syntax.Lower(fileTree)
 	if len(diags) != 0 {
 		t.Fatalf("expected no diagnostics, got: %v", diags)
 	}
@@ -757,7 +797,8 @@ func TestParse_IgnoresLeadingComment(t *testing.T) {
 
 // Task 4: peek() skips inline block comments.
 func TestParse_IgnoresInlineBlockComment(t *testing.T) {
-	file, diags := syntax.Parse("actor /* inline */ user Bob")
+	fileTree, diags := syntax.Parse("actor /* inline */ user Bob")
+	file := syntax.Lower(fileTree)
 	if len(diags) != 0 {
 		t.Fatalf("expected no diagnostics, got: %v", diags)
 	}
@@ -769,7 +810,7 @@ func TestParse_IgnoresInlineBlockComment(t *testing.T) {
 // --- Task 5: ParseTree tests ---
 
 func TestParseTree_ActorSyntaxTree(t *testing.T) {
-	tree, _, diags := syntax.ParseTree("actor user Alice")
+	tree, diags := syntax.Parse("actor user Alice")
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -793,7 +834,7 @@ func TestParseTree_ActorSyntaxTree(t *testing.T) {
 }
 
 func TestParseTree_DomainSyntaxTree(t *testing.T) {
-	tree, _, diags := syntax.ParseTree("domain Ordering { Cart Checkout }")
+	tree, diags := syntax.Parse("domain Ordering { Cart Checkout }")
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -813,7 +854,7 @@ func TestParseTree_DomainSyntaxTree(t *testing.T) {
 }
 
 func TestParseTree_ActorCommentPreserved(t *testing.T) {
-	tree, _, _ := syntax.ParseTree("// leading comment\nactor user Alice")
+	tree, _ := syntax.Parse("// leading comment\nactor user Alice")
 	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
 	if len(actorNodes) != 1 {
 		t.Fatalf("expected 1 actor node")
@@ -836,37 +877,40 @@ func TestParseTree_LegacyParity(t *testing.T) {
 actor system Bob
 domain Commerce { Orders Payments }`
 
-	legacyFile, legacyDiags := syntax.Parse(src)
-	_, treeFile, treeDiags := syntax.ParseTree(src)
+	treeA, legacyDiags := syntax.Parse(src)
+	treeB, treeDiags := syntax.Parse(src)
+	legacyFile := syntax.Lower(treeA)
+	treeFile := syntax.Lower(treeB)
 
 	if len(legacyDiags) != len(treeDiags) {
-		t.Errorf("diag count mismatch: Parse=%d ParseTree=%d", len(legacyDiags), len(treeDiags))
+		t.Errorf("diag count mismatch: %d vs %d", len(legacyDiags), len(treeDiags))
 	}
 	if len(legacyFile.Actors) != len(treeFile.Actors) {
-		t.Errorf("actor count: Parse=%d ParseTree=%d", len(legacyFile.Actors), len(treeFile.Actors))
+		t.Errorf("actor count: %d vs %d", len(legacyFile.Actors), len(treeFile.Actors))
 	}
 	for i, a := range legacyFile.Actors {
 		b := treeFile.Actors[i]
 		if a.Name != b.Name || a.Type != b.Type {
-			t.Errorf("actor[%d]: Parse=%+v ParseTree=%+v", i, a, b)
+			t.Errorf("actor[%d]: %+v vs %+v", i, a, b)
 		}
 	}
 	if len(legacyFile.Domains) != len(treeFile.Domains) {
-		t.Errorf("domain count: Parse=%d ParseTree=%d", len(legacyFile.Domains), len(treeFile.Domains))
+		t.Errorf("domain count: %d vs %d", len(legacyFile.Domains), len(treeFile.Domains))
 	}
 	for i, d := range legacyFile.Domains {
 		e := treeFile.Domains[i]
 		if d.Name != e.Name {
-			t.Errorf("domain[%d] name: Parse=%q ParseTree=%q", i, d.Name, e.Name)
+			t.Errorf("domain[%d] name: %q vs %q", i, d.Name, e.Name)
 		}
 		if len(d.BoundedContexts) != len(e.BoundedContexts) {
-			t.Errorf("domain[%d] bc count: Parse=%d ParseTree=%d", i, len(d.BoundedContexts), len(e.BoundedContexts))
+			t.Errorf("domain[%d] bc count: %d vs %d", i, len(d.BoundedContexts), len(e.BoundedContexts))
 		}
 	}
 }
 
 func TestParseTree_ServiceSyntaxTree(t *testing.T) {
-	tree, file, diags := syntax.ParseTree("service UserService {\n    contexts: Auth\n}")
+	tree, diags := syntax.Parse("service UserService {\n    contexts: Auth\n}")
+	file := syntax.Lower(tree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -892,7 +936,7 @@ func TestParseTree_UseCaseSyntaxTree(t *testing.T) {
 	// "when Customer initiates payment" is the trigger (Customer=actor, initiates=verb, payment=phrase).
 	// "PaymentService asks Bank to process" is an action line (asks=action verb).
 	src := "use_case \"Pay\" {\n    when Customer initiates payment\n        PaymentService asks Bank to process\n}"
-	tree, _, diags := syntax.ParseTree(src)
+	tree, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -920,7 +964,7 @@ func TestParseTree_UseCaseSyntaxTree(t *testing.T) {
 
 func TestParseTree_ArchSyntaxTree(t *testing.T) {
 	src := "arch MyArch {\n    presentation: ComponentA\n}"
-	tree, _, diags := syntax.ParseTree(src)
+	tree, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -940,7 +984,7 @@ func TestParseTree_ArchSyntaxTree(t *testing.T) {
 
 func TestParseTree_ExposureSyntaxTree(t *testing.T) {
 	src := "exposure MyExposure {\n    to: Business_User\n    through: rest\n}"
-	tree, _, diags := syntax.ParseTree(src)
+	tree, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -960,7 +1004,8 @@ func TestParseTree_ExposureSyntaxTree(t *testing.T) {
 
 func TestParseTree_ActorsBlockSyntaxTree(t *testing.T) {
 	src := "actors {\n    user Alice\n    system Bob\n}"
-	tree, file, diags := syntax.ParseTree(src)
+	tree, diags := syntax.Parse(src)
+	file := syntax.Lower(tree)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}

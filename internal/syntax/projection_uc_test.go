@@ -20,7 +20,7 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.Project(f)
+	doc := syntax.ProjectFromTree(f)
 	if len(doc.UseCases) != 1 {
 		t.Fatalf("expected 1 use case, got %d", len(doc.UseCases))
 	}

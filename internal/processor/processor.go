@@ -26,7 +26,7 @@ func (p *Processor) ProcessFile(inputPath, outputDir string) error {
 		return fmt.Errorf("failed to read input file: %v", err)
 	}
 
-	tree, _, _ := syntax.ParseTree(string(content))
+	tree, _ := syntax.Parse(string(content))
 	doc := syntax.ProjectFromTree(tree)
 
 	if err := p.generateDiagrams(doc, outputDir); err != nil {

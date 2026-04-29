@@ -48,7 +48,7 @@ func validateCmd() *cobra.Command {
 				}
 
 				uri := "file://" + file
-				tree, _, parseDiags := syntax.ParseTree(string(content))
+				tree, parseDiags := syntax.Parse(string(content))
 				perFileTrees[uri] = tree
 
 				for _, d := range parseDiags {

@@ -25,21 +25,14 @@ type Parser struct {
 	pos    int
 }
 
-// Parse parses the given source text, returning an AST and any diagnostics.
-// A non-nil File is always returned even when diagnostics are present (island
-// parsing: each top-level block is parsed independently).
-func Parse(src string) (*ast.File, []craft.Diagnostic) {
-	tree, _, diags := ParseTree(src)
-	return Lower(tree), diags
-}
-
-// ParseTree parses the given source text, returning both a lossless syntax tree
-// and the legacy *ast.File, along with any diagnostics. The *SyntaxNode is the
-// root File node containing all top-level constructs as children.
-func ParseTree(src string) (*SyntaxNode, *ast.File, []craft.Diagnostic) {
+// Parse parses the given source text, returning a lossless syntax tree and any
+// diagnostics. A non-nil SyntaxNode is always returned even when diagnostics
+// are present (island parsing: each top-level block is parsed independently).
+func Parse(src string) (*SyntaxNode, []craft.Diagnostic) {
 	l := lexer.New(src)
 	p := &Parser{tokens: l.All()}
-	return p.parseFile()
+	tree, _, diags := p.parseFile()
+	return tree, diags
 }
 
 // --- main parse loop ---

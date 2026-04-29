@@ -57,7 +57,7 @@ func TestHarnessC_DiagnosticsVsGoldens(t *testing.T) {
 			}
 
 			// Run the v2 parser.
-			tree, _, syntaxDiags := syntax.ParseTree(string(content))
+			tree, syntaxDiags := syntax.Parse(string(content))
 
 			// Run single-file sema analysis.
 			uri := "file://" + craftFile

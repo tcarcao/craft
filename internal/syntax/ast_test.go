@@ -7,7 +7,7 @@ import (
 )
 
 func TestActorDecl_View(t *testing.T) {
-	tree, _, _ := syntax.ParseTree("actor user Alice")
+	tree, _ := syntax.Parse("actor user Alice")
 	file := syntax.AsFile(tree)
 	actors := file.Actors()
 	if len(actors) != 1 {
@@ -26,7 +26,7 @@ func TestActorDecl_View(t *testing.T) {
 }
 
 func TestActorsBlock_View(t *testing.T) {
-	tree, _, _ := syntax.ParseTree("actors { user Alice  system Bob }")
+	tree, _ := syntax.Parse("actors { user Alice  system Bob }")
 	file := syntax.AsFile(tree)
 	actors := file.Actors()
 	if len(actors) != 2 {
@@ -35,7 +35,7 @@ func TestActorsBlock_View(t *testing.T) {
 }
 
 func TestDomainDecl_View(t *testing.T) {
-	tree, _, _ := syntax.ParseTree("domain Ordering { Cart Checkout }")
+	tree, _ := syntax.Parse("domain Ordering { Cart Checkout }")
 	file := syntax.AsFile(tree)
 	domains := file.Domains()
 	if len(domains) != 1 {
@@ -56,7 +56,7 @@ func TestDomainDecl_View(t *testing.T) {
 
 func TestFile_Actors_DocumentOrder(t *testing.T) {
 	src := "actor user Alice\nactors { system Bob }\nactor user Carol"
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	actors := syntax.AsFile(tree).Actors()
 	if len(actors) != 3 {
 		t.Fatalf("expected 3 actors, got %d", len(actors))
@@ -71,7 +71,7 @@ func TestFile_Actors_DocumentOrder(t *testing.T) {
 }
 
 func TestFile_SyntaxTree(t *testing.T) {
-	tree, _, _ := syntax.ParseTree("actor user Alice")
+	tree, _ := syntax.Parse("actor user Alice")
 	file := syntax.AsFile(tree)
 	// AsFile must not panic on nil
 	nilFile := syntax.AsFile(nil)
@@ -82,7 +82,7 @@ func TestFile_SyntaxTree(t *testing.T) {
 }
 
 func TestServiceDecl_View(t *testing.T) {
-	tree, _, _ := syntax.ParseTree("service order-service { contexts: [Cart] }")
+	tree, _ := syntax.Parse("service order-service { contexts: [Cart] }")
 	file := syntax.AsFile(tree)
 	services := file.Services()
 	if len(services) != 1 {
@@ -99,7 +99,7 @@ func TestServiceDecl_View(t *testing.T) {
 
 func TestUseCaseDecl_View(t *testing.T) {
 	src := "use_case \"Pay\" {\n    when Customer submits PaymentForm\n    PaymentService asks Bank to process\n}"
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	file := syntax.AsFile(tree)
 	ucs := file.UseCases()
 	if len(ucs) != 1 {
@@ -117,7 +117,7 @@ func TestUseCaseDecl_View(t *testing.T) {
 
 func TestScenarioDecl_View(t *testing.T) {
 	src := "use_case \"Pay\" {\n    when Customer submits PaymentForm\n    PaymentService asks Bank to process\n}"
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	uc := syntax.AsFile(tree).UseCases()[0]
 	scenario := uc.Scenarios()[0]
 
@@ -133,7 +133,7 @@ func TestScenarioDecl_View(t *testing.T) {
 
 func TestActionDecl_VerbPosition(t *testing.T) {
 	src := "use_case \"Pay\" {\n    when Customer submits PaymentForm\n    PaymentService asks Bank to process\n}"
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	scenario := syntax.AsFile(tree).UseCases()[0].Scenarios()[0]
 	actions := scenario.Actions()
 	if len(actions) != 1 {
@@ -153,7 +153,7 @@ func TestActionDecl_VerbPosition(t *testing.T) {
 
 func TestArchDecl_View(t *testing.T) {
 	src := "arch MyArch {\n    presentation: ComponentA\n    gateway: ComponentB\n}"
-	tree, _, diags := syntax.ParseTree(src)
+	tree, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -185,7 +185,7 @@ func TestArchDecl_View(t *testing.T) {
 
 func TestExposureDecl_View(t *testing.T) {
 	src := "exposure MyExposure {\n    to: Customer\n    through: rest\n}"
-	tree, _, diags := syntax.ParseTree(src)
+	tree, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -209,7 +209,7 @@ func TestExposureDecl_View(t *testing.T) {
 
 func TestActionDecl_Notifies(t *testing.T) {
 	src := "use_case \"Notify\" {\n    when Customer submits NotifyForm\n    EmailService notifies \"UserNotified\"\n}"
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	scenario := syntax.AsFile(tree).UseCases()[0].Scenarios()[0]
 	actions := scenario.Actions()
 	if len(actions) != 1 {

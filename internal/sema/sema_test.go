@@ -12,7 +12,7 @@ import (
 // the lossless syntax tree. Parse diagnostics are ignored so tests focus on
 // the sema rule under test.
 func parseTreeFor(src string) *syntax.SyntaxNode {
-	tree, _, _ := syntax.ParseTree(src)
+	tree, _ := syntax.Parse(src)
 	return tree
 }
 

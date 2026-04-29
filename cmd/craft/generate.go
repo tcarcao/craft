@@ -56,7 +56,7 @@ func generateCmd() *cobra.Command {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 
-				astFile, diags := syntax.Parse(string(content))
+				tree, diags := syntax.Parse(string(content))
 				hasError := false
 				for _, d := range diags {
 					fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", file, d.Range.Start.Line+1, d.Severity, d.Message)
@@ -67,7 +67,7 @@ func generateCmd() *cobra.Command {
 				if hasError {
 					return fmt.Errorf("%s: parse errors prevent diagram generation", file)
 				}
-				doc := syntax.Project(astFile)
+				doc := syntax.ProjectFromTree(tree)
 
 				outDir := outputDir
 				if outDir == "" {

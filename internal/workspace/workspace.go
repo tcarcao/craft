@@ -207,7 +207,8 @@ func (w *Workspace) parseAndStore(uri, content string) {
 				})
 			}
 		}()
-		file.SyntaxTree, file.AST, file.Diagnostics = syntax.ParseTree(content)
+		file.SyntaxTree, file.Diagnostics = syntax.Parse(content)
+		file.AST = syntax.Lower(file.SyntaxTree)
 	}()
 
 	// On successful parse, advance LastGoodAST.

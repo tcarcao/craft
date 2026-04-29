@@ -22,10 +22,11 @@ func TestProjectFromTree_ParityWithProject(t *testing.T) {
 			label = label[:40]
 		}
 		t.Run(label, func(t *testing.T) {
-			astFile, _ := syntax.Parse(src)
+			treeA, _ := syntax.Parse(src)
+			astFile := syntax.Lower(treeA)
 			legacyDoc := syntax.Project(astFile)
 
-			tree, _, _ := syntax.ParseTree(src)
+			tree, _ := syntax.Parse(src)
 			newDoc := syntax.ProjectFromTree(tree)
 
 			legacyJSON, _ := json.Marshal(legacyDoc)
