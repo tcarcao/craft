@@ -1502,6 +1502,130 @@ func TestSemanticTokens_StringTypes(t *testing.T) {
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
+func TestSemanticTokens_ExposureAndArch(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: exposure PaymentAPI {    — PaymentAPI at col 9 (0-based), length 10
+	// Line 1:   to: external
+	// Line 2: }
+	// Line 3: arch MyArch {
+	// Line 4:   presentation:
+	// Line 5:     Gateway             — Gateway at col 4 (0-based), length 7
+	// Line 6: }
+	const craftSrc = "exposure PaymentAPI {\n  to: external\n}\narch MyArch {\n  presentation:\n    Gateway\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///exparch.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///exparch.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling semantic tokens result: %v", err)
+	}
+
+	// Decode relative-encoded stream into absolute tokens.
+	type tok struct{ line, startChar, length, tokenType uint32 }
+	var tokens []tok
+	var absLine, absChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		absLine += dl
+		if dl == 0 {
+			absChar += dc
+		} else {
+			absChar = dc
+		}
+		tokens = append(tokens, tok{absLine, absChar, ln, tt})
+	}
+
+	// Build lookup map: (line, startChar) → tok.
+	byPos := make(map[[2]uint32]tok, len(tokens))
+	for _, tk := range tokens {
+		byPos[[2]uint32{tk.line, tk.startChar}] = tk
+	}
+
+	// exposure PaymentAPI { — PaymentAPI at line=0, col=9, length=10, tokenType=6 (craft-exposure-name)
+	if tk, ok := byPos[[2]uint32{0, 9}]; !ok {
+		t.Errorf("expected token at line=0, col=9 (exposure name PaymentAPI); all tokens: %v", tokens)
+	} else if tk.tokenType != 6 {
+		t.Errorf("exposure name: tokenType=%d, want 6 (craft-exposure-name); all tokens: %v", tk.tokenType, tokens)
+	}
+
+	//     Gateway — line=5, col=4, length=7, tokenType=5 (craft-component-name)
+	if tk, ok := byPos[[2]uint32{5, 4}]; !ok {
+		t.Errorf("expected token at line=5, col=4 (arch component Gateway); all tokens: %v", tokens)
+	} else if tk.tokenType != 5 {
+		t.Errorf("arch component name: tokenType=%d, want 5 (craft-component-name); all tokens: %v", tk.tokenType, tokens)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                              //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
 func TestDefinition_TargetContextColumnAware(t *testing.T) {
 	// Fixture (1-based lines):
 	// L1:  domain Auth {               — Auth domain at line 1

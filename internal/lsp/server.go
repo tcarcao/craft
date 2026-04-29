@@ -1661,6 +1661,73 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 		})
 	}
 
+	// Exposures: craft-exposure-name.
+	expIdx := s.semanticTokenTypeIndex("craft-exposure-name")
+	if expIdx >= 0 {
+		for _, e := range file.Exposures() {
+			nameTok := e.Name()
+			if nameTok == nil || nameTok.Line <= 0 {
+				continue
+			}
+			col := uint32(0)
+			if nameTok.Col > 0 {
+				col = uint32(nameTok.Col - 1)
+			}
+			tokens = append(tokens, semanticToken{
+				line:      uint32(nameTok.Line - 1),
+				startChar: col,
+				length:    uint32(len([]rune(nameTok.Value))),
+				tokenType: uint32(expIdx),
+			})
+		}
+	}
+
+	// Arch component names: craft-component-name (primary name per component).
+	compIdx := s.semanticTokenTypeIndex("craft-component-name")
+	if compIdx >= 0 {
+		for _, arch := range file.Archs() {
+			for _, section := range arch.Sections() {
+				for _, comp := range section.Components() {
+					nameTok := comp.Name()
+					if nameTok == nil || nameTok.Line <= 0 {
+						continue
+					}
+					col := uint32(0)
+					if nameTok.Col > 0 {
+						col = uint32(nameTok.Col - 1)
+					}
+					tokens = append(tokens, semanticToken{
+						line:      uint32(nameTok.Line - 1),
+						startChar: col,
+						length:    uint32(len([]rune(nameTok.Value))),
+						tokenType: uint32(compIdx),
+					})
+				}
+			}
+		}
+	}
+
+	// Open-taxonomy actor types: craft-actor-type (ident types only; keyword types handled by Pass 1).
+	actorTypeIdx := s.semanticTokenTypeIndex("craft-actor-type")
+	if actorTypeIdx >= 0 {
+		for _, a := range file.Actors() {
+			typTok := a.ActorTypeToken()
+			if typTok == nil || typTok.Line <= 0 {
+				continue
+			}
+			col := uint32(0)
+			if typTok.Col > 0 {
+				col = uint32(typTok.Col - 1)
+			}
+			tokens = append(tokens, semanticToken{
+				line:      uint32(typTok.Line - 1),
+				startChar: col,
+				length:    uint32(len([]rune(typTok.Value))),
+				tokenType: uint32(actorTypeIdx),
+			})
+		}
+	}
+
 	// Use-case action parties: colour actors/domains/services referenced inside
 	// when clauses using their respective semantic token types (S6).
 	rm := s.ws.ResolutionMap()

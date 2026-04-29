@@ -205,6 +205,24 @@ func (a ActorDecl) ActorTypeValue() string {
 	return ""
 }
 
+// ActorTypeToken returns the token for the actor's open-taxonomy type ident, or nil.
+// Returns nil for built-in keyword types (user/system/service) since Pass 1 handles those.
+func (a ActorDecl) ActorTypeToken() *SyntaxToken {
+	if a.ActorType() != nil {
+		return nil // keyword type already emitted by Pass 1
+	}
+	tokens := a.node.Tokens()
+	for i, tok := range tokens {
+		if tok.Kind == SyntaxKindIdent {
+			if i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindIdent {
+				return tok
+			}
+			break
+		}
+	}
+	return nil
+}
+
 // Name returns the identifier token for the actor's name.
 func (a ActorDecl) Name() *SyntaxToken {
 	return a.node.ChildToken(SyntaxKindIdent)
