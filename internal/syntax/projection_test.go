@@ -17,7 +17,6 @@ func TestProjectFromTree_ParityWithProject(t *testing.T) {
 		"use_case \"Pay\" { when Customer submits PaymentForm\n    PaymentService asks Bank }",
 	}
 	for _, src := range fixtures {
-		src := src
 		label := src
 		if len(label) > 40 {
 			label = label[:40]
