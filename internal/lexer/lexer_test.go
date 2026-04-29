@@ -42,6 +42,23 @@ func TestLexer_Actors(t *testing.T) {
 			src:       "actor user My_Actor",
 			wantTypes: []lexer.TokenType{lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
 		},
+		{
+			name: "line comment at EOF no newline",
+			src:  "// comment at eof",
+			wantTypes: []lexer.TokenType{
+				lexer.TokenLineComment,
+				lexer.TokenEOF,
+			},
+		},
+		{
+			name: "inline line comment after tokens",
+			src:  "actor user Foo // inline comment",
+			wantTypes: []lexer.TokenType{
+				lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent,
+				lexer.TokenLineComment,
+				lexer.TokenEOF,
+			},
+		},
 	}
 
 	for _, tc := range tests {

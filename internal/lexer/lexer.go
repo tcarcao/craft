@@ -188,12 +188,8 @@ func (l *Lexer) Next() Token {
 // skipWhitespace advances past spaces, tabs, carriage returns, and newlines.
 func (l *Lexer) skipWhitespace() {
 	for l.pos < len(l.src) {
-		ch := l.src[l.pos]
-		switch {
-		case ch == ' ' || ch == '\t' || ch == '\r':
-			l.advance()
-		case ch == '\n':
-			// For Craft's grammar all newlines are insignificant, so skip them all here.
+		switch l.src[l.pos] {
+		case ' ', '\t', '\r', '\n':
 			l.advance()
 		default:
 			return
@@ -214,6 +210,9 @@ func (l *Lexer) scanLineComment() Token {
 }
 
 // scanBlockComment scans a /* ... */ block comment and returns it as a token.
+// If EOF is reached without finding */, returns a TokenBlockComment whose Value
+// does not end with */. Callers that need to distinguish malformed block comments
+// must inspect the value.
 func (l *Lexer) scanBlockComment() Token {
 	startLine, startCol := l.line, l.col
 	start := l.pos
