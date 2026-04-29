@@ -2056,4 +2056,122 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 	} else if tok.tokenType != 33 {
 		t.Errorf("format: got tokenType %d, want 33 (craft-phrase-word)", tok.tokenType)
 	}
+
+	t.Run("sync_action", func(t *testing.T) {
+		sIn, tOut2 := io.Pipe()
+		tIn2, sOut2 := io.Pipe()
+
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel2()
+
+		go func() { lsp.Serve(ctx2, sIn, sOut2) }() //nolint:errcheck
+		defer tOut2.Close()
+
+		br2 := bufio.NewReader(tIn2)
+		id2 := 1
+
+		if err := writeMsg(tOut2, lspMsg{
+			JSONRPC: "2.0", ID: &id2, Method: "initialize",
+			Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readMsg(br2); err != nil {
+			t.Fatal(err)
+		}
+		if err := writeMsg(tOut2, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Line 0: use_case "SyncTest" {
+		// Line 1:   when SomeActor does SomeThing
+		// Line 2:     Auth asks Database to verify identity
+		// Line 3: }
+		// col math (0-based): "    Auth asks Database to verify identity"
+		//   col 4:  Auth     (len 4)  — subject
+		//   col 9:  asks     (len 4)  — keyword craft-asks-verb (Pass 1, SyntaxKindKwAsks)
+		//   col 14: Database (len 8)  — target
+		//   col 23: to       (len 2)  — SyntaxKindKwTo → craft-connector-word (index 29)
+		//   col 26: verify   (len 6)  — phrase word → craft-phrase-word (index 33)
+		//   col 33: identity (len 8)  — phrase word → craft-phrase-word (index 33)
+		syncSrc := "use_case \"SyncTest\" {\n  when SomeActor does SomeThing\n    Auth asks Database to verify identity\n}"
+		id2++
+		if err := writeMsg(tOut2, lspMsg{
+			JSONRPC: "2.0", Method: "textDocument/didOpen",
+			Params: json.RawMessage(fmt.Sprintf(
+				`{"textDocument":{"uri":"file:///sync.craft","languageId":"craft","version":1,"text":%s}}`,
+				mustMarshalString(syncSrc),
+			)),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(300 * time.Millisecond)
+
+		id2++
+		tokID2 := id2
+		if err := writeMsg(tOut2, lspMsg{
+			JSONRPC: "2.0", ID: &tokID2,
+			Method: "textDocument/semanticTokens/full",
+			Params: json.RawMessage(`{"textDocument":{"uri":"file:///sync.craft"}}`),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		var resp2 lspMsg
+		deadline2 := time.Now().Add(4 * time.Second)
+		for time.Now().Before(deadline2) {
+			msg, err := readMsg(br2)
+			if err != nil {
+				t.Fatalf("reading: %v", err)
+			}
+			if msg.ID != nil && *msg.ID == tokID2 {
+				resp2 = msg
+				break
+			}
+		}
+		if resp2.ID == nil {
+			t.Fatal("timed out waiting for sync_action token response")
+		}
+
+		var result2 struct{ Data []uint32 `json:"data"` }
+		if err := json.Unmarshal(resp2.Result, &result2); err != nil {
+			t.Fatal(err)
+		}
+
+		type absToken2 struct{ line, startChar, length, tokenType, modifiers uint32 }
+		byPos2 := make(map[[2]uint32]absToken2)
+		var curLine2, curChar2 uint32
+		for i := 0; i+4 < len(result2.Data); i += 5 {
+			dl, dc, ln, tt, mod := result2.Data[i], result2.Data[i+1], result2.Data[i+2], result2.Data[i+3], result2.Data[i+4]
+			curLine2 += dl
+			if dl > 0 {
+				curChar2 = dc
+			} else {
+				curChar2 += dc
+			}
+			byPos2[[2]uint32{curLine2, curChar2}] = absToken2{curLine2, curChar2, ln, tt, mod}
+		}
+
+		// "to" at line 2, col 23, len 2 → tokenType 29 (craft-connector-word)
+		// classified via SyntaxKindKwTo path in sync_action branch
+		if tok, ok := byPos2[[2]uint32{2, 23}]; !ok {
+			t.Error("to not found at line 2 col 23")
+		} else if tok.tokenType != 29 {
+			t.Errorf("to: got tokenType %d, want 29 (craft-connector-word)", tok.tokenType)
+		}
+
+		// "verify" at line 2, col 26, len 6 → tokenType 33 (craft-phrase-word)
+		if tok, ok := byPos2[[2]uint32{2, 26}]; !ok {
+			t.Error("verify not found at line 2 col 26")
+		} else if tok.tokenType != 33 {
+			t.Errorf("verify: got tokenType %d, want 33 (craft-phrase-word)", tok.tokenType)
+		}
+
+		// "identity" at line 2, col 33, len 8 → tokenType 33 (craft-phrase-word)
+		if tok, ok := byPos2[[2]uint32{2, 33}]; !ok {
+			t.Error("identity not found at line 2 col 33")
+		} else if tok.tokenType != 33 {
+			t.Errorf("identity: got tokenType %d, want 33 (craft-phrase-word)", tok.tokenType)
+		}
+	})
 }

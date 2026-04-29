@@ -1923,6 +1923,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl) []semanticToken 
 		}
 		emit(toks[1], verbIdx) // verb
 		start := 2
+		// connector is always SyntaxKindIdent for internal_action (parser guarantee)
 		if start < len(toks) && isConnectorWord(toks[start].Value) && toks[start].Line == actionLine {
 			emit(toks[start], connIdx)
 			start++
@@ -1957,6 +1958,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl) []semanticToken 
 		if start < len(toks) && toks[start].Kind == syntax.SyntaxKindKwTo {
 			start += 2 // skip "to target"
 		}
+		// connector is always SyntaxKindIdent for return_action (parser guarantee)
 		if start < len(toks) && isConnectorWord(toks[start].Value) && toks[start].Line == actionLine {
 			emit(toks[start], connIdx)
 			start++
