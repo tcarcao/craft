@@ -1662,9 +1662,12 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 	}
 
 	// Service body items: data stores, language value, deployment type/target.
+	svcDsIdx := s.semanticTokenTypeIndex("craft-data-store-name")
+	svcLangIdx := s.semanticTokenTypeIndex("craft-language-value")
+	svcDtIdx := s.semanticTokenTypeIndex("craft-deployment-type")
+	svcTargIdx := s.semanticTokenTypeIndex("craft-deployment-target")
 	for _, svc := range file.Services() {
-		dsIdx := s.semanticTokenTypeIndex("craft-data-store-name")
-		if dsIdx >= 0 {
+		if svcDsIdx >= 0 {
 			for _, tok := range svc.DataStoreTokens() {
 				if tok.Line <= 0 {
 					continue
@@ -1677,12 +1680,12 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					line:      uint32(tok.Line - 1),
 					startChar: col,
 					length:    uint32(len([]rune(tok.Value))),
-					tokenType: uint32(dsIdx),
+					tokenType: uint32(svcDsIdx),
 				})
 			}
 		}
 
-		if langIdx := s.semanticTokenTypeIndex("craft-language-value"); langIdx >= 0 {
+		if svcLangIdx >= 0 {
 			if tok := svc.LanguageToken(); tok != nil && tok.Line > 0 {
 				col := uint32(0)
 				if tok.Col > 0 {
@@ -1692,12 +1695,12 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					line:      uint32(tok.Line - 1),
 					startChar: col,
 					length:    uint32(len([]rune(tok.Value))),
-					tokenType: uint32(langIdx),
+					tokenType: uint32(svcLangIdx),
 				})
 			}
 		}
 
-		if dtIdx := s.semanticTokenTypeIndex("craft-deployment-type"); dtIdx >= 0 {
+		if svcDtIdx >= 0 {
 			if tok := svc.DeploymentTypeToken(); tok != nil && tok.Line > 0 {
 				col := uint32(0)
 				if tok.Col > 0 {
@@ -1707,12 +1710,12 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					line:      uint32(tok.Line - 1),
 					startChar: col,
 					length:    uint32(len([]rune(tok.Value))),
-					tokenType: uint32(dtIdx),
+					tokenType: uint32(svcDtIdx),
 				})
 			}
 		}
 
-		if targIdx := s.semanticTokenTypeIndex("craft-deployment-target"); targIdx >= 0 {
+		if svcTargIdx >= 0 {
 			for _, tok := range svc.DeploymentTargetTokens() {
 				if tok.Line <= 0 {
 					continue
@@ -1725,7 +1728,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					line:      uint32(tok.Line - 1),
 					startChar: col,
 					length:    uint32(len([]rune(tok.Value))),
-					tokenType: uint32(targIdx),
+					tokenType: uint32(svcTargIdx),
 				})
 			}
 		}

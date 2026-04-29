@@ -1719,6 +1719,20 @@ func TestSemanticTokens_ServiceBody(t *testing.T) {
 	} else if tok.tokenType != 41 {
 		t.Errorf("canary: got tokenType %d, want 41 (craft-deployment-type)", tok.tokenType)
 	}
+
+	// stable at line 4, col 28, len 6 → tokenType 42 (craft-deployment-target)
+	if tok, ok := byPos[[2]uint32{4, 28}]; !ok {
+		t.Error("stable not found at line 4 col 28")
+	} else if tok.tokenType != 42 {
+		t.Errorf("stable: got tokenType %d, want 42 (craft-deployment-target)", tok.tokenType)
+	}
+
+	// canary (target) at line 4, col 43, len 6 → tokenType 42 (craft-deployment-target)
+	if tok, ok := byPos[[2]uint32{4, 43}]; !ok {
+		t.Error("canary (target) not found at line 4 col 43")
+	} else if tok.tokenType != 42 {
+		t.Errorf("canary (target): got tokenType %d, want 42 (craft-deployment-target)", tok.tokenType)
+	}
 }
 
 func TestDefinition_TargetContextColumnAware(t *testing.T) {
