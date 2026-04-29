@@ -7,6 +7,13 @@ import (
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
+// ProjectFromTree projects a lossless *SyntaxNode tree into a *craft.CraftDoc using
+// the typed-view lower pass followed by the canonical Project projection.
+// It produces output identical to Project(astFile) for the same source.
+func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
+	return Project(Lower(tree))
+}
+
 // Project converts an *ast.File to a *craft.CraftDoc.
 // The projection is the public contract; AST shapes are internal.
 func Project(f *ast.File) *craft.CraftDoc {
