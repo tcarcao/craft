@@ -3,7 +3,6 @@ package sema_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 )
@@ -245,7 +244,7 @@ use_case "User Login" {
 
 func TestAnalyzeWorkspace_ExposureValidTarget(t *testing.T) {
 	syms := sema.Symbols{
-		Actors: []sema.ActorSymbol{{Name: "Business_User", Type: ast.ActorTypeUser, Line: 1, URI: "file:///a.craft"}},
+		Actors: []sema.ActorSymbol{{Name: "Business_User", Type: "user", Line: 1, URI: "file:///a.craft"}},
 		Exposures: []sema.ExposureSymbol{
 			{Name: "default", To: []string{"Business_User"}, Through: []string{"APIGateway"}, Line: 3, URI: "file:///a.craft"},
 		},
@@ -307,7 +306,7 @@ func TestAnalyzeWorkspace_ExposureTo_TargetIsService(t *testing.T) {
 
 func TestAnalyzeWorkspace_ExposureThrough_TargetIsActor(t *testing.T) {
 	syms := sema.Symbols{
-		Actors: []sema.ActorSymbol{{Name: "Admin", Type: ast.ActorTypeUser, Line: 1, URI: "file:///a.craft"}},
+		Actors: []sema.ActorSymbol{{Name: "Admin", Type: "user", Line: 1, URI: "file:///a.craft"}},
 		Exposures: []sema.ExposureSymbol{
 			{Name: "default", To: []string{"APIUser"}, Through: []string{"Admin"}, Line: 5, URI: "file:///a.craft"},
 		},
@@ -328,7 +327,7 @@ func TestAnalyzeWorkspace_ExposureThrough_TargetIsActor(t *testing.T) {
 
 func TestAnalyzeWorkspace_ExposureContexts_TargetIsActor(t *testing.T) {
 	syms := sema.Symbols{
-		Actors: []sema.ActorSymbol{{Name: "Customer", Type: ast.ActorTypeUser, Line: 1, URI: "file:///a.craft"}},
+		Actors: []sema.ActorSymbol{{Name: "Customer", Type: "user", Line: 1, URI: "file:///a.craft"}},
 		Exposures: []sema.ExposureSymbol{
 			{Name: "default", To: []string{"ExternalUser"}, Contexts: []string{"Customer"}, Line: 5, URI: "file:///a.craft"},
 		},

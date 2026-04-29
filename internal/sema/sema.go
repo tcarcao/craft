@@ -14,10 +14,18 @@ import (
 	"log/slog"
 	"runtime/debug"
 
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
+
+// lineToLSP converts a 1-based source line to a 0-based LSP line number.
+// Returns 0 for any non-positive input.
+func lineToLSP(line int) int {
+	if line <= 0 {
+		return 0
+	}
+	return line - 1
+}
 
 // colToLSP converts a 1-based source column to a 0-based LSP character offset.
 // Returns 0 for any non-positive input.
@@ -31,7 +39,7 @@ func colToLSP(col int) int {
 // ActorSymbol holds collected information about an actor declaration.
 type ActorSymbol struct {
 	Name string
-	Type ast.ActorType
+	Type string // "user", "system", "service", or custom type
 	// Line is the 1-based source line of the actor name.
 	Line int
 	// Column is the 1-based column where the actor name starts.
@@ -189,8 +197,8 @@ type useCaseRefKey struct {
 type UseCaseRefTarget struct {
 	Kind string // "actor" | "domain" | "bounded_context" | "service"
 	// One of the following is populated depending on Kind:
-	Actor  *ActorSymbol
-	Domain *DomainSymbol
+	Actor   *ActorSymbol
+	Domain  *DomainSymbol
 	Service *ServiceSymbol
 	// BCLine, BCColumn, BCURI carry the position of the bounded context's own
 	// declaration token (inside its parent domain body). Set when Kind == "bounded_context".
@@ -201,12 +209,11 @@ type UseCaseRefTarget struct {
 
 // AnalyzeFile collects symbols from a single file's syntax tree and runs
 // validation rules for constructs present through S5 (actors + domains + services).
-// It accepts the lossless syntax tree produced by syntax.Parse; the typed
-// ast.File is reconstructed internally via syntax.Lower so callers do not need
-// to hold a separate *ast.File reference.
+// It accepts the lossless syntax tree produced by syntax.Parse and reads it
+// directly via typed view methods — no lower/AST conversion is needed.
 // Returns the symbol table and any semantic diagnostics.
 func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []craft.Diagnostic) {
-	f := syntax.Lower(tree)
+	file := syntax.AsFile(tree)
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("craft sema: panic recovered",
@@ -227,94 +234,124 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 	seenDomains := make(map[string]DomainSymbol)
 	seenServices := make(map[string]ServiceSymbol)
 
-	for _, a := range f.Actors {
-		sym := ActorSymbol{Name: a.Name, Type: a.Type, Line: a.Line, Column: a.Column, URI: uri}
-		if prev, dup := seenActors[a.Name]; dup {
-			startChar := colToLSP(a.Column)
+	for _, a := range file.Actors() {
+		nameTok := a.Name()
+		typeTok := a.ActorType()
+		if nameTok == nil {
+			continue
+		}
+		actorType := ""
+		if typeTok != nil {
+			actorType = typeTok.Value
+		}
+		sym := ActorSymbol{
+			Name:   nameTok.Value,
+			Type:   actorType,
+			Line:   nameTok.Line,
+			Column: nameTok.Col,
+			URI:    uri,
+		}
+		if prev, dup := seenActors[nameTok.Value]; dup {
+			startChar := colToLSP(nameTok.Col)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", a.Name, prev.Line),
+				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", nameTok.Value, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(a.Line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(a.Line), Character: startChar + len(a.Name)},
+					Start: craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar + len(nameTok.Value)},
 				},
 			})
 			continue
 		}
-		seenActors[a.Name] = sym
+		seenActors[nameTok.Value] = sym
 		syms.Actors = append(syms.Actors, sym)
 	}
 
-	for _, d := range f.Domains {
-		bcNames := make([]string, len(d.BoundedContexts))
-		for i, bc := range d.BoundedContexts {
-			bcNames[i] = bc.Name
+	for _, d := range file.Domains() {
+		nameTok := d.Name()
+		if nameTok == nil {
+			continue
+		}
+		var bcNames []string
+		for _, bc := range d.BoundedContexts() {
+			bcTok := bc.Name()
+			if bcTok != nil {
+				bcNames = append(bcNames, bcTok.Value)
+			}
 		}
 		sym := DomainSymbol{
-			Name:            d.Name,
+			Name:            nameTok.Value,
 			BoundedContexts: bcNames,
-			Line:            d.Line,
-			Column:          d.Column,
-			EndLine:         d.EndLine,
-			IsGrouped:       d.IsGrouped,
+			Line:            nameTok.Line,
+			Column:          nameTok.Col,
+			EndLine:         d.EndLine(),
+			IsGrouped:       d.IsGrouped(),
 			URI:             uri,
 		}
-		if prev, dup := seenDomains[d.Name]; dup {
-			startChar := colToLSP(d.Column)
+		if prev, dup := seenDomains[nameTok.Value]; dup {
+			startChar := colToLSP(nameTok.Col)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", d.Name, prev.Line),
+				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameTok.Value, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(d.Line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(d.Line), Character: startChar + len(d.Name)},
+					Start: craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar + len(nameTok.Value)},
 				},
 			})
 			continue
 		}
-		seenDomains[d.Name] = sym
+		seenDomains[nameTok.Value] = sym
 		syms.Domains = append(syms.Domains, sym)
 
 		// Collect bounded context positions for each BC in this domain.
-		for _, bc := range d.BoundedContexts {
+		for _, bc := range d.BoundedContexts() {
+			bcTok := bc.Name()
+			if bcTok == nil {
+				continue
+			}
 			if syms.BCPositions == nil {
 				syms.BCPositions = make(map[string]BCPosition)
 			}
-			syms.BCPositions[bc.Name] = BCPosition{
-				Line:   bc.Line,
-				Column: bc.Column,
+			syms.BCPositions[bcTok.Value] = BCPosition{
+				Line:   bcTok.Line,
+				Column: bcTok.Col,
 				URI:    uri,
 			}
 		}
 	}
 
-	for _, s := range f.Services {
+	for _, s := range file.Services() {
+		nameTok := s.Name()
+		if nameTok == nil {
+			continue
+		}
 		sym := ServiceSymbol{
-			Name:       s.Name,
-			Contexts:   s.Contexts,
-			DataStores: s.DataStores,
-			Language:   s.Language,
-			Line:       s.Line,
-			Column:     s.Column,
-			EndLine:    s.EndLine,
-			IsGrouped:  s.IsGrouped,
+			Name:       nameTok.Value,
+			Contexts:   s.Contexts(),
+			DataStores: s.DataStores(),
+			Language:   s.Language(),
+			Line:       nameTok.Line,
+			Column:     nameTok.Col,
+			EndLine:    s.EndLine(),
+			IsGrouped:  s.IsGrouped(),
 			URI:        uri,
 		}
-		if prev, dup := seenServices[s.Name]; dup {
-			startChar := colToLSP(s.Column)
+		if prev, dup := seenServices[nameTok.Value]; dup {
+			startChar := colToLSP(nameTok.Col)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", s.Name, prev.Line),
+				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameTok.Value, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar + len(s.Name)},
+					Start: craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar + len(nameTok.Value)},
 				},
 			})
 			continue
 		}
-		seenServices[s.Name] = sym
+		seenServices[nameTok.Value] = sym
 		syms.Services = append(syms.Services, sym)
 	}
 
@@ -331,8 +368,8 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 				),
 				Severity: craft.SeverityWarning,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(domSym.Line), Character: startChar},
-					End:   craft.Position{Line: ast.LineToLSP(domSym.Line), Character: startChar + len(name)},
+					Start: craft.Position{Line: lineToLSP(domSym.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(domSym.Line), Character: startChar + len(name)},
 				},
 			})
 		}
@@ -340,52 +377,67 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 
 	// Use case collection + duplicate-use-case-name rule (Q23).
 	seenUseCases := make(map[string]UseCaseSymbol)
-	for _, uc := range f.UseCases {
-		sym := UseCaseSymbol{Name: uc.Name, Line: uc.Line, EndLine: uc.EndLine, URI: uri}
-		if prev, dup := seenUseCases[uc.Name]; dup {
+	for _, uc := range file.UseCases() {
+		titleTok := uc.Title()
+		kwTok := uc.Keyword()
+		if titleTok == nil {
+			continue
+		}
+		ucLine := 0
+		if kwTok != nil {
+			ucLine = kwTok.Line
+		}
+		sym := UseCaseSymbol{Name: titleTok.Value, Line: ucLine, EndLine: uc.EndLine(), URI: uri}
+		if prev, dup := seenUseCases[titleTok.Value]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code: "craft/sema/duplicate-use-case-name",
 				Message: fmt.Sprintf(
-					"use_case %q already declared (first seen at line %d)", uc.Name, prev.Line,
+					"use_case %q already declared (first seen at line %d)", titleTok.Value, prev.Line,
 				),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
-					Start: craft.Position{Line: ast.LineToLSP(uc.Line)},
-					End:   craft.Position{Line: ast.LineToLSP(uc.Line), Character: len(uc.Name)},
+					Start: craft.Position{Line: lineToLSP(ucLine)},
+					End:   craft.Position{Line: lineToLSP(ucLine), Character: len(titleTok.Value)},
 				},
 			})
 			continue
 		}
-		seenUseCases[uc.Name] = sym
+		seenUseCases[titleTok.Value] = sym
 		syms.UseCases = append(syms.UseCases, sym)
 
 		// Collect reference sites from all scenarios for cross-resolution.
-		for _, sc := range uc.Scenarios {
+		for _, sc := range uc.Scenarios() {
+			trigger := sc.Trigger()
+			whenTok := sc.When()
+			triggerLine := 0
+			if whenTok != nil {
+				triggerLine = whenTok.Line
+			}
 			// Trigger subject (actor or domain name).
-			if sc.Trigger.Actor != "" {
+			if actor := trigger.ActorName(); actor != "" {
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-					Name: sc.Trigger.Actor,
-					Line: sc.Trigger.Line,
+					Name: actor,
+					Line: triggerLine,
 				})
 			}
-			if sc.Trigger.Context != "" {
+			if ctx := trigger.ContextName(); ctx != "" {
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-					Name: sc.Trigger.Context,
-					Line: sc.Trigger.Line,
+					Name: ctx,
+					Line: triggerLine,
 				})
 			}
 			// Action parties.
-			for _, action := range sc.Actions {
-				if action.Context != "" {
+			for _, action := range sc.Actions() {
+				if subj := action.SubjectName(); subj != "" {
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-						Name: action.Context,
-						Line: action.Line,
+						Name: subj,
+						Line: action.Line(),
 					})
 				}
-				if action.TargetContext != "" {
+				if target := action.TargetName(); target != "" {
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-						Name: action.TargetContext,
-						Line: action.Line,
+						Name: target,
+						Line: action.Line(),
 					})
 				}
 			}
@@ -395,13 +447,17 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 	// Exposure collection (S8). Exposures have no duplicate-name rule (two
 	// exposures named "default" in separate files is valid; the design
 	// intentionally allows one exposure per API gateway).
-	for _, e := range f.Exposures {
+	for _, e := range file.Exposures() {
+		nameTok := e.Name()
+		if nameTok == nil {
+			continue
+		}
 		syms.Exposures = append(syms.Exposures, ExposureSymbol{
-			Name:     e.Name,
-			To:       e.To,
-			Contexts: e.Contexts,
-			Through:  e.Through,
-			Line:     e.Line,
+			Name:     nameTok.Value,
+			To:       e.To(),
+			Contexts: e.Contexts(),
+			Through:  e.Through(),
+			Line:     e.Line(),
 			URI:      uri,
 		})
 	}
@@ -444,8 +500,8 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 					Severity:  craft.SeverityWarning,
 					SourceURI: s.URI,
 					Range: craft.Range{
-						Start: craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar},
-						End:   craft.Position{Line: ast.LineToLSP(s.Line), Character: startChar + len(s.Name)},
+						Start: craft.Position{Line: lineToLSP(s.Line), Character: startChar},
+						End:   craft.Position{Line: lineToLSP(s.Line), Character: startChar + len(s.Name)},
 					},
 				})
 				// Keep the first declaration in the map so resolution is stable.
@@ -497,8 +553,8 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					Severity:  craft.SeverityError,
 					SourceURI: uri,
 					Range: craft.Range{
-						Start: craft.Position{Line: ast.LineToLSP(svc.Line), Character: startChar},
-						End:   craft.Position{Line: ast.LineToLSP(svc.Line), Character: startChar + len(svc.Name)},
+						Start: craft.Position{Line: lineToLSP(svc.Line), Character: startChar},
+						End:   craft.Position{Line: lineToLSP(svc.Line), Character: startChar + len(svc.Name)},
 					},
 				})
 					continue
@@ -534,8 +590,8 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 	for uri, syms := range perFile {
 		for _, exp := range syms.Exposures {
 			expRange := craft.Range{
-				Start: craft.Position{Line: ast.LineToLSP(exp.Line)},
-				End:   craft.Position{Line: ast.LineToLSP(exp.Line), Character: len(exp.Name)},
+				Start: craft.Position{Line: lineToLSP(exp.Line)},
+				End:   craft.Position{Line: lineToLSP(exp.Line), Character: len(exp.Name)},
 			}
 			// `to:` must name actors.
 			for _, name := range exp.To {
