@@ -201,7 +201,7 @@ type UseCaseRefTarget struct {
 
 // AnalyzeFile collects symbols from a single file's syntax tree and runs
 // validation rules for constructs present through S5 (actors + domains + services).
-// It accepts the lossless syntax tree produced by syntax.ParseTree; the typed
+// It accepts the lossless syntax tree produced by syntax.Parse; the typed
 // ast.File is reconstructed internally via syntax.Lower so callers do not need
 // to hold a separate *ast.File reference.
 // Returns the symbol table and any semantic diagnostics.
