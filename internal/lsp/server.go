@@ -1864,11 +1864,112 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 						})
 					}
 				}
+				tokens = append(tokens, s.classifyActionIdents(action)...)
 			}
 		}
 	}
 
 	return tokens
+}
+
+// isConnectorWord reports whether v is a grammatical connector/preposition in
+// use-case action bodies. Must stay in sync with parser.go (package-private copy).
+func isConnectorWord(v string) bool {
+	switch v {
+	case "a", "an", "the", "as", "to", "from", "in", "on", "at", "for", "with", "by":
+		return true
+	}
+	return false
+}
+
+// classifyActionIdents emits semantic tokens for the verb, connector, and phrase
+// words inside a single action. Subjects and targets are already classified by
+// the resolution-map loop; this covers the remaining ident tokens.
+func (s *Server) classifyActionIdents(action syntax.ActionDecl) []semanticToken {
+	kind := action.Kind()
+	actionLine := action.Line()
+	if actionLine <= 0 {
+		return nil
+	}
+
+	verbIdx := s.semanticTokenTypeIndex("craft-regular-verb")
+	connIdx := s.semanticTokenTypeIndex("craft-connector-word")
+	phraseIdx := s.semanticTokenTypeIndex("craft-phrase-word")
+
+	toks := action.Tokens()
+	var result []semanticToken
+
+	emit := func(tok *syntax.SyntaxToken, typeIdx int) {
+		if tok == nil || tok.Line <= 0 || typeIdx < 0 {
+			return
+		}
+		col := uint32(0)
+		if tok.Col > 0 {
+			col = uint32(tok.Col - 1)
+		}
+		result = append(result, semanticToken{
+			line:      uint32(tok.Line - 1),
+			startChar: col,
+			length:    uint32(tok.Length()),
+			tokenType: uint32(typeIdx),
+		})
+	}
+
+	switch kind {
+	case "internal_action":
+		// toks: [subject, verb, (connector?), phrase...]
+		if len(toks) < 2 {
+			return nil
+		}
+		emit(toks[1], verbIdx) // verb
+		start := 2
+		if start < len(toks) && isConnectorWord(toks[start].Value) && toks[start].Line == actionLine {
+			emit(toks[start], connIdx)
+			start++
+		}
+		for _, tok := range toks[start:] {
+			if tok.Kind != syntax.SyntaxKindIdent || tok.Line != actionLine {
+				continue
+			}
+			emit(tok, phraseIdx)
+		}
+
+	case "sync_action":
+		// toks: [subject, asks, target, (connector?), phrase...]
+		// subject and target classified by resolution map; skip them.
+		start := 3
+		if start < len(toks) && toks[start].Line == actionLine {
+			if toks[start].Kind == syntax.SyntaxKindKwTo || isConnectorWord(toks[start].Value) {
+				emit(toks[start], connIdx)
+				start++
+			}
+		}
+		for _, tok := range toks[start:] {
+			if tok.Kind != syntax.SyntaxKindIdent || tok.Line != actionLine {
+				continue
+			}
+			emit(tok, phraseIdx)
+		}
+
+	case "return_action":
+		// toks: [subject, returns, (to, target)?, (connector?), phrase...]
+		start := 2
+		if start < len(toks) && toks[start].Kind == syntax.SyntaxKindKwTo {
+			start += 2 // skip "to target"
+		}
+		if start < len(toks) && isConnectorWord(toks[start].Value) && toks[start].Line == actionLine {
+			emit(toks[start], connIdx)
+			start++
+		}
+		for _, tok := range toks[start:] {
+			if tok.Kind != syntax.SyntaxKindIdent || tok.Line != actionLine {
+				continue
+			}
+			emit(tok, phraseIdx)
+		}
+	}
+
+	return result
 }
 
 // useCaseRefTokenType resolves a use-case body reference name to its semantic

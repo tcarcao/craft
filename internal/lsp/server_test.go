@@ -1940,3 +1940,120 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 	readMsg(br)                                                              //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
+
+// TestSemanticTokens_VerbsAndPhrases verifies that action verbs, connector words,
+// and phrase words in use-case bodies are classified with correct craft-* types.
+func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "Test" {
+	// Line 1:   when SomeActor does Something
+	// Line 2:     Auth validates email format
+	// Line 3: }
+	// col math (0-based): "    Auth validates email format"
+	//   col 4: Auth (len 4)
+	//   col 9: validates (len 9)
+	//   col 19: email (len 5)
+	//   col 25: format (len 6)
+	craftSrc := "use_case \"Test\" {\n  when SomeActor does Something\n    Auth validates email format\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///verbs.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///verbs.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out")
+	}
+
+	var result struct{ Data []uint32 `json:"data"` }
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType, modifiers uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt, mod := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3], result.Data[i+4]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt, mod}
+	}
+
+	// validates at line 2, col 9, len 9 → tokenType 27 (craft-regular-verb)
+	if tok, ok := byPos[[2]uint32{2, 9}]; !ok {
+		t.Error("validates not found at line 2 col 9")
+	} else if tok.tokenType != 27 {
+		t.Errorf("validates: got tokenType %d, want 27 (craft-regular-verb)", tok.tokenType)
+	}
+
+	// email at line 2, col 19, len 5 → tokenType 33 (craft-phrase-word)
+	if tok, ok := byPos[[2]uint32{2, 19}]; !ok {
+		t.Error("email not found at line 2 col 19")
+	} else if tok.tokenType != 33 {
+		t.Errorf("email: got tokenType %d, want 33 (craft-phrase-word)", tok.tokenType)
+	}
+
+	// format at line 2, col 25, len 6 → tokenType 33 (craft-phrase-word)
+	if tok, ok := byPos[[2]uint32{2, 25}]; !ok {
+		t.Error("format not found at line 2 col 25")
+	} else if tok.tokenType != 33 {
+		t.Errorf("format: got tokenType %d, want 33 (craft-phrase-word)", tok.tokenType)
+	}
+}

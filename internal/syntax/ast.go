@@ -893,6 +893,9 @@ func (a ActionDecl) PhraseText() string {
 	return strings.Join(parts, " ")
 }
 
+// Tokens returns the raw token list for the action node.
+func (a ActionDecl) Tokens() []*SyntaxToken { return a.node.Tokens() }
+
 // Description returns the human-readable full action line.
 func (a ActionDecl) Description() string {
 	subject := a.SubjectName()
