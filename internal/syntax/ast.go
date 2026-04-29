@@ -160,6 +160,18 @@ func (f File) Exposures() []ExposureDecl {
 	return result
 }
 
+// ActorBlocks returns all top-level actors{} block views in document order.
+func (f File) ActorBlocks() []ActorsBlock {
+	if f.node == nil {
+		return nil
+	}
+	var result []ActorsBlock
+	for _, n := range f.node.ChildNodes(SyntaxKindActorsBlock) {
+		result = append(result, ActorsBlock{node: n})
+	}
+	return result
+}
+
 // ActorDecl is a typed view over a SyntaxKindActorDecl node.
 type ActorDecl struct{ node *SyntaxNode }
 
@@ -211,6 +223,15 @@ func (d DomainDecl) Name() *SyntaxToken { return d.node.ChildToken(SyntaxKindIde
 // Standalone domains begin with the `domain` keyword; grouped domains begin with their name.
 func (d DomainDecl) IsGrouped() bool {
 	return d.node.ChildToken(SyntaxKindKwDomain) == nil
+}
+
+// Line returns the 1-based source line of the domain name token.
+func (d DomainDecl) Line() int {
+	tok := d.node.ChildToken(SyntaxKindIdent)
+	if tok == nil {
+		return 0
+	}
+	return tok.Line
 }
 
 // EndLine returns the 1-based line of the closing `}`.
@@ -279,6 +300,15 @@ func (s ServiceDecl) Name() *SyntaxToken    { return s.node.ChildToken(SyntaxKin
 // IsGrouped returns true when the service was declared inside a services { } block.
 func (s ServiceDecl) IsGrouped() bool {
 	return s.node.ChildToken(SyntaxKindKwService) == nil
+}
+
+// Line returns the 1-based source line of the service name token.
+func (s ServiceDecl) Line() int {
+	tok := s.node.ChildToken(SyntaxKindIdent)
+	if tok == nil {
+		return 0
+	}
+	return tok.Line
 }
 
 // EndLine returns the 1-based line of the closing `}`.

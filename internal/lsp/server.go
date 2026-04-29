@@ -29,7 +29,6 @@ import (
 	"go.lsp.dev/protocol"
 	"go.uber.org/zap"
 
-	"github.com/tcarcao/craft/internal/ast"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/workspace"
@@ -239,7 +238,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	if f == nil {
 		return nil, nil
 	}
-	fileAST := syntax.Lower(f.SyntaxTree)
+	file := syntax.AsFile(f.SyntaxTree)
 
 	cursorLine := int(params.Position.Line) + 1     // convert to 1-based
 	cursorChar := int(params.Position.Character) + 1 // convert to 1-based
@@ -247,19 +246,25 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 
 	// Walk services: match cursor against each context reference line so that
 	// go-to-definition fires when the cursor is on a `contexts:` entry.
-	for _, svc := range fileAST.Services {
-		for i, ctxName := range svc.Contexts {
+	for _, svc := range file.Services() {
+		nameTok := svc.Name()
+		if nameTok == nil {
+			continue
+		}
+		ctxNames := svc.Contexts()
+		ctxLines := svc.ContextLines()
+		for i, ctxName := range ctxNames {
 			// Match by context token line when available; fall back to the
 			// service name line for services parsed without line tracking
 			// (e.g. from the ANTLR adapter path).
-			ctxLine := svc.Line
-			if i < len(svc.ContextLines) {
-				ctxLine = svc.ContextLines[i]
+			ctxLine := nameTok.Line
+			if i < len(ctxLines) {
+				ctxLine = ctxLines[i]
 			}
 			if ctxLine != cursorLine {
 				continue
 			}
-			domSym, ok := sema.ResolveServiceContext(rm, uri, svc.Name, ctxName)
+			domSym, ok := sema.ResolveServiceContext(rm, uri, nameTok.Value, ctxName)
 			if !ok {
 				continue
 			}
@@ -279,35 +284,41 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 
 	// Walk use-case action parties: cursor on an action line resolves to the
 	// actor/domain/service declaration.
-	for _, uc := range fileAST.UseCases {
-		for _, sc := range uc.Scenarios {
+	for _, uc := range file.UseCases() {
+		for _, sc := range uc.Scenarios() {
 			// Check trigger subject line.
-			if sc.Trigger.Line == cursorLine {
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Actor, sc.Trigger.Line); ok {
+			whenTok := sc.When()
+			triggerLine := 0
+			if whenTok != nil {
+				triggerLine = whenTok.Line
+			}
+			if triggerLine == cursorLine {
+				trigger := sc.Trigger()
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, trigger.ActorName(), triggerLine); ok {
 					return []protocol.Location{loc}, nil
 				}
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, sc.Trigger.Context, sc.Trigger.Line); ok {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, trigger.ContextName(), triggerLine); ok {
 					return []protocol.Location{loc}, nil
 				}
 			}
-			for _, action := range sc.Actions {
-				if action.Line != cursorLine {
+			for _, action := range sc.Actions() {
+				if action.Line() != cursorLine {
 					continue
 				}
 				// If cursor falls on or past TargetContextColumn, try TargetContext first.
-				if action.TargetContextColumn > 0 && action.TargetContext != "" &&
-					cursorChar >= action.TargetContextColumn {
-					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
+				if action.TargetCol() > 0 && action.TargetName() != "" &&
+					cursorChar >= action.TargetCol() {
+					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetName(), action.Line()); ok {
 						return []protocol.Location{loc}, nil
 					}
-					// TargetContext unresolved — fall through to "from" party.
+					// TargetName unresolved — fall through to "from" party.
 				}
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.Context, action.Line); ok {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.SubjectName(), action.Line()); ok {
 					return []protocol.Location{loc}, nil
 				}
-				// When no column info is available, also try TargetContext as a plain fallback.
-				if action.TargetContextColumn == 0 {
-					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetContext, action.Line); ok {
+				// When no column info is available, also try TargetName as a plain fallback.
+				if action.TargetCol() == 0 {
+					if loc, ok := resolveUseCaseRefToLocation(rm, uri, action.TargetName(), action.Line()); ok {
 						return []protocol.Location{loc}, nil
 					}
 				}
@@ -675,32 +686,46 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 		if f.SyntaxTree == nil {
 			continue
 		}
-		fAST := syntax.Lower(f.SyntaxTree)
-		for _, uc := range fAST.UseCases {
-			entryPoint, involved := extractUseCaseContexts(uc)
+		fFile := syntax.AsFile(f.SyntaxTree)
+		for _, uc := range fFile.UseCases() {
+			titleTok := uc.Title()
+			kwTok := uc.Keyword()
+			if titleTok == nil {
+				continue
+			}
+			ucLine := 0
+			if kwTok != nil {
+				ucLine = kwTok.Line
+			}
+			entryPoint, involved := extractUseCaseContextsFromView(uc)
 			result.UseCases = append(result.UseCases, craftUseCaseEntry{
-				Name:              uc.Name,
+				Name:              titleTok.Value,
 				URI:               f.URI,
-				StartLine:         uc.Line,
-				EndLine:           uc.EndLine,
+				StartLine:         ucLine,
+				EndLine:           uc.EndLine(),
 				InCurrentFile:     currentFileURI != "" && f.URI == currentFileURI,
 				EntryPointContext: entryPoint,
 				InvolvedContexts:  involved,
 			})
 		}
-		for _, blockRange := range fAST.ActorBlocks {
+		for _, block := range fFile.ActorBlocks() {
 			result.ActorBlocks = append(result.ActorBlocks, craftBlockRef{
 				FileURI:   f.URI,
-				StartLine: blockRange.Line,
-				EndLine:   blockRange.EndLine,
+				StartLine: block.Line(),
+				EndLine:   block.EndLine(),
 			})
 		}
-		for _, arch := range fAST.Archs {
+		for _, arch := range fFile.Archs() {
+			nameTok := arch.Name()
+			name := ""
+			if nameTok != nil {
+				name = nameTok.Value
+			}
 			result.Archs = append(result.Archs, craftArchEntry{
-				Name:          arch.Name,
+				Name:          name,
 				URI:           f.URI,
-				StartLine:     arch.Line,
-				EndLine:       arch.EndLine,
+				StartLine:     arch.Line(),
+				EndLine:       arch.EndLine(),
 				InCurrentFile: currentFileURI != "" && f.URI == currentFileURI,
 			})
 		}
@@ -709,12 +734,12 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	return result
 }
 
-// extractUseCaseContexts derives the entry-point bounded context and all involved contexts
+// extractUseCaseContextsFromView derives the entry-point bounded context and all involved contexts
 // from a use case declaration by inspecting its scenario triggers and actions.
 // The entry point is the first domain that appears (trigger domain for domain_listen,
-// otherwise the first action Domain). Involved is the deduplicated set of all Domain
-// and TargetDomain values across every scenario.
-func extractUseCaseContexts(uc *ast.UseCaseDecl) (entryPoint string, involved []string) {
+// otherwise the first action subject). Involved is the deduplicated set of all subject
+// and target values across every scenario.
+func extractUseCaseContextsFromView(uc syntax.UseCaseDecl) (entryPoint string, involved []string) {
 	seen := make(map[string]struct{})
 	add := func(name string) {
 		if name == "" {
@@ -728,13 +753,14 @@ func extractUseCaseContexts(uc *ast.UseCaseDecl) (entryPoint string, involved []
 			entryPoint = name
 		}
 	}
-	for _, sc := range uc.Scenarios {
-		if sc.Trigger.TriggerType == "domain_listen" {
-			add(sc.Trigger.Context)
+	for _, sc := range uc.Scenarios() {
+		trigger := sc.Trigger()
+		if trigger.Kind() == "domain_listen" {
+			add(trigger.ContextName())
 		}
-		for _, action := range sc.Actions {
-			add(action.Context)
-			add(action.TargetContext)
+		for _, action := range sc.Actions() {
+			add(action.SubjectName())
+			add(action.TargetName())
 		}
 	}
 	return entryPoint, involved
@@ -788,11 +814,11 @@ func (s *Server) extractPartialDslFromBlockRanges(args []interface{}) interface{
 		if f == nil {
 			continue
 		}
-		fAST := syntax.Lower(f.SyntaxTree)
+		fFile := syntax.AsFile(f.SyntaxTree)
 		contentLines := strings.Split(f.Content, "\n")
 
 		for _, r := range byFile[fileURI] {
-			part := reconstructDSLRange(fAST, contentLines, r.startLine, r.endLine)
+			part := reconstructDSLRangeFromView(fFile, contentLines, r.startLine, r.endLine)
 			if part != "" {
 				parts = append(parts, part)
 			}
@@ -802,18 +828,26 @@ func (s *Server) extractPartialDslFromBlockRanges(args []interface{}) interface{
 	return strings.Join(parts, "\n\n")
 }
 
-// reconstructDSLRange finds the AST declaration whose line range matches startLine:endLine
-// and returns well-formed DSL. Falls back to raw line slicing for non-service/domain ranges.
-// Returns empty string if no content is available for the range.
-func reconstructDSLRange(file *ast.File, contentLines []string, startLine, endLine int) string {
-	for _, svc := range file.Services {
-		if svc.Line == startLine && svc.EndLine == endLine {
-			return reconstructService(svc)
+// reconstructDSLRangeFromView finds the typed-view declaration whose line range matches
+// startLine:endLine and returns well-formed DSL. Falls back to raw line slicing for
+// non-service/domain ranges. Returns empty string if no content is available.
+func reconstructDSLRangeFromView(file syntax.File, contentLines []string, startLine, endLine int) string {
+	for _, svc := range file.Services() {
+		nameTok := svc.Name()
+		if nameTok == nil {
+			continue
+		}
+		if nameTok.Line == startLine && svc.EndLine() == endLine {
+			return reconstructServiceFromView(svc)
 		}
 	}
-	for _, dom := range file.Domains {
-		if dom.Line == startLine && dom.EndLine == endLine {
-			return reconstructDomain(dom)
+	for _, dom := range file.Domains() {
+		nameTok := dom.Name()
+		if nameTok == nil {
+			continue
+		}
+		if nameTok.Line == startLine && dom.EndLine() == endLine {
+			return reconstructDomainFromView(dom)
 		}
 	}
 	// Fallback: raw line slice for actor blocks, arch blocks, and other top-level ranges.
@@ -831,95 +865,90 @@ func reconstructDSLRange(file *ast.File, contentLines []string, startLine, endLi
 	return strings.Join(contentLines[start:end], "\n")
 }
 
-// reconstructService builds valid DSL for a single service declaration.
+// reconstructServiceFromView builds valid DSL for a single service declaration.
 // Grouped services (from services { }) are wrapped; top-level services use the service keyword.
-func reconstructService(svc *ast.ServiceDecl) string {
+func reconstructServiceFromView(svc syntax.ServiceDecl) string {
+	nameTok := svc.Name()
+	if nameTok == nil {
+		return ""
+	}
 	var sb strings.Builder
 	indent := "  "
 	fieldIndent := "    "
-	if !svc.IsGrouped {
+	if !svc.IsGrouped() {
 		sb.WriteString("service ")
-		sb.WriteString(svc.Name)
+		sb.WriteString(nameTok.Value)
 		sb.WriteString(" {\n")
 		indent = ""
 		fieldIndent = "  "
 	} else {
 		sb.WriteString("services {\n")
 		sb.WriteString(indent)
-		sb.WriteString(svc.Name)
+		sb.WriteString(nameTok.Value)
 		sb.WriteString(" {\n")
 	}
-	if len(svc.Contexts) > 0 {
-		sb.WriteString(fieldIndent)
-		sb.WriteString("contexts: ")
-		sb.WriteString(strings.Join(svc.Contexts, ", "))
-		sb.WriteString("\n")
+	if ctxs := svc.Contexts(); len(ctxs) > 0 {
+		sb.WriteString(fieldIndent + "contexts: " + strings.Join(ctxs, ", ") + "\n")
 	}
-	if len(svc.DataStores) > 0 {
-		sb.WriteString(fieldIndent)
-		sb.WriteString("data-stores: ")
-		sb.WriteString(strings.Join(svc.DataStores, ", "))
-		sb.WriteString("\n")
+	if ds := svc.DataStores(); len(ds) > 0 {
+		sb.WriteString(fieldIndent + "data-stores: " + strings.Join(ds, ", ") + "\n")
 	}
-	if svc.Language != "" {
-		sb.WriteString(fieldIndent)
-		sb.WriteString("language: ")
-		sb.WriteString(svc.Language)
-		sb.WriteString("\n")
+	if lang := svc.Language(); lang != "" {
+		sb.WriteString(fieldIndent + "language: " + lang + "\n")
 	}
-	if svc.DeploymentType != "" {
-		sb.WriteString(fieldIndent)
-		sb.WriteString("deployment: ")
-		sb.WriteString(svc.DeploymentType)
-		if len(svc.DeploymentRules) > 0 {
+	if dt := svc.DeploymentType(); dt != "" {
+		sb.WriteString(fieldIndent + "deployment: " + dt)
+		if rules := svc.DeploymentRules(); len(rules) > 0 {
 			sb.WriteString("(")
-			for i, rule := range svc.DeploymentRules {
+			for i, r := range rules {
 				if i > 0 {
 					sb.WriteString(", ")
 				}
-				sb.WriteString(rule.Percentage)
-				sb.WriteString(" -> ")
-				sb.WriteString(rule.Target)
+				sb.WriteString(r.Percentage + " -> " + r.Target)
 			}
 			sb.WriteString(")")
 		}
 		sb.WriteString("\n")
 	}
-	if svc.IsGrouped {
-		sb.WriteString(indent)
-		sb.WriteString("}\n}")
+	if svc.IsGrouped() {
+		sb.WriteString(indent + "}\n}")
 	} else {
 		sb.WriteString("}")
 	}
 	return sb.String()
 }
 
-// reconstructDomain builds valid DSL for a single domain declaration.
+// reconstructDomainFromView builds valid DSL for a single domain declaration.
 // Grouped domains (from domains { }) are wrapped; top-level domains use the domain keyword.
-func reconstructDomain(dom *ast.DomainDecl) string {
+func reconstructDomainFromView(dom syntax.DomainDecl) string {
+	nameTok := dom.Name()
+	if nameTok == nil {
+		return ""
+	}
 	var sb strings.Builder
 	indent := "  "
 	bcIndent := "    "
-	if !dom.IsGrouped {
+	if !dom.IsGrouped() {
 		sb.WriteString("domain ")
-		sb.WriteString(dom.Name)
+		sb.WriteString(nameTok.Value)
 		sb.WriteString(" {\n")
 		indent = ""
 		bcIndent = "  "
 	} else {
 		sb.WriteString("domains {\n")
 		sb.WriteString(indent)
-		sb.WriteString(dom.Name)
+		sb.WriteString(nameTok.Value)
 		sb.WriteString(" {\n")
 	}
-	for _, bc := range dom.BoundedContexts {
-		sb.WriteString(bcIndent)
-		sb.WriteString(bc.Name)
-		sb.WriteString("\n")
+	for _, bc := range dom.BoundedContexts() {
+		bcTok := bc.Name()
+		if bcTok == nil {
+			continue
+		}
+		sb.WriteString(bcIndent + bcTok.Value + "\n")
 	}
-	if dom.IsGrouped {
-		sb.WriteString(indent)
-		sb.WriteString("}\n}")
+	if dom.IsGrouped() {
+		sb.WriteString(indent + "}\n}")
 	} else {
 		sb.WriteString("}")
 	}
