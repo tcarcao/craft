@@ -601,6 +601,9 @@ type TriggerDecl struct{ node *SyntaxNode }
 // Subject returns the subject identifier token of the trigger (actor/domain name).
 func (t TriggerDecl) Subject() *SyntaxToken { return t.node.ChildToken(SyntaxKindIdent) }
 
+// Tokens returns all syntax tokens in the trigger node (mirrors ActionDecl.Tokens).
+func (t TriggerDecl) Tokens() []*SyntaxToken { return t.node.Tokens() }
+
 // Event returns the string token for event-style triggers (when "<EventName>").
 func (t TriggerDecl) Event() *SyntaxToken { return t.node.ChildToken(SyntaxKindString) }
 

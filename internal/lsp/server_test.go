@@ -2272,3 +2272,277 @@ func TestSemanticTokens_DomainListenTriggerColumn(t *testing.T) {
 
 	_ = errCh
 }
+
+// TestSemanticTokens_TriggerPhrase verifies that uppercase idents and connector
+// words inside a trigger phrase (e.g. "VAS" and "to" in
+// "when Business_User purchases VAS to wallet") get craft-phrase-word tokens,
+// overriding the TextMate entity-name / connector-keywords patterns that would
+// otherwise color them as entity types or operators.
+func TestSemanticTokens_TriggerPhrase(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: actor user Business_User
+	// Line 1: use_case "Test" {
+	// Line 2:   when Business_User purchases VAS to wallet
+	//            0123456789012345678901234567890123456789
+	//            w=2, B=7, VAS=29, to=33
+	// Line 3: }
+	craftSrc := "actor user Business_User\nuse_case \"Test\" {\n  when Business_User purchases VAS to wallet\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///trigger.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///trigger.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if len(result.Data)%5 != 0 {
+		t.Fatalf("data length %d not a multiple of 5", len(result.Data))
+	}
+
+	type absToken struct{ line, startChar, length, tokenType, modifiers uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt, mod := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3], result.Data[i+4]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt, mod}
+	}
+
+	// Line 2: "  when Business_User purchases VAS to wallet"
+	//          0         1         2         3         4
+	//          0123456789012345678901234567890123456789012345
+	//          "  " = 2 spaces, "when" at 2, "Business_User" at 7, "purchases" at 21
+	//          "VAS" at 31, "to" at 35, "wallet" at 38
+	//
+	// Recount: "  when Business_User purchases VAS to wallet"
+	// 0: ' '
+	// 1: ' '
+	// 2: 'w' (when starts)
+	// 6: ' '
+	// 7: 'B' (Business_User starts, len 13)
+	// 20: ' '
+	// 21: 'p' (purchases starts, len 9)
+	// 30: ' '
+	// 31: 'V' (VAS starts, len 3)
+	// 34: ' '
+	// 35: 't' (to starts, len 2)
+	// 37: ' '
+	// 38: 'w' (wallet starts, len 6)
+	vasLine, vasCol := uint32(2), uint32(31)
+	toLine, toCol := uint32(2), uint32(35)
+
+	vasTok, vasOk := byPos[[2]uint32{vasLine, vasCol}]
+	toTok, toOk := byPos[[2]uint32{toLine, toCol}]
+
+	if !vasOk {
+		t.Errorf("VAS not found at line %d col %d — trigger phrase should emit craft-phrase-word", vasLine, vasCol)
+	}
+	if !toOk {
+		t.Errorf(`"to" not found at line %d col %d — trigger phrase should emit craft-phrase-word`, toLine, toCol)
+	}
+	if vasOk && toOk && vasTok.tokenType != toTok.tokenType {
+		t.Errorf("VAS (type=%d) and to (type=%d) should both be craft-phrase-word", vasTok.tokenType, toTok.tokenType)
+	}
+	if vasOk && vasTok.length != 3 {
+		t.Errorf("VAS length = %d, want 3", vasTok.length)
+	}
+	if toOk && toTok.length != 2 {
+		t.Errorf(`"to" length = %d, want 2`, toTok.length)
+	}
+
+	cancel()
+	_ = errCh
+}
+
+// TestSemanticTokens_StringLength verifies that string semantic tokens cover the
+// full "content" span including both opening and closing quote characters.
+// Previously, Token.Length() returned only the content length (quotes excluded),
+// so the last 1-2 characters of every string fell back to TextMate highlighting,
+// producing a visible color split in themes where string.other ≠ string.quoted.double.
+func TestSemanticTokens_StringLength(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "Purchase" {
+	//           ^col 0             ^col 9 → "Purchase" = 10 chars (with quotes)
+	// Line 1:   when User does thing
+	// Line 2:     Service notifies "VAS added"
+	//                              ^col 21 → "VAS added" = 11 chars (with quotes)
+	// Line 3: }
+	craftSrc := "use_case \"Purchase\" {\n  when User does thing\n    Service notifies \"VAS added\"\n}"
+
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///strings.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///strings.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for semanticTokens/full response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("semanticTokens/full returned error: %s", resp.Error)
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshalling result: %v", err)
+	}
+	if len(result.Data)%5 != 0 {
+		t.Fatalf("data length %d not a multiple of 5", len(result.Data))
+	}
+
+	type absToken struct{ line, startChar, length, tokenType, modifiers uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt, mod := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3], result.Data[i+4]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt, mod}
+	}
+
+	// "Purchase" at line 0, col 9 — full string with quotes = 10 chars.
+	if tok, ok := byPos[[2]uint32{0, 9}]; !ok {
+		t.Error(`"Purchase" string token not found at line 0 col 9`)
+	} else if tok.length != 10 {
+		t.Errorf(`"Purchase" token length = %d, want 10 (quotes included)`, tok.length)
+	}
+
+	// "VAS added" at line 2, col 21 — full string with quotes = 11 chars.
+	if tok, ok := byPos[[2]uint32{2, 21}]; !ok {
+		t.Error(`"VAS added" string token not found at line 2 col 21`)
+	} else if tok.length != 11 {
+		t.Errorf(`"VAS added" token length = %d, want 11 (quotes included)`, tok.length)
+	}
+
+	cancel()
+	_ = errCh
+}

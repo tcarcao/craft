@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
@@ -1555,10 +1556,15 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			if idx < 0 {
 				continue
 			}
+			length := uint32(tok.Length())
+			if tok.Kind == syntax.SyntaxKindString {
+				// Token.Value stores content without quotes; add 2 to cover "content".
+				length += 2
+			}
 			tokens = append(tokens, semanticToken{
 				line:      uint32(tok.Line - 1),
 				startChar: uint32(tok.Col - 1),
-				length:    uint32(tok.Length()),
+				length:    length,
 				tokenType: uint32(idx),
 			})
 		}
@@ -1831,6 +1837,42 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					})
 				}
 			}
+			// Trigger phrase: emit craft-phrase-word for idents after the subject
+			// that TextMate would otherwise color incorrectly (uppercase idents →
+			// entity.name.type, connector words like "to" → keyword.operator).
+			phraseWordIdx := s.semanticTokenTypeIndex("craft-phrase-word")
+			if phraseWordIdx >= 0 && trigger.Kind() == "external" {
+				subjectSkipped := false
+				for _, tok := range trigger.Tokens() {
+					if tok.Kind != syntax.SyntaxKindIdent || tok.Line <= 0 {
+						continue
+					}
+					if !subjectSkipped {
+						subjectSkipped = true
+						continue // subject already handled above
+					}
+					val := tok.Value
+					if len(val) == 0 {
+						continue
+					}
+					// Only override tokens that TextMate would color: uppercase idents
+					// (entity-name pattern) or connector words (connector-keywords pattern).
+					if !unicode.IsUpper([]rune(val)[0]) && !isConnectorWord(val) {
+						continue
+					}
+					col := uint32(0)
+					if tok.Col > 0 {
+						col = uint32(tok.Col - 1)
+					}
+					tokens = append(tokens, semanticToken{
+						line:      uint32(tok.Line - 1),
+						startChar: col,
+						length:    uint32(len([]rune(val))),
+						tokenType: uint32(phraseWordIdx),
+					})
+				}
+			}
+
 			// Action domain and targetDomain.
 			for _, action := range sc.Actions() {
 				if action.Line() <= 0 {
