@@ -1940,7 +1940,10 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl) []semanticToken 
 		// subject and target classified by resolution map; skip them.
 		start := 3
 		if start < len(toks) && toks[start].Line == actionLine {
-			if toks[start].Kind == syntax.SyntaxKindKwTo || isConnectorWord(toks[start].Value) {
+			if toks[start].Kind == syntax.SyntaxKindKwTo {
+				// Pass 1 already emits SyntaxKindKwTo as craft-connector-word; just advance.
+				start++
+			} else if isConnectorWord(toks[start].Value) {
 				emit(toks[start], connIdx)
 				start++
 			}
