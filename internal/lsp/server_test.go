@@ -2175,3 +2175,100 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 		}
 	})
 }
+
+// TestSemanticTokens_DomainListenTriggerColumn is a regression test for a bug
+// where domain_listen trigger subjects (e.g. "VASScheduling" in
+// "when VASScheduling listens ...") were emitted at col 0 instead of their
+// actual column, because ActorCol() guards on Kind()!="external".
+func TestSemanticTokens_DomainListenTriggerColumn(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+	br := bufio.NewReader(testIn)
+	id := 1
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: domain Biz {
+	// Line 1:   MyContext
+	// Line 2: }
+	// Line 3: use_case "Test" {
+	// Line 4:   when MyContext listens "SomeEvent"
+	// Line 5: }
+	// "MyContext" on line 4 starts at col 7 (after "  when "), len 9.
+	craftSrc := "domain Biz {\n  MyContext\n}\nuse_case \"Test\" {\n  when MyContext listens \"SomeEvent\"\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(`{"textDocument":{"uri":"file:///dl.craft","languageId":"craft","version":1,"text":%s}}`, mustMarshalString(craftSrc)))}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &tokID, Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///dl.craft"}}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType, modifiers uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt, mod := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3], result.Data[i+4]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt, mod}
+	}
+
+	// "MyContext" on line 4 must start at col 7, not col 0.
+	// If it lands at col 0 the bug is present (ActorCol() returned 0 for domain_listen).
+	if _, atZero := byPos[[2]uint32{4, 0}]; atZero {
+		t.Error("domain_listen subject emitted at col 0 — ActorCol() bug not fixed")
+	}
+	if tok, ok := byPos[[2]uint32{4, 7}]; !ok {
+		t.Errorf("MyContext not found at line 4 col 7 (found tokens: %v)", byPos)
+	} else if tok.length != 9 {
+		t.Errorf("MyContext: got length %d, want 9", tok.length)
+	}
+
+	_ = errCh
+}

@@ -1820,8 +1820,8 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			if triggerName != "" && triggerLine > 0 {
 				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, triggerLine); ok {
 					col := uint32(0)
-					if trigger.ActorCol() > 0 {
-						col = uint32(trigger.ActorCol() - 1)
+					if subj := trigger.Subject(); subj != nil && subj.Col > 0 {
+						col = uint32(subj.Col - 1)
 					}
 					tokens = append(tokens, semanticToken{
 						line:      uint32(triggerLine - 1),
