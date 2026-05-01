@@ -42,6 +42,17 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 	node := root.NodeAt(green.TextSize(offset))
 	for node != nil {
 		switch node.Kind() {
+		case syntax.SyntaxKindServiceField:
+			if node.ChildToken(syntax.SyntaxKindKwContexts) != nil {
+				return "service.contexts"
+			}
+			if node.ChildToken(syntax.SyntaxKindKwLanguage) != nil {
+				return "service.language"
+			}
+			if node.ChildToken(syntax.SyntaxKindKwDataStores) != nil {
+				return "service.data-stores"
+			}
+			return "service"
 		case syntax.SyntaxKindServiceDecl:
 			return "service"
 		case syntax.SyntaxKindServicesBlock:
@@ -87,6 +98,18 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, lines []string, c
 
 	enclosing := treeEnclosingBlock(root, li, cursorLine, cursorCol)
 
+	// Tree-based service field detection (takes priority over regex).
+	switch enclosing {
+	case "service.contexts":
+		return ctxServiceContexts
+	case "service.language":
+		return ctxServiceLang
+	case "service.data-stores":
+		return ctxServiceField
+	}
+
+	// Regex-based field detection: handles empty-value positions where the
+	// ServiceField node may not span the cursor (e.g. "contexts: " with no values).
 	if field, ok := fieldBeforeCursor(linePrefix); ok {
 		switch field {
 		case "language":

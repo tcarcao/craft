@@ -3043,3 +3043,84 @@ func TestIncrementalSync(t *testing.T) {
 	readMsg(br)                                                              //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
+
+func TestCompletion_ServiceContextsFieldValue(t *testing.T) {
+	// Cursor is after "contexts: " on line 4 (0-based).
+	// "Auth" is a bounded context defined in domain Payments — should appear in completions.
+	const craftSrc = "domain Payments {\n  Auth\n}\nservice PaySvc {\n  contexts: \n}"
+	// Line 4, char 12 = after "contexts: " (10 chars + "  " indent = 12)
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)})
+
+	const uri = "file:///completion_ctx.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams})
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	compID := id
+	compParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 4, "character": 12},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &compID, Method: "textDocument/completion", Params: compParams})
+
+	var compResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == compID {
+			compResp = msg
+			break
+		}
+	}
+	if compResp.ID == nil {
+		t.Fatal("timed out waiting for completion response")
+	}
+
+	var list struct {
+		Items []struct {
+			Label string `json:"label"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(compResp.Result, &list); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	var found bool
+	for _, item := range list.Items {
+		if item.Label == "Auth" {
+			found = true
+		}
+	}
+	if !found {
+		labels := make([]string, len(list.Items))
+		for i, it := range list.Items {
+			labels[i] = it.Label
+		}
+		t.Errorf("completion did not include 'Auth'; got: %v", labels)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"})
+	readMsg(br)
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})
+}
