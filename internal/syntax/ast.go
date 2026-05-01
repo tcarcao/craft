@@ -453,6 +453,50 @@ func (s ServiceDecl) Contexts() []string { return s.parseServiceBody().Contexts 
 // TODO(Task 10): rewire to LineIndex; entries are 0 in interim.
 func (s ServiceDecl) ContextLines() []int { return s.parseServiceBody().ContextLines }
 
+// ContextTokens returns the raw SyntaxToken for each name in the contexts: list.
+// Use tok.Offset() + a LineIndex to compute LSP positions for inlay hints.
+func (s ServiceDecl) ContextTokens() []SyntaxToken {
+	var result []SyntaxToken
+	tokens := scanBodyTokens(s.node)
+	i := 0
+	for i < len(tokens) {
+		tok := tokens[i]
+		if tok.Kind() == SyntaxKindRBrace {
+			break
+		}
+		if tok.Kind() != SyntaxKindIdent {
+			i++
+			continue
+		}
+		if i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
+			isContexts := tok.Text() == "contexts"
+			i += 2 // skip fieldName + colon
+			if !isContexts {
+				continue
+			}
+			for i < len(tokens) {
+				t := tokens[i]
+				if t.Kind() == SyntaxKindRBrace {
+					break
+				}
+				if t.Kind() == SyntaxKindComma {
+					i++
+					continue
+				}
+				if (t.Kind() == SyntaxKindIdent || t.Kind() == SyntaxKindString) && !isAstFieldSentinel(tokens, i) {
+					result = append(result, t)
+					i++
+				} else {
+					break
+				}
+			}
+			break // contexts: appears at most once
+		}
+		i++
+	}
+	return result
+}
+
 // DataStores returns the data-store names listed in the service body.
 func (s ServiceDecl) DataStores() []string { return s.parseServiceBody().DataStores }
 

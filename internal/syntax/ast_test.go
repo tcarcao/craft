@@ -390,3 +390,56 @@ func TestArchDecl_LineAccessors(t *testing.T) {
 	_ = a.PresentationLine(li)
 	_ = a.GatewayLine(li)
 }
+
+func TestServiceDecl_ContextTokens(t *testing.T) {
+	src := `services {
+	  Auth {
+	    contexts: Login, Register
+	    language: golang
+	  }
+	}`
+	tree := astParse(src)
+	file := syntax.AsFile(tree)
+	svcs := file.Services()
+	if len(svcs) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(svcs))
+	}
+	toks := svcs[0].ContextTokens()
+	if len(toks) != 2 {
+		t.Fatalf("expected 2 context tokens (Login, Register), got %d: %v", len(toks), toks)
+	}
+	if toks[0].Text() != "Login" {
+		t.Errorf("toks[0]: got %q want Login", toks[0].Text())
+	}
+	if toks[1].Text() != "Register" {
+		t.Errorf("toks[1]: got %q want Register", toks[1].Text())
+	}
+}
+
+func TestServiceDecl_ContextTokens_EdgeCases(t *testing.T) {
+	// Service with no contexts: field at all.
+	src1 := "services {\n  Svc {\n    language: golang\n  }\n}"
+	tree1 := astParse(src1)
+	file1 := syntax.AsFile(tree1)
+	svcs1 := file1.Services()
+	if len(svcs1) != 1 {
+		t.Fatalf("src1: expected 1 service, got %d", len(svcs1))
+	}
+	toks1 := svcs1[0].ContextTokens()
+	if len(toks1) != 0 {
+		t.Errorf("no contexts field: expected 0 tokens, got %d: %v", len(toks1), toks1)
+	}
+
+	// Service with contexts: present but empty (next field follows immediately).
+	src2 := "services {\n  Svc {\n    contexts:\n    language: golang\n  }\n}"
+	tree2 := astParse(src2)
+	file2 := syntax.AsFile(tree2)
+	svcs2 := file2.Services()
+	if len(svcs2) != 1 {
+		t.Fatalf("src2: expected 1 service, got %d", len(svcs2))
+	}
+	toks2 := svcs2[0].ContextTokens()
+	if len(toks2) != 0 {
+		t.Errorf("empty contexts: expected 0 tokens, got %d: %v", len(toks2), toks2)
+	}
+}
