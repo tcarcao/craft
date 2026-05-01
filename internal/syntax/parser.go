@@ -1223,7 +1223,7 @@ func (p *Parser) peekAt(offset int) lexer.Token {
 	count := 0
 	for i := p.pos; i < len(p.tokens); i++ {
 		tt := p.tokens[i].Type
-		if tt == lexer.TokenLineComment || tt == lexer.TokenBlockComment {
+		if tt == lexer.TokenLineComment || tt == lexer.TokenBlockComment || tt == lexer.TokenDocComment {
 			continue
 		}
 		if count == offset {
@@ -1333,7 +1333,7 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 func (p *Parser) peek() lexer.Token {
 	for i := p.pos; i < len(p.tokens); i++ {
 		tt := p.tokens[i].Type
-		if tt == lexer.TokenLineComment || tt == lexer.TokenBlockComment {
+		if tt == lexer.TokenLineComment || tt == lexer.TokenBlockComment || tt == lexer.TokenDocComment {
 			continue
 		}
 		return p.tokens[i]
@@ -1378,6 +1378,11 @@ func (p *Parser) attachTrivia() {
 		case lexer.TokenBlockComment:
 			p.emitWhitespaceBefore(tok)
 			p.builder.Token(SyntaxKindBlockComment, tok.Value)
+			p.updatePrevEnd(tok)
+			p.pos++
+		case lexer.TokenDocComment:
+			p.emitWhitespaceBefore(tok)
+			p.builder.Token(SyntaxKindDocComment, tok.Value)
 			p.updatePrevEnd(tok)
 			p.pos++
 		default:
@@ -1479,6 +1484,7 @@ var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
 	lexer.TokenEOF:          SyntaxKindEOF,
 	lexer.TokenLineComment:  SyntaxKindLineComment,
 	lexer.TokenBlockComment: SyntaxKindBlockComment,
+	lexer.TokenDocComment:   SyntaxKindDocComment,
 }
 
 func (p *Parser) diagUnexpected(tok lexer.Token, expected string) craft.Diagnostic {

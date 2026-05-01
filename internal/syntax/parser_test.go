@@ -77,6 +77,45 @@ func TestParseTree_ActorCommentPreserved(t *testing.T) {
 	}
 }
 
+func TestParseTree_DocCommentPreserved(t *testing.T) {
+	src := "/// Doc for actor\nactor user Alice"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	tree := syntax.Root(g)
+	actors := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor, got %d", len(actors))
+	}
+	allToks := actors[0].AllTokens()
+	hasDoc := false
+	for _, tok := range allToks {
+		if tok.Kind() == syntax.SyntaxKindDocComment {
+			hasDoc = true
+			break
+		}
+	}
+	if !hasDoc {
+		t.Error("expected leading doc comment to appear in actor node's AllTokens()")
+	}
+}
+
+func TestParseTree_DocCommentNotMistakenForLineComment(t *testing.T) {
+	src := "/// Doc\nactor system Foo"
+	g, _, _ := syntax.Parse(src)
+	tree := syntax.Root(g)
+	actors := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor, got %d", len(actors))
+	}
+	for _, tok := range actors[0].AllTokens() {
+		if tok.Kind() == syntax.SyntaxKindLineComment {
+			t.Error("/// should produce SyntaxKindDocComment, not SyntaxKindLineComment")
+		}
+	}
+}
+
 func TestParseTree_ServiceSyntaxTree(t *testing.T) {
 	g, _, diags := syntax.Parse("service UserService {\n    contexts: Auth\n}")
 	if len(diags) != 0 {

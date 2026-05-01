@@ -15,6 +15,7 @@ const (
 	SyntaxKindError        // unrecognised character (from lexer.TokenError)
 	SyntaxKindLineComment  // // ...
 	SyntaxKindBlockComment // /* ... */
+	SyntaxKindDocComment   // /// ...
 	SyntaxKindWhitespace   // spaces, tabs, newlines between tokens
 	SyntaxKindIdent        // unresolved name — never a contextual keyword
 	SyntaxKindString
@@ -63,6 +64,11 @@ const (
 	SyntaxKindKwTrue  // future: boolean values in modifier properties
 	SyntaxKindKwFalse // future: boolean values in modifier properties
 
+	// New contextual keywords for triggers and imports
+	SyntaxKindKwCron   // contextual keyword `cron` (in when clause)
+	SyntaxKindKwEvery  // contextual keyword `every` (in when clause)
+	SyntaxKindKwImport // hard keyword `import`
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -92,4 +98,5 @@ const (
 	SyntaxKindErrorNode // wraps tokens that could not form a valid construct
 	SyntaxKindRef         // wraps a name ident at a reference site (e.g. contexts: field values)
 	SyntaxKindServiceField // wraps one field declaration (keyword + colon + values) in a service body
+	SyntaxKindImportDecl   // import "path/to/file.craft"
 )
