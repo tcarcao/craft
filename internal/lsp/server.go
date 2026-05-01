@@ -1445,11 +1445,11 @@ func (s *Server) PrepareRename(_ context.Context, params *protocol.PrepareRename
 	if tok == nil {
 		return nil, nil
 	}
-	pos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
-	endChar := pos.Character + uint32(len(tok.Text()))
+	startPos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
+	endPos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset()+green.TextSize(len(tok.Text())))
 	return &protocol.Range{
-		Start: pos,
-		End:   protocol.Position{Line: pos.Line, Character: endChar},
+		Start: startPos,
+		End:   endPos,
 	}, nil
 }
 
@@ -1482,10 +1482,16 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 	rm := s.ws.ResolutionMap()
 
 	edits := make(map[protocol.DocumentURI][]protocol.TextEdit)
+	seen := make(map[string]struct{})
 	addEdit := func(fileURI string, line, col int) {
 		if line <= 0 || col <= 0 {
 			return
 		}
+		key := fmt.Sprintf("%s:%d:%d", fileURI, line, col)
+		if _, dup := seen[key]; dup {
+			return
+		}
+		seen[key] = struct{}{}
 		startLine := lspLine(line)
 		startChar := uint32(col - 1)
 		edits[protocol.DocumentURI(fileURI)] = append(
