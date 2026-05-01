@@ -281,3 +281,55 @@ func TestLexer_PunctuationTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_DocComment(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		wantTypes []lexer.TokenType
+	}{
+		{
+			name:      "doc comment distinguished from line comment",
+			src:       "/// doc\nactor user Alice",
+			wantTypes: []lexer.TokenType{lexer.TokenDocComment, lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "regular line comment still works",
+			src:       "// regular\nactor user Alice",
+			wantTypes: []lexer.TokenType{lexer.TokenLineComment, lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "doc comment at EOF no newline",
+			src:       "/// doc at eof",
+			wantTypes: []lexer.TokenType{lexer.TokenDocComment, lexer.TokenEOF},
+		},
+		{
+			name:      "doc comment value includes ///",
+			src:       "/// hello world",
+			wantTypes: []lexer.TokenType{lexer.TokenDocComment, lexer.TokenEOF},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			toks := l.All()
+			if len(toks) != len(tc.wantTypes) {
+				t.Fatalf("token count: got %d want %d\ntokens: %v", len(toks), len(tc.wantTypes), toks)
+			}
+			for i, tok := range toks {
+				if tok.Type != tc.wantTypes[i] {
+					t.Errorf("token[%d]: got type %v want %v (value=%q)", i, tok.Type, tc.wantTypes[i], tok.Value)
+				}
+			}
+		})
+	}
+	// Value check: doc comment value must start with ///
+	l := lexer.New("/// my doc")
+	toks := l.All()
+	if toks[0].Type != lexer.TokenDocComment {
+		t.Fatalf("expected TokenDocComment, got %v", toks[0].Type)
+	}
+	if len(toks[0].Value) < 3 || toks[0].Value[:3] != "///" {
+		t.Errorf("doc comment value should start with ///, got %q", toks[0].Value)
+	}
+}

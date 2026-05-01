@@ -71,8 +71,9 @@ const (
 	TokenArrow  // ->
 
 	// Lossless syntax tree trivia tokens
-	TokenLineComment  // // ... single-line comment
+	TokenLineComment  // // ... single-line comment (two slashes, not three)
 	TokenBlockComment // /* ... */ block comment
+	TokenDocComment   // /// ... doc comment (three slashes)
 
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
@@ -141,6 +142,8 @@ func (l *Lexer) Next() Token {
 	ch := l.src[l.pos]
 
 	switch {
+	case ch == '/' && l.peek(1) == '/' && l.peek(2) == '/':
+		return l.scanDocComment()
 	case ch == '/' && l.peek(1) == '/':
 		return l.scanLineComment()
 	case ch == '/' && l.peek(1) == '*':
@@ -207,6 +210,19 @@ func (l *Lexer) scanLineComment() Token {
 		l.advance()
 	}
 	return Token{Type: TokenLineComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
+}
+
+// scanDocComment scans a /// doc comment and returns it as a TokenDocComment.
+func (l *Lexer) scanDocComment() Token {
+	startLine, startCol := l.line, l.col
+	start := l.pos
+	l.advance() // /
+	l.advance() // /
+	l.advance() // /
+	for l.pos < len(l.src) && l.src[l.pos] != '\n' {
+		l.advance()
+	}
+	return Token{Type: TokenDocComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol}
 }
 
 // scanBlockComment scans a /* ... */ block comment and returns it as a token.
