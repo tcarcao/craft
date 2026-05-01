@@ -79,6 +79,11 @@ func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
 		}
 	}
 
+	// Capture trailing whitespace/newlines after the last token.
+	if int(p.prevEnd) < len(p.src) {
+		p.builder.Token(SyntaxKindWhitespace, p.src[p.prevEnd:])
+	}
+
 	p.builder.FinishNode()
 	return p.builder.Finish(), diags
 }
