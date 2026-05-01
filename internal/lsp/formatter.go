@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // FormatDocument formats a Craft DSL source string to canonical form:
@@ -17,8 +18,10 @@ func FormatDocument(content string) string {
 		return "\n"
 	}
 	gn, _, diags := syntax.Parse(content)
-	if len(diags) > 0 {
-		return content
+	for _, d := range diags {
+		if d.Severity == craft.SeverityError {
+			return content
+		}
 	}
 	root := syntax.Root(gn)
 

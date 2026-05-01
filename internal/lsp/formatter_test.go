@@ -69,8 +69,8 @@ func TestFormatDocument_TopLevelBlankLines(t *testing.T) {
 
 func TestFormatDocument_EmptyInput(t *testing.T) {
 	got := FormatDocument("")
-	if got != "\n" && got != "" {
-		t.Errorf("FormatDocument empty: got %q", got)
+	if got != "\n" {
+		t.Errorf("FormatDocument empty: got %q, want %q", got, "\n")
 	}
 }
 

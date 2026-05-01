@@ -144,7 +144,8 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			DocumentSymbolProvider: true,
 			HoverProvider:          true,
 			DefinitionProvider:     true,
-			FoldingRangeProvider:   true,
+			FoldingRangeProvider:        true,
+			DocumentFormattingProvider: true,
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
