@@ -125,6 +125,8 @@ type UseCaseRef struct {
 	Name string
 	// Line is the 1-based source line of the reference token.
 	Line int
+	// Column is the 1-based column of the reference token.
+	Column int
 }
 
 // Symbols is the output of the symbol-collection pass for a single file.
@@ -446,15 +448,25 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			}
 			// Trigger subject (actor or domain name).
 			if actor := trigger.ActorName(); actor != "" {
+				col := 0
+				if hasLI {
+					col = trigger.ActorCol(lineIdx)
+				}
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-					Name: actor,
-					Line: triggerLine,
+					Name:   actor,
+					Line:   triggerLine,
+					Column: col,
 				})
 			}
 			if ctx := trigger.ContextName(); ctx != "" {
+				col := 0
+				if hasLI {
+					col = trigger.ActorCol(lineIdx) // ActorCol works for both trigger kinds
+				}
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-					Name: ctx,
-					Line: triggerLine,
+					Name:   ctx,
+					Line:   triggerLine,
+					Column: col,
 				})
 			}
 			// Action parties.
@@ -464,15 +476,25 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 					actionLine = action.Line(lineIdx)
 				}
 				if subj := action.SubjectName(); subj != "" {
+					col := 0
+					if hasLI {
+						col = action.SubjectCol(lineIdx)
+					}
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-						Name: subj,
-						Line: actionLine,
+						Name:   subj,
+						Line:   actionLine,
+						Column: col,
 					})
 				}
 				if target := action.TargetName(); target != "" {
+					col := 0
+					if hasLI {
+						col = action.TargetCol(lineIdx)
+					}
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
-						Name: target,
-						Line: actionLine,
+						Name:   target,
+						Line:   actionLine,
+						Column: col,
 					})
 				}
 			}

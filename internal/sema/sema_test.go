@@ -490,3 +490,26 @@ func TestResolveUseCaseRef_BoundedContextCarriesBCPosition(t *testing.T) {
 		t.Errorf("BCURI: got %q want file:///t.craft", target.BCURI)
 	}
 }
+
+func TestAnalyzeFile_UseCaseRef_HasColumn(t *testing.T) {
+	src := "actor user Alice\nuse_case \"T\" {\n  when Alice creates Session\n    Auth validates token\n}"
+	g, li, _ := syntax.Parse(src)
+	tree := syntax.Root(g)
+	syms, _ := sema.AnalyzeFile("file:///a.craft", tree, li)
+	if len(syms.UseCaseRefs) == 0 {
+		t.Fatal("expected UseCaseRefs, got none")
+	}
+	for _, ref := range syms.UseCaseRefs {
+		if ref.Column == 0 {
+			t.Errorf("ref %q at line %d has Column=0, want >0", ref.Name, ref.Line)
+		}
+	}
+	// Verify specific column for the trigger actor "Alice" on line 3 ("  when Alice...").
+	for _, ref := range syms.UseCaseRefs {
+		if ref.Name == "Alice" && ref.Line == 3 {
+			if ref.Column != 8 {
+				t.Errorf("Alice trigger ref: got Column=%d, want 8", ref.Column)
+			}
+		}
+	}
+}
