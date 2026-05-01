@@ -333,3 +333,36 @@ func TestLexer_DocComment(t *testing.T) {
 		t.Errorf("doc comment value should start with ///, got %q", toks[0].Value)
 	}
 }
+
+func TestLexer_ImportKeyword(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		wantTypes []lexer.TokenType
+	}{
+		{
+			name:      "import keyword",
+			src:       `import "other.craft"`,
+			wantTypes: []lexer.TokenType{lexer.TokenKwImport, lexer.TokenString, lexer.TokenEOF},
+		},
+		{
+			name:      "import not confused with identifier",
+			src:       "import_service",
+			wantTypes: []lexer.TokenType{lexer.TokenIdent, lexer.TokenEOF},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			toks := l.All()
+			if len(toks) != len(tc.wantTypes) {
+				t.Fatalf("token count: got %d want %d\ntokens: %v", len(toks), len(tc.wantTypes), toks)
+			}
+			for i, tok := range toks {
+				if tok.Type != tc.wantTypes[i] {
+					t.Errorf("token[%d]: got type %v want %v (value=%q)", i, tok.Type, tc.wantTypes[i], tok.Value)
+				}
+			}
+		})
+	}
+}

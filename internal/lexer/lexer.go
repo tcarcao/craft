@@ -75,6 +75,9 @@ const (
 	TokenBlockComment // /* ... */ block comment
 	TokenDocComment   // /// ... doc comment (three slashes)
 
+	// Top-level structural keywords
+	TokenKwImport // import
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -91,6 +94,7 @@ var keywords = map[string]TokenType{
 	"use_case": TokenKwUseCase,
 	"arch":     TokenKwArch,
 	"exposure": TokenKwExposure,
+	"import":   TokenKwImport,
 }
 
 // Token is a scanned unit from the source.
