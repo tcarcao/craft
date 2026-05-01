@@ -306,6 +306,58 @@ func TestParseTree_CronTriggerMissingString(t *testing.T) {
 	}
 }
 
+func TestParseTree_ImportDecl(t *testing.T) {
+	src := `import "services/payments.craft"`
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	root := syntax.Root(g)
+	imports := root.ChildNodes(syntax.SyntaxKindImportDecl)
+	if len(imports) != 1 {
+		t.Fatalf("expected 1 import node, got %d", len(imports))
+	}
+	kwTok := imports[0].ChildToken(syntax.SyntaxKindKwImport)
+	if kwTok == nil || kwTok.Text() != "import" {
+		t.Errorf("missing import keyword token")
+	}
+	pathTok := imports[0].ChildToken(syntax.SyntaxKindString)
+	if pathTok == nil || pathTok.Text() != "services/payments.craft" {
+		t.Errorf("missing or wrong import path token, got %v", pathTok)
+	}
+}
+
+func TestParseTree_MultipleImports(t *testing.T) {
+	src := "import \"a.craft\"\nimport \"b.craft\"\nactor user Alice"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	root := syntax.Root(g)
+	imports := root.ChildNodes(syntax.SyntaxKindImportDecl)
+	if len(imports) != 2 {
+		t.Fatalf("expected 2 import nodes, got %d", len(imports))
+	}
+	actors := root.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor node, got %d", len(actors))
+	}
+}
+
+func TestParseTree_ImportMissingPath(t *testing.T) {
+	// import without a string path should produce a diagnostic and still parse the rest.
+	src := "import\nactor user Alice"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Error("expected diagnostic for missing import path")
+	}
+	root := syntax.Root(g)
+	actors := root.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor node after bad import, got %d", len(actors))
+	}
+}
+
 // TestRecovery_NestedBraceInServiceField verifies that a service field whose
 // value accidentally contains `{...}` does not cause the parser to consume
 // the wrong `}` as the service block's closing brace, which would prevent

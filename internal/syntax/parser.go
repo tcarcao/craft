@@ -53,6 +53,8 @@ func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
 	for !p.atEOF() {
 		tok := p.peek()
 		switch tok.Type {
+		case lexer.TokenKwImport:
+			diags = append(diags, p.parseImportStatement()...)
 		case lexer.TokenKwActor:
 			diags = append(diags, p.parseActorStatement()...)
 		case lexer.TokenKwActors:
@@ -122,6 +124,27 @@ func (p *Parser) parseActorStatement() []craft.Diagnostic {
 		return diags
 	}
 	p.consumeAs(SyntaxKindIdent)
+
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseImportStatement parses: import "<path>"
+func (p *Parser) parseImportStatement() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindImportDecl)
+	var diags []craft.Diagnostic
+
+	p.attachTrivia()
+	p.consumeAs(SyntaxKindKwImport)
+
+	pathTok := p.peek()
+	if pathTok.Type != lexer.TokenString {
+		diags = append(diags, p.diagUnexpected(pathTok, "import path string (e.g. \"other.craft\")"))
+		p.resyncToTopLevel()
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindString)
 
 	p.builder.FinishNode()
 	return diags
@@ -1345,7 +1368,8 @@ func (p *Parser) resyncToBlock() {
 
 func isTopLevelKeyword(tt lexer.TokenType) bool {
 	switch tt {
-	case lexer.TokenKwActor, lexer.TokenKwActors,
+	case lexer.TokenKwImport,
+		lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
 		lexer.TokenKwService, lexer.TokenKwServices,
 		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure:
@@ -1481,6 +1505,7 @@ func lexerKindToSyntaxKind(tt lexer.TokenType) SyntaxKind {
 // default emission. Several call sites also use this for keyword-specific kinds
 // (e.g., mapping TokenKwUser to SyntaxKindKwUser when used as an actor type).
 var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
+	lexer.TokenKwImport:     SyntaxKindKwImport,
 	lexer.TokenKwActor:      SyntaxKindKwActor,
 	lexer.TokenKwActors:     SyntaxKindKwActors,
 	lexer.TokenKwUser:       SyntaxKindKwUser,
