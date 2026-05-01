@@ -42,13 +42,37 @@ func nodeFirstTokenCol(node SyntaxNode, li green.LineIndex) int {
 	return col
 }
 
-// isAstFieldSentinel returns true when tokens[i] is an ident followed by a colon —
-// the start of a new field definition.
+// isAstFieldSentinel returns true when tokens[i] is a field keyword or ident followed
+// by a colon — the start of a new field definition.
 func isAstFieldSentinel(tokens []SyntaxToken, i int) bool {
 	if i+1 >= len(tokens) {
 		return false
 	}
-	return tokens[i].Kind() == SyntaxKindIdent && tokens[i+1].Kind() == SyntaxKindColon
+	if tokens[i+1].Kind() != SyntaxKindColon {
+		return false
+	}
+	k := tokens[i].Kind()
+	return k == SyntaxKindIdent || k == SyntaxKindKwContexts || k == SyntaxKindKwDataStores ||
+		k == SyntaxKindKwLanguage || k == SyntaxKindKwDeployment
+}
+
+// serviceFieldName returns the field name string for a token that is a service
+// body field keyword (contexts, data-stores, language, deployment) or a plain
+// ident. Returns "" for other token kinds.
+func serviceFieldName(tok SyntaxToken) string {
+	switch tok.Kind() {
+	case SyntaxKindKwContexts:
+		return "contexts"
+	case SyntaxKindKwDataStores:
+		return "data-stores"
+	case SyntaxKindKwLanguage:
+		return "language"
+	case SyntaxKindKwDeployment:
+		return "deployment"
+	case SyntaxKindIdent:
+		return tok.Text()
+	}
+	return ""
 }
 
 // collectAstIdentList collects comma-separated ident/string values from tokens[i].
@@ -324,6 +348,29 @@ type RefDecl struct{ node SyntaxNode }
 // Name returns the identifier token inside this ref node.
 func (r RefDecl) Name() *SyntaxToken { return r.node.ChildToken(SyntaxKindIdent) }
 
+// ServiceField is a typed view over a SyntaxKindServiceField node.
+type ServiceField struct{ node SyntaxNode }
+
+// IsContexts reports whether this is a contexts: field.
+func (sf ServiceField) IsContexts() bool {
+	return sf.node.ChildToken(SyntaxKindKwContexts) != nil
+}
+
+// IsLanguage reports whether this is a language: field.
+func (sf ServiceField) IsLanguage() bool {
+	return sf.node.ChildToken(SyntaxKindKwLanguage) != nil
+}
+
+// IsDataStores reports whether this is a data-stores: field.
+func (sf ServiceField) IsDataStores() bool {
+	return sf.node.ChildToken(SyntaxKindKwDataStores) != nil
+}
+
+// IsDeployment reports whether this is a deployment: field.
+func (sf ServiceField) IsDeployment() bool {
+	return sf.node.ChildToken(SyntaxKindKwDeployment) != nil
+}
+
 // DomainsBlock is a typed view over a SyntaxKindDomainsBlock node.
 type DomainsBlock struct{ node SyntaxNode }
 
@@ -389,11 +436,11 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind() != SyntaxKindIdent {
+		fieldName := serviceFieldName(tok)
+		if fieldName == "" {
 			i++
 			continue
 		}
-		fieldName := tok.Text()
 		if i+1 >= len(tokens) || tokens[i+1].Kind() != SyntaxKindColon {
 			i++
 			continue
@@ -443,7 +490,7 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 			}
 		default:
 			for i < len(tokens) {
-				if tokens[i].Kind() == SyntaxKindRBrace || tokens[i].Kind() == SyntaxKindIdent {
+				if tokens[i].Kind() == SyntaxKindRBrace || serviceFieldName(tokens[i]) != "" {
 					break
 				}
 				i++
@@ -471,12 +518,13 @@ func (s ServiceDecl) ContextTokens() []SyntaxToken {
 		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind() != SyntaxKindIdent {
+		fieldName := serviceFieldName(tok)
+		if fieldName == "" {
 			i++
 			continue
 		}
 		if i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
-			isContexts := tok.Text() == "contexts"
+			isContexts := fieldName == "contexts"
 			i += 2 // skip fieldName + colon
 			if !isContexts {
 				continue
@@ -519,6 +567,16 @@ func (s ServiceDecl) ContextRefs() []RefDecl {
 	return result
 }
 
+// Fields returns all field declarations inside this service body.
+func (s ServiceDecl) Fields() []ServiceField {
+	children := s.node.ChildNodes(SyntaxKindServiceField)
+	result := make([]ServiceField, len(children))
+	for i, child := range children {
+		result[i] = ServiceField{node: child}
+	}
+	return result
+}
+
 // DataStores returns the data-store names listed in the service body.
 func (s ServiceDecl) DataStores() []string { return s.parseServiceBody().DataStores }
 
@@ -541,7 +599,7 @@ func (s ServiceDecl) DataStoreTokens() []SyntaxToken {
 		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind() == SyntaxKindIdent && tok.Text() == "data-stores" &&
+		if serviceFieldName(tok) == "data-stores" &&
 			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
 			var result []SyntaxToken
@@ -574,7 +632,7 @@ func (s ServiceDecl) LanguageToken() *SyntaxToken {
 		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind() == SyntaxKindIdent && tok.Text() == "language" &&
+		if serviceFieldName(tok) == "language" &&
 			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
 			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
@@ -595,7 +653,7 @@ func (s ServiceDecl) DeploymentTypeToken() *SyntaxToken {
 		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind() == SyntaxKindIdent && tok.Text() == "deployment" &&
+		if serviceFieldName(tok) == "deployment" &&
 			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
 			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
@@ -616,7 +674,7 @@ func (s ServiceDecl) DeploymentTargetTokens() []SyntaxToken {
 		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind() == SyntaxKindIdent && tok.Text() == "deployment" &&
+		if serviceFieldName(tok) == "deployment" &&
 			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
 			// Skip deployment type ident.

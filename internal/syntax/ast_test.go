@@ -528,6 +528,43 @@ func TestExposureTokenAccessors(t *testing.T) {
 	}
 }
 
+func TestServiceDecl_Fields_ReturnsServiceFieldNodes(t *testing.T) {
+	src := "service PaySvc {\n  contexts: Auth, Profile\n  language: golang\n}"
+	gn, _, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	svcs := file.Services()
+	if len(svcs) != 1 {
+		t.Fatalf("want 1 service, got %d", len(svcs))
+	}
+	fields := svcs[0].Fields()
+	if len(fields) != 2 {
+		t.Fatalf("want 2 fields (contexts, language), got %d", len(fields))
+	}
+	if !fields[0].IsContexts() {
+		t.Errorf("fields[0]: want IsContexts() true, got false")
+	}
+	if !fields[1].IsLanguage() {
+		t.Errorf("fields[1]: want IsLanguage() true, got false")
+	}
+}
+
+func TestContextTokens_StillWorksAfterServiceFieldWrap(t *testing.T) {
+	src := "service PaySvc {\n  contexts: Auth, Profile\n}"
+	gn, _, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	toks := file.Services()[0].ContextTokens()
+	if len(toks) != 2 {
+		t.Fatalf("want 2 context tokens, got %d", len(toks))
+	}
+	for i, want := range []string{"Auth", "Profile"} {
+		if toks[i].Text() != want {
+			t.Errorf("toks[%d] = %q, want %q", i, toks[i].Text(), want)
+		}
+	}
+}
+
 func TestResyncToTopLevel_EmitsErrorNode(t *testing.T) {
 	// "service Foo extra" without "{" triggers resyncToTopLevel.
 	// The tokens up to the next top-level keyword should be wrapped in

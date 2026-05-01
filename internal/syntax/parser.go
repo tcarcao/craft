@@ -542,17 +542,15 @@ func (p *Parser) parseServiceStatement() []craft.Diagnostic {
 }
 
 // parseServiceBody parses the fields inside a service { ... } block.
-// Tokens are emitted directly into the current builder scope.
+// Each field is wrapped in a SyntaxKindServiceField node so that tree-based
+// completion context detection can identify which field the cursor is in.
 func (p *Parser) parseServiceBody() []craft.Diagnostic {
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
 
-		// Field names are contextual keywords: contexts, data-stores, language.
-		// They lex as TokenIdent (or hyphenated ident). We match on Value.
 		if tok.Type != lexer.TokenIdent {
-			// Unknown or error token inside service body — skip.
 			diags = append(diags, p.diagUnexpected(tok, "field name (contexts, data-stores, language) or `}`"))
 			if tok.Type == lexer.TokenLBrace {
 				p.resyncToBlock()
@@ -563,12 +561,25 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 		}
 
 		fieldName := tok.Value
-		fieldTok := tok // save the field name token before consuming
-		p.consumeAs(SyntaxKindIdent) // field name
 
-		// Expect colon after field name.
+		p.builder.StartNode(SyntaxKindServiceField)
+
+		switch fieldName {
+		case "contexts":
+			p.consumeAs(SyntaxKindKwContexts)
+		case "data-stores":
+			p.consumeAs(SyntaxKindKwDataStores)
+		case "language":
+			p.consumeAs(SyntaxKindKwLanguage)
+		case "deployment":
+			p.consumeAs(SyntaxKindKwDeployment)
+		default:
+			p.consumeAs(SyntaxKindIdent)
+		}
+
 		if p.peek().Type != lexer.TokenColon {
 			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
+			p.builder.FinishNode()
 			continue
 		}
 		p.consumeAs(SyntaxKindColon)
@@ -589,9 +600,11 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 			diags = append(diags, dd...)
 		default:
 			// Unknown field — emit diagnostic and skip to next line.
-			diags = append(diags, p.diagUnexpected(fieldTok, "field name (contexts, data-stores, language) or `}`"))
+			diags = append(diags, p.diagUnexpected(tok, "field name (contexts, data-stores, language) or `}`"))
 			p.skipToNextField()
 		}
+
+		p.builder.FinishNode()
 	}
 
 	return diags

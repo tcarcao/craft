@@ -90,5 +90,6 @@ const (
 	SyntaxKindExposureDecl
 	SyntaxKindDeploymentRule
 	SyntaxKindErrorNode // wraps tokens that could not form a valid construct
-	SyntaxKindRef       // wraps a name ident at a reference site (e.g. contexts: field values)
+	SyntaxKindRef         // wraps a name ident at a reference site (e.g. contexts: field values)
+	SyntaxKindServiceField // wraps one field declaration (keyword + colon + values) in a service body
 )
