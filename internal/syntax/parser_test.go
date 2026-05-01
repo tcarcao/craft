@@ -192,3 +192,32 @@ func TestParseTree_ActorsBlockSyntaxTree(t *testing.T) {
 		t.Errorf("expected 2 actor decl nodes inside block, got %d", len(actorDecls))
 	}
 }
+
+// TestRecovery_NestedBraceInServiceField verifies that a service field whose
+// value accidentally contains `{...}` does not cause the parser to consume
+// the wrong `}` as the service block's closing brace, which would prevent
+// subsequent services in the same block from being parsed.
+func TestRecovery_NestedBraceInServiceField(t *testing.T) {
+	src := `services {
+  Foo {
+    bad_field: {broken_value}
+    language: golang
+  }
+  Bar {
+    language: python
+  }
+}`
+	gn, _, diags := syntax.Parse(src)
+	root := syntax.Root(gn)
+
+	services := syntax.AsFile(root).Services()
+	if len(services) != 2 {
+		t.Fatalf("want 2 services, got %d (diags: %v)", len(services), diags)
+	}
+	if name := services[1].Name(); name == nil || name.Text() != "Bar" {
+		t.Errorf("want second service Bar, got %v", name)
+	}
+	if len(diags) == 0 {
+		t.Error("want at least one diagnostic for bad_field, got none")
+	}
+}

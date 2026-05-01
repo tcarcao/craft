@@ -555,6 +555,7 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 		}
 
 		fieldName := tok.Value
+		fieldTok := tok // save the field name token before consuming
 		p.consumeAs(SyntaxKindIdent) // field name
 
 		// Expect colon after field name.
@@ -579,7 +580,8 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 			dd := p.parseDeploymentSpec()
 			diags = append(diags, dd...)
 		default:
-			// Unknown field — skip to next line.
+			// Unknown field — emit diagnostic and skip to next line.
+			diags = append(diags, p.diagUnexpected(fieldTok, "field name (contexts, data-stores, language) or `}`"))
 			p.skipToNextField()
 		}
 	}
@@ -604,11 +606,27 @@ func isKeywordUsedAsIdent(tt lexer.TokenType) bool {
 
 // skipToNextField advances tokens until it finds what looks like the start of
 // a field name (TokenIdent) or the closing brace of the current block.
+// Depth-aware: nested { } pairs are skipped as a unit so a value like
+// `field: {broken}` does not cause the outer block's `}` to be consumed early.
 func (p *Parser) skipToNextField() {
+	depth := 0
 	for !p.atEOF() {
 		tok := p.peek()
-		if tok.Type == lexer.TokenRBrace || tok.Type == lexer.TokenIdent {
-			return
+		if tok.Type == lexer.TokenLBrace {
+			depth++
+			p.consume()
+			continue
+		}
+		if tok.Type == lexer.TokenRBrace {
+			if depth > 0 {
+				depth--
+				p.consume()
+				continue
+			}
+			return // stop before the enclosing block's `}`
+		}
+		if depth == 0 && tok.Type == lexer.TokenIdent {
+			return // next field name
 		}
 		p.consume()
 	}
@@ -1236,6 +1254,36 @@ func (p *Parser) resyncToTopLevel() {
 		}
 		p.consume()
 	}
+}
+
+// resyncToBlock wraps unrecognised tokens inside a construct in a
+// SyntaxKindErrorNode, consuming until the nearest `}` at depth 0 or a
+// top-level keyword (failsafe). The closing `}` is NOT consumed so the
+// enclosing loop can handle it normally.
+func (p *Parser) resyncToBlock() {
+	p.builder.StartNode(SyntaxKindErrorNode)
+	depth := 0
+	for !p.atEOF() {
+		tok := p.peek()
+		if tok.Type == lexer.TokenLBrace {
+			depth++
+			p.consume()
+			continue
+		}
+		if tok.Type == lexer.TokenRBrace {
+			if depth > 0 {
+				depth--
+				p.consume()
+				continue
+			}
+			break // stop before the block's own `}`
+		}
+		if depth == 0 && isTopLevelKeyword(tok.Type) {
+			break // failsafe: don't skip past a new top-level construct
+		}
+		p.consume()
+	}
+	p.builder.FinishNode()
 }
 
 func isTopLevelKeyword(tt lexer.TokenType) bool {
