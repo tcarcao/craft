@@ -356,7 +356,11 @@ func (p *Parser) parseBoundedContextList() []craft.Diagnostic {
 		} else {
 			// Unknown token inside domain block — could be a sub-keyword; skip.
 			diags = append(diags, p.diagUnexpected(tok, "bounded context name or `}`"))
-			p.consume()
+			if tok.Type == lexer.TokenLBrace {
+				p.resyncToBlock()
+			} else {
+				p.consume()
+			}
 		}
 	}
 	return diags
@@ -550,7 +554,11 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 		if tok.Type != lexer.TokenIdent {
 			// Unknown or error token inside service body — skip.
 			diags = append(diags, p.diagUnexpected(tok, "field name (contexts, data-stores, language) or `}`"))
-			p.consume()
+			if tok.Type == lexer.TokenLBrace {
+				p.resyncToBlock()
+			} else {
+				p.consume()
+			}
 			continue
 		}
 
