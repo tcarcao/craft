@@ -356,8 +356,9 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	// Walk exposures: to: → actor, through: → service, contexts: → domain/service.
 	for _, exp := range file.Exposures() {
 		for _, tok := range exp.ToTokens() {
-			tokLine, _ := f.LineIndex.LineCol(tok.Offset())
-			if tokLine != cursorLine {
+			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
+			tokName := tok.Text()
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
 				continue
 			}
 			if sym, ok := wsSym.Actors[tok.Text()]; ok && sym.Line > 0 {
@@ -375,8 +376,9 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			}
 		}
 		for _, tok := range exp.ThroughTokens() {
-			tokLine, _ := f.LineIndex.LineCol(tok.Offset())
-			if tokLine != cursorLine {
+			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
+			tokName := tok.Text()
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
 				continue
 			}
 			if sym, ok := wsSym.Services[tok.Text()]; ok && sym.Line > 0 {
@@ -394,8 +396,9 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			}
 		}
 		for _, tok := range exp.ContextsTokens() {
-			tokLine, _ := f.LineIndex.LineCol(tok.Offset())
-			if tokLine != cursorLine {
+			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
+			tokName := tok.Text()
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
 				continue
 			}
 			name := tok.Text()
