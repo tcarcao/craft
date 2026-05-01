@@ -58,12 +58,11 @@ func TestHarnessC_DiagnosticsVsGoldens(t *testing.T) {
 
 			// Run the v2 parser.
 			greenRoot, li, syntaxDiags := syntax.Parse(string(content))
-			_ = li
 			tree := syntax.Root(greenRoot)
 
 			// Run single-file sema analysis.
 			uri := "file://" + craftFile
-			syms, semaDiags := sema.AnalyzeFile(uri, tree)
+			syms, semaDiags := sema.AnalyzeFile(uri, tree, li)
 
 			// Run workspace-level analysis treating this as a single-file workspace.
 			// This surfaces unresolved-reference and cross-file diagnostics even for

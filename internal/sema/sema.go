@@ -259,10 +259,15 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			URI:    uri,
 		}
 		if prev, dup := seenActors[nameTok.Text()]; dup {
+			startChar := colToLSP(sym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
 				Severity: craft.SeverityError,
+				Range: craft.Range{
+					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+				},
 			})
 			continue
 		}
@@ -300,10 +305,15 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			URI:             uri,
 		}
 		if prev, dup := seenDomains[nameTok.Text()]; dup {
+			startChar := colToLSP(sym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
 				Severity: craft.SeverityError,
+				Range: craft.Range{
+					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+				},
 			})
 			continue
 		}
@@ -356,10 +366,15 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			URI:        uri,
 		}
 		if prev, dup := seenServices[nameTok.Text()]; dup {
+			startChar := colToLSP(sym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
 				Severity: craft.SeverityError,
+				Range: craft.Range{
+					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+				},
 			})
 			continue
 		}

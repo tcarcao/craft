@@ -11,10 +11,7 @@ import (
 // ProjectFromTree projects a lossless red SyntaxNode tree into a *craft.CraftDoc
 // using typed views directly — no lower.go dependency.
 //
-// li is reserved for future position-aware projection (Task 10); it is currently
-// unused but kept on the public signature so callers wire LineIndex through.
 func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
-	_ = li
 	if root == (SyntaxNode{}) {
 		return &craft.CraftDoc{UseCases: []craft.UseCase{}}
 	}
@@ -22,7 +19,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 	doc := &craft.CraftDoc{UseCases: []craft.UseCase{}}
 
 	// Services
-	doc.Services = projectServicesFromViews(file)
+	doc.Services = projectServicesFromViews(file, li)
 
 	// Actors
 	for _, a := range file.Actors() {
@@ -34,10 +31,11 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 		if typeVal == "" {
 			continue // malformed — skip
 		}
+		actorLine, _ := li.LineCol(nameTok.Offset())
 		doc.Actors = append(doc.Actors, craft.Actor{
 			Name: nameTok.Text(),
 			Type: craft.ActorType(typeVal),
-			Line: 0,
+			Line: actorLine,
 		})
 	}
 
@@ -97,7 +95,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 				}
 				counter++
 				actID := fmt.Sprintf("action_%d", counter)
-				outSc.Actions = append(outSc.Actions, projectActionFromView(action, actID))
+				outSc.Actions = append(outSc.Actions, projectActionFromView(action, actID, li))
 			}
 			outUC.Scenarios = append(outUC.Scenarios, outSc)
 		}
@@ -202,7 +200,7 @@ func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 	}
 }
 
-func projectActionFromView(a ActionDecl, id string) craft.Action {
+func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Action {
 	kind := a.Kind()
 	subject := a.SubjectName()
 	target := a.TargetName()
@@ -294,6 +292,10 @@ func projectActionFromView(a ActionDecl, id string) craft.Action {
 		}
 	}
 
+	actionLine := 0
+	if toks := a.Tokens(); len(toks) > 0 {
+		actionLine, _ = li.LineCol(toks[0].Offset())
+	}
 	return craft.Action{
 		ID:            id,
 		Type:          craft.ActionType(kind),
@@ -304,7 +306,7 @@ func projectActionFromView(a ActionDecl, id string) craft.Action {
 		Connector:     connector,
 		Phrase:        phrase,
 		Description:   description,
-		Line:          0,
+		Line:          actionLine,
 	}
 }
 
@@ -330,7 +332,7 @@ func serviceNameTok(svc ServiceDecl) *SyntaxToken {
 	return nil
 }
 
-func projectServicesFromViews(file File) []craft.Service {
+func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
 	type entry struct {
 		svc    craft.Service
 		ctxSet map[string]bool
@@ -347,11 +349,12 @@ func projectServicesFromViews(file File) []craft.Service {
 		name := nameTok.Text()
 		e, exists := byName[name]
 		if !exists {
+			svcLine, _ := li.LineCol(nameTok.Offset())
 			e = &entry{
 				svc: craft.Service{
 					Name:       name,
 					Deployment: craft.DeploymentStrategy{Type: svc.DeploymentType()},
-					Line:       0,
+					Line:       svcLine,
 				},
 				ctxSet: map[string]bool{},
 				dsSet:  map[string]bool{},
