@@ -15,6 +15,7 @@ const (
 	SyntaxKindError        // unrecognised character (from lexer.TokenError)
 	SyntaxKindLineComment  // // ...
 	SyntaxKindBlockComment // /* ... */
+	SyntaxKindWhitespace   // spaces, tabs, newlines between tokens
 	SyntaxKindIdent        // unresolved name — never a contextual keyword
 	SyntaxKindString
 	SyntaxKindNumber

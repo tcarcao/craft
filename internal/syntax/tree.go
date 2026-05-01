@@ -48,12 +48,11 @@ func (t SyntaxToken) Kind() SyntaxKind { return t.green.Kind }
 func (t SyntaxToken) Text() string { return t.green.Text }
 
 // Offset returns the byte offset of the token start from the beginning of the
-// source file. It uses the position stored in the green token (set by the parser
-// from the lexer's line/col converted via LineIndex.Offset).
-func (t SyntaxToken) Offset() green.TextSize { return t.green.Pos }
+// source file. Computed lazily by ChildrenIter() accumulating child widths from root.
+func (t SyntaxToken) Offset() green.TextSize { return t.offset }
 
 func (t SyntaxToken) TextRange() green.TextRange {
-	return green.TextRange{Start: t.green.Pos, End: t.green.Pos + t.green.Width()}
+	return green.TextRange{Start: t.offset, End: t.offset + t.green.Width()}
 }
 func (t SyntaxToken) isSyntaxElement() {}
 
@@ -153,7 +152,7 @@ func (n SyntaxNode) ChildNodes(kind SyntaxKind) []SyntaxNode {
 }
 
 func isTrivia(k SyntaxKind) bool {
-	return k == SyntaxKindLineComment || k == SyntaxKindBlockComment
+	return k == SyntaxKindLineComment || k == SyntaxKindBlockComment || k == SyntaxKindWhitespace
 }
 
 // Tokens returns all leaf tokens in document order, excluding trivia.

@@ -26,7 +26,8 @@ type Parser struct {
 	pos     int
 	builder green.GreenNodeBuilder
 	src     string
-	li      green.LineIndex // used to convert lexer line/col to byte offsets for GreenToken.Pos
+	li      green.LineIndex
+	prevEnd green.TextSize // byte offset after last emitted token
 }
 
 // Parse parses src and returns the green root, a LineIndex, and any diagnostics.
@@ -1256,27 +1257,44 @@ func (p *Parser) peek() lexer.Token {
 	return lexer.Token{Type: lexer.TokenEOF}
 }
 
-// attachTrivia emits any line/block comment tokens at p.pos into the current
-// builder scope, advancing p.pos past each one collected.
-// tokPos converts a lexer token's 1-based line/col into a byte offset using the
-// parser's pre-built LineIndex. Returns 0 for the sentinel EOF token.
-func (p *Parser) tokPos(tok lexer.Token) green.TextSize {
+// emitWhitespaceBefore emits a whitespace token for any gap between the last
+// emitted token and the start of tok. This makes the green tree lossless.
+func (p *Parser) emitWhitespaceBefore(tok lexer.Token) {
 	if tok.Type == lexer.TokenEOF {
-		return 0
+		return
 	}
-	return p.li.Offset(tok.Line, tok.Column)
+	currentStart := p.li.Offset(tok.Line, tok.Column)
+	if currentStart > p.prevEnd {
+		ws := p.src[p.prevEnd:currentStart]
+		p.builder.Token(SyntaxKindWhitespace, ws)
+		p.prevEnd = currentStart
+	}
 }
 
-// Call this before consume/consumeAs to capture leading trivia.
+// updatePrevEnd records the byte end of the last emitted token.
+func (p *Parser) updatePrevEnd(tok lexer.Token) {
+	if tok.Type == lexer.TokenEOF {
+		return
+	}
+	start := p.li.Offset(tok.Line, tok.Column)
+	p.prevEnd = start + green.TextSize(len(tok.Value))
+}
+
+// attachTrivia emits any line/block comment tokens at p.pos into the current
+// builder scope, advancing p.pos past each one collected.
 func (p *Parser) attachTrivia() {
 	for p.pos < len(p.tokens) {
 		tok := p.tokens[p.pos]
 		switch tok.Type {
 		case lexer.TokenLineComment:
-			p.builder.Token(SyntaxKindLineComment, tok.Value, p.tokPos(tok))
+			p.emitWhitespaceBefore(tok)
+			p.builder.Token(SyntaxKindLineComment, tok.Value)
+			p.updatePrevEnd(tok)
 			p.pos++
 		case lexer.TokenBlockComment:
-			p.builder.Token(SyntaxKindBlockComment, tok.Value, p.tokPos(tok))
+			p.emitWhitespaceBefore(tok)
+			p.builder.Token(SyntaxKindBlockComment, tok.Value)
+			p.updatePrevEnd(tok)
 			p.pos++
 		default:
 			return
@@ -1293,7 +1311,9 @@ func (p *Parser) consume() lexer.Token {
 	}
 	tok := p.tokens[p.pos]
 	p.pos++
-	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value, p.tokPos(tok))
+	p.emitWhitespaceBefore(tok)
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value)
+	p.updatePrevEnd(tok)
 	return tok
 }
 
@@ -1306,7 +1326,9 @@ func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
 	}
 	tok := p.tokens[p.pos]
 	p.pos++
-	p.builder.Token(kind, tok.Value, p.tokPos(tok))
+	p.emitWhitespaceBefore(tok)
+	p.builder.Token(kind, tok.Value)
+	p.updatePrevEnd(tok)
 	return tok
 }
 
