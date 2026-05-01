@@ -18,7 +18,7 @@ import (
 // It accepts the per-file syntax tree map and the merged workspace symbol table.
 // Returns diagnostics with SourceURI populated so callers can route each
 // finding to the correct file.
-func LintWorkspace(perFileTrees map[string]*syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
+func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
 	var diags []craft.Diagnostic
 	diags = append(diags, lintDeadEvents(perFileTrees)...)
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
@@ -39,7 +39,7 @@ func eventTokenLen(name string, isString bool) int {
 	return len(name)
 }
 
-func lintDeadEvents(perFileTrees map[string]*syntax.SyntaxNode) []craft.Diagnostic {
+func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagnostic {
 	type pubSite struct {
 		uri, event string
 		line, col  int
@@ -101,7 +101,7 @@ func lintDeadEvents(perFileTrees map[string]*syntax.SyntaxNode) []craft.Diagnost
 // Warning: an actor is declared but never appears as the subject of any
 // external trigger (`when <Actor> …`) in any workspace file.
 
-func lintUnusedActors(perFileTrees map[string]*syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
+func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
 	if len(ws.Actors) == 0 {
 		return nil
 	}
@@ -154,7 +154,7 @@ func lintUnusedActors(perFileTrees map[string]*syntax.SyntaxNode, ws WorkspaceSy
 
 var pastTenseRe = regexp.MustCompile(`(?i)\b\w+(ed|en)\b`)
 
-func lintEventPastTense(perFileTrees map[string]*syntax.SyntaxNode) []craft.Diagnostic {
+func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagnostic {
 	reported := map[string]bool{}
 	var diags []craft.Diagnostic
 
@@ -186,7 +186,7 @@ func lintEventPastTense(perFileTrees map[string]*syntax.SyntaxNode) []craft.Diag
 				whenTok := sc.When()
 				triggerLine := 0
 				if whenTok != nil {
-					triggerLine = whenTok.Line
+					_ = whenTok // line not available without LineIndex; triggerLine stays 0
 				}
 				if k := trigger.Kind(); k == "event" || k == "domain_listen" {
 					check(trigger.EventValue(), uri, triggerLine, trigger.EventCol(), trigger.EventIsString())

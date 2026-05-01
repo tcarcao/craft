@@ -19,15 +19,15 @@ func TestWorkspace_OpenAndGet(t *testing.T) {
 	if f == nil {
 		t.Fatal("file not found after Open")
 	}
-	actors := syntax.AsFile(f.SyntaxTree).Actors()
+	actors := syntax.AsFile(syntax.Root(f.Green)).Actors()
 	if len(actors) != 1 {
 		t.Errorf("expected 1 actor, got %d", len(actors))
 	}
 	nameTok := actors[0].Name()
-	if nameTok == nil || nameTok.Value != "Alice" {
+	if nameTok == nil || nameTok.Text() != "Alice" {
 		name := ""
 		if nameTok != nil {
-			name = nameTok.Value
+			name = nameTok.Text()
 		}
 		t.Errorf("got actor name %q", name)
 	}
@@ -39,15 +39,15 @@ func TestWorkspace_Change(t *testing.T) {
 	w.Change("file:///a.craft", "actor user Bob")
 
 	f := w.Get("file:///a.craft")
-	actors := syntax.AsFile(f.SyntaxTree).Actors()
+	actors := syntax.AsFile(syntax.Root(f.Green)).Actors()
 	if len(actors) == 0 {
 		t.Fatal("expected 1 actor after change")
 	}
 	nameTok := actors[0].Name()
-	if nameTok == nil || nameTok.Value != "Bob" {
+	if nameTok == nil || nameTok.Text() != "Bob" {
 		name := ""
 		if nameTok != nil {
-			name = nameTok.Value
+			name = nameTok.Text()
 		}
 		t.Errorf("expected Bob after change, got %q", name)
 	}
@@ -139,33 +139,33 @@ func TestWorkspace_PerformanceGate_S5(t *testing.T) {
 }
 
 // TestWorkspace_SyntaxTreeUpdated verifies that after a successful parse the
-// SyntaxTree is populated and updated on subsequent changes.
+// Green tree is populated and updated on subsequent changes.
 func TestWorkspace_SyntaxTreeUpdated(t *testing.T) {
 	w := workspace.New(nil)
 
-	// Initial valid parse — SyntaxTree should be set.
+	// Initial valid parse — Green should be set.
 	w.Open("file:///a.craft", "actor user Alice")
 	f := w.Get("file:///a.craft")
 	if f == nil {
 		t.Fatal("file not found")
 	}
-	if f.SyntaxTree == nil {
-		t.Fatal("SyntaxTree should be non-nil after successful parse")
+	if f.Green == nil {
+		t.Fatal("Green should be non-nil after successful parse")
 	}
-	actors1 := syntax.AsFile(f.SyntaxTree).Actors()
+	actors1 := syntax.AsFile(syntax.Root(f.Green)).Actors()
 	if len(actors1) != 1 {
-		t.Errorf("SyntaxTree: expected 1 actor, got %d", len(actors1))
+		t.Errorf("Green: expected 1 actor, got %d", len(actors1))
 	}
 
-	// After a content change that still parses successfully, SyntaxTree
+	// After a content change that still parses successfully, Green
 	// reflects the new parse.
 	w.Change("file:///a.craft", "actor user Alice\nactor system Bob")
 	f2 := w.Get("file:///a.craft")
-	if f2.SyntaxTree == nil {
-		t.Fatal("SyntaxTree should still be set after second successful parse")
+	if f2.Green == nil {
+		t.Fatal("Green should still be set after second successful parse")
 	}
-	actors2 := syntax.AsFile(f2.SyntaxTree).Actors()
+	actors2 := syntax.AsFile(syntax.Root(f2.Green)).Actors()
 	if len(actors2) != 2 {
-		t.Errorf("SyntaxTree: expected 2 actors, got %d", len(actors2))
+		t.Errorf("Green: expected 2 actors, got %d", len(actors2))
 	}
 }

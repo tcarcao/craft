@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -29,9 +30,10 @@ import (
 // File holds the cached parse result for a single .craft document.
 type File struct {
 	URI         string
-	Content     string
+	Content     string         // kept: hash check and UTF16Col source
 	ContentHash [32]byte
-	SyntaxTree  *syntax.SyntaxNode
+	Green       *green.GreenNode  // replaces SyntaxTree
+	LineIndex   green.LineIndex   // built once per open/change
 	Diagnostics []craft.Diagnostic
 	// Symbols is the per-file symbol table, computed after parsing.
 	Symbols sema.Symbols
@@ -186,11 +188,11 @@ func (w *Workspace) parseAndStore(uri, content string) {
 				})
 			}
 		}()
-		file.SyntaxTree, file.Diagnostics = syntax.Parse(content)
+		file.Green, file.LineIndex, file.Diagnostics = syntax.Parse(content)
 	}()
 
 	// Collect per-file symbols (no cross-file resolution yet).
-	syms, semaDiags := sema.AnalyzeFile(uri, file.SyntaxTree)
+	syms, semaDiags := sema.AnalyzeFile(uri, syntax.Root(file.Green), file.LineIndex)
 	file.Symbols = syms
 	file.Diagnostics = append(file.Diagnostics, semaDiags...)
 
@@ -202,10 +204,10 @@ func (w *Workspace) parseAndStore(uri, content string) {
 // Must be called with w.mu held.
 func (w *Workspace) recomputeResolution() {
 	perFile := make(map[string]sema.Symbols, len(w.files))
-	perFileTrees := make(map[string]*syntax.SyntaxNode, len(w.files))
+	perFileTrees := make(map[string]syntax.SyntaxNode, len(w.files))
 	for uri, f := range w.files {
 		perFile[uri] = f.Symbols
-		perFileTrees[uri] = f.SyntaxTree
+		perFileTrees[uri] = syntax.Root(f.Green)
 	}
 	ws, mergeDiags := sema.MergeWorkspaceSymbols(perFile)
 	rm, resolveDiags := sema.AnalyzeWorkspace(perFile, ws)

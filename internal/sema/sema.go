@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
@@ -212,7 +213,9 @@ type UseCaseRefTarget struct {
 // It accepts the lossless syntax tree produced by syntax.Parse and reads it
 // directly via typed view methods — no lower/AST conversion is needed.
 // Returns the symbol table and any semantic diagnostics.
-func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []craft.Diagnostic) {
+// li is accepted but ignored until Task 10 wires up source-accurate line numbers.
+func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (syms Symbols, diags []craft.Diagnostic) {
+	// TODO(Task 10): use li[0].LineCol(tok.Offset()) once green offsets equal source byte positions.
 	file := syntax.AsFile(tree)
 	defer func() {
 		if r := recover(); r != nil {
@@ -241,26 +244,21 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 		}
 		actorType := a.ActorTypeValue()
 		sym := ActorSymbol{
-			Name:   nameTok.Value,
+			Name:   nameTok.Text(),
 			Type:   actorType,
-			Line:   nameTok.Line,
-			Column: nameTok.Col,
+			Line:   0, // TODO(Task 10)
+			Column: 0, // TODO(Task 10)
 			URI:    uri,
 		}
-		if prev, dup := seenActors[nameTok.Value]; dup {
-			startChar := colToLSP(nameTok.Col)
+		if prev, dup := seenActors[nameTok.Text()]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", nameTok.Value, prev.Line),
+				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
 				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar + len(nameTok.Value)},
-				},
 			})
 			continue
 		}
-		seenActors[nameTok.Value] = sym
+		seenActors[nameTok.Text()] = sym
 		syms.Actors = append(syms.Actors, sym)
 	}
 
@@ -273,32 +271,27 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 		for _, bc := range d.BoundedContexts() {
 			bcTok := bc.Name()
 			if bcTok != nil {
-				bcNames = append(bcNames, bcTok.Value)
+				bcNames = append(bcNames, bcTok.Text())
 			}
 		}
 		sym := DomainSymbol{
-			Name:            nameTok.Value,
+			Name:            nameTok.Text(),
 			BoundedContexts: bcNames,
-			Line:            nameTok.Line,
-			Column:          nameTok.Col,
+			Line:            0, // TODO(Task 10)
+			Column:          0, // TODO(Task 10)
 			EndLine:         d.EndLine(),
 			IsGrouped:       d.IsGrouped(),
 			URI:             uri,
 		}
-		if prev, dup := seenDomains[nameTok.Value]; dup {
-			startChar := colToLSP(nameTok.Col)
+		if prev, dup := seenDomains[nameTok.Text()]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameTok.Value, prev.Line),
+				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
 				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar + len(nameTok.Value)},
-				},
 			})
 			continue
 		}
-		seenDomains[nameTok.Value] = sym
+		seenDomains[nameTok.Text()] = sym
 		syms.Domains = append(syms.Domains, sym)
 
 		// Collect bounded context positions for each BC in this domain.
@@ -310,9 +303,9 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 			if syms.BCPositions == nil {
 				syms.BCPositions = make(map[string]BCPosition)
 			}
-			syms.BCPositions[bcTok.Value] = BCPosition{
-				Line:   bcTok.Line,
-				Column: bcTok.Col,
+			syms.BCPositions[bcTok.Text()] = BCPosition{
+				Line:   0, // TODO(Task 10)
+				Column: 0, // TODO(Task 10)
 				URI:    uri,
 			}
 		}
@@ -324,30 +317,25 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 			continue
 		}
 		sym := ServiceSymbol{
-			Name:       nameTok.Value,
+			Name:       nameTok.Text(),
 			Contexts:   s.Contexts(),
 			DataStores: s.DataStores(),
 			Language:   s.Language(),
-			Line:       nameTok.Line,
-			Column:     nameTok.Col,
+			Line:       0, // TODO(Task 10)
+			Column:     0, // TODO(Task 10)
 			EndLine:    s.EndLine(),
 			IsGrouped:  s.IsGrouped(),
 			URI:        uri,
 		}
-		if prev, dup := seenServices[nameTok.Value]; dup {
-			startChar := colToLSP(nameTok.Col)
+		if prev, dup := seenServices[nameTok.Text()]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameTok.Value, prev.Line),
+				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
 				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(nameTok.Line), Character: startChar + len(nameTok.Value)},
-				},
 			})
 			continue
 		}
-		seenServices[nameTok.Value] = sym
+		seenServices[nameTok.Text()] = sym
 		syms.Services = append(syms.Services, sym)
 	}
 
@@ -379,36 +367,32 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 		if titleTok == nil {
 			continue
 		}
-		ucLine := 0
-		if kwTok != nil {
-			ucLine = kwTok.Line
-		}
-		sym := UseCaseSymbol{Name: titleTok.Value, Line: ucLine, EndLine: uc.EndLine(), URI: uri}
-		if prev, dup := seenUseCases[titleTok.Value]; dup {
+		ucLine := 0 // TODO(Task 10): use li + kwTok.Offset()
+		_ = kwTok
+		sym := UseCaseSymbol{Name: titleTok.Text(), Line: ucLine, EndLine: uc.EndLine(), URI: uri}
+		if prev, dup := seenUseCases[titleTok.Text()]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code: "craft/sema/duplicate-use-case-name",
 				Message: fmt.Sprintf(
-					"use_case %q already declared (first seen at line %d)", titleTok.Value, prev.Line,
+					"use_case %q already declared (first seen at line %d)", titleTok.Text(), prev.Line,
 				),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
 					Start: craft.Position{Line: lineToLSP(ucLine)},
-					End:   craft.Position{Line: lineToLSP(ucLine), Character: len(titleTok.Value)},
+					End:   craft.Position{Line: lineToLSP(ucLine), Character: len(titleTok.Text())},
 				},
 			})
 			continue
 		}
-		seenUseCases[titleTok.Value] = sym
+		seenUseCases[titleTok.Text()] = sym
 		syms.UseCases = append(syms.UseCases, sym)
 
 		// Collect reference sites from all scenarios for cross-resolution.
 		for _, sc := range uc.Scenarios() {
 			trigger := sc.Trigger()
 			whenTok := sc.When()
-			triggerLine := 0
-			if whenTok != nil {
-				triggerLine = whenTok.Line
-			}
+			triggerLine := 0 // TODO(Task 10): use li + whenTok.Offset()
+			_ = whenTok
 			// Trigger subject (actor or domain name).
 			if actor := trigger.ActorName(); actor != "" {
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
@@ -449,7 +433,7 @@ func AnalyzeFile(uri string, tree *syntax.SyntaxNode) (syms Symbols, diags []cra
 			continue
 		}
 		syms.Exposures = append(syms.Exposures, ExposureSymbol{
-			Name:     nameTok.Value,
+			Name:     nameTok.Text(),
 			To:       e.To(),
 			Contexts: e.Contexts(),
 			Through:  e.Through(),
