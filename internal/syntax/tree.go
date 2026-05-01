@@ -46,9 +46,14 @@ type SyntaxToken struct {
 
 func (t SyntaxToken) Kind() SyntaxKind { return t.green.Kind }
 func (t SyntaxToken) Text() string { return t.green.Text }
-func (t SyntaxToken) Offset() green.TextSize { return t.offset }
+
+// Offset returns the byte offset of the token start from the beginning of the
+// source file. It uses the position stored in the green token (set by the parser
+// from the lexer's line/col converted via LineIndex.Offset).
+func (t SyntaxToken) Offset() green.TextSize { return t.green.Pos }
+
 func (t SyntaxToken) TextRange() green.TextRange {
-	return green.TextRange{Start: t.offset, End: t.offset + t.green.Width()}
+	return green.TextRange{Start: t.green.Pos, End: t.green.Pos + t.green.Width()}
 }
 func (t SyntaxToken) isSyntaxElement() {}
 

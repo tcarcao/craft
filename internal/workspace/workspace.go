@@ -205,13 +205,15 @@ func (w *Workspace) parseAndStore(uri, content string) {
 func (w *Workspace) recomputeResolution() {
 	perFile := make(map[string]sema.Symbols, len(w.files))
 	perFileTrees := make(map[string]syntax.SyntaxNode, len(w.files))
+	perFileLIs := make(map[string]green.LineIndex, len(w.files))
 	for uri, f := range w.files {
 		perFile[uri] = f.Symbols
 		perFileTrees[uri] = syntax.Root(f.Green)
+		perFileLIs[uri] = f.LineIndex
 	}
 	ws, mergeDiags := sema.MergeWorkspaceSymbols(perFile)
 	rm, resolveDiags := sema.AnalyzeWorkspace(perFile, ws)
-	lintDiags := sema.LintWorkspace(perFileTrees, ws)
+	lintDiags := sema.LintWorkspace(perFileTrees, ws, perFileLIs)
 	w.resolution.ws = ws
 	w.resolution.rm = rm
 

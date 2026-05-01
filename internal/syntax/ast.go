@@ -3,7 +3,44 @@ package syntax
 import (
 	"fmt"
 	"strings"
+
+	"github.com/tcarcao/craft/internal/green"
 )
+
+// nodeFirstTokenLine returns the 1-based line of the first token in node (via li),
+// or 0 if the node has no tokens or li is zero.
+func nodeFirstTokenLine(node SyntaxNode, li green.LineIndex) int {
+	toks := node.Tokens()
+	if len(toks) == 0 {
+		return 0
+	}
+	line, _ := li.LineCol(toks[0].Offset())
+	return line
+}
+
+// nodeEndLine returns the 1-based line of the last RBrace token in node (via li),
+// or 0 if not found.
+func nodeEndLine(node SyntaxNode, li green.LineIndex) int {
+	toks := node.AllTokens()
+	for i := len(toks) - 1; i >= 0; i-- {
+		if toks[i].Kind() == SyntaxKindRBrace {
+			line, _ := li.LineCol(toks[i].Offset())
+			return line
+		}
+	}
+	return 0
+}
+
+// nodeFirstTokenCol returns the 1-based column of the first token in node (via li),
+// or 0 if the node has no tokens.
+func nodeFirstTokenCol(node SyntaxNode, li green.LineIndex) int {
+	toks := node.Tokens()
+	if len(toks) == 0 {
+		return 0
+	}
+	_, col := li.LineCol(toks[0].Offset())
+	return col
+}
 
 // isAstFieldSentinel returns true when tokens[i] is an ident followed by a colon —
 // the start of a new field definition.
@@ -252,13 +289,18 @@ func (d DomainDecl) IsGrouped() bool {
 	return d.node.ChildToken(SyntaxKindKwDomain) == nil
 }
 
-// Line returns the 1-based source line of the domain name token.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (d DomainDecl) Line() int { return 0 }
+// Line returns the 1-based source line of the domain name token using li.
+func (d DomainDecl) Line(li green.LineIndex) int {
+	tok := d.Name()
+	if tok == nil {
+		return nodeFirstTokenLine(d.node, li)
+	}
+	line, _ := li.LineCol(tok.Offset())
+	return line
+}
 
-// EndLine returns the 1-based line of the closing `}`.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (d DomainDecl) EndLine() int { return 0 }
+// EndLine returns the 1-based line of the closing `}` using li.
+func (d DomainDecl) EndLine(li green.LineIndex) int { return nodeEndLine(d.node, li) }
 
 // BoundedContexts returns all BoundedContext views within this domain.
 func (d DomainDecl) BoundedContexts() []BoundedContext {
@@ -290,13 +332,11 @@ func (db DomainsBlock) Domains() []DomainDecl {
 // ActorsBlock is a typed view over a SyntaxKindActorsBlock node.
 type ActorsBlock struct{ node SyntaxNode }
 
-// Line returns the 1-based source line of the `actors` keyword.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (b ActorsBlock) Line() int { return 0 }
+// Line returns the 1-based source line of the `actors` keyword using li.
+func (b ActorsBlock) Line(li green.LineIndex) int { return nodeFirstTokenLine(b.node, li) }
 
-// EndLine returns the 1-based line of the closing `}`.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (b ActorsBlock) EndLine() int { return 0 }
+// EndLine returns the 1-based line of the closing `}` using li.
+func (b ActorsBlock) EndLine(li green.LineIndex) int { return nodeEndLine(b.node, li) }
 
 // ServiceDecl is a typed view over a SyntaxKindServiceDecl node.
 type ServiceDecl struct{ node SyntaxNode }
@@ -309,13 +349,18 @@ func (s ServiceDecl) IsGrouped() bool {
 	return s.node.ChildToken(SyntaxKindKwService) == nil
 }
 
-// Line returns the 1-based source line of the service name token.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (s ServiceDecl) Line() int { return 0 }
+// Line returns the 1-based source line of the service name token using li.
+func (s ServiceDecl) Line(li green.LineIndex) int {
+	tok := s.Name()
+	if tok == nil {
+		return nodeFirstTokenLine(s.node, li)
+	}
+	line, _ := li.LineCol(tok.Offset())
+	return line
+}
 
-// EndLine returns the 1-based line of the closing `}`.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (s ServiceDecl) EndLine() int { return 0 }
+// EndLine returns the 1-based line of the closing `}` using li.
+func (s ServiceDecl) EndLine(li green.LineIndex) int { return nodeEndLine(s.node, li) }
 
 // serviceBodyFields holds all parsed service body fields.
 type serviceBodyFields struct {
@@ -539,9 +584,8 @@ type UseCaseDecl struct{ node SyntaxNode }
 func (u UseCaseDecl) Keyword() *SyntaxToken { return u.node.ChildToken(SyntaxKindKwUseCase) }
 func (u UseCaseDecl) Title() *SyntaxToken   { return u.node.ChildToken(SyntaxKindString) }
 
-// EndLine returns the 1-based line of the closing `}`.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (u UseCaseDecl) EndLine() int { return 0 }
+// EndLine returns the 1-based line of the closing `}` using li.
+func (u UseCaseDecl) EndLine(li green.LineIndex) int { return nodeEndLine(u.node, li) }
 
 // Scenarios returns all ScenarioDecl views within this use case.
 func (u UseCaseDecl) Scenarios() []ScenarioDecl {
@@ -617,9 +661,16 @@ func (t TriggerDecl) ActorName() string {
 	return tok.Text()
 }
 
-// ActorCol returns the 1-based column of the actor token, or 0 if not an external trigger.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (t TriggerDecl) ActorCol() int { return 0 }
+// ActorCol returns the 1-based column of the subject token using li.
+// Works for both external and domain_listen triggers.
+func (t TriggerDecl) ActorCol(li green.LineIndex) int {
+	tok := t.node.ChildToken(SyntaxKindIdent)
+	if tok == nil {
+		return 0
+	}
+	_, col := li.LineCol(tok.Offset())
+	return col
+}
 
 // ContextName returns the subject name for domain_listen triggers.
 func (t TriggerDecl) ContextName() string {
@@ -649,9 +700,23 @@ func (t TriggerDecl) EventValue() string {
 	return ""
 }
 
-// EventCol returns the 1-based column of the event token.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (t TriggerDecl) EventCol() int { return 0 }
+// EventCol returns the 1-based column of the event token using li.
+func (t TriggerDecl) EventCol(li green.LineIndex) int {
+	tokens := t.node.Tokens()
+	switch t.Kind() {
+	case "event":
+		if len(tokens) > 0 {
+			_, col := li.LineCol(tokens[0].Offset())
+			return col
+		}
+	case "domain_listen":
+		if len(tokens) >= 3 {
+			_, col := li.LineCol(tokens[2].Offset())
+			return col
+		}
+	}
+	return 0
+}
 
 // EventIsString returns true when the event token is a quoted string literal.
 func (t TriggerDecl) EventIsString() bool {
@@ -710,13 +775,25 @@ func (a ActionDecl) SubjectName() string {
 	return tok.Text()
 }
 
-// SubjectCol returns the 1-based column of the subject token.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ActionDecl) SubjectCol() int { return 0 }
+// SubjectCol returns the 1-based column of the subject token using li.
+func (a ActionDecl) SubjectCol(li green.LineIndex) int {
+	tok := a.Subject()
+	if tok == nil {
+		return 0
+	}
+	_, col := li.LineCol(tok.Offset())
+	return col
+}
 
-// Line returns the 1-based source line of the action subject token.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ActionDecl) Line() int { return 0 }
+// Line returns the 1-based source line of the action subject token using li.
+func (a ActionDecl) Line(li green.LineIndex) int {
+	tok := a.Subject()
+	if tok == nil {
+		return nodeFirstTokenLine(a.node, li)
+	}
+	line, _ := li.LineCol(tok.Offset())
+	return line
+}
 
 // TargetName returns the target context for sync_action and return_action.
 func (a ActionDecl) TargetName() string {
@@ -736,9 +813,25 @@ func (a ActionDecl) TargetName() string {
 	return ""
 }
 
-// TargetCol returns the 1-based column of the target name token.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ActionDecl) TargetCol() int { return 0 }
+// TargetCol returns the 1-based column of the target name token using li.
+func (a ActionDecl) TargetCol(li green.LineIndex) int {
+	tokens := a.node.Tokens()
+	switch a.Kind() {
+	case "sync_action":
+		if len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindIdent {
+			_, col := li.LineCol(tokens[2].Offset())
+			return col
+		}
+	case "return_action":
+		for i, tok := range tokens {
+			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
+				_, col := li.LineCol(tokens[i+1].Offset())
+				return col
+			}
+		}
+	}
+	return 0
+}
 
 // EventValue returns the event name for async_action (notifies).
 func (a ActionDecl) EventValue() string {
@@ -752,9 +845,18 @@ func (a ActionDecl) EventValue() string {
 	return ""
 }
 
-// EventCol returns the 1-based column of the event token for async_action.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ActionDecl) EventCol() int { return 0 }
+// EventCol returns the 1-based column of the event token for async_action using li.
+func (a ActionDecl) EventCol(li green.LineIndex) int {
+	if a.Kind() != "async_action" {
+		return 0
+	}
+	tokens := a.node.Tokens()
+	if len(tokens) >= 3 {
+		_, col := li.LineCol(tokens[2].Offset())
+		return col
+	}
+	return 0
+}
 
 // EventIsString returns true when the event was a quoted string literal.
 func (a ActionDecl) EventIsString() bool {
@@ -882,21 +984,35 @@ func (a ArchDecl) Keyword() *SyntaxToken { return a.node.ChildToken(SyntaxKindKw
 // Name returns the identifier token for the arch's name (optional).
 func (a ArchDecl) Name() *SyntaxToken { return a.node.ChildToken(SyntaxKindIdent) }
 
-// Line returns the 1-based source line of the `arch` keyword.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ArchDecl) Line() int { return 0 }
+// Line returns the 1-based source line of the `arch` keyword using li.
+func (a ArchDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(a.node, li) }
 
-// EndLine returns the 1-based line of the closing `}`.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ArchDecl) EndLine() int { return 0 }
+// EndLine returns the 1-based line of the closing `}` using li.
+func (a ArchDecl) EndLine(li green.LineIndex) int { return nodeEndLine(a.node, li) }
 
-// PresentationLine returns the 1-based line of the `presentation:` label, or 0 if absent.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ArchDecl) PresentationLine() int { return 0 }
+// PresentationLine returns the 1-based line of the `presentation:` label using li, or 0 if absent.
+func (a ArchDecl) PresentationLine(li green.LineIndex) int {
+	for _, section := range a.Sections() {
+		kw := section.Keyword()
+		if kw != nil && kw.Kind() == SyntaxKindKwPresentation {
+			line, _ := li.LineCol(kw.Offset())
+			return line
+		}
+	}
+	return 0
+}
 
-// GatewayLine returns the 1-based line of the `gateway:` label, or 0 if absent.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (a ArchDecl) GatewayLine() int { return 0 }
+// GatewayLine returns the 1-based line of the `gateway:` label using li, or 0 if absent.
+func (a ArchDecl) GatewayLine(li green.LineIndex) int {
+	for _, section := range a.Sections() {
+		kw := section.Keyword()
+		if kw != nil && kw.Kind() == SyntaxKindKwGateway {
+			line, _ := li.LineCol(kw.Offset())
+			return line
+		}
+	}
+	return 0
+}
 
 // Sections returns all ArchSection views within this arch block.
 func (a ArchDecl) Sections() []ArchSection {
@@ -1091,9 +1207,8 @@ func (e ExposureDecl) parseExposureBody() exposureBodyFields {
 	return f
 }
 
-// Line returns the 1-based source line of the `exposure` keyword.
-// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
-func (e ExposureDecl) Line() int { return 0 }
+// Line returns the 1-based source line of the `exposure` keyword using li.
+func (e ExposureDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(e.node, li) }
 
 // To returns the `to:` target names.
 func (e ExposureDecl) To() []string { return e.parseExposureBody().To }

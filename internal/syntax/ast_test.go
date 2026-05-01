@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/syntax"
 )
 
@@ -292,8 +293,8 @@ func TestDomainDecl_BodyAccessors(t *testing.T) {
 	if d.IsGrouped() {
 		t.Error("want IsGrouped=false for standalone domain")
 	}
-	// EndLine is wired to LineIndex in Task 10; for now just verify the call doesn't panic.
-	_ = d.EndLine()
+	// EndLine requires a LineIndex (Task 10); pass zero value — just verify it doesn't panic.
+	_ = d.EndLine(green.LineIndex{})
 }
 
 func TestTriggerDecl_Kind(t *testing.T) {
@@ -382,10 +383,10 @@ func TestArchDecl_LineAccessors(t *testing.T) {
 		t.Fatalf("want 1 arch, got %d", len(archs))
 	}
 	a := archs[0]
-	// Position accessors are wired through LineIndex in Task 10. For now the
-	// typed view returns 0 and we just verify the calls don't panic.
-	_ = a.Line()
-	_ = a.EndLine()
-	_ = a.PresentationLine()
-	_ = a.GatewayLine()
+	// Position accessors require a LineIndex (Task 10). Pass zero value — just verify no panic.
+	li := green.LineIndex{}
+	_ = a.Line(li)
+	_ = a.EndLine(li)
+	_ = a.PresentationLine(li)
+	_ = a.GatewayLine(li)
 }

@@ -10,19 +10,25 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // LintWorkspace runs style and consistency checks across all workspace files.
 // It accepts the per-file syntax tree map and the merged workspace symbol table.
+// An optional perFileLineIndices map (uri→LineIndex) enables accurate position reporting.
 // Returns diagnostics with SourceURI populated so callers can route each
 // finding to the correct file.
-func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
+func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, perFileLineIndices ...map[string]green.LineIndex) []craft.Diagnostic {
+	var lis map[string]green.LineIndex
+	if len(perFileLineIndices) > 0 {
+		lis = perFileLineIndices[0]
+	}
 	var diags []craft.Diagnostic
-	diags = append(diags, lintDeadEvents(perFileTrees)...)
+	diags = append(diags, lintDeadEvents(perFileTrees, lis)...)
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
-	diags = append(diags, lintEventPastTense(perFileTrees)...)
+	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
 	return diags
 }
 
@@ -39,7 +45,7 @@ func eventTokenLen(name string, isString bool) int {
 	return len(name)
 }
 
-func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagnostic {
+func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []craft.Diagnostic {
 	type pubSite struct {
 		uri, event string
 		line, col  int
@@ -49,6 +55,7 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagnosti
 	consumed := map[string]bool{}
 
 	for uri, tree := range perFileTrees {
+		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
@@ -66,8 +73,8 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagnosti
 								published[ev] = pubSite{
 									uri:      uri,
 									event:    ev,
-									line:     action.Line(),
-									col:      action.EventCol(),
+									line:     action.Line(li),
+									col:      action.EventCol(li),
 									tokenLen: eventTokenLen(ev, action.EventIsString()),
 								}
 							}
@@ -154,7 +161,7 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 
 var pastTenseRe = regexp.MustCompile(`(?i)\b\w+(ed|en)\b`)
 
-func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagnostic {
+func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []craft.Diagnostic {
 	reported := map[string]bool{}
 	var diags []craft.Diagnostic
 
@@ -179,6 +186,7 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagn
 	}
 
 	for uri, tree := range perFileTrees {
+		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
@@ -186,14 +194,14 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode) []craft.Diagn
 				whenTok := sc.When()
 				triggerLine := 0
 				if whenTok != nil {
-					_ = whenTok // line not available without LineIndex; triggerLine stays 0
+					triggerLine, _ = li.LineCol(whenTok.Offset())
 				}
 				if k := trigger.Kind(); k == "event" || k == "domain_listen" {
-					check(trigger.EventValue(), uri, triggerLine, trigger.EventCol(), trigger.EventIsString())
+					check(trigger.EventValue(), uri, triggerLine, trigger.EventCol(li), trigger.EventIsString())
 				}
 				for _, action := range sc.Actions() {
 					if action.Kind() == "async_action" {
-						check(action.EventValue(), uri, action.Line(), action.EventCol(), action.EventIsString())
+						check(action.EventValue(), uri, action.Line(li), action.EventCol(li), action.EventIsString())
 					}
 				}
 			}

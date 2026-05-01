@@ -213,9 +213,13 @@ type UseCaseRefTarget struct {
 // It accepts the lossless syntax tree produced by syntax.Parse and reads it
 // directly via typed view methods — no lower/AST conversion is needed.
 // Returns the symbol table and any semantic diagnostics.
-// li is accepted but ignored until Task 10 wires up source-accurate line numbers.
+// li is the LineIndex for resolving byte offsets to line/col; pass it for accurate positions.
 func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (syms Symbols, diags []craft.Diagnostic) {
-	// TODO(Task 10): use li[0].LineCol(tok.Offset()) once green offsets equal source byte positions.
+	var lineIdx green.LineIndex
+	hasLI := len(li) > 0
+	if hasLI {
+		lineIdx = li[0]
+	}
 	file := syntax.AsFile(tree)
 	defer func() {
 		if r := recover(); r != nil {
@@ -243,11 +247,15 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			continue
 		}
 		actorType := a.ActorTypeValue()
+		actorLine, actorCol := 0, 0
+		if hasLI {
+			actorLine, actorCol = lineIdx.LineCol(nameTok.Offset())
+		}
 		sym := ActorSymbol{
 			Name:   nameTok.Text(),
 			Type:   actorType,
-			Line:   0, // TODO(Task 10)
-			Column: 0, // TODO(Task 10)
+			Line:   actorLine,
+			Column: actorCol,
 			URI:    uri,
 		}
 		if prev, dup := seenActors[nameTok.Text()]; dup {
@@ -274,12 +282,20 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				bcNames = append(bcNames, bcTok.Text())
 			}
 		}
+		domLine, domCol := 0, 0
+		if hasLI {
+			domLine, domCol = lineIdx.LineCol(nameTok.Offset())
+		}
+		domEndLine := 0
+		if hasLI {
+			domEndLine = d.EndLine(lineIdx)
+		}
 		sym := DomainSymbol{
 			Name:            nameTok.Text(),
 			BoundedContexts: bcNames,
-			Line:            0, // TODO(Task 10)
-			Column:          0, // TODO(Task 10)
-			EndLine:         d.EndLine(),
+			Line:            domLine,
+			Column:          domCol,
+			EndLine:         domEndLine,
 			IsGrouped:       d.IsGrouped(),
 			URI:             uri,
 		}
@@ -303,9 +319,13 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			if syms.BCPositions == nil {
 				syms.BCPositions = make(map[string]BCPosition)
 			}
+			bcLine, bcCol := 0, 0
+			if hasLI {
+				bcLine, bcCol = lineIdx.LineCol(bcTok.Offset())
+			}
 			syms.BCPositions[bcTok.Text()] = BCPosition{
-				Line:   0, // TODO(Task 10)
-				Column: 0, // TODO(Task 10)
+				Line:   bcLine,
+				Column: bcCol,
 				URI:    uri,
 			}
 		}
@@ -316,14 +336,22 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if nameTok == nil {
 			continue
 		}
+		svcLine, svcCol := 0, 0
+		if hasLI {
+			svcLine, svcCol = lineIdx.LineCol(nameTok.Offset())
+		}
+		svcEndLine := 0
+		if hasLI {
+			svcEndLine = s.EndLine(lineIdx)
+		}
 		sym := ServiceSymbol{
 			Name:       nameTok.Text(),
 			Contexts:   s.Contexts(),
 			DataStores: s.DataStores(),
 			Language:   s.Language(),
-			Line:       0, // TODO(Task 10)
-			Column:     0, // TODO(Task 10)
-			EndLine:    s.EndLine(),
+			Line:       svcLine,
+			Column:     svcCol,
+			EndLine:    svcEndLine,
 			IsGrouped:  s.IsGrouped(),
 			URI:        uri,
 		}
@@ -367,9 +395,15 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if titleTok == nil {
 			continue
 		}
-		ucLine := 0 // TODO(Task 10): use li + kwTok.Offset()
-		_ = kwTok
-		sym := UseCaseSymbol{Name: titleTok.Text(), Line: ucLine, EndLine: uc.EndLine(), URI: uri}
+		ucLine := 0
+		if hasLI && kwTok != nil {
+			ucLine, _ = lineIdx.LineCol(kwTok.Offset())
+		}
+		ucEndLine := 0
+		if hasLI {
+			ucEndLine = uc.EndLine(lineIdx)
+		}
+		sym := UseCaseSymbol{Name: titleTok.Text(), Line: ucLine, EndLine: ucEndLine, URI: uri}
 		if prev, dup := seenUseCases[titleTok.Text()]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code: "craft/sema/duplicate-use-case-name",
@@ -391,8 +425,10 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		for _, sc := range uc.Scenarios() {
 			trigger := sc.Trigger()
 			whenTok := sc.When()
-			triggerLine := 0 // TODO(Task 10): use li + whenTok.Offset()
-			_ = whenTok
+			triggerLine := 0
+			if hasLI && whenTok != nil {
+				triggerLine, _ = lineIdx.LineCol(whenTok.Offset())
+			}
 			// Trigger subject (actor or domain name).
 			if actor := trigger.ActorName(); actor != "" {
 				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
@@ -408,16 +444,20 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			}
 			// Action parties.
 			for _, action := range sc.Actions() {
+				actionLine := 0
+				if hasLI {
+					actionLine = action.Line(lineIdx)
+				}
 				if subj := action.SubjectName(); subj != "" {
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
 						Name: subj,
-						Line: action.Line(),
+						Line: actionLine,
 					})
 				}
 				if target := action.TargetName(); target != "" {
 					syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
 						Name: target,
-						Line: action.Line(),
+						Line: actionLine,
 					})
 				}
 			}
@@ -432,12 +472,16 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if nameTok == nil {
 			continue
 		}
+		expLineNum := 0
+		if hasLI {
+			expLineNum = e.Line(lineIdx)
+		}
 		syms.Exposures = append(syms.Exposures, ExposureSymbol{
 			Name:     nameTok.Text(),
 			To:       e.To(),
 			Contexts: e.Contexts(),
 			Through:  e.Through(),
-			Line:     e.Line(),
+			Line:     expLineNum,
 			URI:      uri,
 		})
 	}

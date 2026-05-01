@@ -45,8 +45,9 @@ func (b *GreenNodeBuilder) Checkpoint() Checkpoint {
 }
 
 // Token appends a leaf token to the current scope.
-func (b *GreenNodeBuilder) Token(kind SyntaxKind, text string) {
-	b.children = append(b.children, &GreenToken{Kind: kind, Text: text})
+// pos is the byte offset of the token start from the beginning of the source file.
+func (b *GreenNodeBuilder) Token(kind SyntaxKind, text string, pos TextSize) {
+	b.children = append(b.children, &GreenToken{Kind: kind, Text: text, Pos: pos})
 }
 
 // FinishNode closes the current scope and appends the resulting GreenNode

@@ -26,15 +26,16 @@ type Parser struct {
 	pos     int
 	builder green.GreenNodeBuilder
 	src     string
+	li      green.LineIndex // used to convert lexer line/col to byte offsets for GreenToken.Pos
 }
 
 // Parse parses src and returns the green root, a LineIndex, and any diagnostics.
 // A non-nil GreenNode is always returned (island parsing preserved).
 func Parse(src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
-	l := lexer.New(src)
-	p := &Parser{tokens: l.All(), src: src}
-	root, diags := p.parseFile()
 	li := green.NewLineIndex(src)
+	l := lexer.New(src)
+	p := &Parser{tokens: l.All(), src: src, li: li}
+	root, diags := p.parseFile()
 	return root, li, diags
 }
 
@@ -1257,16 +1258,25 @@ func (p *Parser) peek() lexer.Token {
 
 // attachTrivia emits any line/block comment tokens at p.pos into the current
 // builder scope, advancing p.pos past each one collected.
+// tokPos converts a lexer token's 1-based line/col into a byte offset using the
+// parser's pre-built LineIndex. Returns 0 for the sentinel EOF token.
+func (p *Parser) tokPos(tok lexer.Token) green.TextSize {
+	if tok.Type == lexer.TokenEOF {
+		return 0
+	}
+	return p.li.Offset(tok.Line, tok.Column)
+}
+
 // Call this before consume/consumeAs to capture leading trivia.
 func (p *Parser) attachTrivia() {
 	for p.pos < len(p.tokens) {
 		tok := p.tokens[p.pos]
 		switch tok.Type {
 		case lexer.TokenLineComment:
-			p.builder.Token(SyntaxKindLineComment, tok.Value)
+			p.builder.Token(SyntaxKindLineComment, tok.Value, p.tokPos(tok))
 			p.pos++
 		case lexer.TokenBlockComment:
-			p.builder.Token(SyntaxKindBlockComment, tok.Value)
+			p.builder.Token(SyntaxKindBlockComment, tok.Value, p.tokPos(tok))
 			p.pos++
 		default:
 			return
@@ -1283,7 +1293,7 @@ func (p *Parser) consume() lexer.Token {
 	}
 	tok := p.tokens[p.pos]
 	p.pos++
-	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value)
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value, p.tokPos(tok))
 	return tok
 }
 
@@ -1296,7 +1306,7 @@ func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
 	}
 	tok := p.tokens[p.pos]
 	p.pos++
-	p.builder.Token(kind, tok.Value)
+	p.builder.Token(kind, tok.Value, p.tokPos(tok))
 	return tok
 }
 

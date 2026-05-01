@@ -6,11 +6,14 @@ type GreenElement interface {
 	isGreenElement()
 }
 
-// GreenToken is a position-independent leaf node.
-// Width is the byte length of Text.
+// GreenToken is a leaf node carrying the token kind, text, and its byte offset
+// from the start of the source file. Pos is populated by the parser using the
+// lexer token's line/col converted via LineIndex.Offset; it must not be used
+// for tree-sharing (nodes are not interned by position).
 type GreenToken struct {
 	Kind SyntaxKind
 	Text string
+	Pos  TextSize // byte offset of token start from beginning of source file
 }
 
 func (t *GreenToken) Width() TextSize  { return TextSize(len(t.Text)) }
