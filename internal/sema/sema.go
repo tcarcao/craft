@@ -626,21 +626,31 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 	}
 
 	// Resolve use-case reference sites (S6).
-	// For each ref, try to find a matching actor, domain, bounded-context, or service.
-	// Unknown references emit craft/sema/unresolved-reference diagnostics.
-	// References that name an actor in action.TargetContext are valid (actors can be targets).
+	// Emit craft/sema/unresolved-reference only when the workspace has at least one
+	// declared symbol: if no declarations exist, every name is unknown by definition
+	// and flooding diagnostics would be unhelpful on a brand-new file.
+	wsHasSymbols := len(ws.Actors) > 0 || len(ws.Domains) > 0 || len(ws.Services) > 0
 	for uri, syms := range perFile {
 		for _, ref := range syms.UseCaseRefs {
 			key := useCaseRefKey{URI: uri, Line: ref.Line, Name: ref.Name}
 			if target, ok := resolveUseCaseRef(ws, ref.Name); ok {
 				rm.UseCaseRefs[key] = target
+				continue
 			}
-			// Unknown refs in use-case bodies don't emit diagnostics here —
-			// many use-case participants are external/future entities. Diagnostics
-			// are reserved for unambiguously wrong references (future S9 work).
-			// Per S6 plan: we populate the ResolutionMap for hover/definition use;
-			// unresolved-reference diagnostics for use-case bodies are fire-only
-			// when the workspace has actor/domain/service declarations.
+			if !wsHasSymbols {
+				continue
+			}
+			startChar := colToLSP(ref.Column)
+			diags = append(diags, craft.Diagnostic{
+				Code:      "craft/sema/unresolved-reference",
+				Message:   fmt.Sprintf("use-case participant %q is not declared as an actor, domain, or service", ref.Name),
+				Severity:  craft.SeverityWarning,
+				SourceURI: uri,
+				Range: craft.Range{
+					Start: craft.Position{Line: lineToLSP(ref.Line), Character: startChar},
+					End:   craft.Position{Line: lineToLSP(ref.Line), Character: startChar + len(ref.Name)},
+				},
+			})
 		}
 	}
 

@@ -1,6 +1,7 @@
 package sema_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/internal/sema"
@@ -510,6 +511,47 @@ func TestAnalyzeFile_UseCaseRef_HasColumn(t *testing.T) {
 			if ref.Column != 8 {
 				t.Errorf("Alice trigger ref: got Column=%d, want 8", ref.Column)
 			}
+		}
+	}
+}
+
+func TestAnalyzeWorkspace_UnresolvedUseCaseRef_EmitsDiagnostic(t *testing.T) {
+	// Workspace has known actors, so UnknownRobot should get a diagnostic.
+	src := "actor user Alice\nuse_case \"T\" {\n  when UnknownRobot creates Session\n}"
+	g, li, _ := syntax.Parse(src)
+	tree := syntax.Root(g)
+	syms, _ := sema.AnalyzeFile("file:///a.craft", tree, li)
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+
+	var found bool
+	for _, d := range diags {
+		if d.Code == "craft/sema/unresolved-reference" && strings.Contains(d.Message, "UnknownRobot") {
+			found = true
+			if d.Severity != "warning" {
+				t.Errorf("expected warning severity for use-case ref diagnostic, got %q", d.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected craft/sema/unresolved-reference for UnknownRobot, got: %v", diags)
+	}
+}
+
+func TestAnalyzeWorkspace_NoSymbols_NoUseCaseRefDiag(t *testing.T) {
+	// Workspace has NO known symbols — unresolved refs must stay silent.
+	src := "use_case \"T\" {\n  when UnknownRobot creates Session\n}"
+	g, li, _ := syntax.Parse(src)
+	tree := syntax.Root(g)
+	syms, _ := sema.AnalyzeFile("file:///a.craft", tree, li)
+	perFile := map[string]sema.Symbols{"file:///a.craft": syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+
+	for _, d := range diags {
+		if d.Code == "craft/sema/unresolved-reference" && strings.Contains(d.Message, "UnknownRobot") {
+			t.Fatalf("must not emit unresolved-reference when workspace has no declarations; got: %v", d)
 		}
 	}
 }
