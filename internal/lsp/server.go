@@ -1096,8 +1096,30 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 }
 
 
-func (s *Server) Formatting(_ context.Context, _ *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
-	return nil, nil
+func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
+	if params == nil {
+		return nil, nil
+	}
+	f := s.ws.Get(string(params.TextDocument.URI))
+	if f == nil {
+		return nil, nil
+	}
+	formatted := FormatDocument(f.Content)
+	if formatted == f.Content {
+		return nil, nil
+	}
+	lines := strings.Split(f.Content, "\n")
+	lastLine := uint32(len(lines) - 1)
+	lastChar := uint32(len(lines[len(lines)-1]))
+	return []protocol.TextEdit{
+		{
+			Range: protocol.Range{
+				Start: protocol.Position{Line: 0, Character: 0},
+				End:   protocol.Position{Line: lastLine, Character: lastChar},
+			},
+			NewText: formatted,
+		},
+	}, nil
 }
 
 func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
