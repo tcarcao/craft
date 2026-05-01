@@ -556,15 +556,37 @@ func TestResyncToTopLevel_EmitsErrorNode(t *testing.T) {
 		t.Error("service Bar not found — resyncToTopLevel consumed it")
 	}
 
-	// Walk all tokens looking for any whose parent has kind SyntaxKindErrorNode.
-	found := false
-	for _, tok := range root.AllTokens() {
-		if tok.Parent().Kind() == syntax.SyntaxKindErrorNode {
-			found = true
+	// The error node should be nested inside the broken SyntaxKindServiceDecl
+	// for "Foo", containing the stray "extra" token but NOT consuming "service Bar".
+	// resyncToTopLevel() is called while still inside the ServiceDecl node, so the
+	// ErrorNode is a child of ServiceDecl (which is itself a direct child of root).
+	var fooDecl *syntax.SyntaxNode
+	for _, child := range root.ChildNodes(syntax.SyntaxKindServiceDecl) {
+		c := child
+		nameTok := c.ChildToken(syntax.SyntaxKindIdent)
+		if nameTok != nil && nameTok.Text() == "Foo" {
+			fooDecl = &c
 			break
 		}
 	}
-	if !found {
-		t.Error("no SyntaxKindErrorNode found in tree after resyncToTopLevel")
+	if fooDecl == nil {
+		t.Fatal("no SyntaxKindServiceDecl for 'Foo' found as direct child of file root")
+	}
+	errNode := fooDecl.ChildNode(syntax.SyntaxKindErrorNode)
+	if errNode == nil {
+		t.Fatal("no SyntaxKindErrorNode found inside the broken 'Foo' ServiceDecl")
+	}
+	// The error node must contain the "extra" token.
+	extraFound := false
+	for _, tok := range errNode.AllTokens() {
+		if tok.Text() == "extra" {
+			extraFound = true
+		}
+		if tok.Text() == "Bar" {
+			t.Errorf("error node consumed 'Bar' — resyncToTopLevel overshot")
+		}
+	}
+	if !extraFound {
+		t.Error("SyntaxKindErrorNode does not contain the 'extra' token")
 	}
 }
