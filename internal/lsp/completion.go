@@ -5,6 +5,8 @@ import (
 
 	"go.lsp.dev/protocol"
 
+	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/workspace"
 )
 
@@ -31,11 +33,48 @@ func splitLines(content string) []string {
 	return strings.Split(content, "\n")
 }
 
+// treeEnclosingBlock returns the enclosing DSL keyword string for the cursor
+// position by walking the syntax tree — the same values findEnclosingKeyword
+// returns ("service", "domain", "actors", "use_case", "expose", "arch", or "").
+// Tree-based lookup correctly handles `}` characters inside comments and strings.
+func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, cursorCol int) string {
+	offset := li.Offset(cursorLine+1, cursorCol+1)
+	node := root.NodeAt(green.TextSize(offset))
+	for node != nil {
+		switch node.Kind() {
+		case syntax.SyntaxKindServiceDecl:
+			return "service"
+		case syntax.SyntaxKindServicesBlock:
+			return "services"
+		case syntax.SyntaxKindDomainDecl:
+			return "domain"
+		case syntax.SyntaxKindDomainsBlock:
+			return "domains"
+		case syntax.SyntaxKindActorsBlock:
+			return "actors"
+		case syntax.SyntaxKindUseCaseDecl, syntax.SyntaxKindScenario:
+			return "use_case"
+		case syntax.SyntaxKindExposureDecl:
+			return "expose"
+		case syntax.SyntaxKindArchDecl:
+			return "arch"
+		case syntax.SyntaxKindFile:
+			return ""
+		}
+		parent := node.Parent()
+		if parent == nil {
+			break
+		}
+		node = parent
+	}
+	return ""
+}
+
 // detectContext determines what kind of completion to offer based on where
-// the cursor sits in the grammar. It scans lines backwards counting { / } depth
-// to find the nearest enclosing keyword, and checks the current line for
-// field-value patterns (e.g. "language: ").
-func detectContext(lines []string, cursorLine, cursorCol int) completionContext {
+// the cursor sits in the grammar. It uses the syntax tree to find the nearest
+// enclosing keyword, and checks the current line for field-value patterns
+// (e.g. "language: ").
+func detectContext(root syntax.SyntaxNode, li green.LineIndex, lines []string, cursorLine, cursorCol int) completionContext {
 	linePrefix := ""
 	if cursorLine < len(lines) {
 		l := lines[cursorLine]
@@ -46,7 +85,7 @@ func detectContext(lines []string, cursorLine, cursorCol int) completionContext 
 		}
 	}
 
-	enclosing := findEnclosingKeyword(lines, cursorLine)
+	enclosing := treeEnclosingBlock(root, li, cursorLine, cursorCol)
 
 	if field, ok := fieldBeforeCursor(linePrefix); ok {
 		switch field {
@@ -108,72 +147,6 @@ func fieldBeforeCursor(linePrefix string) (string, bool) {
 	return field, true
 }
 
-// knownKeywords is the set of top-level block-opening keywords in the Craft DSL.
-var knownKeywords = map[string]bool{
-	"service":  true,
-	"services": true,
-	"domain":   true,
-	"domains":  true,
-	"actors":   true,
-	"use_case": true,
-	"expose":   true,
-	"arch":     true,
-}
-
-// findEnclosingKeyword scans lines backwards from cursorLine-1, tracking { / }
-// depth, and returns the leading keyword of the line that opens the nearest
-// enclosing block. When the immediate enclosing opener is not a known DSL
-// keyword (e.g. a service name inside "services { Foo { ... } }"), the scan
-// continues outward to find the containing block's keyword.
-// Returns "" when the cursor is at the top level.
-func findEnclosingKeyword(lines []string, cursorLine int) string {
-	// needEncloser tracks how many levels out we still need to resolve.
-	// 0 means: looking for the first unmatched '{'.
-	// 1 means: found an unknown-keyword block; need the block that wraps it.
-	needEncloser := 0
-	depth := 0
-	for i := cursorLine - 1; i >= 0; i-- {
-		line := lines[i]
-		for j := len(line) - 1; j >= 0; j-- {
-			ch := line[j]
-			if ch == '}' {
-				depth++
-			} else if ch == '{' {
-				if depth > 0 {
-					depth--
-				} else if needEncloser > 0 {
-					// This '{' closes the block that contains the unknown-keyword
-					// block we found earlier. Return this line's keyword.
-					kw := extractLeadingKeyword(line)
-					if knownKeywords[kw] {
-						return kw
-					}
-					// Still unknown; keep going one more level out.
-					needEncloser++
-				} else {
-					kw := extractLeadingKeyword(line)
-					if knownKeywords[kw] {
-						return kw
-					}
-					// Unknown identifier opening a block (e.g. a service name
-					// inside "services { }"). Look for the block that wraps this.
-					needEncloser = 1
-				}
-			}
-		}
-	}
-	return ""
-}
-
-// extractLeadingKeyword returns the first whitespace-separated token of a line.
-func extractLeadingKeyword(line string) string {
-	fields := strings.Fields(strings.TrimLeft(line, " \t"))
-	if len(fields) == 0 {
-		return ""
-	}
-	return fields[0]
-}
-
 // isActionLine returns true when the line prefix starts with an identifier that
 // is not "when" — indicating a use-case action line rather than a trigger line.
 func isActionLine(linePrefix string) bool {
@@ -189,15 +162,16 @@ func isActionLine(linePrefix string) bool {
 // the appropriate CompletionList. Returns nil when no completions apply.
 func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.CompletionParams) *protocol.CompletionList {
 	f := ws.Get(uri)
-	var lines []string
-	if f != nil {
-		lines = splitLines(f.Content)
+	if f == nil {
+		return nil
 	}
 
+	lines := splitLines(f.Content)
 	cursorLine := int(params.Position.Line)
 	cursorCol := int(params.Position.Character)
 
-	ctx := detectContext(lines, cursorLine, cursorCol)
+	root := syntax.Root(f.Green)
+	ctx := detectContext(root, f.LineIndex, lines, cursorLine, cursorCol)
 
 	switch ctx {
 	case ctxTopLevel:

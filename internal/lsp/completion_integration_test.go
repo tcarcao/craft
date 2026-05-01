@@ -297,7 +297,7 @@ func TestCompletion_Expose(t *testing.T) {
 
 	// Main file: actor Alice, service OrderSvc, domain Commerce with BC Orders
 	// expose block with to:, through:, contexts: lines
-	const src = "actor user Alice\nservices {\n  OrderSvc {\n    contexts: Orders\n  }\n}\ndomain Commerce {\n  Orders\n}\nexpose MyAPI {\n  to: \n  through: \n  contexts: \n}"
+	const src = "actor user Alice\nservices {\n  OrderSvc {\n    contexts: Orders\n  }\n}\ndomain Commerce {\n  Orders\n}\nexposure MyAPI {\n  to: \n  through: \n  contexts: \n}"
 	const uri = "file:///expose.craft"
 	p, _ := json.Marshal(map[string]any{
 		"textDocument": map[string]any{"uri": uri, "languageId": "craft", "version": 1, "text": src},
@@ -306,7 +306,7 @@ func TestCompletion_Expose(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Test expose field names: open a simple expose file with blank body
-	const expFieldSrc = "expose MyAPI {\n  \n}"
+	const expFieldSrc = "exposure MyAPI {\n  \n}"
 	const expFieldURI = "file:///expose_fields.craft"
 	pf, _ := json.Marshal(map[string]any{
 		"textDocument": map[string]any{"uri": expFieldURI, "languageId": "craft", "version": 1, "text": expFieldSrc},

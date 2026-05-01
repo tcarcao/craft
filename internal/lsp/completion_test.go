@@ -2,6 +2,8 @@ package lsp
 
 import (
 	"testing"
+
+	"github.com/tcarcao/craft/internal/syntax"
 )
 
 func TestDetectContext(t *testing.T) {
@@ -74,25 +76,25 @@ func TestDetectContext(t *testing.T) {
 		},
 		{
 			name: "inside expose block - blank line",
-			src:  "expose MyAPI {\n  \n}",
+			src:  "exposure MyAPI {\n  \n}",
 			line: 1, col: 2,
 			want: ctxExposeField,
 		},
 		{
 			name: "after to: in expose",
-			src:  "expose MyAPI {\n  to: \n}",
+			src:  "exposure MyAPI {\n  to: \n}",
 			line: 1, col: 5,
 			want: ctxExposeTo,
 		},
 		{
 			name: "after through: in expose",
-			src:  "expose MyAPI {\n  through: \n}",
+			src:  "exposure MyAPI {\n  through: \n}",
 			line: 1, col: 10,
 			want: ctxExposeThrough,
 		},
 		{
 			name: "after contexts: in expose",
-			src:  "expose MyAPI {\n  contexts: \n}",
+			src:  "exposure MyAPI {\n  contexts: \n}",
 			line: 1, col: 11,
 			want: ctxExposeContexts,
 		},
@@ -113,10 +115,45 @@ func TestDetectContext(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			lines := splitLines(tc.src)
-			got := detectContext(lines, tc.line, tc.col)
+			gn, li, _ := syntax.Parse(tc.src)
+			root := syntax.Root(gn)
+			got := detectContext(root, li, lines, tc.line, tc.col)
 			if got != tc.want {
 				t.Errorf("detectContext: got %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestDetectContext_BlankLineInsideBlock explicitly verifies that whitespace
+// tokens in the green tree (emitted for losslessness) are parented by the
+// enclosing service declaration, so NodeAt returns a non-nil node and
+// treeEnclosingBlock correctly identifies the surrounding block.
+func TestDetectContext_BlankLineInsideBlock(t *testing.T) {
+	src := "service Foo {\n  \n}"
+	// Cursor at the blank line (line 1, col 2) — inside the service body.
+	lines := splitLines(src)
+	gn, li, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	got := detectContext(root, li, lines, 1, 2)
+	if got != ctxServiceField {
+		t.Errorf("blank line inside service: got %v, want ctxServiceField", got)
+	}
+}
+
+func TestDetectContext_CommentBraceFix(t *testing.T) {
+	// findEnclosingKeyword counts `}` in a comment as a real `}` and
+	// gets confused. Tree-based lookup should return ctxDomainBody.
+	src := `domain Foo {
+  // this has } in a comment
+
+}`
+	// Cursor at the blank line (line 2, col 0) — inside the domain body.
+	lines := splitLines(src)
+	gn, li, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	got := detectContext(root, li, lines, 2, 0)
+	if got != ctxDomainBody {
+		t.Errorf("detectContext with comment brace: got %v, want ctxDomainBody", got)
 	}
 }
