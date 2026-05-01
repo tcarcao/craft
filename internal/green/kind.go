@@ -5,3 +5,6 @@ package green
 // The canonical constants are defined in internal/syntax/kind.go.
 // internal/green stores and forwards kind values but never inspects them.
 type SyntaxKind int
+
+func (k SyntaxKind) IsToken() bool { return int(k) > 0 && int(k) < 1000 }
+func (k SyntaxKind) IsNode() bool  { return int(k) >= 1000 }

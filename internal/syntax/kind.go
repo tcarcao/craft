@@ -1,12 +1,11 @@
 package syntax
 
+import "github.com/tcarcao/craft/internal/green"
+
 // SyntaxKind identifies the type of a syntax node or token.
 // Token kinds are in (0, 1000). Node kinds are >= 1000.
 // SyntaxKindInvalid (0) is the zero value and is neither.
-type SyntaxKind int
-
-func (k SyntaxKind) IsToken() bool { return int(k) > 0 && int(k) < 1000 }
-func (k SyntaxKind) IsNode() bool  { return int(k) >= 1000 }
+type SyntaxKind = green.SyntaxKind
 
 const (
 	SyntaxKindInvalid SyntaxKind = iota // 0 — zero value, never used
