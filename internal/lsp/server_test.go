@@ -430,6 +430,111 @@ func mustMarshalString(s string) string {
 	return string(b)
 }
 
+func TestInlayHints_ServiceContextResolvesToDomain(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	// initialize
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id,
+		Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	initResp, err := readMsg(br)
+	if err != nil {
+		t.Fatalf("reading initialize response: %v", err)
+	}
+	if initResp.Error != nil {
+		t.Fatalf("initialize error: %s", initResp.Error)
+	}
+	// Verify inlayHintProvider capability was patched in.
+	var initResult map[string]interface{}
+	if err := json.Unmarshal(initResp.Result, &initResult); err != nil {
+		t.Fatalf("unmarshal initialize result: %v", err)
+	}
+	caps, _ := initResult["capabilities"].(map[string]interface{})
+	if caps["inlayHintProvider"] != true {
+		t.Errorf("expected inlayHintProvider: true in capabilities, got: %v", caps["inlayHintProvider"])
+	}
+
+	// initialized
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// open document
+	craftSrc := "domain Auth {\n  Login\n  Register\n}\nservices {\n  UserService {\n    contexts: Login, Register\n    language: golang\n  }\n}\n"
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0",
+		Method:  "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///test.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	// send inlayHint request
+	id = 2
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id,
+		Method: "textDocument/inlayHint",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///test.craft"},"range":{"start":{"line":0,"character":0},"end":{"line":100,"character":0}}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// read messages until we find the response with id=2
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == id {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for inlayHint response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("inlayHint returned error: %s", resp.Error)
+	}
+
+	var hints []map[string]interface{}
+	if err := json.Unmarshal(resp.Result, &hints); err != nil {
+		t.Fatalf("unmarshal inlayHint result: %v", err)
+	}
+	if len(hints) != 2 {
+		t.Fatalf("expected 2 inlay hints (Login→Auth, Register→Auth), got %d: %v", len(hints), hints)
+	}
+	for _, h := range hints {
+		label, _ := h["label"].(string)
+		if label != " ← Auth" {
+			t.Errorf("expected label \" ← Auth\", got %q", label)
+		}
+	}
+
+	cancel()
+}
+
 func TestExtractDslFromBlockRanges_GroupedService(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()

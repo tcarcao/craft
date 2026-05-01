@@ -94,7 +94,11 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	defer zapLogger.Sync() //nolint:errcheck
 
 	handler := withPanicRecovery(
-		protocol.ServerHandler(srv, jsonrpc2.MethodNotFoundHandler),
+		withInlayHints(
+			protocol.ServerHandler(srv, jsonrpc2.MethodNotFoundHandler),
+			ws,
+			logger,
+		),
 		logger,
 	)
 
