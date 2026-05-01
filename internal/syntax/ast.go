@@ -317,6 +317,13 @@ type BoundedContext struct{ node SyntaxNode }
 // Name returns the identifier token for the bounded context's name.
 func (bc BoundedContext) Name() *SyntaxToken { return bc.node.ChildToken(SyntaxKindIdent) }
 
+// RefDecl is a typed view over a SyntaxKindRef node — a name reference wrapped
+// by the parser at reference sites such as contexts: field values.
+type RefDecl struct{ node SyntaxNode }
+
+// Name returns the identifier token inside this ref node.
+func (r RefDecl) Name() *SyntaxToken { return r.node.ChildToken(SyntaxKindIdent) }
+
 // DomainsBlock is a typed view over a SyntaxKindDomainsBlock node.
 type DomainsBlock struct{ node SyntaxNode }
 
@@ -493,6 +500,21 @@ func (s ServiceDecl) ContextTokens() []SyntaxToken {
 			break // contexts: appears at most once
 		}
 		i++
+	}
+	return result
+}
+
+// ContextRefs returns RefDecl views for each name in the contexts: field.
+// Each RefDecl wraps the name ident in a SyntaxKindRef node; call
+// ref.Name().Offset() for byte-accurate position info.
+func (s ServiceDecl) ContextRefs() []RefDecl {
+	toks := s.ContextTokens()
+	result := make([]RefDecl, 0, len(toks))
+	for _, tok := range toks {
+		parent := tok.Parent()
+		if parent != nil && parent.Kind() == SyntaxKindRef {
+			result = append(result, RefDecl{node: *parent})
+		}
 	}
 	return result
 }

@@ -443,3 +443,51 @@ func TestServiceDecl_ContextTokens_EdgeCases(t *testing.T) {
 		t.Errorf("empty contexts: expected 0 tokens, got %d: %v", len(toks2), toks2)
 	}
 }
+
+func TestContextRefs_ReturnsRefDecls(t *testing.T) {
+	src := "service Foo {\n  contexts: Auth, Profile\n  language: golang\n}"
+	gn, li, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	svcs := file.Services()
+	if len(svcs) != 1 {
+		t.Fatalf("want 1 service, got %d", len(svcs))
+	}
+	refs := svcs[0].ContextRefs()
+	if len(refs) != 2 {
+		t.Fatalf("want 2 context refs, got %d", len(refs))
+	}
+	want := []string{"Auth", "Profile"}
+	for i, ref := range refs {
+		tok := ref.Name()
+		if tok == nil {
+			t.Errorf("refs[%d].Name() = nil", i)
+			continue
+		}
+		if tok.Text() != want[i] {
+			t.Errorf("refs[%d].Name() = %q, want %q", i, tok.Text(), want[i])
+		}
+		line, _ := li.LineCol(tok.Offset())
+		if line != 2 {
+			t.Errorf("refs[%d] line = %d, want 2", i, line)
+		}
+	}
+}
+
+func TestContextTokens_StillWorksAfterRefWrap(t *testing.T) {
+	// Verify ContextTokens() (which uses Tokens() recursively) is unaffected
+	// by the SyntaxKindRef wrapper added in this task.
+	src := "service Foo {\n  contexts: Auth, Profile\n}"
+	gn, _, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	toks := file.Services()[0].ContextTokens()
+	if len(toks) != 2 {
+		t.Fatalf("want 2 tokens, got %d", len(toks))
+	}
+	for i, want := range []string{"Auth", "Profile"} {
+		if toks[i].Text() != want {
+			t.Errorf("toks[%d] = %q, want %q", i, toks[i].Text(), want)
+		}
+	}
+}

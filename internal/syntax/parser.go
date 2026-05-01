@@ -1650,11 +1650,34 @@ func (p *Parser) parseIdentList() {
 	}
 }
 
-// parseIdentListWithLines parses a comma-separated ident list, emitting tokens
-// into the current builder scope. (Lines are no longer tracked here — they can
-// be derived from the LineIndex via SyntaxToken offsets.)
+// parseRefList parses a comma-separated ident list, wrapping each name in a
+// SyntaxKindRef node so that reference sites are structurally distinct from
+// declaration sites. The flat Tokens() result is unchanged — existing AST
+// scanning code remains correct.
+func (p *Parser) parseRefList() {
+	for {
+		tok := p.peek()
+		isIdent := tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString ||
+			isKeywordUsedAsIdent(tok.Type)
+		if !isIdent {
+			return
+		}
+		p.builder.StartNode(SyntaxKindRef)
+		p.consumeAs(SyntaxKindIdent)
+		p.builder.FinishNode()
+		if p.peek().Type == lexer.TokenComma {
+			p.consumeAs(SyntaxKindComma)
+		} else {
+			break
+		}
+	}
+}
+
+// parseIdentListWithLines parses a comma-separated ident list, wrapping each
+// name in a SyntaxKindRef node (reference tracking). Lines are derived from
+// SyntaxToken offsets + LineIndex — no explicit line tracking needed.
 func (p *Parser) parseIdentListWithLines() {
-	p.parseIdentList()
+	p.parseRefList()
 }
 
 // parseDeploymentSpec parses a deployment spec, emitting tokens into the
