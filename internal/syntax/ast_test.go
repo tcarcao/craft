@@ -527,3 +527,44 @@ func TestExposureTokenAccessors(t *testing.T) {
 		t.Errorf("ContextsTokens = %v, want [Auth]", ctxToks)
 	}
 }
+
+func TestResyncToTopLevel_EmitsErrorNode(t *testing.T) {
+	// "service Foo extra" without "{" triggers resyncToTopLevel.
+	// The tokens up to the next top-level keyword should be wrapped in
+	// SyntaxKindErrorNode, not emitted as loose siblings of SyntaxKindServiceDecl.
+	// We include extra non-top-level tokens ("extra") so resyncToTopLevel has
+	// something to consume and wrap.
+	src := "service Foo extra\nservice Bar {\n  language: golang\n}"
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatal("want at least one diagnostic for missing `{`")
+	}
+
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+
+	// Bar should be parsed successfully despite Foo being broken.
+	svcs := file.Services()
+	var barFound bool
+	for _, svc := range svcs {
+		tok := svc.Name()
+		if tok != nil && tok.Text() == "Bar" {
+			barFound = true
+		}
+	}
+	if !barFound {
+		t.Error("service Bar not found — resyncToTopLevel consumed it")
+	}
+
+	// Walk all tokens looking for any whose parent has kind SyntaxKindErrorNode.
+	found := false
+	for _, tok := range root.AllTokens() {
+		if tok.Parent().Kind() == syntax.SyntaxKindErrorNode {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("no SyntaxKindErrorNode found in tree after resyncToTopLevel")
+	}
+}

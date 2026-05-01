@@ -1253,15 +1253,20 @@ func tokenToActorType(tok lexer.Token) (string, bool) {
 
 // resyncToTopLevel discards tokens until it finds a known top-level keyword
 // or EOF, so the main loop can continue from a clean state. The skipped tokens
-// are emitted into the builder so the lossless invariant is preserved.
+// are wrapped in a SyntaxKindErrorNode so the lossless invariant is preserved
+// and error recovery is visible in the tree.
 func (p *Parser) resyncToTopLevel() {
+	if p.atEOF() || isTopLevelKeyword(p.peek().Type) {
+		return
+	}
+	p.builder.StartNode(SyntaxKindErrorNode)
 	for !p.atEOF() {
-		tok := p.peek()
-		if isTopLevelKeyword(tok.Type) {
-			return
+		if isTopLevelKeyword(p.peek().Type) {
+			break
 		}
 		p.consume()
 	}
+	p.builder.FinishNode()
 }
 
 // resyncToBlock wraps unrecognised tokens inside a construct in a
