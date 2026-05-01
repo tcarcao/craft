@@ -1,5 +1,6 @@
 // Package syntax implements the hand-written recursive-descent parser for the
-// Craft DSL. It produces a lossless syntax tree (SyntaxNode).
+// Craft DSL. It produces a lossless syntax tree by emitting events into a
+// green.GreenNodeBuilder.
 //
 // S3: actors. S4: domains. S5: services + services block.
 // S6: use_case "..." { when ... } blocks.
@@ -12,31 +13,35 @@ package syntax
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/lexer"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // Parser is a recursive-descent parser for Craft DSL.
+// It emits events into a GreenNodeBuilder rather than constructing SyntaxNodes directly.
 type Parser struct {
-	tokens []lexer.Token
-	pos    int
+	tokens  []lexer.Token
+	pos     int
+	builder green.GreenNodeBuilder
+	src     string
 }
 
-// Parse parses the given source text, returning a lossless syntax tree and any
-// diagnostics. A non-nil SyntaxNode is always returned even when diagnostics
-// are present (island parsing: each top-level block is parsed independently).
-func Parse(src string) (*SyntaxNode, []craft.Diagnostic) {
+// Parse parses src and returns the green root, a LineIndex, and any diagnostics.
+// A non-nil GreenNode is always returned (island parsing preserved).
+func Parse(src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
 	l := lexer.New(src)
-	p := &Parser{tokens: l.All()}
-	return p.parseFile()
+	p := &Parser{tokens: l.All(), src: src}
+	root, diags := p.parseFile()
+	li := green.NewLineIndex(src)
+	return root, li, diags
 }
 
 // --- main parse loop ---
 
-func (p *Parser) parseFile() (*SyntaxNode, []craft.Diagnostic) {
-	root := &SyntaxNode{Kind: SyntaxKindFile}
+func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
+	p.builder.StartNode(SyntaxKindFile)
 	var diags []craft.Diagnostic
 
 	// Global counter for scenario_N / action_N IDs across all use_cases in the file,
@@ -47,59 +52,23 @@ func (p *Parser) parseFile() (*SyntaxNode, []craft.Diagnostic) {
 		tok := p.peek()
 		switch tok.Type {
 		case lexer.TokenKwActor:
-			node, d := p.parseActorStatement()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseActorStatement()...)
 		case lexer.TokenKwActors:
-			node, d := p.parseActorsBlock()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseActorsBlock()...)
 		case lexer.TokenKwDomain:
-			node, d := p.parseDomainStatement()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseDomainStatement()...)
 		case lexer.TokenKwDomains:
-			node, d := p.parseDomainsBlock()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseDomainsBlock()...)
 		case lexer.TokenKwService:
-			node, d := p.parseServiceStatement()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseServiceStatement()...)
 		case lexer.TokenKwServices:
-			node, d := p.parseServicesBlock()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseServicesBlock()...)
 		case lexer.TokenKwUseCase:
-			node, d := p.parseUseCaseBlock(&ucCounter)
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseUseCaseBlock(&ucCounter)...)
 		case lexer.TokenKwArch:
-			node, d := p.parseArchBlock()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseArchBlock()...)
 		case lexer.TokenKwExposure:
-			node, d := p.parseExposureBlock()
-			diags = append(diags, d...)
-			if node != nil {
-				root.Children = append(root.Children, node)
-			}
+			diags = append(diags, p.parseExposureBlock()...)
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -107,77 +76,71 @@ func (p *Parser) parseFile() (*SyntaxNode, []craft.Diagnostic) {
 			p.resyncToTopLevel()
 		}
 	}
-	return root, diags
+
+	p.builder.FinishNode()
+	return p.builder.Finish(), diags
 }
 
 // parseActorStatement parses: actor <type> <name>
-func (p *Parser) parseActorStatement() (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindActorDecl}
+func (p *Parser) parseActorStatement() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindActorDecl)
 	var diags []craft.Diagnostic
 
-	// Collect and attach leading trivia (comments).
-	for _, t := range p.collectTrivia() {
-		node.Children = append(node.Children, t)
-	}
+	// Attach leading trivia (comments).
+	p.attachTrivia()
 
 	// Consume `actor` keyword.
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwActor))
+	p.consumeAs(SyntaxKindKwActor)
 
 	typeTok := p.peek()
 	_, ok := tokenToActorType(typeTok)
 	if !ok {
 		diags = append(diags, p.diagUnexpected(typeTok, "actor type"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 	// Map the actor-type token to the right SyntaxKind.
 	typeKind := SyntaxKindIdent
-	if k, found := lexerKindToSyntaxKind[typeTok.Type]; found {
+	if k, found := lexerKindToSyntaxKindMap[typeTok.Type]; found {
 		typeKind = k
 	}
-	node.Children = append(node.Children, p.consumeAs(typeKind))
+	p.consumeAs(typeKind)
 
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenIdent {
 		diags = append(diags, p.diagUnexpected(nameTok, "actor name"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+	p.consumeAs(SyntaxKindIdent)
 
-	return node, diags
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseActorsBlock parses: actors { <actor_definition>* }
-func (p *Parser) parseActorsBlock() (*SyntaxNode, []craft.Diagnostic) {
-	blockNode := &SyntaxNode{Kind: SyntaxKindActorsBlock}
+func (p *Parser) parseActorsBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindActorsBlock)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `actors`.
-	for _, t := range p.collectTrivia() {
-		blockNode.Children = append(blockNode.Children, t)
-	}
+	// Attach leading trivia before `actors`.
+	p.attachTrivia()
 
-	actorsTok := p.consume() // consume `actors`, capture line
-	blockNode.Children = append(blockNode.Children, &SyntaxToken{
-		Kind:  SyntaxKindKwActors,
-		Value: actorsTok.Value,
-		Line:  actorsTok.Line,
-		Col:   actorsTok.Column,
-	})
+	p.consumeAs(SyntaxKindKwActors) // consume `actors`
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return blockNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
-		// Collect trivia inside block.
-		for _, t := range p.collectTrivia() {
-			blockNode.Children = append(blockNode.Children, t)
-		}
+		// Attach trivia inside block.
+		p.attachTrivia()
 		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 			break
 		}
@@ -197,21 +160,22 @@ func (p *Parser) parseActorsBlock() (*SyntaxNode, []craft.Diagnostic) {
 		}
 
 		// Build a child ActorDecl node for each entry in the block.
-		actorNode := &SyntaxNode{Kind: SyntaxKindActorDecl}
+		p.builder.StartNode(SyntaxKindActorDecl)
 		typeKind := SyntaxKindIdent
-		if k, found := lexerKindToSyntaxKind[tok.Type]; found {
+		if k, found := lexerKindToSyntaxKindMap[tok.Type]; found {
 			typeKind = k
 		}
-		actorNode.Children = append(actorNode.Children, p.consumeAs(typeKind))
+		p.consumeAs(typeKind)
 
 		nameTok := p.peek()
 		if nameTok.Type != lexer.TokenIdent {
 			diags = append(diags, p.diagUnexpected(nameTok, "actor name"))
 			p.consume()
+			p.builder.FinishNode()
 			continue
 		}
-		actorNode.Children = append(actorNode.Children, p.consumeAs(SyntaxKindIdent))
-		blockNode.Children = append(blockNode.Children, actorNode)
+		p.consumeAs(SyntaxKindIdent)
+		p.builder.FinishNode()
 	}
 
 	if p.atEOF() {
@@ -221,44 +185,43 @@ func (p *Parser) parseActorsBlock() (*SyntaxNode, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return blockNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindRBrace))
-	return blockNode, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseDomainStatement parses: domain <name> { <bounded_context>* }
-func (p *Parser) parseDomainStatement() (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindDomainDecl}
+func (p *Parser) parseDomainStatement() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindDomainDecl)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `domain`.
-	for _, t := range p.collectTrivia() {
-		node.Children = append(node.Children, t)
-	}
+	// Attach leading trivia before `domain`.
+	p.attachTrivia()
 
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwDomain))
+	p.consumeAs(SyntaxKindKwDomain)
 
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenIdent && !isDomainNameToken(nameTok.Type) {
 		diags = append(diags, p.diagUnexpected(nameTok, "domain name"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+	p.consumeAs(SyntaxKindIdent)
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
-	_, bcNodes, d := p.parseBoundedContextList()
+	d := p.parseBoundedContextList()
 	diags = append(diags, d...)
-	for _, bcNode := range bcNodes {
-		node.Children = append(node.Children, bcNode)
-	}
 
 	if p.atEOF() {
 		diags = append(diags, craft.Diagnostic{
@@ -267,37 +230,36 @@ func (p *Parser) parseDomainStatement() (*SyntaxNode, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(nameTok),
 		})
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
+	p.consumeAs(SyntaxKindRBrace)
 
-	return node, diags
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseDomainsBlock parses: domains { <domain_block>* }
 // where each domain_block is: <name> { <bounded_context>* }
-func (p *Parser) parseDomainsBlock() (*SyntaxNode, []craft.Diagnostic) {
-	blockNode := &SyntaxNode{Kind: SyntaxKindDomainsBlock}
+func (p *Parser) parseDomainsBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindDomainsBlock)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `domains`.
-	for _, t := range p.collectTrivia() {
-		blockNode.Children = append(blockNode.Children, t)
-	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindKwDomains))
+	// Attach leading trivia before `domains`.
+	p.attachTrivia()
+	p.consumeAs(SyntaxKindKwDomains)
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return blockNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
-		// Collect trivia inside block.
-		for _, t := range p.collectTrivia() {
-			blockNode.Children = append(blockNode.Children, t)
-		}
+		// Attach trivia inside block.
+		p.attachTrivia()
 		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 			break
 		}
@@ -311,21 +273,18 @@ func (p *Parser) parseDomainsBlock() (*SyntaxNode, []craft.Diagnostic) {
 		nameTok := tok
 
 		// Build a child DomainDecl node.
-		domainNode := &SyntaxNode{Kind: SyntaxKindDomainDecl}
-		domainNode.Children = append(domainNode.Children, p.consumeAs(SyntaxKindIdent))
+		p.builder.StartNode(SyntaxKindDomainDecl)
+		p.consumeAs(SyntaxKindIdent)
 
 		if p.peek().Type != lexer.TokenLBrace {
 			diags = append(diags, p.diagUnexpected(p.peek(), "{"))
-			blockNode.Children = append(blockNode.Children, domainNode)
+			p.builder.FinishNode()
 			continue
 		}
-		domainNode.Children = append(domainNode.Children, p.consumeAs(SyntaxKindLBrace))
+		p.consumeAs(SyntaxKindLBrace)
 
-		_, bcNodes, d := p.parseBoundedContextList()
+		d := p.parseBoundedContextList()
 		diags = append(diags, d...)
-		for _, bcNode := range bcNodes {
-			domainNode.Children = append(domainNode.Children, bcNode)
-		}
 
 		if p.atEOF() {
 			diags = append(diags, craft.Diagnostic{
@@ -334,11 +293,12 @@ func (p *Parser) parseDomainsBlock() (*SyntaxNode, []craft.Diagnostic) {
 				Severity: craft.SeverityError,
 				Range:    tokenRange(nameTok),
 			})
-			blockNode.Children = append(blockNode.Children, domainNode)
-			return blockNode, diags
+			p.builder.FinishNode()
+			p.builder.FinishNode()
+			return diags
 		}
-		domainNode.Children = append(domainNode.Children, p.consumeAs(SyntaxKindRBrace))
-		blockNode.Children = append(blockNode.Children, domainNode)
+		p.consumeAs(SyntaxKindRBrace)
+		p.builder.FinishNode()
 	}
 
 	if p.atEOF() {
@@ -348,47 +308,41 @@ func (p *Parser) parseDomainsBlock() (*SyntaxNode, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return blockNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindRBrace))
-	return blockNode, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseBoundedContextList parses a list of identifiers until `}` or EOF.
 // These are the bounded context names inside a domain block.
 // Duplicates are silently deduplicated (keeping first occurrence), matching
 // ANTLR behavior and the v1 spec.
-// Returns a slice of SyntaxNodes and diagnostics.
-func (p *Parser) parseBoundedContextList() ([]string, []*SyntaxNode, []craft.Diagnostic) {
-	var contexts []string
-	var bcNodes []*SyntaxNode
+// Emits BoundedContext nodes into the current builder scope.
+func (p *Parser) parseBoundedContextList() []craft.Diagnostic {
 	seen := make(map[string]bool)
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
-		// Collect trivia inside the context list.
-		triviaTokens := p.collectTrivia()
+		// Attach trivia inside the context list.
+		p.attachTrivia()
 		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
-			// Attach any trailing trivia to the last node or discard — for now discard
-			// (they'll be captured at the parent's RBrace step).
-			_ = triviaTokens
 			break
 		}
 
 		tok := p.peek()
 		if tok.Type == lexer.TokenIdent || isDomainNameToken(tok.Type) {
-			bcNode := &SyntaxNode{Kind: SyntaxKindBoundedContext}
-			// Attach leading trivia to this bounded-context node.
-			for _, t := range triviaTokens {
-				bcNode.Children = append(bcNode.Children, t)
-			}
-			bcNode.Children = append(bcNode.Children, p.consumeAs(SyntaxKindIdent))
 			if !seen[tok.Value] {
 				seen[tok.Value] = true
-				contexts = append(contexts, tok.Value)
-				bcNodes = append(bcNodes, bcNode)
+				p.builder.StartNode(SyntaxKindBoundedContext)
+				p.consumeAs(SyntaxKindIdent)
+				p.builder.FinishNode()
+			} else {
+				// Duplicate: consume but do not wrap (matches ANTLR dedup behavior).
+				p.consume()
 			}
-			// Duplicate: node is built but not appended (matches ANTLR dedup behavior).
 		} else if tok.Type == lexer.TokenError {
 			diags = append(diags, p.diagUnexpected(tok, "bounded context name or `}`"))
 			p.consume()
@@ -398,7 +352,7 @@ func (p *Parser) parseBoundedContextList() ([]string, []*SyntaxNode, []craft.Dia
 			p.consume()
 		}
 	}
-	return contexts, bcNodes, diags
+	return diags
 }
 
 // isDomainNameToken returns true for token types that can legally appear as a
@@ -418,28 +372,25 @@ func isDomainNameToken(tt lexer.TokenType) bool {
 // parseServicesBlock parses: services { <service_block>* }
 // Each service_block is: <name> { <field>* } where name is an ident,
 // hyphenated-ident, or quoted string.
-func (p *Parser) parseServicesBlock() (*SyntaxNode, []craft.Diagnostic) {
-	blockNode := &SyntaxNode{Kind: SyntaxKindServicesBlock}
+func (p *Parser) parseServicesBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindServicesBlock)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `services`.
-	for _, t := range p.collectTrivia() {
-		blockNode.Children = append(blockNode.Children, t)
-	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindKwServices))
+	// Attach leading trivia before `services`.
+	p.attachTrivia()
+	p.consumeAs(SyntaxKindKwServices)
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return blockNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
-		// Collect trivia inside block.
-		for _, t := range p.collectTrivia() {
-			blockNode.Children = append(blockNode.Children, t)
-		}
+		// Attach trivia inside block.
+		p.attachTrivia()
 		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 			break
 		}
@@ -448,32 +399,26 @@ func (p *Parser) parseServicesBlock() (*SyntaxNode, []craft.Diagnostic) {
 
 		// Service name: identifier, string literal, or keyword-as-name
 		var name string
-		var nameLine, nameCol int
+		var nameLine int
 		var nameKind SyntaxKind
 		switch tok.Type {
 		case lexer.TokenIdent:
 			name = tok.Value
 			nameLine = tok.Line
-			nameCol = tok.Column
 			nameKind = SyntaxKindIdent
-			p.consume()
 		case lexer.TokenString:
 			name = tok.Value
 			nameLine = tok.Line
-			nameCol = tok.Column
 			nameKind = SyntaxKindString
-			p.consume()
 		default:
 			if isServiceNameKeyword(tok.Type) {
 				name = tok.Value
 				nameLine = tok.Line
-				nameCol = tok.Column
-				if k, found := lexerKindToSyntaxKind[tok.Type]; found {
+				if k, found := lexerKindToSyntaxKindMap[tok.Type]; found {
 					nameKind = k
 				} else {
 					nameKind = SyntaxKindIdent
 				}
-				p.consume()
 			} else {
 				diags = append(diags, p.diagUnexpected(tok, "service name"))
 				p.consume()
@@ -482,22 +427,17 @@ func (p *Parser) parseServicesBlock() (*SyntaxNode, []craft.Diagnostic) {
 		}
 
 		// Build the child service node.
-		svcNode := &SyntaxNode{Kind: SyntaxKindServiceDecl}
-		svcNode.Children = append(svcNode.Children, &SyntaxToken{
-			Kind:  nameKind,
-			Value: name,
-			Line:  nameLine,
-			Col:   nameCol,
-		})
+		p.builder.StartNode(SyntaxKindServiceDecl)
+		p.consumeAs(nameKind)
 
 		if p.peek().Type != lexer.TokenLBrace {
 			diags = append(diags, p.diagUnexpected(p.peek(), "{"))
-			blockNode.Children = append(blockNode.Children, svcNode)
+			p.builder.FinishNode()
 			continue
 		}
-		svcNode.Children = append(svcNode.Children, p.consumeAs(SyntaxKindLBrace))
+		p.consumeAs(SyntaxKindLBrace)
 
-		d := p.parseServiceBody(svcNode)
+		d := p.parseServiceBody()
 		diags = append(diags, d...)
 
 		if p.atEOF() {
@@ -510,11 +450,12 @@ func (p *Parser) parseServicesBlock() (*SyntaxNode, []craft.Diagnostic) {
 					End:   craft.Position{Line: lspLine(nameLine)},
 				},
 			})
-			blockNode.Children = append(blockNode.Children, svcNode)
-			return blockNode, diags
+			p.builder.FinishNode()
+			p.builder.FinishNode()
+			return diags
 		}
-		svcNode.Children = append(svcNode.Children, p.consumeAs(SyntaxKindRBrace))
-		blockNode.Children = append(blockNode.Children, svcNode)
+		p.consumeAs(SyntaxKindRBrace)
+		p.builder.FinishNode()
 	}
 
 	if p.atEOF() {
@@ -524,23 +465,23 @@ func (p *Parser) parseServicesBlock() (*SyntaxNode, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
-		return blockNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	blockNode.Children = append(blockNode.Children, p.consumeAs(SyntaxKindRBrace))
-	return blockNode, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseServiceStatement parses: service <name> { <field>* }
 // This is the singular top-level service form (Q11).
-func (p *Parser) parseServiceStatement() (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindServiceDecl}
+func (p *Parser) parseServiceStatement() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindServiceDecl)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `service`.
-	for _, t := range p.collectTrivia() {
-		node.Children = append(node.Children, t)
-	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwService))
+	// Attach leading trivia before `service`.
+	p.attachTrivia()
+	p.consumeAs(SyntaxKindKwService)
 
 	nameTok := p.peek()
 	var name string
@@ -552,21 +493,23 @@ func (p *Parser) parseServiceStatement() (*SyntaxNode, []craft.Diagnostic) {
 		if nameTok.Type == lexer.TokenString {
 			nameKind = SyntaxKindString
 		}
-		node.Children = append(node.Children, p.consumeAs(nameKind))
+		p.consumeAs(nameKind)
 	} else {
 		diags = append(diags, p.diagUnexpected(nameTok, "service name"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
-	d := p.parseServiceBody(node)
+	d := p.parseServiceBody()
 	diags = append(diags, d...)
 
 	if p.atEOF() {
@@ -579,15 +522,17 @@ func (p *Parser) parseServiceStatement() (*SyntaxNode, []craft.Diagnostic) {
 				End:   craft.Position{Line: lspLine(nameLine)},
 			},
 		})
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
-	return node, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseServiceBody parses the fields inside a service { ... } block.
-// node receives all consumed tokens as children for lossless tree reconstruction.
-func (p *Parser) parseServiceBody(node *SyntaxNode) []craft.Diagnostic {
+// Tokens are emitted directly into the current builder scope.
+func (p *Parser) parseServiceBody() []craft.Diagnostic {
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
@@ -603,32 +548,31 @@ func (p *Parser) parseServiceBody(node *SyntaxNode) []craft.Diagnostic {
 		}
 
 		fieldName := tok.Value
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent)) // field name
+		p.consumeAs(SyntaxKindIdent) // field name
 
 		// Expect colon after field name.
 		if p.peek().Type != lexer.TokenColon {
 			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
 			continue
 		}
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindColon))
+		p.consumeAs(SyntaxKindColon)
 
 		switch fieldName {
 		case "contexts":
-			p.parseIdentListWithLinesIntoNode(node)
+			p.parseIdentListWithLines()
 		case "data-stores":
-			p.parseIdentListIntoNode(node)
+			p.parseIdentList()
 		case "language":
 			if p.peek().Type == lexer.TokenIdent {
-				node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+				p.consumeAs(SyntaxKindIdent)
 			} else {
 				diags = append(diags, p.diagUnexpected(p.peek(), "language identifier"))
 			}
 		case "deployment":
-			dd := p.parseDeploymentSpecIntoNode(node)
+			dd := p.parseDeploymentSpec()
 			diags = append(diags, dd...)
 		default:
-			// Unknown field — skip to next line (consume until next ident that
-			// could be a field name, or `}`).
+			// Unknown field — skip to next line.
 			p.skipToNextField()
 		}
 	}
@@ -681,49 +625,46 @@ func isServiceNameKeyword(tt lexer.TokenType) bool {
 // parseUseCaseBlock parses: use_case "<name>" { <scenario>* }
 // A scenario is: when <trigger> <action>*
 // counter is the global ID counter shared across all use_cases in the file.
-func (p *Parser) parseUseCaseBlock(counter *int) (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindUseCaseDecl}
+func (p *Parser) parseUseCaseBlock(counter *int) []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindUseCaseDecl)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `use_case`.
-	for _, t := range p.collectTrivia() {
-		node.Children = append(node.Children, t)
-	}
+	// Attach leading trivia before `use_case`.
+	p.attachTrivia()
 
 	ucTok := p.peek()
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwUseCase))
+	p.consumeAs(SyntaxKindKwUseCase)
 
 	// Expect a quoted string name.
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenString {
 		diags = append(diags, p.diagUnexpected(nameTok, "use_case name string"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 	name := nameTok.Value
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindString))
+	p.consumeAs(SyntaxKindString)
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
 
 		// `when` is a contextual keyword that lexes as TokenIdent.
 		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
-			scenarioNode, d := p.parseScenario(counter)
+			d := p.parseScenario(counter)
 			diags = append(diags, d...)
-			if scenarioNode != nil {
-				node.Children = append(node.Children, scenarioNode)
-			}
 		} else {
 			// Skip unknown tokens inside the use_case body.
 			diags = append(diags, p.diagUnexpected(tok, "`when` or `}`"))
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindError))
+			p.consumeAs(SyntaxKindError)
 		}
 	}
 
@@ -734,28 +675,27 @@ func (p *Parser) parseUseCaseBlock(counter *int) (*SyntaxNode, []craft.Diagnosti
 			Severity: craft.SeverityError,
 			Range:    tokenRange(ucTok),
 		})
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
-	return node, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseScenario parses one `when <trigger>` clause plus its following action lines.
 // counter is a shared global ID counter (pointer) for scenario_N / action_N IDs,
 // matching ANTLR's numbering scheme where both scenarios and actions share one counter.
-func (p *Parser) parseScenario(counter *int) (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindScenario}
+func (p *Parser) parseScenario(counter *int) []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindScenario)
 	var diags []craft.Diagnostic
 
 	// consume `when` as contextual keyword
 	whenTok := p.peek()
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwWhen))
+	p.consumeAs(SyntaxKindKwWhen)
 
-	triggerNode, d := p.parseTrigger(whenTok.Line)
+	d := p.parseTrigger(whenTok.Line)
 	diags = append(diags, d...)
-	if triggerNode != nil {
-		node.Children = append(node.Children, triggerNode)
-	}
 
 	*counter++
 
@@ -766,76 +706,77 @@ func (p *Parser) parseScenario(counter *int) (*SyntaxNode, []craft.Diagnostic) {
 		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
 			break
 		}
-		actionNode, d := p.parseAction(counter)
+		d := p.parseAction(counter)
 		diags = append(diags, d...)
-		if actionNode != nil {
-			node.Children = append(node.Children, actionNode)
-		}
 	}
 
-	return node, diags
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseTrigger parses the `<actor/domain> <verb> <phrase>` part after `when`.
 // Two forms:
 //   - external:      `when <actor> <verb> <phrase>`
 //   - domain_listen: `when <domain> listens "<event>"`
-func (p *Parser) parseTrigger(whenLine int) (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindTrigger}
+func (p *Parser) parseTrigger(whenLine int) []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindTrigger)
 	var diags []craft.Diagnostic
 
 	// event trigger: when "<EventName>"  (no subject identifier)
 	if p.peek().Type == lexer.TokenString {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindString))
-		return node, diags
+		p.consumeAs(SyntaxKindString)
+		p.builder.FinishNode()
+		return diags
 	}
 
 	// The first token is the actor/domain subject.
 	subjectTok := p.peek()
 	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
 		diags = append(diags, p.diagUnexpected(subjectTok, "trigger subject (actor/domain name)"))
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 	subjectKind := SyntaxKindIdent
-	if k, found := lexerKindToSyntaxKind[subjectTok.Type]; found {
+	if k, found := lexerKindToSyntaxKindMap[subjectTok.Type]; found {
 		subjectKind = k
 	}
-	node.Children = append(node.Children, p.consumeAs(subjectKind))
+	p.consumeAs(subjectKind)
 
 	// The second token is the verb.  If it is `listens` (ident), this is domain_listen.
 	verbTok := p.peek()
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
 		// No verb token — treat as a partial trigger.
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 	verb := verbTok.Value
 
 	if verb == "listens" {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindKwListens))
+		p.consumeAs(SyntaxKindKwListens)
 		// domain_listen: when <domain> listens "<event>"
 		eventTok := p.peek()
 		if eventTok.Type == lexer.TokenString {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindString))
+			p.consumeAs(SyntaxKindString)
 		} else if eventTok.Type == lexer.TokenIdent {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		}
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 
 	// external: when <actor> <verb> [connector_word] <phrase>
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+	p.consumeAs(SyntaxKindIdent)
 
 	// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
-	// When present, it is stripped from the phrase (matching ANTLR trigger description format).
 	connTok := p.peek()
 	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == verbTok.Line {
-		// consume connector_word
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		p.consumeAs(SyntaxKindIdent)
 	}
 	// Collect phrase tokens on the same line.
-	p.collectPhraseIntoNode(verbTok.Line, node)
+	p.collectPhrase(verbTok.Line)
 
-	return node, diags
+	p.builder.FinishNode()
+	return diags
 }
 
 // isConnectorWord returns true for ANTLR grammar connector_word tokens.
@@ -857,30 +798,32 @@ func isConnectorWord(v string) bool {
 //	<domain> notifies "<event>"              → async_action
 //	<domain> returns [to <target>] <phrase>  → return_action
 //	<domain> <verb> <phrase>                 → internal_action
-func (p *Parser) parseAction(counter *int) (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindAction}
+func (p *Parser) parseAction(counter *int) []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindAction)
 	var diags []craft.Diagnostic
 
 	subjectTok := p.peek()
 	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
 		// Not an action line — skip the token.
 		diags = append(diags, p.diagUnexpected(subjectTok, "action subject (domain/service name) or `when`"))
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindError))
-		return node, diags
+		p.consumeAs(SyntaxKindError)
+		p.builder.FinishNode()
+		return diags
 	}
 	actionLine := subjectTok.Line
 	subjectKind := SyntaxKindIdent
-	if k, found := lexerKindToSyntaxKind[subjectTok.Type]; found {
+	if k, found := lexerKindToSyntaxKindMap[subjectTok.Type]; found {
 		subjectKind = k
 	}
-	node.Children = append(node.Children, p.consumeAs(subjectKind))
+	p.consumeAs(subjectKind)
 
 	verbTok := p.peek()
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
 		// No verb — treat as minimal internal action.
 		*counter++
 		*counter++
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
 	verb := verbTok.Value
 
@@ -888,134 +831,129 @@ func (p *Parser) parseAction(counter *int) (*SyntaxNode, []craft.Diagnostic) {
 
 	switch verb {
 	case "asks":
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindKwAsks))
-		d := p.parseAsksAction(actionLine, &diags, node)
-		return node, d
+		p.consumeAs(SyntaxKindKwAsks)
+		p.parseAsksAction(actionLine)
+		p.builder.FinishNode()
+		return diags
 	case "notifies":
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindKwNotifies))
-		d := p.parseNotifiesAction(&diags, node)
-		return node, d
+		p.consumeAs(SyntaxKindKwNotifies)
+		d := p.parseNotifiesAction()
+		diags = append(diags, d...)
+		p.builder.FinishNode()
+		return diags
 	case "returns":
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindKwReturns))
-		d := p.parseReturnsAction(actionLine, &diags, node)
-		return node, d
+		p.consumeAs(SyntaxKindKwReturns)
+		p.parseReturnsAction(actionLine)
+		p.builder.FinishNode()
+		return diags
 	default:
 		// internal_action: <domain> <verb> [connector_word] <phrase>
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		p.consumeAs(SyntaxKindIdent)
 		// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
 		connTok := p.peek()
 		if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == actionLine {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		}
-		p.collectPhraseIntoNode(actionLine, node)
-		return node, diags
+		p.collectPhrase(actionLine)
+		p.builder.FinishNode()
+		return diags
 	}
 }
 
-// parseAsksAction parses: <domain> asks <target> to|for <phrase>
-// The `asks` keyword token has already been consumed and added to node by parseAction.
-func (p *Parser) parseAsksAction(line int, diags *[]craft.Diagnostic, node *SyntaxNode) []craft.Diagnostic {
+// parseAsksAction parses: <target> to|for <phrase>
+// The `asks` keyword token has already been consumed by parseAction.
+func (p *Parser) parseAsksAction(line int) {
 	targetTok := p.peek()
 	if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		p.consumeAs(SyntaxKindIdent)
 	}
 
 	// connector: "to" or "for"
 	connTok := p.peek()
 	if connTok.Type == lexer.TokenIdent && (connTok.Value == "to" || connTok.Value == "for") {
 		if connTok.Value == "to" {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindKwTo))
+			p.consumeAs(SyntaxKindKwTo)
 		} else {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		}
 	}
 
-	p.collectPhraseIntoNode(line, node)
-	return *diags
+	p.collectPhrase(line)
 }
 
-// parseNotifiesAction parses: <domain> notifies "<event>"
-// The `notifies` keyword token has already been consumed and added to node by parseAction.
-func (p *Parser) parseNotifiesAction(diags *[]craft.Diagnostic, node *SyntaxNode) []craft.Diagnostic {
+// parseNotifiesAction parses the "<event>" or event-ident after `notifies`.
+func (p *Parser) parseNotifiesAction() []craft.Diagnostic {
+	var diags []craft.Diagnostic
 	eventTok := p.peek()
 	if eventTok.Type == lexer.TokenString {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindString))
+		p.consumeAs(SyntaxKindString)
 	} else if eventTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(eventTok.Type) {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		p.consumeAs(SyntaxKindIdent)
 	} else if eventTok.Type == lexer.TokenError {
-		*diags = append(*diags, p.diagUnterminatedString(eventTok))
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindError))
+		diags = append(diags, p.diagUnterminatedString(eventTok))
+		p.consumeAs(SyntaxKindError)
 	}
-	return *diags
+	return diags
 }
 
-// parseReturnsAction parses: <domain> returns [to <target>] [connector_word] <phrase>
-// The `returns` keyword token has already been consumed and added to node by parseAction.
-func (p *Parser) parseReturnsAction(line int, diags *[]craft.Diagnostic, node *SyntaxNode) []craft.Diagnostic {
+// parseReturnsAction parses [to <target>] [connector_word] <phrase> after `returns`.
+func (p *Parser) parseReturnsAction(line int) {
 	// Check for optional `to <target>`
 	if p.peek().Type == lexer.TokenIdent && p.peek().Value == "to" {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindKwTo))
+		p.consumeAs(SyntaxKindKwTo)
 		targetTok := p.peek()
 		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		}
 	}
 
 	// Optional connector_word before phrase (ANTLR grammar: return_action connector_word? phrase)
 	connTok := p.peek()
 	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == line {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		p.consumeAs(SyntaxKindIdent)
 	}
 
-	p.collectPhraseIntoNode(line, node)
-	return *diags
+	p.collectPhrase(line)
 }
 
-
-// collectPhraseIntoNode collects phrase tokens on actionLine, appends them as
-// SyntaxToken children of node, and returns the phrase string (matching collectPhrase output).
-func (p *Parser) collectPhraseIntoNode(actionLine int, node *SyntaxNode) string {
+// collectPhrase emits phrase tokens on actionLine into the current builder scope.
+func (p *Parser) collectPhrase(actionLine int) {
 	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
-		return ""
+		return
 	}
 	if p.peek().Line != actionLine {
-		return ""
+		return
 	}
 	startLine := actionLine
-	var parts []string
 	for {
 		tok := p.peek()
 		switch tok.Type {
 		case lexer.TokenRBrace, lexer.TokenEOF:
-			return strings.Join(parts, " ")
+			return
 		case lexer.TokenIdent:
 			if tok.Line != startLine {
-				return strings.Join(parts, " ")
+				return
 			}
-			parts = append(parts, tok.Value)
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		case lexer.TokenString:
 			if tok.Line != startLine {
-				return strings.Join(parts, " ")
+				return
 			}
-			parts = append(parts, tok.Value)
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindString))
+			p.consumeAs(SyntaxKindString)
 		case lexer.TokenNumber:
 			if tok.Line != startLine {
-				return strings.Join(parts, " ")
+				return
 			}
-			parts = append(parts, tok.Value)
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindNumber))
+			p.consumeAs(SyntaxKindNumber)
 		default:
 			if isAnyKeywordAsIdent(tok.Type) {
 				if tok.Line != startLine {
-					return strings.Join(parts, " ")
+					return
 				}
-				parts = append(parts, tok.Value)
-				node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+				p.consumeAs(SyntaxKindIdent)
 				continue
 			}
-			return strings.Join(parts, " ")
+			return
 		}
 	}
 }
@@ -1024,31 +962,30 @@ func (p *Parser) collectPhraseIntoNode(actionLine int, node *SyntaxNode) string 
 
 // parseArchBlock parses: arch <name>? { <arch_sections> }
 // where arch_sections is one or more presentation: or gateway: labelled lists.
-func (p *Parser) parseArchBlock() (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindArchDecl}
+func (p *Parser) parseArchBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindArchDecl)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `arch`.
-	for _, t := range p.collectTrivia() {
-		node.Children = append(node.Children, t)
-	}
+	// Attach leading trivia before `arch`.
+	p.attachTrivia()
 
 	archTok := p.peek()
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwArch))
+	p.consumeAs(SyntaxKindKwArch)
 
 	// Optional name: an identifier that is NOT `{`.
 	if p.peek().Type == lexer.TokenIdent || isAnyKeywordAsIdent(p.peek().Type) {
 		if p.peek().Type != lexer.TokenLBrace {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		}
 	}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
+	p.consumeAs(SyntaxKindLBrace)
 
 	// Parse sections until `}` or EOF.
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
@@ -1060,25 +997,22 @@ func (p *Parser) parseArchBlock() (*SyntaxNode, []craft.Diagnostic) {
 			label := tok.Value
 			labelLine := tok.Line
 
-			sectionNode := &SyntaxNode{Kind: SyntaxKindArchSection}
+			p.builder.StartNode(SyntaxKindArchSection)
 
 			// Consume label as contextual keyword.
 			switch label {
 			case "presentation":
-				sectionNode.Children = append(sectionNode.Children, p.consumeAs(SyntaxKindKwPresentation))
+				p.consumeAs(SyntaxKindKwPresentation)
 			case "gateway":
-				sectionNode.Children = append(sectionNode.Children, p.consumeAs(SyntaxKindKwGateway))
+				p.consumeAs(SyntaxKindKwGateway)
 			default:
-				sectionNode.Children = append(sectionNode.Children, p.consumeAs(SyntaxKindIdent))
+				p.consumeAs(SyntaxKindIdent)
 			}
-			sectionNode.Children = append(sectionNode.Children, p.consumeAs(SyntaxKindColon))
+			p.consumeAs(SyntaxKindColon)
 
-			_, componentNodes, d := p.parseArchComponentListWithNodes()
+			d := p.parseArchComponentList()
 			diags = append(diags, d...)
-			for _, cn := range componentNodes {
-				sectionNode.Children = append(sectionNode.Children, cn)
-			}
-			node.Children = append(node.Children, sectionNode)
+			p.builder.FinishNode()
 
 			if label != "presentation" && label != "gateway" {
 				// Unknown section label — warn.
@@ -1092,7 +1026,7 @@ func (p *Parser) parseArchBlock() (*SyntaxNode, []craft.Diagnostic) {
 		} else {
 			// Unexpected token in arch body — skip.
 			diags = append(diags, p.diagUnexpected(tok, "arch section label (presentation or gateway) or `}`"))
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindError))
+			p.consumeAs(SyntaxKindError)
 		}
 	}
 
@@ -1103,16 +1037,17 @@ func (p *Parser) parseArchBlock() (*SyntaxNode, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(archTok),
 		})
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
-	return node, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
-
-// parseArchComponentListWithNodes parses an arch component list and returns SyntaxNodes.
-func (p *Parser) parseArchComponentListWithNodes() ([]struct{}, []*SyntaxNode, []craft.Diagnostic) {
-	var nodes []*SyntaxNode
+// parseArchComponentList parses an arch component list, emitting ArchComponent
+// nodes into the current builder scope.
+func (p *Parser) parseArchComponentList() []craft.Diagnostic {
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
@@ -1128,43 +1063,41 @@ func (p *Parser) parseArchComponentListWithNodes() ([]struct{}, []*SyntaxNode, [
 			continue
 		}
 
-		compNode, d := p.parseArchComponentWithNode()
+		d := p.parseArchComponent()
 		diags = append(diags, d...)
-		if compNode != nil {
-			nodes = append(nodes, compNode)
-		}
 	}
-	return nil, nodes, diags
+	return diags
 }
 
-// parseArchComponentWithNode parses a single component entry and builds a SyntaxNode.
-func (p *Parser) parseArchComponentWithNode() (*SyntaxNode, []craft.Diagnostic) {
-	compNode := &SyntaxNode{Kind: SyntaxKindArchComponent}
+// parseArchComponent parses a single component entry as an ArchComponent node.
+// Flow chains (a > b > c) become a single ArchComponent node containing all
+// sub-components and the `>` tokens (matching prior behavior).
+func (p *Parser) parseArchComponent() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindArchComponent)
 	var diags []craft.Diagnostic
 
 	// Parse the first component with optional modifiers.
-	ok, d := p.parseComponentWithModifiersNode(compNode)
+	ok, d := p.parseComponentWithModifiers()
 	diags = append(diags, d...)
 	if !ok {
-		return compNode, diags
+		p.builder.FinishNode()
+		return diags
 	}
 
 	// Flow chain: collect all components separated by `>`.
 	for p.peek().Type == lexer.TokenGT {
-		compNode.Children = append(compNode.Children, p.consumeAs(SyntaxKindGT))
-		nextCompNode := &SyntaxNode{Kind: SyntaxKindArchComponent}
-		_, d := p.parseComponentWithModifiersNode(nextCompNode)
+		p.consumeAs(SyntaxKindGT)
+		_, d := p.parseComponentWithModifiers()
 		diags = append(diags, d...)
-		// Flatten nextCompNode children into compNode.
-		compNode.Children = append(compNode.Children, nextCompNode.Children...)
 	}
 
-	return compNode, diags
+	p.builder.FinishNode()
+	return diags
 }
 
-// parseComponentWithModifiersNode appends component tokens to node.
-// Returns true if a component was parsed successfully.
-func (p *Parser) parseComponentWithModifiersNode(node *SyntaxNode) (bool, []craft.Diagnostic) {
+// parseComponentWithModifiers emits component tokens (name + optional modifiers)
+// directly into the current builder scope. Returns true if a component was parsed.
+func (p *Parser) parseComponentWithModifiers() (bool, []craft.Diagnostic) {
 	var diags []craft.Diagnostic
 
 	nameTok := p.peek()
@@ -1172,17 +1105,14 @@ func (p *Parser) parseComponentWithModifiersNode(node *SyntaxNode) (bool, []craf
 		diags = append(diags, p.diagUnexpected(nameTok, "component name"))
 		return false, diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+	p.consumeAs(SyntaxKindIdent)
 
 	if p.peek().Type == lexer.TokenLBracket {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindLBracket))
-		modNodes, d := p.parseModifierListWithNodes()
+		p.consumeAs(SyntaxKindLBracket)
+		d := p.parseModifierList()
 		diags = append(diags, d...)
-		for _, mn := range modNodes {
-			node.Children = append(node.Children, mn)
-		}
 		if p.peek().Type == lexer.TokenRBracket {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindRBracket))
+			p.consumeAs(SyntaxKindRBracket)
 		} else {
 			diags = append(diags, p.diagUnexpected(p.peek(), "]"))
 		}
@@ -1191,9 +1121,8 @@ func (p *Parser) parseComponentWithModifiersNode(node *SyntaxNode) (bool, []craf
 	return true, diags
 }
 
-// parseModifierListWithNodes parses modifier list and returns SyntaxNodes.
-func (p *Parser) parseModifierListWithNodes() ([]*SyntaxNode, []craft.Diagnostic) {
-	var nodes []*SyntaxNode
+// parseModifierList emits ArchModifier nodes into the current builder scope.
+func (p *Parser) parseModifierList() []craft.Diagnostic {
 	var diags []craft.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBracket {
@@ -1203,29 +1132,29 @@ func (p *Parser) parseModifierListWithNodes() ([]*SyntaxNode, []craft.Diagnostic
 			p.consume()
 			continue
 		}
-		modNode := &SyntaxNode{Kind: SyntaxKindArchModifier}
-		modNode.Children = append(modNode.Children, p.consumeAs(SyntaxKindIdent))
+		p.builder.StartNode(SyntaxKindArchModifier)
+		p.consumeAs(SyntaxKindIdent)
 
 		if p.peek().Type == lexer.TokenColon {
-			modNode.Children = append(modNode.Children, p.consumeAs(SyntaxKindColon))
+			p.consumeAs(SyntaxKindColon)
 			valTok := p.peek()
 			switch valTok.Type {
 			case lexer.TokenIdent:
-				modNode.Children = append(modNode.Children, p.consumeAs(SyntaxKindIdent))
+				p.consumeAs(SyntaxKindIdent)
 			case lexer.TokenString:
-				modNode.Children = append(modNode.Children, p.consumeAs(SyntaxKindString))
+				p.consumeAs(SyntaxKindString)
 			case lexer.TokenNumber, lexer.TokenPercentage:
-				modNode.Children = append(modNode.Children, p.consumeAs(SyntaxKindNumber))
+				p.consumeAs(SyntaxKindNumber)
 			default:
 				if isAnyKeywordAsIdent(valTok.Type) {
-					modNode.Children = append(modNode.Children, p.consumeAs(SyntaxKindIdent))
+					p.consumeAs(SyntaxKindIdent)
 				} else {
 					diags = append(diags, p.diagUnexpected(valTok, "modifier value (identifier, string, or number)"))
 				}
 			}
 		}
 
-		nodes = append(nodes, modNode)
+		p.builder.FinishNode()
 
 		if p.peek().Type == lexer.TokenComma {
 			p.consume() // consume `,`
@@ -1233,10 +1162,8 @@ func (p *Parser) parseModifierListWithNodes() ([]*SyntaxNode, []craft.Diagnostic
 			break
 		}
 	}
-	return nodes, diags
+	return diags
 }
-
-
 
 // peekAt returns the Nth non-comment token at or after p.pos without advancing.
 // offset=0 is equivalent to peek(); offset=1 is the token after that, etc.
@@ -1272,8 +1199,8 @@ func isAnyKeywordAsIdent(tt lexer.TokenType) bool {
 
 // --- helpers ---
 
-// isActorTypeToken returns true if the token is a valid actor type.
-// Q5: any identifier is a valid actor type (open taxonomy).
+// tokenToActorType returns the actor-type string and true if tok is a valid
+// actor type. Q5: any identifier is a valid actor type (open taxonomy).
 func tokenToActorType(tok lexer.Token) (string, bool) {
 	switch tok.Type {
 	case lexer.TokenKwUser:
@@ -1292,7 +1219,8 @@ func tokenToActorType(tok lexer.Token) (string, bool) {
 }
 
 // resyncToTopLevel discards tokens until it finds a known top-level keyword
-// or EOF, so the main loop can continue from a clean state.
+// or EOF, so the main loop can continue from a clean state. The skipped tokens
+// are emitted into the builder so the lossless invariant is preserved.
 func (p *Parser) resyncToTopLevel() {
 	for !p.atEOF() {
 		tok := p.peek()
@@ -1327,114 +1255,114 @@ func (p *Parser) peek() lexer.Token {
 	return lexer.Token{Type: lexer.TokenEOF}
 }
 
-// consume advances past any comment tokens at p.pos, then consumes and returns
-// the next meaningful token (advancing p.pos past it as well).
-func (p *Parser) consume() lexer.Token {
-	// skip leading comments
+// attachTrivia emits any line/block comment tokens at p.pos into the current
+// builder scope, advancing p.pos past each one collected.
+// Call this before consume/consumeAs to capture leading trivia.
+func (p *Parser) attachTrivia() {
 	for p.pos < len(p.tokens) {
-		tt := p.tokens[p.pos].Type
-		if tt != lexer.TokenLineComment && tt != lexer.TokenBlockComment {
-			break
-		}
-		p.pos++
-	}
-	if p.pos < len(p.tokens) {
 		tok := p.tokens[p.pos]
-		p.pos++
-		return tok
+		switch tok.Type {
+		case lexer.TokenLineComment:
+			p.builder.Token(SyntaxKindLineComment, tok.Value)
+			p.pos++
+		case lexer.TokenBlockComment:
+			p.builder.Token(SyntaxKindBlockComment, tok.Value)
+			p.pos++
+		default:
+			return
+		}
 	}
-	return lexer.Token{Type: lexer.TokenEOF}
+}
+
+// consume advances past the current non-trivia token and emits it into the builder
+// using its lexer-mapped SyntaxKind. Trivia before it is attached automatically.
+func (p *Parser) consume() lexer.Token {
+	p.attachTrivia()
+	if p.pos >= len(p.tokens) {
+		return lexer.Token{Type: lexer.TokenEOF}
+	}
+	tok := p.tokens[p.pos]
+	p.pos++
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value)
+	return tok
+}
+
+// consumeAs advances past the current token, emitting it into the builder with
+// the given kind. Trivia before it is attached automatically.
+func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
+	p.attachTrivia()
+	if p.pos >= len(p.tokens) {
+		return lexer.Token{Type: lexer.TokenEOF}
+	}
+	tok := p.tokens[p.pos]
+	p.pos++
+	p.builder.Token(kind, tok.Value)
+	return tok
 }
 
 func (p *Parser) atEOF() bool {
 	return p.peek().Type == lexer.TokenEOF
 }
 
-// collectTrivia collects any comment tokens at p.pos and returns them as
-// []*SyntaxToken, advancing p.pos past each one collected.
-// Call this before consumeAs to capture leading trivia.
-func (p *Parser) collectTrivia() []*SyntaxToken {
-	var trivia []*SyntaxToken
-	for p.pos < len(p.tokens) {
-		tok := p.tokens[p.pos]
-		switch tok.Type {
-		case lexer.TokenLineComment:
-			trivia = append(trivia, &SyntaxToken{
-				Kind:  SyntaxKindLineComment,
-				Value: tok.Value,
-				Line:  tok.Line,
-				Col:   tok.Column,
-			})
-			p.pos++
-		case lexer.TokenBlockComment:
-			trivia = append(trivia, &SyntaxToken{
-				Kind:  SyntaxKindBlockComment,
-				Value: tok.Value,
-				Line:  tok.Line,
-				Col:   tok.Column,
-			})
-			p.pos++
-		default:
-			return trivia
-		}
-	}
-	return trivia
-}
-
-// consumeAs converts the current non-comment lexer token into a *SyntaxToken
-// with the given kind, advancing p.pos past it.
-// Any buffered comment tokens before the meaningful token are skipped
-// (they should be collected via collectTrivia beforehand).
-func (p *Parser) consumeAs(kind SyntaxKind) *SyntaxToken {
-	// skip any leading comments (trivia already collected by caller)
-	for p.pos < len(p.tokens) {
-		tt := p.tokens[p.pos].Type
-		if tt != lexer.TokenLineComment && tt != lexer.TokenBlockComment {
-			break
-		}
-		p.pos++
-	}
-	tok := p.consume()
-	return &SyntaxToken{
-		Kind:  kind,
-		Value: tok.Value,
-		Line:  tok.Line,
-		Col:   tok.Column,
+// snapshot saves builder + parser position for speculative parsing.
+func (p *Parser) snapshot() green.BuilderSnapshot {
+	return green.BuilderSnapshot{
+		ParentsLen:  len(p.builder.Parents()),
+		ChildrenLen: len(p.builder.Children()),
+		TokPos:      p.pos,
 	}
 }
 
-// lexerKindToSyntaxKind maps hard lexer token types to SyntaxKind values.
-// Used in Tasks 5+6 when building SyntaxTokens from lexer tokens.
-var lexerKindToSyntaxKind = map[lexer.TokenType]SyntaxKind{
-	lexer.TokenKwActor:       SyntaxKindKwActor,
-	lexer.TokenKwActors:      SyntaxKindKwActors,
-	lexer.TokenKwUser:        SyntaxKindKwUser,
-	lexer.TokenKwSystem:      SyntaxKindKwSystem,
-	lexer.TokenKwService:     SyntaxKindKwService,
-	lexer.TokenKwDomain:      SyntaxKindKwDomain,
-	lexer.TokenKwDomains:     SyntaxKindKwDomains,
-	lexer.TokenKwServices:    SyntaxKindKwServices,
-	lexer.TokenKwUseCase:     SyntaxKindKwUseCase,
-	lexer.TokenKwArch:        SyntaxKindKwArch,
-	lexer.TokenKwExposure:    SyntaxKindKwExposure,
-	lexer.TokenIdent:         SyntaxKindIdent,
-	lexer.TokenString:        SyntaxKindString,
-	lexer.TokenNumber:        SyntaxKindNumber,
-	lexer.TokenPercentage:    SyntaxKindPercentage,
-	lexer.TokenLBrace:        SyntaxKindLBrace,
-	lexer.TokenRBrace:        SyntaxKindRBrace,
-	lexer.TokenLParen:        SyntaxKindLParen,
-	lexer.TokenRParen:        SyntaxKindRParen,
-	lexer.TokenLBracket:      SyntaxKindLBracket,
-	lexer.TokenRBracket:      SyntaxKindRBracket,
-	lexer.TokenColon:         SyntaxKindColon,
-	lexer.TokenComma:         SyntaxKindComma,
-	lexer.TokenGT:            SyntaxKindGT,
-	lexer.TokenArrow:         SyntaxKindArrow,
-	lexer.TokenError:         SyntaxKindError,
-	lexer.TokenEOF:           SyntaxKindEOF,
-	lexer.TokenLineComment:   SyntaxKindLineComment,
-	lexer.TokenBlockComment:  SyntaxKindBlockComment,
+// rollback restores builder + parser to a prior snapshot.
+func (p *Parser) rollback(s green.BuilderSnapshot) {
+	p.builder.SetParents(p.builder.Parents()[:s.ParentsLen])
+	p.builder.SetChildren(p.builder.Children()[:s.ChildrenLen])
+	p.pos = s.TokPos
+}
+
+// lexerKindToSyntaxKind maps a lexer.TokenType to its default SyntaxKind for
+// emission into the green tree. Token types without a direct mapping fall back
+// to SyntaxKindIdent.
+func lexerKindToSyntaxKind(tt lexer.TokenType) SyntaxKind {
+	if k, ok := lexerKindToSyntaxKindMap[tt]; ok {
+		return k
+	}
+	return SyntaxKindIdent
+}
+
+// lexerKindToSyntaxKindMap maps lexer token types to SyntaxKind values for
+// default emission. Several call sites also use this for keyword-specific kinds
+// (e.g., mapping TokenKwUser to SyntaxKindKwUser when used as an actor type).
+var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
+	lexer.TokenKwActor:      SyntaxKindKwActor,
+	lexer.TokenKwActors:     SyntaxKindKwActors,
+	lexer.TokenKwUser:       SyntaxKindKwUser,
+	lexer.TokenKwSystem:     SyntaxKindKwSystem,
+	lexer.TokenKwService:    SyntaxKindKwService,
+	lexer.TokenKwDomain:     SyntaxKindKwDomain,
+	lexer.TokenKwDomains:    SyntaxKindKwDomains,
+	lexer.TokenKwServices:   SyntaxKindKwServices,
+	lexer.TokenKwUseCase:    SyntaxKindKwUseCase,
+	lexer.TokenKwArch:       SyntaxKindKwArch,
+	lexer.TokenKwExposure:   SyntaxKindKwExposure,
+	lexer.TokenIdent:        SyntaxKindIdent,
+	lexer.TokenString:       SyntaxKindString,
+	lexer.TokenNumber:       SyntaxKindNumber,
+	lexer.TokenPercentage:   SyntaxKindPercentage,
+	lexer.TokenLBrace:       SyntaxKindLBrace,
+	lexer.TokenRBrace:       SyntaxKindRBrace,
+	lexer.TokenLParen:       SyntaxKindLParen,
+	lexer.TokenRParen:       SyntaxKindRParen,
+	lexer.TokenLBracket:     SyntaxKindLBracket,
+	lexer.TokenRBracket:     SyntaxKindRBracket,
+	lexer.TokenColon:        SyntaxKindColon,
+	lexer.TokenComma:        SyntaxKindComma,
+	lexer.TokenGT:           SyntaxKindGT,
+	lexer.TokenArrow:        SyntaxKindArrow,
+	lexer.TokenError:        SyntaxKindError,
+	lexer.TokenEOF:          SyntaxKindEOF,
+	lexer.TokenLineComment:  SyntaxKindLineComment,
+	lexer.TokenBlockComment: SyntaxKindBlockComment,
 }
 
 func (p *Parser) diagUnexpected(tok lexer.Token, expected string) craft.Diagnostic {
@@ -1510,87 +1438,84 @@ func tokenRange(tok lexer.Token) craft.Range {
 
 // parseExposureBlock parses: exposure <name> { to: ... contexts: ... through: ... }
 // Field keywords (to, contexts, through) are contextual identifiers per Q3.
-func (p *Parser) parseExposureBlock() (*SyntaxNode, []craft.Diagnostic) {
-	node := &SyntaxNode{Kind: SyntaxKindExposureDecl}
+func (p *Parser) parseExposureBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindExposureDecl)
 	var diags []craft.Diagnostic
 
-	// Collect leading trivia before `exposure`.
-	for _, t := range p.collectTrivia() {
-		node.Children = append(node.Children, t)
-	}
+	// Attach leading trivia before `exposure`.
+	p.attachTrivia()
 
 	kwTok := p.peek()
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindKwExposure))
+	p.consumeAs(SyntaxKindKwExposure)
 
 	// Exposure name: any identifier or keyword-used-as-identifier (including "default").
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenIdent && !isKeywordUsedAsIdent(nameTok.Type) {
 		diags = append(diags, p.diagUnexpected(nameTok, "exposure name"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+	p.consumeAs(SyntaxKindIdent)
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
 		p.resyncToTopLevel()
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindLBrace))
-
-	// throughRuleNode accumulates a single DeploymentRule node for the through: field.
-	// We defer creation until we actually find `through:`.
-	var throughRuleNode *SyntaxNode
+	p.consumeAs(SyntaxKindLBrace)
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
 		if tok.Type != lexer.TokenIdent {
 			diags = append(diags, p.diagUnexpected(tok, "field name (to, contexts, through) or `}`"))
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindError))
+			p.consumeAs(SyntaxKindError)
 			continue
 		}
 		fieldName := tok.Value
 
+		if fieldName == "through" {
+			// Wrap the through field (kw + colon + value list) in a
+			// DeploymentRule node via a checkpoint so it becomes a single subtree.
+			cp := p.builder.Checkpoint()
+			p.consumeAs(SyntaxKindKwThrough)
+
+			if p.peek().Type != lexer.TokenColon {
+				diags = append(diags, p.diagUnexpected(p.peek(), ":"))
+				// Wrap what we have so far as the rule node and continue.
+				p.builder.StartNodeAt(cp, SyntaxKindDeploymentRule)
+				p.builder.FinishNode()
+				continue
+			}
+			p.consumeAs(SyntaxKindColon)
+			p.parseIdentList()
+			p.builder.StartNodeAt(cp, SyntaxKindDeploymentRule)
+			p.builder.FinishNode()
+			continue
+		}
+
 		// Consume field name as contextual keyword.
 		switch fieldName {
 		case "to":
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindKwTo))
+			p.consumeAs(SyntaxKindKwTo)
 		case "contexts":
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindKwContexts))
-		case "through":
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindKwThrough))
+			p.consumeAs(SyntaxKindKwContexts)
 		default:
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		}
 
 		if p.peek().Type != lexer.TokenColon {
 			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
 			continue
 		}
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindColon))
+		p.consumeAs(SyntaxKindColon)
 
 		switch fieldName {
 		case "to":
-			p.parseIdentListIntoNode(node)
+			p.parseIdentList()
 		case "contexts":
-			p.parseIdentListIntoNode(node)
-		case "through":
-			// Build a DeploymentRule node containing the `through` keyword token (already added)
-			// and value tokens.
-			if throughRuleNode == nil {
-				// Rebuild: the `through` kw and `:` tokens were already added to node.Children,
-				// so we create a new DeploymentRule node that holds only the value tokens.
-				// For structural clarity, the DeploymentRule node holds the `through` keyword
-				// and value, so we must wrap them. We'll remove the last 2 tokens from
-				// node.Children (through kw + colon) and put them into the rule node instead.
-				throughRuleNode = &SyntaxNode{Kind: SyntaxKindDeploymentRule}
-				// Move the last 2 children (through kw + colon) from node to throughRuleNode.
-				n := len(node.Children)
-				throughRuleNode.Children = append(throughRuleNode.Children, node.Children[n-2], node.Children[n-1])
-				node.Children = node.Children[:n-2]
-			}
-			p.parseIdentListIntoNode(throughRuleNode)
-			node.Children = append(node.Children, throughRuleNode)
+			p.parseIdentList()
 		default:
 			p.skipToNextField()
 		}
@@ -1603,75 +1528,50 @@ func (p *Parser) parseExposureBlock() (*SyntaxNode, []craft.Diagnostic) {
 			Severity: craft.SeverityError,
 			Range:    tokenRange(kwTok),
 		})
-		return node, diags
+		p.builder.FinishNode()
+		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindRBrace))
-	return node, diags
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
 }
 
-// parseIdentListIntoNode parses a comma-separated ident list and appends tokens to node.
-func (p *Parser) parseIdentListIntoNode(node *SyntaxNode) []string {
-	var items []string
+// parseIdentList parses a comma-separated ident list, emitting tokens into the
+// current builder scope.
+func (p *Parser) parseIdentList() {
 	for {
 		tok := p.peek()
-		var val string
 		switch {
 		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
-			val = tok.Value
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		case isKeywordUsedAsIdent(tok.Type):
-			val = tok.Value
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		default:
-			return items
+			return
 		}
-		items = append(items, val)
 		if p.peek().Type == lexer.TokenComma {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindComma))
+			p.consumeAs(SyntaxKindComma)
 		} else {
 			break
 		}
 	}
-	return items
 }
 
-// parseIdentListWithLinesIntoNode parses a comma-separated ident list, appends tokens to node,
-// and returns both the values and their 1-based source lines.
-// Used for service contexts: field so that go-to-definition can match the cursor line.
-func (p *Parser) parseIdentListWithLinesIntoNode(node *SyntaxNode) ([]string, []int) {
-	var items []string
-	var lines []int
-	for {
-		tok := p.peek()
-		var val string
-		switch {
-		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
-			val = tok.Value
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
-		case isKeywordUsedAsIdent(tok.Type):
-			val = tok.Value
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
-		default:
-			return items, lines
-		}
-		items = append(items, val)
-		lines = append(lines, tok.Line)
-		if p.peek().Type == lexer.TokenComma {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindComma))
-		} else {
-			break
-		}
-	}
-	return items, lines
+// parseIdentListWithLines parses a comma-separated ident list, emitting tokens
+// into the current builder scope. (Lines are no longer tracked here — they can
+// be derived from the LineIndex via SyntaxToken offsets.)
+func (p *Parser) parseIdentListWithLines() {
+	p.parseIdentList()
 }
 
-// parseDeploymentSpecIntoNode parses deployment spec and appends tokens to node.
-func (p *Parser) parseDeploymentSpecIntoNode(node *SyntaxNode) []craft.Diagnostic {
+// parseDeploymentSpec parses a deployment spec, emitting tokens into the
+// current builder scope.
+func (p *Parser) parseDeploymentSpec() []craft.Diagnostic {
 	var diags []craft.Diagnostic
 
 	typeTok := p.peek()
 	if typeTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(typeTok.Type) {
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+		p.consumeAs(SyntaxKindIdent)
 	} else {
 		diags = append(diags, p.diagUnexpected(typeTok, "deployment type identifier"))
 		return diags
@@ -1680,7 +1580,7 @@ func (p *Parser) parseDeploymentSpecIntoNode(node *SyntaxNode) []craft.Diagnosti
 	if p.peek().Type != lexer.TokenLParen {
 		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindLParen))
+	p.consumeAs(SyntaxKindLParen)
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRParen {
 		pctTok := p.peek()
@@ -1689,24 +1589,24 @@ func (p *Parser) parseDeploymentSpecIntoNode(node *SyntaxNode) []craft.Diagnosti
 			p.consume()
 			continue
 		}
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindPercentage))
+		p.consumeAs(SyntaxKindPercentage)
 
 		if p.peek().Type != lexer.TokenArrow {
 			diags = append(diags, p.diagUnexpected(p.peek(), "->"))
 			p.consume()
 			continue
 		}
-		node.Children = append(node.Children, p.consumeAs(SyntaxKindArrow))
+		p.consumeAs(SyntaxKindArrow)
 
 		targetTok := p.peek()
 		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindIdent))
+			p.consumeAs(SyntaxKindIdent)
 		} else {
 			diags = append(diags, p.diagUnexpected(targetTok, "deployment target identifier"))
 		}
 
 		if p.peek().Type == lexer.TokenComma {
-			node.Children = append(node.Children, p.consumeAs(SyntaxKindComma))
+			p.consumeAs(SyntaxKindComma)
 		}
 	}
 
@@ -1719,6 +1619,7 @@ func (p *Parser) parseDeploymentSpecIntoNode(node *SyntaxNode) []craft.Diagnosti
 		})
 		return diags
 	}
-	node.Children = append(node.Children, p.consumeAs(SyntaxKindRParen))
+	p.consumeAs(SyntaxKindRParen)
 	return diags
 }
+
