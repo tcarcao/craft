@@ -265,6 +265,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	cursorLine := int(params.Position.Line) + 1     // convert to 1-based
 	cursorChar := int(params.Position.Character) + 1 // convert to 1-based
 	rm := s.ws.ResolutionMap()
+	wsSym := s.ws.WorkspaceSymbols()
 
 	// Walk services: match cursor against each context reference line so that
 	// go-to-definition fires when the cursor is on a `contexts:` entry.
@@ -348,6 +349,81 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 						return []protocol.Location{loc}, nil
 					}
 				}
+			}
+		}
+	}
+
+	// Walk exposures: to: → actor, through: → service, contexts: → domain/service.
+	for _, exp := range file.Exposures() {
+		for _, tok := range exp.ToTokens() {
+			tokLine, _ := f.LineIndex.LineCol(tok.Offset())
+			if tokLine != cursorLine {
+				continue
+			}
+			if sym, ok := wsSym.Actors[tok.Text()]; ok && sym.Line > 0 {
+				startChar := uint32(0)
+				if sym.Column > 0 {
+					startChar = uint32(sym.Column - 1)
+				}
+				return []protocol.Location{{
+					URI: protocol.DocumentURI(sym.URI),
+					Range: protocol.Range{
+						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+					},
+				}}, nil
+			}
+		}
+		for _, tok := range exp.ThroughTokens() {
+			tokLine, _ := f.LineIndex.LineCol(tok.Offset())
+			if tokLine != cursorLine {
+				continue
+			}
+			if sym, ok := wsSym.Services[tok.Text()]; ok && sym.Line > 0 {
+				startChar := uint32(0)
+				if sym.Column > 0 {
+					startChar = uint32(sym.Column - 1)
+				}
+				return []protocol.Location{{
+					URI: protocol.DocumentURI(sym.URI),
+					Range: protocol.Range{
+						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+					},
+				}}, nil
+			}
+		}
+		for _, tok := range exp.ContextsTokens() {
+			tokLine, _ := f.LineIndex.LineCol(tok.Offset())
+			if tokLine != cursorLine {
+				continue
+			}
+			name := tok.Text()
+			if sym, ok := wsSym.Domains[name]; ok && sym.Line > 0 {
+				startChar := uint32(0)
+				if sym.Column > 0 {
+					startChar = uint32(sym.Column - 1)
+				}
+				return []protocol.Location{{
+					URI: protocol.DocumentURI(sym.URI),
+					Range: protocol.Range{
+						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+					},
+				}}, nil
+			}
+			if sym, ok := wsSym.Services[name]; ok && sym.Line > 0 {
+				startChar := uint32(0)
+				if sym.Column > 0 {
+					startChar = uint32(sym.Column - 1)
+				}
+				return []protocol.Location{{
+					URI: protocol.DocumentURI(sym.URI),
+					Range: protocol.Range{
+						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+					},
+				}}, nil
 			}
 		}
 	}

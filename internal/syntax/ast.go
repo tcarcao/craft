@@ -1285,6 +1285,56 @@ func (e ExposureDecl) Contexts() []string { return e.parseExposureBody().Context
 // Through returns the `through:` names.
 func (e ExposureDecl) Through() []string { return e.parseExposureBody().Through }
 
+// exposureFieldTokens returns the ident tokens for a named exposure field.
+// kind must be the token kind used as the field keyword
+// (SyntaxKindKwTo, SyntaxKindKwThrough, SyntaxKindKwContexts).
+func (e ExposureDecl) exposureFieldTokens(kind SyntaxKind) []SyntaxToken {
+	tokens := scanBodyTokens(e.node)
+	for i, tok := range tokens {
+		if tok.Kind() != kind {
+			continue
+		}
+		if i+1 >= len(tokens) || tokens[i+1].Kind() != SyntaxKindColon {
+			continue
+		}
+		i += 2
+		var result []SyntaxToken
+		for i < len(tokens) {
+			t := tokens[i]
+			if t.Kind() == SyntaxKindRBrace {
+				break
+			}
+			if t.Kind() == SyntaxKindComma {
+				i++
+				continue
+			}
+			// Another field keyword followed by colon = new field.
+			if i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
+				break
+			}
+			if t.Kind() == SyntaxKindIdent || t.Kind() == SyntaxKindString {
+				result = append(result, t)
+			}
+			i++
+		}
+		return result
+	}
+	return nil
+}
+
+// ToTokens returns the ident tokens for the `to:` field values.
+func (e ExposureDecl) ToTokens() []SyntaxToken { return e.exposureFieldTokens(SyntaxKindKwTo) }
+
+// ThroughTokens returns the ident tokens for the `through:` field values.
+func (e ExposureDecl) ThroughTokens() []SyntaxToken {
+	return e.exposureFieldTokens(SyntaxKindKwThrough)
+}
+
+// ContextsTokens returns the ident tokens for the `contexts:` field values.
+func (e ExposureDecl) ContextsTokens() []SyntaxToken {
+	return e.exposureFieldTokens(SyntaxKindKwContexts)
+}
+
 // DeploymentRule is a typed view over a SyntaxKindDeploymentRule node.
 // In exposure blocks this wraps the 'through: <value>' clause.
 type DeploymentRule struct{ node SyntaxNode }

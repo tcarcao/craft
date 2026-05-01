@@ -491,3 +491,39 @@ func TestContextTokens_StillWorksAfterRefWrap(t *testing.T) {
 		}
 	}
 }
+
+func TestExposureTokenAccessors(t *testing.T) {
+	src := "actor user Alice\nactor user Bob\nservice PaySvc {\n  language: golang\n}\nexposure default {\n  to: Alice, Bob\n  through: PaySvc\n  contexts: Auth\n}"
+	gn, li, _ := syntax.Parse(src)
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	exps := file.Exposures()
+	if len(exps) != 1 {
+		t.Fatalf("want 1 exposure, got %d", len(exps))
+	}
+	exp := exps[0]
+
+	toToks := exp.ToTokens()
+	if len(toToks) != 2 {
+		t.Fatalf("ToTokens: want 2, got %d", len(toToks))
+	}
+	for i, want := range []string{"Alice", "Bob"} {
+		if toToks[i].Text() != want {
+			t.Errorf("ToTokens[%d] = %q, want %q", i, toToks[i].Text(), want)
+		}
+		line, _ := li.LineCol(toToks[i].Offset())
+		if line != 7 {
+			t.Errorf("ToTokens[%d] line = %d, want 7", i, line)
+		}
+	}
+
+	throughToks := exp.ThroughTokens()
+	if len(throughToks) != 1 || throughToks[0].Text() != "PaySvc" {
+		t.Errorf("ThroughTokens = %v, want [PaySvc]", throughToks)
+	}
+
+	ctxToks := exp.ContextsTokens()
+	if len(ctxToks) != 1 || ctxToks[0].Text() != "Auth" {
+		t.Errorf("ContextsTokens = %v, want [Auth]", ctxToks)
+	}
+}

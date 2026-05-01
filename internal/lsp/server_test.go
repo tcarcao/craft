@@ -2756,3 +2756,104 @@ func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
 		})
 	}
 }
+
+func TestDefinition_ExposureToTarget(t *testing.T) {
+	// L1: actor user Alice
+	// L2: service PaySvc {
+	// L3:   language: golang
+	// L4: }
+	// L5: exposure default {
+	// L6:   to: Alice
+	// L7:   through: PaySvc
+	// L8: }
+	const craftSrc = "actor user Alice\nservice PaySvc {\n  language: golang\n}\nexposure default {\n  to: Alice\n  through: PaySvc\n}"
+
+	tests := []struct {
+		name       string
+		cursorLine uint32 // 0-based
+		cursorChar uint32
+		wantLine   uint32
+		wantChar   uint32
+	}{
+		// "Alice" at line 5 (0-based), char 6 → actor Alice at line 0, char 11
+		{name: "to-actor", cursorLine: 5, cursorChar: 6, wantLine: 0, wantChar: 11},
+		// "PaySvc" at line 6, char 11 → service PaySvc at line 1, char 8
+		{name: "through-service", cursorLine: 6, cursorChar: 11, wantLine: 1, wantChar: 8},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			serverIn, testOut := io.Pipe()
+			testIn, serverOut := io.Pipe()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			defer testOut.Close()
+			go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+			br := bufio.NewReader(testIn)
+
+			id := 1
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize",
+				Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)}) //nolint:errcheck
+			readMsg(br)                                                                          //nolint:errcheck
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+			const uri = "file:///exposure_def.craft"
+			openParams, _ := json.Marshal(map[string]interface{}{
+				"textDocument": map[string]interface{}{
+					"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+				},
+			})
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+			time.Sleep(300 * time.Millisecond)
+
+			id++
+			defID := id
+			defParams, _ := json.Marshal(map[string]interface{}{
+				"textDocument": map[string]interface{}{"uri": uri},
+				"position":     map[string]interface{}{"line": tc.cursorLine, "character": tc.cursorChar},
+			})
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &defID, Method: "textDocument/definition", Params: defParams}) //nolint:errcheck
+
+			var defResp lspMsg
+			deadline := time.Now().Add(4 * time.Second)
+			for time.Now().Before(deadline) {
+				msg, err := readMsg(br)
+				if err != nil {
+					t.Fatalf("read: %v", err)
+				}
+				if msg.ID != nil && *msg.ID == defID {
+					defResp = msg
+					break
+				}
+			}
+			if defResp.ID == nil {
+				t.Fatal("timed out")
+			}
+			var locs []struct {
+				Range struct {
+					Start struct {
+						Line      uint32 `json:"line"`
+						Character uint32 `json:"character"`
+					} `json:"start"`
+				} `json:"range"`
+			}
+			if err := json.Unmarshal(defResp.Result, &locs); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if len(locs) == 0 {
+				t.Fatalf("empty locations; cursor (%d,%d)", tc.cursorLine, tc.cursorChar)
+			}
+			if locs[0].Range.Start.Line != tc.wantLine {
+				t.Errorf("line: got %d want %d", locs[0].Range.Start.Line, tc.wantLine)
+			}
+			if locs[0].Range.Start.Character != tc.wantChar {
+				t.Errorf("char: got %d want %d", locs[0].Range.Start.Character, tc.wantChar)
+			}
+
+			id2 := 99
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+			readMsg(br)                                                              //nolint:errcheck
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+		})
+	}
+}
