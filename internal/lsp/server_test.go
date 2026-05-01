@@ -2757,6 +2757,109 @@ func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
 	}
 }
 
+func TestRename_ActorName(t *testing.T) {
+	// L1: actor user Alice
+	// L2: use_case "T" {
+	// L3:   when Alice creates Session
+	// L4:     Alice asks Auth to validate
+	// L5: }
+	const craftSrc = "actor user Alice\nuse_case \"T\" {\n  when Alice creates Session\n    Alice asks Auth to validate\n}"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///rename_actor.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Cursor on "Alice" in line 0 (declaration), char 11 → rename to "Carol"
+	id++
+	renameID := id
+	renameParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": 11},
+		"newName":      "Carol",
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &renameID, Method: "textDocument/rename", Params: renameParams}) //nolint:errcheck
+
+	var renameResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == renameID {
+			renameResp = msg
+			break
+		}
+	}
+	if renameResp.ID == nil {
+		t.Fatal("timed out waiting for rename response")
+	}
+	if renameResp.Error != nil {
+		t.Fatalf("rename error: %s", renameResp.Error)
+	}
+
+	var rawEdit struct {
+		Changes map[string]json.RawMessage `json:"changes"`
+	}
+	if err := json.Unmarshal(renameResp.Result, &rawEdit); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if len(rawEdit.Changes) == 0 {
+		t.Fatal("no changes in workspace edit")
+	}
+
+	fileEdits, ok := rawEdit.Changes[uri]
+	if !ok {
+		t.Fatalf("no edits for %s; got keys: %v", uri, rawEdit.Changes)
+	}
+	type textEdit struct {
+		NewText string `json:"newText"`
+		Range   struct {
+			Start struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"start"`
+		} `json:"range"`
+	}
+	var edits []textEdit
+	if err := json.Unmarshal(fileEdits, &edits); err != nil {
+		t.Fatalf("unmarshal edits: %v", err)
+	}
+	// Expect 3 edits: declaration (line 0), trigger (line 2), action subject (line 3)
+	if len(edits) != 3 {
+		t.Fatalf("want 3 edits, got %d: %+v", len(edits), edits)
+	}
+	for _, e := range edits {
+		if e.NewText != "Carol" {
+			t.Errorf("edit newText = %q, want %q", e.NewText, "Carol")
+		}
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                              //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
 func TestDefinition_ExposureToTarget(t *testing.T) {
 	// L1: actor user Alice
 	// L2: service PaySvc {

@@ -70,6 +70,42 @@ func lspPosFromOffset(li green.LineIndex, src string, offset green.TextSize) pro
 	return protocol.Position{Line: lspLine(line), Character: startChar}
 }
 
+// findDeclNameAtLine returns the name token of the first actor, domain, or
+// service declaration whose name token falls on cursorLine (1-based).
+func findDeclNameAtLine(file syntax.File, li green.LineIndex, cursorLine int) *syntax.SyntaxToken {
+	for _, a := range file.Actors() {
+		tok := a.Name()
+		if tok == nil {
+			continue
+		}
+		line, _ := li.LineCol(tok.Offset())
+		if line == cursorLine {
+			return tok
+		}
+	}
+	for _, d := range file.Domains() {
+		tok := d.Name()
+		if tok == nil {
+			continue
+		}
+		line, _ := li.LineCol(tok.Offset())
+		if line == cursorLine {
+			return tok
+		}
+	}
+	for _, svc := range file.Services() {
+		tok := svc.Name()
+		if tok == nil {
+			continue
+		}
+		line, _ := li.LineCol(tok.Offset())
+		if line == cursorLine {
+			return tok
+		}
+	}
+	return nil
+}
+
 // Serve reads JSON-RPC messages from r and writes responses to w until the
 // client sends exit or the context is cancelled.
 func Serve(ctx context.Context, r io.Reader, w io.Writer) error {
@@ -144,6 +180,7 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			DocumentSymbolProvider: true,
 			HoverProvider:          true,
 			DefinitionProvider:     true,
+			RenameProvider:         true,
 			FoldingRangeProvider:        true,
 			DocumentFormattingProvider: true,
 			// SemanticTokensProvider is interface{} in this protocol version;
@@ -1393,8 +1430,27 @@ func (s *Server) OnTypeFormatting(_ context.Context, _ *protocol.DocumentOnTypeF
 	return nil, nil
 }
 
-func (s *Server) PrepareRename(_ context.Context, _ *protocol.PrepareRenameParams) (*protocol.Range, error) {
-	return nil, nil
+func (s *Server) PrepareRename(_ context.Context, params *protocol.PrepareRenameParams) (*protocol.Range, error) {
+	if params == nil {
+		return nil, nil
+	}
+	uri := string(params.TextDocument.URI)
+	f := s.ws.Get(uri)
+	if f == nil {
+		return nil, nil
+	}
+	cursorLine := int(params.Position.Line) + 1
+	file := syntax.AsFile(syntax.Root(f.Green))
+	tok := findDeclNameAtLine(file, f.LineIndex, cursorLine)
+	if tok == nil {
+		return nil, nil
+	}
+	pos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
+	endChar := pos.Character + uint32(len(tok.Text()))
+	return &protocol.Range{
+		Start: pos,
+		End:   protocol.Position{Line: pos.Line, Character: endChar},
+	}, nil
 }
 
 func (s *Server) RangeFormatting(_ context.Context, _ *protocol.DocumentRangeFormattingParams) ([]protocol.TextEdit, error) {
@@ -1405,8 +1461,108 @@ func (s *Server) References(_ context.Context, _ *protocol.ReferenceParams) ([]p
 	return nil, nil
 }
 
-func (s *Server) Rename(_ context.Context, _ *protocol.RenameParams) (*protocol.WorkspaceEdit, error) {
-	return nil, nil
+func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*protocol.WorkspaceEdit, error) {
+	if params == nil {
+		return nil, nil
+	}
+	uri := string(params.TextDocument.URI)
+	f := s.ws.Get(uri)
+	if f == nil {
+		return nil, nil
+	}
+	cursorLine := int(params.Position.Line) + 1
+	newName := params.NewName
+	file := syntax.AsFile(syntax.Root(f.Green))
+
+	nameTok := findDeclNameAtLine(file, f.LineIndex, cursorLine)
+	if nameTok == nil {
+		return nil, nil
+	}
+	oldName := nameTok.Text()
+	rm := s.ws.ResolutionMap()
+
+	edits := make(map[protocol.DocumentURI][]protocol.TextEdit)
+	addEdit := func(fileURI string, line, col int) {
+		if line <= 0 || col <= 0 {
+			return
+		}
+		startLine := lspLine(line)
+		startChar := uint32(col - 1)
+		edits[protocol.DocumentURI(fileURI)] = append(
+			edits[protocol.DocumentURI(fileURI)],
+			protocol.TextEdit{
+				Range: protocol.Range{
+					Start: protocol.Position{Line: startLine, Character: startChar},
+					End:   protocol.Position{Line: startLine, Character: startChar + uint32(len(oldName))},
+				},
+				NewText: newName,
+			},
+		)
+	}
+
+	// Declaration site.
+	declLine, declCol := f.LineIndex.LineCol(nameTok.Offset())
+	addEdit(uri, declLine, declCol)
+
+	// Reference sites: use-case refs from all files.
+	for _, wf := range s.ws.AllFiles() {
+		for _, ref := range wf.Symbols.UseCaseRefs {
+			if ref.Name != oldName {
+				continue
+			}
+			target, ok := sema.ResolveUseCaseRef(rm, wf.URI, ref.Name, ref.Line)
+			if !ok {
+				continue
+			}
+			// Only rename refs that point to the symbol declared in the cursor's file.
+			var targetURI string
+			switch target.Kind {
+			case "actor":
+				if target.Actor != nil {
+					targetURI = target.Actor.URI
+				}
+			case "domain":
+				if target.Domain != nil {
+					targetURI = target.Domain.URI
+				}
+			case "service":
+				if target.Service != nil {
+					targetURI = target.Service.URI
+				}
+			}
+			if targetURI != uri {
+				continue
+			}
+			addEdit(wf.URI, ref.Line, ref.Column)
+		}
+
+		// Service context refs that resolve to a domain declared in the cursor's file.
+		wfFile := syntax.AsFile(syntax.Root(wf.Green))
+		for _, svc := range wfFile.Services() {
+			svcNameTok := svc.Name()
+			if svcNameTok == nil {
+				continue
+			}
+			ctxNames := svc.Contexts()
+			ctxToks := svc.ContextTokens()
+			for i, ctxName := range ctxNames {
+				if ctxName != oldName {
+					continue
+				}
+				domSym, ok := sema.ResolveServiceContext(rm, wf.URI, svcNameTok.Text(), ctxName)
+				if !ok || domSym.URI != uri {
+					continue
+				}
+				if i >= len(ctxToks) {
+					continue
+				}
+				tokLine, tokCol := wf.LineIndex.LineCol(ctxToks[i].Offset())
+				addEdit(wf.URI, tokLine, tokCol)
+			}
+		}
+	}
+
+	return &protocol.WorkspaceEdit{Changes: edits}, nil
 }
 
 func (s *Server) SignatureHelp(_ context.Context, _ *protocol.SignatureHelpParams) (*protocol.SignatureHelp, error) {
