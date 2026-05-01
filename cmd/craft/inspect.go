@@ -43,8 +43,9 @@ func inspectCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
-				tree, _ := syntax.Parse(string(content))
-				doc := syntax.ProjectFromTree(tree)
+				greenRoot, li, _ := syntax.Parse(string(content))
+				tree := syntax.Root(greenRoot)
+				doc := syntax.ProjectFromTree(tree, li)
 				merged.Actors = append(merged.Actors, doc.Actors...)
 				merged.Domains = append(merged.Domains, doc.Domains...)
 				merged.Services = append(merged.Services, doc.Services...)

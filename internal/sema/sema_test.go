@@ -10,9 +10,9 @@ import (
 // parseTreeFor is a test helper that parses a craft source string and returns
 // the lossless syntax tree. Parse diagnostics are ignored so tests focus on
 // the sema rule under test.
-func parseTreeFor(src string) *syntax.SyntaxNode {
-	tree, _ := syntax.Parse(src)
-	return tree
+func parseTreeFor(src string) syntax.SyntaxNode {
+	g, _, _ := syntax.Parse(src)
+	return syntax.Root(g)
 }
 
 func TestAnalyzeFile_NoDuplicates(t *testing.T) {

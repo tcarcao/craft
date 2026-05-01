@@ -32,7 +32,7 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
-			perFileTrees := make(map[string]*syntax.SyntaxNode)
+			perFileTrees := make(map[string]syntax.SyntaxNode)
 			perFileSyms := make(map[string]sema.Symbols)
 			var results []validateResult
 
@@ -48,7 +48,9 @@ func validateCmd() *cobra.Command {
 				}
 
 				uri := "file://" + file
-				tree, parseDiags := syntax.Parse(string(content))
+				greenRoot, li, parseDiags := syntax.Parse(string(content))
+				_ = li
+				tree := syntax.Root(greenRoot)
 				perFileTrees[uri] = tree
 
 				for _, d := range parseDiags {

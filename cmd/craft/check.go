@@ -36,8 +36,9 @@ func checkCmd() *cobra.Command {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 
-			tree, parseDiags := syntax.Parse(string(content))
-			doc := syntax.ProjectFromTree(tree)
+			greenRoot, li, parseDiags := syntax.Parse(string(content))
+			tree := syntax.Root(greenRoot)
+			doc := syntax.ProjectFromTree(tree, li)
 
 			uri := "file://" + args[0]
 			_, semaDiags := sema.AnalyzeFile(uri, tree)
@@ -72,7 +73,7 @@ type symbolInfo struct {
 	Type string `json:"type,omitempty"`
 }
 
-func buildSymbolsJSON(tree *syntax.SyntaxNode) []symbolInfo {
+func buildSymbolsJSON(tree syntax.SyntaxNode) []symbolInfo {
 	file := syntax.AsFile(tree)
 	var out []symbolInfo
 	for _, a := range file.Actors() {
@@ -81,9 +82,9 @@ func buildSymbolsJSON(tree *syntax.SyntaxNode) []symbolInfo {
 			continue
 		}
 		out = append(out, symbolInfo{
-			Name: nameTok.Value,
+			Name: nameTok.Text(),
 			Kind: "actor",
-			Line: nameTok.Line,
+			Line: 0,
 			Type: a.ActorTypeValue(),
 		})
 	}

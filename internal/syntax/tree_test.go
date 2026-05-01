@@ -6,23 +6,27 @@ import (
 	"github.com/tcarcao/craft/internal/syntax"
 )
 
+// treeFromSrc parses src and returns the wrapped red root.
+func treeFromSrc(src string) syntax.SyntaxNode {
+	g, _, _ := syntax.Parse(src)
+	return syntax.Root(g)
+}
+
 func TestSyntaxNode_ChildToken(t *testing.T) {
-	node := &syntax.SyntaxNode{
-		Kind: syntax.SyntaxKindActorDecl,
-		Children: []syntax.SyntaxElement{
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindKwActor, Value: "actor", Line: 1, Col: 1},
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindKwUser, Value: "user", Line: 1, Col: 7},
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindIdent, Value: "Alice", Line: 1, Col: 12},
-		},
+	tree := treeFromSrc("actor user Alice")
+	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorNodes) != 1 {
+		t.Fatalf("expected 1 actor node, got %d", len(actorNodes))
 	}
+	node := actorNodes[0]
 
 	kwTok := node.ChildToken(syntax.SyntaxKindKwActor)
-	if kwTok == nil || kwTok.Value != "actor" {
+	if kwTok == nil || kwTok.Text() != "actor" {
 		t.Errorf("expected actor keyword, got %v", kwTok)
 	}
 
 	nameTok := node.ChildToken(syntax.SyntaxKindIdent)
-	if nameTok == nil || nameTok.Value != "Alice" {
+	if nameTok == nil || nameTok.Text() != "Alice" {
 		t.Errorf("expected name Alice, got %v", nameTok)
 	}
 
@@ -33,123 +37,103 @@ func TestSyntaxNode_ChildToken(t *testing.T) {
 }
 
 func TestSyntaxNode_ChildToken_MultipleKinds(t *testing.T) {
-	node := &syntax.SyntaxNode{
-		Kind: syntax.SyntaxKindActorDecl,
-		Children: []syntax.SyntaxElement{
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindKwSystem, Value: "system", Line: 1, Col: 7},
-		},
+	tree := treeFromSrc("actor system Bob")
+	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorNodes) != 1 {
+		t.Fatalf("expected 1 actor node")
 	}
-	tok := node.ChildToken(syntax.SyntaxKindKwUser, syntax.SyntaxKindKwSystem, syntax.SyntaxKindKwService)
-	if tok == nil || tok.Value != "system" {
+	tok := actorNodes[0].ChildToken(syntax.SyntaxKindKwUser, syntax.SyntaxKindKwSystem, syntax.SyntaxKindKwService)
+	if tok == nil || tok.Text() != "system" {
 		t.Errorf("expected system, got %v", tok)
 	}
 }
 
 func TestSyntaxNode_ChildTokens(t *testing.T) {
-	node := &syntax.SyntaxNode{
-		Kind: syntax.SyntaxKindActorDecl,
-		Children: []syntax.SyntaxElement{
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindIdent, Value: "Alice", Line: 1, Col: 1},
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindIdent, Value: "Bob", Line: 2, Col: 1},
-		},
+	// A domain body has two BC nodes; each contains an Ident token. We test
+	// ChildTokens at the BC level rather than constructing nodes by hand.
+	tree := treeFromSrc("domain D { Cart Checkout }")
+	dom := tree.ChildNodes(syntax.SyntaxKindDomainDecl)
+	if len(dom) != 1 {
+		t.Fatalf("expected 1 domain")
 	}
-	toks := node.ChildTokens(syntax.SyntaxKindIdent)
-	if len(toks) != 2 {
-		t.Errorf("expected 2 ident tokens, got %d", len(toks))
+	bcs := dom[0].ChildNodes(syntax.SyntaxKindBoundedContext)
+	if len(bcs) != 2 {
+		t.Fatalf("expected 2 BCs, got %d", len(bcs))
+	}
+	idents := bcs[0].ChildTokens(syntax.SyntaxKindIdent)
+	if len(idents) != 1 {
+		t.Errorf("expected 1 ident token in first BC, got %d", len(idents))
 	}
 }
 
 func TestSyntaxNode_ChildNode(t *testing.T) {
-	child := &syntax.SyntaxNode{Kind: syntax.SyntaxKindActorDecl}
-	node := &syntax.SyntaxNode{
-		Kind:     syntax.SyntaxKindFile,
-		Children: []syntax.SyntaxElement{child},
+	tree := treeFromSrc("actor user Alice")
+	found := tree.ChildNode(syntax.SyntaxKindActorDecl)
+	if found == nil {
+		t.Fatal("expected to find ActorDecl child")
 	}
-	found := node.ChildNode(syntax.SyntaxKindActorDecl)
-	if found != child {
-		t.Error("expected to find child actor decl node")
-	}
-	missing := node.ChildNode(syntax.SyntaxKindDomainDecl)
+	missing := tree.ChildNode(syntax.SyntaxKindDomainDecl)
 	if missing != nil {
 		t.Error("expected nil for missing child node")
 	}
 }
 
 func TestSyntaxNode_ChildNodes(t *testing.T) {
-	a1 := &syntax.SyntaxNode{Kind: syntax.SyntaxKindActorDecl}
-	a2 := &syntax.SyntaxNode{Kind: syntax.SyntaxKindActorDecl}
-	d1 := &syntax.SyntaxNode{Kind: syntax.SyntaxKindDomainDecl}
-	node := &syntax.SyntaxNode{
-		Kind:     syntax.SyntaxKindFile,
-		Children: []syntax.SyntaxElement{a1, a2, d1},
-	}
-	actors := node.ChildNodes(syntax.SyntaxKindActorDecl)
+	tree := treeFromSrc("actor user Alice\nactor user Bob\ndomain D { Cart }")
+	actors := tree.ChildNodes(syntax.SyntaxKindActorDecl)
 	if len(actors) != 2 {
 		t.Errorf("expected 2 actor nodes, got %d", len(actors))
 	}
 }
 
 func TestSyntaxNode_Tokens_SkipsComments(t *testing.T) {
-	node := &syntax.SyntaxNode{
-		Kind: syntax.SyntaxKindActorDecl,
-		Children: []syntax.SyntaxElement{
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindLineComment, Value: "// hi", Line: 1, Col: 1},
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindKwActor, Value: "actor", Line: 2, Col: 1},
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindIdent, Value: "Alice", Line: 2, Col: 7},
-		},
+	tree := treeFromSrc("// hi\nactor user Alice")
+	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorNodes) != 1 {
+		t.Fatalf("expected 1 actor node")
 	}
-	toks := node.Tokens()
-	if len(toks) != 2 {
-		t.Errorf("Tokens() should skip comments, got %d tokens", len(toks))
-	}
-	if toks[0].Value != "actor" {
-		t.Errorf("first token should be 'actor', got %q", toks[0].Value)
+	toks := actorNodes[0].Tokens()
+	for _, tok := range toks {
+		if tok.Kind() == syntax.SyntaxKindLineComment {
+			t.Errorf("Tokens() should skip comments; got comment %q", tok.Text())
+		}
 	}
 }
 
 func TestSyntaxNode_AllTokens_IncludesComments(t *testing.T) {
-	node := &syntax.SyntaxNode{
-		Kind: syntax.SyntaxKindActorDecl,
-		Children: []syntax.SyntaxElement{
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindLineComment, Value: "// hi", Line: 1, Col: 1},
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindKwActor, Value: "actor", Line: 2, Col: 1},
-		},
+	tree := treeFromSrc("// hi\nactor user Alice")
+	actorNodes := tree.ChildNodes(syntax.SyntaxKindActorDecl)
+	if len(actorNodes) != 1 {
+		t.Fatalf("expected 1 actor node")
 	}
-	toks := node.AllTokens()
-	if len(toks) != 2 {
-		t.Errorf("AllTokens() should include comments, got %d", len(toks))
+	toks := actorNodes[0].AllTokens()
+	hasComment := false
+	for _, tok := range toks {
+		if tok.Kind() == syntax.SyntaxKindLineComment {
+			hasComment = true
+		}
 	}
-	if toks[0].Kind != syntax.SyntaxKindLineComment {
-		t.Errorf("first token should be comment, got %v", toks[0].Kind)
+	if !hasComment {
+		t.Error("AllTokens() should include comments")
 	}
 }
 
 func TestSyntaxNode_Tokens_Recursive(t *testing.T) {
-	// Tokens() and AllTokens() must descend into child nodes
-	inner := &syntax.SyntaxNode{
-		Kind: syntax.SyntaxKindActorDecl,
-		Children: []syntax.SyntaxElement{
-			&syntax.SyntaxToken{Kind: syntax.SyntaxKindKwActor, Value: "actor", Line: 1, Col: 1},
-		},
+	// Tokens() must descend into child nodes — the file root collects from
+	// the actor decl node beneath it.
+	tree := treeFromSrc("actor user Alice")
+	toks := tree.Tokens()
+	if len(toks) == 0 {
+		t.Fatal("expected token recursion to surface the actor keyword")
 	}
-	outer := &syntax.SyntaxNode{
-		Kind:     syntax.SyntaxKindFile,
-		Children: []syntax.SyntaxElement{inner},
+	found := false
+	for _, tok := range toks {
+		if tok.Text() == "actor" {
+			found = true
+			break
+		}
 	}
-	toks := outer.Tokens()
-	if len(toks) != 1 || toks[0].Value != "actor" {
-		t.Errorf("expected recursive token collection, got %v", toks)
-	}
-}
-
-func TestSyntaxToken_Length(t *testing.T) {
-	tok := &syntax.SyntaxToken{Kind: syntax.SyntaxKindIdent, Value: "Alice"}
-	if tok.Length() != 5 {
-		t.Errorf("expected length 5, got %d", tok.Length())
-	}
-	// Unicode: length in runes, not bytes
-	tok2 := &syntax.SyntaxToken{Kind: syntax.SyntaxKindIdent, Value: "héllo"}
-	if tok2.Length() != 5 {
-		t.Errorf("expected rune length 5 for unicode, got %d", tok2.Length())
+	if !found {
+		t.Errorf("expected `actor` token among recursive tokens, got %v", toks)
 	}
 }

@@ -7,28 +7,31 @@ import (
 
 // isAstFieldSentinel returns true when tokens[i] is an ident followed by a colon —
 // the start of a new field definition.
-func isAstFieldSentinel(tokens []*SyntaxToken, i int) bool {
+func isAstFieldSentinel(tokens []SyntaxToken, i int) bool {
 	if i+1 >= len(tokens) {
 		return false
 	}
-	return tokens[i].Kind == SyntaxKindIdent && tokens[i+1].Kind == SyntaxKindColon
+	return tokens[i].Kind() == SyntaxKindIdent && tokens[i+1].Kind() == SyntaxKindColon
 }
 
 // collectAstIdentList collects comma-separated ident/string values from tokens[i].
 // Stops at a field sentinel (ident+colon), RBrace, or non-ident/string.
-func collectAstIdentList(tokens []*SyntaxToken, i int) (names []string, lines []int, newI int) {
+// Returned `lines` slice is filled with zeros — token line positions now require
+// a LineIndex (Task 10). Callers that need real line numbers must compute from
+// tok.Offset() + LineIndex.LineCol.
+func collectAstIdentList(tokens []SyntaxToken, i int) (names []string, lines []int, newI int) {
 	for i < len(tokens) {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind == SyntaxKindComma {
+		if tok.Kind() == SyntaxKindComma {
 			i++
 			continue
 		}
-		if (tok.Kind == SyntaxKindIdent || tok.Kind == SyntaxKindString) && !isAstFieldSentinel(tokens, i) {
-			names = append(names, tok.Value)
-			lines = append(lines, tok.Line)
+		if (tok.Kind() == SyntaxKindIdent || tok.Kind() == SyntaxKindString) && !isAstFieldSentinel(tokens, i) {
+			names = append(names, tok.Text())
+			lines = append(lines, 0)
 			i++
 		} else {
 			break
@@ -38,10 +41,10 @@ func collectAstIdentList(tokens []*SyntaxToken, i int) (names []string, lines []
 }
 
 // scanBodyTokens returns tokens inside the first LBrace…RBrace pair of a node.
-func scanBodyTokens(node *SyntaxNode) []*SyntaxToken {
+func scanBodyTokens(node SyntaxNode) []SyntaxToken {
 	all := node.Tokens()
 	for i, tok := range all {
-		if tok.Kind == SyntaxKindLBrace {
+		if tok.Kind() == SyntaxKindLBrace {
 			return all[i+1:]
 		}
 	}
@@ -49,29 +52,32 @@ func scanBodyTokens(node *SyntaxNode) []*SyntaxToken {
 }
 
 // AsFile wraps a SyntaxKindFile node as a typed File view.
-// Returns a zero File if node is nil or wrong kind.
-func AsFile(node *SyntaxNode) File { return File{node: node} }
+func AsFile(node SyntaxNode) File { return File{node: node} }
 
 // File is a typed view over a SyntaxKindFile node.
-type File struct{ node *SyntaxNode }
+type File struct{ node SyntaxNode }
+
+// isZero reports whether the file view wraps a zero/empty SyntaxNode.
+func (f File) isZero() bool { return f.node == (SyntaxNode{}) }
 
 // Actors returns all ActorDecl views — both standalone and those inside actors{} blocks,
 // in document order.
 func (f File) Actors() []ActorDecl {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []ActorDecl
-	for _, child := range f.node.Children {
-		switch c := child.(type) {
-		case *SyntaxNode:
-			switch c.Kind {
-			case SyntaxKindActorDecl:
-				result = append(result, ActorDecl{node: c})
-			case SyntaxKindActorsBlock:
-				for _, n := range c.ChildNodes(SyntaxKindActorDecl) {
-					result = append(result, ActorDecl{node: n})
-				}
+	for _, child := range f.node.Children() {
+		c, ok := child.(SyntaxNode)
+		if !ok {
+			continue
+		}
+		switch c.Kind() {
+		case SyntaxKindActorDecl:
+			result = append(result, ActorDecl{node: c})
+		case SyntaxKindActorsBlock:
+			for _, n := range c.ChildNodes(SyntaxKindActorDecl) {
+				result = append(result, ActorDecl{node: n})
 			}
 		}
 	}
@@ -81,20 +87,21 @@ func (f File) Actors() []ActorDecl {
 // Domains returns all DomainDecl views — both standalone and those inside domains{} blocks,
 // in document order.
 func (f File) Domains() []DomainDecl {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []DomainDecl
-	for _, child := range f.node.Children {
-		switch c := child.(type) {
-		case *SyntaxNode:
-			switch c.Kind {
-			case SyntaxKindDomainDecl:
-				result = append(result, DomainDecl{node: c})
-			case SyntaxKindDomainsBlock:
-				for _, n := range c.ChildNodes(SyntaxKindDomainDecl) {
-					result = append(result, DomainDecl{node: n})
-				}
+	for _, child := range f.node.Children() {
+		c, ok := child.(SyntaxNode)
+		if !ok {
+			continue
+		}
+		switch c.Kind() {
+		case SyntaxKindDomainDecl:
+			result = append(result, DomainDecl{node: c})
+		case SyntaxKindDomainsBlock:
+			for _, n := range c.ChildNodes(SyntaxKindDomainDecl) {
+				result = append(result, DomainDecl{node: n})
 			}
 		}
 	}
@@ -104,20 +111,21 @@ func (f File) Domains() []DomainDecl {
 // Services returns all ServiceDecl views — both standalone and those inside services{} blocks,
 // in document order.
 func (f File) Services() []ServiceDecl {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []ServiceDecl
-	for _, child := range f.node.Children {
-		switch c := child.(type) {
-		case *SyntaxNode:
-			switch c.Kind {
-			case SyntaxKindServiceDecl:
-				result = append(result, ServiceDecl{node: c})
-			case SyntaxKindServicesBlock:
-				for _, n := range c.ChildNodes(SyntaxKindServiceDecl) {
-					result = append(result, ServiceDecl{node: n})
-				}
+	for _, child := range f.node.Children() {
+		c, ok := child.(SyntaxNode)
+		if !ok {
+			continue
+		}
+		switch c.Kind() {
+		case SyntaxKindServiceDecl:
+			result = append(result, ServiceDecl{node: c})
+		case SyntaxKindServicesBlock:
+			for _, n := range c.ChildNodes(SyntaxKindServiceDecl) {
+				result = append(result, ServiceDecl{node: n})
 			}
 		}
 	}
@@ -126,7 +134,7 @@ func (f File) Services() []ServiceDecl {
 
 // UseCases returns all UseCaseDecl views.
 func (f File) UseCases() []UseCaseDecl {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []UseCaseDecl
@@ -138,7 +146,7 @@ func (f File) UseCases() []UseCaseDecl {
 
 // Archs returns all ArchDecl views.
 func (f File) Archs() []ArchDecl {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []ArchDecl
@@ -150,7 +158,7 @@ func (f File) Archs() []ArchDecl {
 
 // Exposures returns all ExposureDecl views.
 func (f File) Exposures() []ExposureDecl {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []ExposureDecl
@@ -162,7 +170,7 @@ func (f File) Exposures() []ExposureDecl {
 
 // ActorBlocks returns all top-level actors{} block views in document order.
 func (f File) ActorBlocks() []ActorsBlock {
-	if f.node == nil {
+	if f.isZero() {
 		return nil
 	}
 	var result []ActorsBlock
@@ -173,7 +181,7 @@ func (f File) ActorBlocks() []ActorsBlock {
 }
 
 // ActorDecl is a typed view over a SyntaxKindActorDecl node.
-type ActorDecl struct{ node *SyntaxNode }
+type ActorDecl struct{ node SyntaxNode }
 
 // Keyword returns the 'actor' keyword token (present on standalone actor declarations).
 // Returns nil for actors inside an actors{} block (which have no 'actor' keyword).
@@ -190,14 +198,14 @@ func (a ActorDecl) ActorType() *SyntaxToken {
 // (user/system/service) and open-taxonomy ident types (e.g. "actor partner PaymentGateway").
 func (a ActorDecl) ActorTypeValue() string {
 	if tok := a.ActorType(); tok != nil {
-		return tok.Value
+		return tok.Text()
 	}
 	// Open-taxonomy: first ident is type, second is name.
 	tokens := a.node.Tokens()
 	for i, tok := range tokens {
-		if tok.Kind == SyntaxKindIdent {
-			if i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindIdent {
-				return tok.Value
+		if tok.Kind() == SyntaxKindIdent {
+			if i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindIdent {
+				return tok.Text()
 			}
 			break
 		}
@@ -213,9 +221,10 @@ func (a ActorDecl) ActorTypeToken() *SyntaxToken {
 	}
 	tokens := a.node.Tokens()
 	for i, tok := range tokens {
-		if tok.Kind == SyntaxKindIdent {
-			if i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindIdent {
-				return tok
+		if tok.Kind() == SyntaxKindIdent {
+			if i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindIdent {
+				t := tok
+				return &t
 			}
 			break
 		}
@@ -229,7 +238,7 @@ func (a ActorDecl) Name() *SyntaxToken {
 }
 
 // DomainDecl is a typed view over a SyntaxKindDomainDecl node.
-type DomainDecl struct{ node *SyntaxNode }
+type DomainDecl struct{ node SyntaxNode }
 
 // Keyword returns the 'domain' keyword token.
 func (d DomainDecl) Keyword() *SyntaxToken { return d.node.ChildToken(SyntaxKindKwDomain) }
@@ -244,22 +253,12 @@ func (d DomainDecl) IsGrouped() bool {
 }
 
 // Line returns the 1-based source line of the domain name token.
-func (d DomainDecl) Line() int {
-	tok := d.node.ChildToken(SyntaxKindIdent)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (d DomainDecl) Line() int { return 0 }
 
 // EndLine returns the 1-based line of the closing `}`.
-func (d DomainDecl) EndLine() int {
-	tok := d.node.ChildToken(SyntaxKindRBrace)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (d DomainDecl) EndLine() int { return 0 }
 
 // BoundedContexts returns all BoundedContext views within this domain.
 func (d DomainDecl) BoundedContexts() []BoundedContext {
@@ -271,13 +270,13 @@ func (d DomainDecl) BoundedContexts() []BoundedContext {
 }
 
 // BoundedContext is a typed view over a SyntaxKindBoundedContext node.
-type BoundedContext struct{ node *SyntaxNode }
+type BoundedContext struct{ node SyntaxNode }
 
 // Name returns the identifier token for the bounded context's name.
 func (bc BoundedContext) Name() *SyntaxToken { return bc.node.ChildToken(SyntaxKindIdent) }
 
 // DomainsBlock is a typed view over a SyntaxKindDomainsBlock node.
-type DomainsBlock struct{ node *SyntaxNode }
+type DomainsBlock struct{ node SyntaxNode }
 
 // Domains returns all DomainDecl views within this block.
 func (db DomainsBlock) Domains() []DomainDecl {
@@ -289,28 +288,18 @@ func (db DomainsBlock) Domains() []DomainDecl {
 }
 
 // ActorsBlock is a typed view over a SyntaxKindActorsBlock node.
-type ActorsBlock struct{ node *SyntaxNode }
+type ActorsBlock struct{ node SyntaxNode }
 
 // Line returns the 1-based source line of the `actors` keyword.
-func (b ActorsBlock) Line() int {
-	tok := b.node.ChildToken(SyntaxKindKwActors)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (b ActorsBlock) Line() int { return 0 }
 
 // EndLine returns the 1-based line of the closing `}`.
-func (b ActorsBlock) EndLine() int {
-	tok := b.node.ChildToken(SyntaxKindRBrace)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (b ActorsBlock) EndLine() int { return 0 }
 
 // ServiceDecl is a typed view over a SyntaxKindServiceDecl node.
-type ServiceDecl struct{ node *SyntaxNode }
+type ServiceDecl struct{ node SyntaxNode }
 
 func (s ServiceDecl) Keyword() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwService) }
 func (s ServiceDecl) Name() *SyntaxToken    { return s.node.ChildToken(SyntaxKindIdent) }
@@ -321,22 +310,12 @@ func (s ServiceDecl) IsGrouped() bool {
 }
 
 // Line returns the 1-based source line of the service name token.
-func (s ServiceDecl) Line() int {
-	tok := s.node.ChildToken(SyntaxKindIdent)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (s ServiceDecl) Line() int { return 0 }
 
 // EndLine returns the 1-based line of the closing `}`.
-func (s ServiceDecl) EndLine() int {
-	tok := s.node.ChildToken(SyntaxKindRBrace)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (s ServiceDecl) EndLine() int { return 0 }
 
 // serviceBodyFields holds all parsed service body fields.
 type serviceBodyFields struct {
@@ -355,15 +334,15 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 	i := 0
 	for i < len(tokens) {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind != SyntaxKindIdent {
+		if tok.Kind() != SyntaxKindIdent {
 			i++
 			continue
 		}
-		fieldName := tok.Value
-		if i+1 >= len(tokens) || tokens[i+1].Kind != SyntaxKindColon {
+		fieldName := tok.Text()
+		if i+1 >= len(tokens) || tokens[i+1].Kind() != SyntaxKindColon {
 			i++
 			continue
 		}
@@ -375,44 +354,44 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 		case "data-stores":
 			f.DataStores, _, i = collectAstIdentList(tokens, i)
 		case "language":
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
-				f.Language = tokens[i].Value
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
+				f.Language = tokens[i].Text()
 				i++
 			}
 		case "deployment":
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
-				f.DeploymentType = tokens[i].Value
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
+				f.DeploymentType = tokens[i].Text()
 				i++
 			}
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindLParen {
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindLParen {
 				i++
-				for i < len(tokens) && tokens[i].Kind != SyntaxKindRParen {
-					if tokens[i].Kind != SyntaxKindPercentage {
+				for i < len(tokens) && tokens[i].Kind() != SyntaxKindRParen {
+					if tokens[i].Kind() != SyntaxKindPercentage {
 						i++
 						continue
 					}
-					pct := tokens[i].Value
+					pct := tokens[i].Text()
 					i++
-					if i < len(tokens) && tokens[i].Kind == SyntaxKindArrow {
+					if i < len(tokens) && tokens[i].Kind() == SyntaxKindArrow {
 						i++
 					}
 					var target string
-					if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
-						target = tokens[i].Value
+					if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
+						target = tokens[i].Text()
 						i++
 					}
 					f.DeploymentRules = append(f.DeploymentRules, struct{ Percentage, Target string }{pct, target})
-					if i < len(tokens) && tokens[i].Kind == SyntaxKindComma {
+					if i < len(tokens) && tokens[i].Kind() == SyntaxKindComma {
 						i++
 					}
 				}
-				if i < len(tokens) && tokens[i].Kind == SyntaxKindRParen {
+				if i < len(tokens) && tokens[i].Kind() == SyntaxKindRParen {
 					i++
 				}
 			}
 		default:
 			for i < len(tokens) {
-				if tokens[i].Kind == SyntaxKindRBrace || tokens[i].Kind == SyntaxKindIdent {
+				if tokens[i].Kind() == SyntaxKindRBrace || tokens[i].Kind() == SyntaxKindIdent {
 					break
 				}
 				i++
@@ -426,6 +405,7 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 func (s ServiceDecl) Contexts() []string { return s.parseServiceBody().Contexts }
 
 // ContextLines returns the 1-based source line of each context name token.
+// TODO(Task 10): rewire to LineIndex; entries are 0 in interim.
 func (s ServiceDecl) ContextLines() []int { return s.parseServiceBody().ContextLines }
 
 // DataStores returns the data-store names listed in the service body.
@@ -443,26 +423,26 @@ func (s ServiceDecl) DeploymentRules() []struct{ Percentage, Target string } {
 }
 
 // DataStoreTokens returns the SyntaxToken for each data-store name in the service body.
-func (s ServiceDecl) DataStoreTokens() []*SyntaxToken {
+func (s ServiceDecl) DataStoreTokens() []SyntaxToken {
 	tokens := scanBodyTokens(s.node)
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind == SyntaxKindIdent && tok.Value == "data-stores" &&
-			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+		if tok.Kind() == SyntaxKindIdent && tok.Text() == "data-stores" &&
+			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
-			var result []*SyntaxToken
+			var result []SyntaxToken
 			for i < len(tokens) {
-				if tokens[i].Kind == SyntaxKindComma {
+				if tokens[i].Kind() == SyntaxKindComma {
 					i++
 					continue
 				}
-				if tokens[i].Kind == SyntaxKindRBrace || isAstFieldSentinel(tokens, i) {
+				if tokens[i].Kind() == SyntaxKindRBrace || isAstFieldSentinel(tokens, i) {
 					break
 				}
-				if tokens[i].Kind == SyntaxKindIdent {
+				if tokens[i].Kind() == SyntaxKindIdent {
 					result = append(result, tokens[i])
 					i++
 				} else {
@@ -480,14 +460,15 @@ func (s ServiceDecl) LanguageToken() *SyntaxToken {
 	tokens := scanBodyTokens(s.node)
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind == SyntaxKindIdent && tok.Value == "language" &&
-			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+		if tok.Kind() == SyntaxKindIdent && tok.Text() == "language" &&
+			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
-				return tokens[i]
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
+				t := tokens[i]
+				return &t
 			}
 			return nil
 		}
@@ -500,14 +481,15 @@ func (s ServiceDecl) DeploymentTypeToken() *SyntaxToken {
 	tokens := scanBodyTokens(s.node)
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind == SyntaxKindIdent && tok.Value == "deployment" &&
-			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+		if tok.Kind() == SyntaxKindIdent && tok.Text() == "deployment" &&
+			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
-				return tokens[i]
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
+				t := tokens[i]
+				return &t
 			}
 			return nil
 		}
@@ -516,30 +498,30 @@ func (s ServiceDecl) DeploymentTypeToken() *SyntaxToken {
 }
 
 // DeploymentTargetTokens returns the SyntaxToken for each deployment rule target.
-func (s ServiceDecl) DeploymentTargetTokens() []*SyntaxToken {
+func (s ServiceDecl) DeploymentTargetTokens() []SyntaxToken {
 	tokens := scanBodyTokens(s.node)
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind == SyntaxKindIdent && tok.Value == "deployment" &&
-			i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+		if tok.Kind() == SyntaxKindIdent && tok.Text() == "deployment" &&
+			i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			i += 2
 			// Skip deployment type ident.
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
 				i++
 			}
 			// Enter parenthesised rule list.
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindLParen {
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindLParen {
 				i++
 			}
-			var result []*SyntaxToken
-			for i < len(tokens) && tokens[i].Kind != SyntaxKindRParen && tokens[i].Kind != SyntaxKindRBrace {
+			var result []SyntaxToken
+			for i < len(tokens) && tokens[i].Kind() != SyntaxKindRParen && tokens[i].Kind() != SyntaxKindRBrace {
 				// Each rule: <percentage> -> <target>
-				if tokens[i].Kind == SyntaxKindArrow {
+				if tokens[i].Kind() == SyntaxKindArrow {
 					i++
-					if i < len(tokens) && tokens[i].Kind == SyntaxKindIdent {
+					if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
 						result = append(result, tokens[i])
 					}
 				}
@@ -552,19 +534,14 @@ func (s ServiceDecl) DeploymentTargetTokens() []*SyntaxToken {
 }
 
 // UseCaseDecl is a typed view over a SyntaxKindUseCaseDecl node.
-type UseCaseDecl struct{ node *SyntaxNode }
+type UseCaseDecl struct{ node SyntaxNode }
 
 func (u UseCaseDecl) Keyword() *SyntaxToken { return u.node.ChildToken(SyntaxKindKwUseCase) }
 func (u UseCaseDecl) Title() *SyntaxToken   { return u.node.ChildToken(SyntaxKindString) }
 
 // EndLine returns the 1-based line of the closing `}`.
-func (u UseCaseDecl) EndLine() int {
-	tok := u.node.ChildToken(SyntaxKindRBrace)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (u UseCaseDecl) EndLine() int { return 0 }
 
 // Scenarios returns all ScenarioDecl views within this use case.
 func (u UseCaseDecl) Scenarios() []ScenarioDecl {
@@ -576,14 +553,17 @@ func (u UseCaseDecl) Scenarios() []ScenarioDecl {
 }
 
 // ScenarioDecl is a typed view over a SyntaxKindScenario node.
-type ScenarioDecl struct{ node *SyntaxNode }
+type ScenarioDecl struct{ node SyntaxNode }
 
 // When returns the 'when' keyword token that starts this scenario.
 func (s ScenarioDecl) When() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwWhen) }
 
 // Trigger returns the trigger sub-node of this scenario.
 func (s ScenarioDecl) Trigger() TriggerDecl {
-	return TriggerDecl{node: s.node.ChildNode(SyntaxKindTrigger)}
+	if n := s.node.ChildNode(SyntaxKindTrigger); n != nil {
+		return TriggerDecl{node: *n}
+	}
+	return TriggerDecl{}
 }
 
 // Actions returns all action nodes in this scenario.
@@ -596,13 +576,13 @@ func (s ScenarioDecl) Actions() []ActionDecl {
 }
 
 // TriggerDecl is a typed view over a SyntaxKindTrigger node.
-type TriggerDecl struct{ node *SyntaxNode }
+type TriggerDecl struct{ node SyntaxNode }
 
 // Subject returns the subject identifier token of the trigger (actor/domain name).
 func (t TriggerDecl) Subject() *SyntaxToken { return t.node.ChildToken(SyntaxKindIdent) }
 
 // Tokens returns all syntax tokens in the trigger node (mirrors ActionDecl.Tokens).
-func (t TriggerDecl) Tokens() []*SyntaxToken { return t.node.Tokens() }
+func (t TriggerDecl) Tokens() []SyntaxToken { return t.node.Tokens() }
 
 // Event returns the string token for event-style triggers (when "<EventName>").
 func (t TriggerDecl) Event() *SyntaxToken { return t.node.ChildToken(SyntaxKindString) }
@@ -615,11 +595,11 @@ func (t TriggerDecl) Kind() string {
 		return "external"
 	}
 	// event trigger: first token is a string literal
-	if tokens[0].Kind == SyntaxKindString {
+	if tokens[0].Kind() == SyntaxKindString {
 		return "event"
 	}
 	// domain_listen: second token is `listens`
-	if len(tokens) >= 2 && tokens[1].Kind == SyntaxKindKwListens {
+	if len(tokens) >= 2 && tokens[1].Kind() == SyntaxKindKwListens {
 		return "domain_listen"
 	}
 	return "external"
@@ -634,20 +614,12 @@ func (t TriggerDecl) ActorName() string {
 	if tok == nil {
 		return ""
 	}
-	return tok.Value
+	return tok.Text()
 }
 
 // ActorCol returns the 1-based column of the actor token, or 0 if not an external trigger.
-func (t TriggerDecl) ActorCol() int {
-	if t.Kind() != "external" {
-		return 0
-	}
-	tok := t.node.ChildToken(SyntaxKindIdent)
-	if tok == nil {
-		return 0
-	}
-	return tok.Col
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (t TriggerDecl) ActorCol() int { return 0 }
 
 // ContextName returns the subject name for domain_listen triggers.
 func (t TriggerDecl) ContextName() string {
@@ -658,7 +630,7 @@ func (t TriggerDecl) ContextName() string {
 	if tok == nil {
 		return ""
 	}
-	return tok.Value
+	return tok.Text()
 }
 
 // EventValue returns the event name (for event and domain_listen triggers).
@@ -667,46 +639,34 @@ func (t TriggerDecl) EventValue() string {
 	switch t.Kind() {
 	case "event":
 		if len(tokens) > 0 {
-			return tokens[0].Value
+			return tokens[0].Text()
 		}
 	case "domain_listen":
 		if len(tokens) >= 3 {
-			return tokens[2].Value
+			return tokens[2].Text()
 		}
 	}
 	return ""
 }
 
 // EventCol returns the 1-based column of the event token.
-func (t TriggerDecl) EventCol() int {
-	tokens := t.node.Tokens()
-	switch t.Kind() {
-	case "event":
-		if len(tokens) > 0 {
-			return tokens[0].Col
-		}
-	case "domain_listen":
-		if len(tokens) >= 3 {
-			return tokens[2].Col
-		}
-	}
-	return 0
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (t TriggerDecl) EventCol() int { return 0 }
 
 // EventIsString returns true when the event token is a quoted string literal.
 func (t TriggerDecl) EventIsString() bool {
 	tokens := t.node.Tokens()
 	switch t.Kind() {
 	case "event":
-		return len(tokens) > 0 && tokens[0].Kind == SyntaxKindString
+		return len(tokens) > 0 && tokens[0].Kind() == SyntaxKindString
 	case "domain_listen":
-		return len(tokens) >= 3 && tokens[2].Kind == SyntaxKindString
+		return len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindString
 	}
 	return false
 }
 
 // ActionDecl is a typed view over a SyntaxKindAction node.
-type ActionDecl struct{ node *SyntaxNode }
+type ActionDecl struct{ node SyntaxNode }
 
 // Subject returns the subject identifier token (domain/service name).
 func (a ActionDecl) Subject() *SyntaxToken { return a.node.ChildToken(SyntaxKindIdent) }
@@ -729,7 +689,7 @@ func (a ActionDecl) Kind() string {
 	if verb == nil {
 		return "internal_action"
 	}
-	switch verb.Kind {
+	switch verb.Kind() {
 	case SyntaxKindKwAsks:
 		return "sync_action"
 	case SyntaxKindKwNotifies:
@@ -747,39 +707,29 @@ func (a ActionDecl) SubjectName() string {
 	if tok == nil {
 		return ""
 	}
-	return tok.Value
+	return tok.Text()
 }
 
 // SubjectCol returns the 1-based column of the subject token.
-func (a ActionDecl) SubjectCol() int {
-	tok := a.Subject()
-	if tok == nil {
-		return 0
-	}
-	return tok.Col
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ActionDecl) SubjectCol() int { return 0 }
 
 // Line returns the 1-based source line of the action subject token.
-func (a ActionDecl) Line() int {
-	tok := a.Subject()
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ActionDecl) Line() int { return 0 }
 
 // TargetName returns the target context for sync_action and return_action.
 func (a ActionDecl) TargetName() string {
 	tokens := a.node.Tokens()
 	switch a.Kind() {
 	case "sync_action":
-		if len(tokens) >= 3 && tokens[2].Kind == SyntaxKindIdent {
-			return tokens[2].Value
+		if len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindIdent {
+			return tokens[2].Text()
 		}
 	case "return_action":
 		for i, tok := range tokens {
-			if tok.Kind == SyntaxKindKwTo && i+1 < len(tokens) {
-				return tokens[i+1].Value
+			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
+				return tokens[i+1].Text()
 			}
 		}
 	}
@@ -787,22 +737,8 @@ func (a ActionDecl) TargetName() string {
 }
 
 // TargetCol returns the 1-based column of the target name token.
-func (a ActionDecl) TargetCol() int {
-	tokens := a.node.Tokens()
-	switch a.Kind() {
-	case "sync_action":
-		if len(tokens) >= 3 && tokens[2].Kind == SyntaxKindIdent {
-			return tokens[2].Col
-		}
-	case "return_action":
-		for i, tok := range tokens {
-			if tok.Kind == SyntaxKindKwTo && i+1 < len(tokens) {
-				return tokens[i+1].Col
-			}
-		}
-	}
-	return 0
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ActionDecl) TargetCol() int { return 0 }
 
 // EventValue returns the event name for async_action (notifies).
 func (a ActionDecl) EventValue() string {
@@ -811,22 +747,14 @@ func (a ActionDecl) EventValue() string {
 	}
 	tokens := a.node.Tokens()
 	if len(tokens) >= 3 {
-		return tokens[2].Value
+		return tokens[2].Text()
 	}
 	return ""
 }
 
 // EventCol returns the 1-based column of the event token for async_action.
-func (a ActionDecl) EventCol() int {
-	if a.Kind() != "async_action" {
-		return 0
-	}
-	tokens := a.node.Tokens()
-	if len(tokens) >= 3 {
-		return tokens[2].Col
-	}
-	return 0
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ActionDecl) EventCol() int { return 0 }
 
 // EventIsString returns true when the event was a quoted string literal.
 func (a ActionDecl) EventIsString() bool {
@@ -834,19 +762,19 @@ func (a ActionDecl) EventIsString() bool {
 		return false
 	}
 	tokens := a.node.Tokens()
-	return len(tokens) >= 3 && tokens[2].Kind == SyntaxKindString
+	return len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindString
 }
 
 // VerbValue returns the verb text.
 func (a ActionDecl) VerbValue() string {
 	tok := a.Verb()
 	if tok != nil {
-		return tok.Value
+		return tok.Text()
 	}
 	// internal_action: verb is the ident at tokens[1]
 	tokens := a.node.Tokens()
 	if len(tokens) >= 2 {
-		return tokens[1].Value
+		return tokens[1].Text()
 	}
 	return ""
 }
@@ -857,7 +785,7 @@ func (a ActionDecl) ConnectorValue() string {
 	if tok == nil {
 		return ""
 	}
-	return tok.Value
+	return tok.Text()
 }
 
 // PhraseText returns the description phrase for the action.
@@ -870,20 +798,20 @@ func (a ActionDecl) PhraseText() string {
 	switch a.Kind() {
 	case "sync_action":
 		start = 3 // subject, asks, target
-		if start < len(tokens) && (tokens[start].Kind == SyntaxKindKwTo || isConnectorWord(tokens[start].Value)) && tokens[start].Line == a.Line() {
+		if start < len(tokens) && (tokens[start].Kind() == SyntaxKindKwTo || isConnectorWord(tokens[start].Text())) {
 			start++ // skip connector
 		}
 	case "return_action":
 		start = 2
-		if start < len(tokens) && tokens[start].Kind == SyntaxKindKwTo {
+		if start < len(tokens) && tokens[start].Kind() == SyntaxKindKwTo {
 			start += 2 // skip `to target`
 		}
-		if start < len(tokens) && isConnectorWord(tokens[start].Value) && tokens[start].Line == a.Line() {
+		if start < len(tokens) && isConnectorWord(tokens[start].Text()) {
 			start++
 		}
 	case "internal_action":
 		start = 2 // subject, verb
-		if start < len(tokens) && isConnectorWord(tokens[start].Value) && tokens[start].Line == a.Line() {
+		if start < len(tokens) && isConnectorWord(tokens[start].Text()) {
 			start++
 		}
 	case "async_action":
@@ -891,13 +819,13 @@ func (a ActionDecl) PhraseText() string {
 	}
 	var parts []string
 	for _, tok := range tokens[start:] {
-		parts = append(parts, tok.Value)
+		parts = append(parts, tok.Text())
 	}
 	return strings.Join(parts, " ")
 }
 
 // Tokens returns the raw token list for the action node.
-func (a ActionDecl) Tokens() []*SyntaxToken { return a.node.Tokens() }
+func (a ActionDecl) Tokens() []SyntaxToken { return a.node.Tokens() }
 
 // Description returns the human-readable full action line.
 func (a ActionDecl) Description() string {
@@ -911,8 +839,8 @@ func (a ActionDecl) Description() string {
 		// missing "for" ident connectors.
 		var connector string
 		tokens := a.node.Tokens()
-		if len(tokens) > 3 && (tokens[3].Kind == SyntaxKindKwTo || isConnectorWord(tokens[3].Value)) && tokens[3].Line == a.Line() {
-			connector = tokens[3].Value
+		if len(tokens) > 3 && (tokens[3].Kind() == SyntaxKindKwTo || isConnectorWord(tokens[3].Text())) {
+			connector = tokens[3].Text()
 		}
 		desc := subject + " asks " + target
 		if connector != "" {
@@ -946,7 +874,7 @@ func (a ActionDecl) Description() string {
 }
 
 // ArchDecl is a typed view over a SyntaxKindArchDecl node.
-type ArchDecl struct{ node *SyntaxNode }
+type ArchDecl struct{ node SyntaxNode }
 
 // Keyword returns the 'arch' keyword token.
 func (a ArchDecl) Keyword() *SyntaxToken { return a.node.ChildToken(SyntaxKindKwArch) }
@@ -955,52 +883,20 @@ func (a ArchDecl) Keyword() *SyntaxToken { return a.node.ChildToken(SyntaxKindKw
 func (a ArchDecl) Name() *SyntaxToken { return a.node.ChildToken(SyntaxKindIdent) }
 
 // Line returns the 1-based source line of the `arch` keyword.
-func (a ArchDecl) Line() int {
-	tok := a.node.ChildToken(SyntaxKindKwArch)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ArchDecl) Line() int { return 0 }
 
 // EndLine returns the 1-based line of the closing `}`.
-func (a ArchDecl) EndLine() int {
-	tok := a.node.ChildToken(SyntaxKindRBrace)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ArchDecl) EndLine() int { return 0 }
 
 // PresentationLine returns the 1-based line of the `presentation:` label, or 0 if absent.
-func (a ArchDecl) PresentationLine() int {
-	for _, child := range a.node.Children {
-		section, ok := child.(*SyntaxNode)
-		if !ok || section.Kind != SyntaxKindArchSection {
-			continue
-		}
-		tok := section.ChildToken(SyntaxKindKwPresentation)
-		if tok != nil {
-			return tok.Line
-		}
-	}
-	return 0
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ArchDecl) PresentationLine() int { return 0 }
 
 // GatewayLine returns the 1-based line of the `gateway:` label, or 0 if absent.
-func (a ArchDecl) GatewayLine() int {
-	for _, child := range a.node.Children {
-		section, ok := child.(*SyntaxNode)
-		if !ok || section.Kind != SyntaxKindArchSection {
-			continue
-		}
-		tok := section.ChildToken(SyntaxKindKwGateway)
-		if tok != nil {
-			return tok.Line
-		}
-	}
-	return 0
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (a ArchDecl) GatewayLine() int { return 0 }
 
 // Sections returns all ArchSection views within this arch block.
 func (a ArchDecl) Sections() []ArchSection {
@@ -1012,11 +908,14 @@ func (a ArchDecl) Sections() []ArchSection {
 }
 
 // ArchSection is a typed view over a SyntaxKindArchSection node.
-type ArchSection struct{ node *SyntaxNode }
+type ArchSection struct{ node SyntaxNode }
+
+// isZero reports whether the section view wraps a zero/empty SyntaxNode.
+func (s ArchSection) isZero() bool { return s.node == (SyntaxNode{}) }
 
 // Keyword returns the section label keyword token (presentation or gateway).
 func (s ArchSection) Keyword() *SyntaxToken {
-	if s.node == nil {
+	if s.isZero() {
 		return nil
 	}
 	return s.node.ChildToken(SyntaxKindKwPresentation, SyntaxKindKwGateway, SyntaxKindIdent)
@@ -1024,7 +923,7 @@ func (s ArchSection) Keyword() *SyntaxToken {
 
 // Components returns all ArchComponent views within this section.
 func (s ArchSection) Components() []ArchComponent {
-	if s.node == nil {
+	if s.isZero() {
 		return nil
 	}
 	var result []ArchComponent
@@ -1035,11 +934,14 @@ func (s ArchSection) Components() []ArchComponent {
 }
 
 // ArchComponent is a typed view over a SyntaxKindArchComponent node.
-type ArchComponent struct{ node *SyntaxNode }
+type ArchComponent struct{ node SyntaxNode }
+
+// isZero reports whether the component view wraps a zero/empty SyntaxNode.
+func (c ArchComponent) isZero() bool { return c.node == (SyntaxNode{}) }
 
 // Name returns the identifier token for the component's name.
 func (c ArchComponent) Name() *SyntaxToken {
-	if c.node == nil {
+	if c.isZero() {
 		return nil
 	}
 	return c.node.ChildToken(SyntaxKindIdent)
@@ -1047,7 +949,7 @@ func (c ArchComponent) Name() *SyntaxToken {
 
 // Modifiers returns all ArchModifier views within this component.
 func (c ArchComponent) Modifiers() []ArchModifier {
-	if c.node == nil {
+	if c.isZero() {
 		return nil
 	}
 	var result []ArchModifier
@@ -1058,11 +960,14 @@ func (c ArchComponent) Modifiers() []ArchModifier {
 }
 
 // ArchModifier is a typed view over a SyntaxKindArchModifier node.
-type ArchModifier struct{ node *SyntaxNode }
+type ArchModifier struct{ node SyntaxNode }
+
+// isZero reports whether the modifier view wraps a zero/empty SyntaxNode.
+func (m ArchModifier) isZero() bool { return m.node == (SyntaxNode{}) }
 
 // Key returns the identifier token for the modifier key.
 func (m ArchModifier) Key() *SyntaxToken {
-	if m.node == nil {
+	if m.isZero() {
 		return nil
 	}
 	return m.node.ChildToken(SyntaxKindIdent)
@@ -1071,30 +976,31 @@ func (m ArchModifier) Key() *SyntaxToken {
 // Value returns the value token for the modifier (ident, string, or number).
 // Returns nil if the modifier has no value (key-only modifier).
 func (m ArchModifier) Value() *SyntaxToken {
-	if m.node == nil {
+	if m.isZero() {
 		return nil
 	}
 	// The modifier node children are: Ident (key), optional Colon, optional value token.
 	// The value token follows the Colon and may be Ident, String, or Number.
 	colonSeen := false
-	for _, child := range m.node.Children {
-		tok, ok := child.(*SyntaxToken)
+	for _, child := range m.node.Children() {
+		tok, ok := child.(SyntaxToken)
 		if !ok {
 			continue
 		}
-		if tok.Kind == SyntaxKindColon {
+		if tok.Kind() == SyntaxKindColon {
 			colonSeen = true
 			continue
 		}
 		if colonSeen {
-			return tok
+			t := tok
+			return &t
 		}
 	}
 	return nil
 }
 
 // ExposureDecl is a typed view over a SyntaxKindExposureDecl node.
-type ExposureDecl struct{ node *SyntaxNode }
+type ExposureDecl struct{ node SyntaxNode }
 
 // Keyword returns the 'exposure' keyword token.
 func (e ExposureDecl) Keyword() *SyntaxToken { return e.node.ChildToken(SyntaxKindKwExposure) }
@@ -1119,24 +1025,24 @@ type exposureBodyFields struct {
 }
 
 // collectAstExposureIdentList collects idents for exposure fields.
-func collectAstExposureIdentList(tokens []*SyntaxToken, i int) ([]string, int) {
+func collectAstExposureIdentList(tokens []SyntaxToken, i int) ([]string, int) {
 	var names []string
 	for i < len(tokens) {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
-		if tok.Kind == SyntaxKindComma {
+		if tok.Kind() == SyntaxKindComma {
 			i++
 			continue
 		}
-		isFieldKw := tok.Kind == SyntaxKindKwTo || tok.Kind == SyntaxKindKwContexts ||
-			tok.Kind == SyntaxKindKwThrough || tok.Kind == SyntaxKindIdent
-		if isFieldKw && i+1 < len(tokens) && tokens[i+1].Kind == SyntaxKindColon {
+		isFieldKw := tok.Kind() == SyntaxKindKwTo || tok.Kind() == SyntaxKindKwContexts ||
+			tok.Kind() == SyntaxKindKwThrough || tok.Kind() == SyntaxKindIdent
+		if isFieldKw && i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon {
 			break
 		}
-		if tok.Kind == SyntaxKindIdent || tok.Kind == SyntaxKindString {
-			names = append(names, tok.Value)
+		if tok.Kind() == SyntaxKindIdent || tok.Kind() == SyntaxKindString {
+			names = append(names, tok.Text())
 		}
 		i++
 	}
@@ -1149,11 +1055,11 @@ func (e ExposureDecl) parseExposureBody() exposureBodyFields {
 	i := 0
 	for i < len(tokens) {
 		tok := tokens[i]
-		if tok.Kind == SyntaxKindRBrace {
+		if tok.Kind() == SyntaxKindRBrace {
 			break
 		}
 		var fieldName string
-		switch tok.Kind {
+		switch tok.Kind() {
 		case SyntaxKindKwTo:
 			fieldName = "to"
 		case SyntaxKindKwContexts:
@@ -1161,12 +1067,12 @@ func (e ExposureDecl) parseExposureBody() exposureBodyFields {
 		case SyntaxKindKwThrough:
 			fieldName = "through"
 		case SyntaxKindIdent:
-			fieldName = tok.Value
+			fieldName = tok.Text()
 		default:
 			i++
 			continue
 		}
-		if i+1 >= len(tokens) || tokens[i+1].Kind != SyntaxKindColon {
+		if i+1 >= len(tokens) || tokens[i+1].Kind() != SyntaxKindColon {
 			i++
 			continue
 		}
@@ -1186,13 +1092,8 @@ func (e ExposureDecl) parseExposureBody() exposureBodyFields {
 }
 
 // Line returns the 1-based source line of the `exposure` keyword.
-func (e ExposureDecl) Line() int {
-	tok := e.node.ChildToken(SyntaxKindKwExposure)
-	if tok == nil {
-		return 0
-	}
-	return tok.Line
-}
+// TODO(Task 10): rewire to LineIndex; returns 0 in interim.
+func (e ExposureDecl) Line() int { return 0 }
 
 // To returns the `to:` target names.
 func (e ExposureDecl) To() []string { return e.parseExposureBody().To }
@@ -1205,11 +1106,14 @@ func (e ExposureDecl) Through() []string { return e.parseExposureBody().Through 
 
 // DeploymentRule is a typed view over a SyntaxKindDeploymentRule node.
 // In exposure blocks this wraps the 'through: <value>' clause.
-type DeploymentRule struct{ node *SyntaxNode }
+type DeploymentRule struct{ node SyntaxNode }
+
+// isZero reports whether the rule view wraps a zero/empty SyntaxNode.
+func (r DeploymentRule) isZero() bool { return r.node == (SyntaxNode{}) }
 
 // Through returns the 'through' keyword token.
 func (r DeploymentRule) Through() *SyntaxToken {
-	if r.node == nil {
+	if r.isZero() {
 		return nil
 	}
 	return r.node.ChildToken(SyntaxKindKwThrough)
@@ -1217,7 +1121,7 @@ func (r DeploymentRule) Through() *SyntaxToken {
 
 // Arrow returns the '->' token (present in service deployment rules).
 func (r DeploymentRule) Arrow() *SyntaxToken {
-	if r.node == nil {
+	if r.isZero() {
 		return nil
 	}
 	return r.node.ChildToken(SyntaxKindArrow)

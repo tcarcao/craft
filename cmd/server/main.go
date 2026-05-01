@@ -327,8 +327,9 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 // semantics and renders whatever partial model the parser produces.
 // Callers that need strict error checking should use the CLI instead.
 func parseDSL(src string) (*craft.CraftDoc, error) {
-	tree, _ := syntax.Parse(src)
-	return syntax.ProjectFromTree(tree), nil
+	greenRoot, li, _ := syntax.Parse(src)
+	tree := syntax.Root(greenRoot)
+	return syntax.ProjectFromTree(tree, li), nil
 }
 
 func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {

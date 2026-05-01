@@ -24,9 +24,9 @@ func wsWithActors(names ...string) sema.WorkspaceSymbols {
 
 // parseTree is a test helper that parses a craft source string into a syntax
 // tree. Diagnostics from parsing are ignored so tests focus on lint rules.
-func parseTree(src string) *syntax.SyntaxNode {
-	tree, _ := syntax.Parse(src)
-	return tree
+func parseTree(src string) syntax.SyntaxNode {
+	g, _, _ := syntax.Parse(src)
+	return syntax.Root(g)
 }
 
 // ── dead-event ────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ use_case "Test" {
     Auth notifies "Order Created"
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/lint/dead-event" && containsStr(d.Message, `"Order Created"`) {
@@ -59,7 +59,7 @@ use_case "Test" {
     Auth validates receipt
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code == "craft/lint/dead-event" && containsStr(d.Message, `"Order Created"`) {
 			t.Errorf("unexpected craft/lint/dead-event for consumed event 'Order Created'")
@@ -78,7 +78,7 @@ use_case "Test" {
 }
 `
 	ws := wsWithActors("Admin")
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"Admin"`) {
@@ -99,7 +99,7 @@ use_case "Test" {
 }
 `
 	ws := wsWithActors("Admin")
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"Admin"`) {
 			t.Errorf("unexpected craft/lint/unused-actor for used actor 'Admin'")
@@ -119,7 +119,7 @@ use_case "Test" {
 }
 `
 	ws := wsWithActors("NotificationListener")
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, ws)
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" && containsStr(d.Message, `"NotificationListener"`) {
 			t.Errorf("unexpected craft/lint/unused-actor for actor used in listens trigger")
@@ -129,7 +129,7 @@ use_case "Test" {
 
 func TestLint_UnusedActor_NoActors_NoFire(t *testing.T) {
 	src := ``
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code == "craft/lint/unused-actor" {
 			t.Errorf("unexpected unused-actor diagnostic when no actors defined")
@@ -146,7 +146,7 @@ use_case "Test" {
     Auth notifies "Order Processing"
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/lint/event-not-past-tense" && containsStr(d.Message, `"Order Processing"`) {
@@ -165,7 +165,7 @@ use_case "Test" {
     Auth notifies "Order Created"
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code == "craft/lint/event-not-past-tense" && containsStr(d.Message, `"Order Created"`) {
 			t.Errorf("unexpected craft/lint/event-not-past-tense for past-tense event 'Order Created'")
@@ -189,7 +189,7 @@ use_case "T" {
     Auth notifies "Order Placed"
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/dead-event" {
 			continue
@@ -215,7 +215,7 @@ use_case "T" {
     Auth notifies OrderPlaced
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/dead-event" {
 			continue
@@ -240,7 +240,7 @@ use_case "T" {
     Auth notifies "Order Processing"
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/event-not-past-tense" {
 			continue
@@ -264,7 +264,7 @@ use_case "T" {
     Auth notifies Processing
 }
 `
-	diags := sema.LintWorkspace(map[string]*syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///t.craft": parseTree(src)}, wsWithActors())
 	for _, d := range diags {
 		if d.Code != "craft/lint/event-not-past-tense" {
 			continue

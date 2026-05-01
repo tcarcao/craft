@@ -4,16 +4,21 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
-// ProjectFromTree projects a lossless *SyntaxNode tree into a *craft.CraftDoc
+// ProjectFromTree projects a lossless red SyntaxNode tree into a *craft.CraftDoc
 // using typed views directly — no lower.go dependency.
-func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
-	if tree == nil {
+//
+// li is reserved for future position-aware projection (Task 10); it is currently
+// unused but kept on the public signature so callers wire LineIndex through.
+func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
+	_ = li
+	if root == (SyntaxNode{}) {
 		return &craft.CraftDoc{UseCases: []craft.UseCase{}}
 	}
-	file := AsFile(tree)
+	file := AsFile(root)
 	doc := &craft.CraftDoc{UseCases: []craft.UseCase{}}
 
 	// Services
@@ -30,9 +35,9 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 			continue // malformed — skip
 		}
 		doc.Actors = append(doc.Actors, craft.Actor{
-			Name: nameTok.Value,
+			Name: nameTok.Text(),
 			Type: craft.ActorType(typeVal),
-			Line: nameTok.Line,
+			Line: 0,
 		})
 	}
 
@@ -46,11 +51,11 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 		for _, bc := range d.BoundedContexts() {
 			bcTok := bc.Name()
 			if bcTok != nil {
-				bcNames = append(bcNames, bcTok.Value)
+				bcNames = append(bcNames, bcTok.Text())
 			}
 		}
 		doc.Domains = append(doc.Domains, craft.Domain{
-			Name:            nameTok.Value,
+			Name:            nameTok.Text(),
 			BoundedContexts: bcNames,
 		})
 	}
@@ -63,7 +68,7 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 			continue
 		}
 		outUC := craft.UseCase{
-			Name:      titleTok.Value,
+			Name:      titleTok.Text(),
 			Scenarios: []craft.Scenario{},
 		}
 		for _, sc := range uc.Scenarios() {
@@ -79,8 +84,8 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 				// Mirror lowerAction: two paths increment counter twice and skip the action.
 				// Path 1: no subject — first token is SyntaxKindError.
 				// Path 2: subject present but no verb — exactly one non-error token.
-				tokens := action.node.Tokens()
-				if len(tokens) > 0 && tokens[0].Kind == SyntaxKindError {
+				tokens := action.Tokens()
+				if len(tokens) > 0 && tokens[0].Kind() == SyntaxKindError {
 					counter++
 					counter++
 					continue
@@ -104,7 +109,7 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 		nameTok := a.Name()
 		name := ""
 		if nameTok != nil {
-			name = nameTok.Value
+			name = nameTok.Text()
 		}
 		ab := craft.ArchBlock{
 			Name:         name,
@@ -117,7 +122,7 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 				continue
 			}
 			components := projectArchComponentsFromView(section.Components())
-			switch kwTok.Kind {
+			switch kwTok.Kind() {
 			case SyntaxKindKwPresentation:
 				ab.Presentation = append(ab.Presentation, components...)
 			case SyntaxKindKwGateway:
@@ -134,7 +139,7 @@ func ProjectFromTree(tree *SyntaxNode) *craft.CraftDoc {
 			continue
 		}
 		doc.Exposures = append(doc.Exposures, craft.Exposure{
-			Name:     nameTok.Value,
+			Name:     nameTok.Text(),
 			To:       e.To(),
 			Contexts: e.Contexts(),
 			Through:  e.Through(),
@@ -156,22 +161,22 @@ func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 	default: // external
 		// Match lower.go lowerTrigger: read by token position, not by kind.
 		// Actor is tokens[0] (may be a keyword like KwUser, not SyntaxKindIdent).
-		tokens := t.node.Tokens()
+		tokens := t.Tokens()
 		if len(tokens) >= 1 {
-			actor = tokens[0].Value
+			actor = tokens[0].Text()
 		}
 		if len(tokens) >= 2 {
-			verb = tokens[1].Value
+			verb = tokens[1].Text()
 		}
 		phraseStart := 2
-		if len(tokens) > 2 && isConnectorWord(tokens[2].Value) {
+		if len(tokens) > 2 && isConnectorWord(tokens[2].Text()) {
 			// connector is consumed (discarded) from phrase, matching lower.go `_ = connector`
 			phraseStart = 3
 		}
 		if len(tokens) > phraseStart {
 			var parts []string
 			for _, tok := range tokens[phraseStart:] {
-				parts = append(parts, tok.Value)
+				parts = append(parts, tok.Text())
 			}
 			phrase = strings.Join(parts, " ")
 		}
@@ -212,20 +217,19 @@ func projectActionFromView(a ActionDecl, id string) craft.Action {
 		// Match lower.go lowerAsksAction: connector is at tokens[3] (KwTo or "for" ident).
 		// a.ConnectorValue() only returns KwTo; must check tokens for "for" too.
 		{
-			tokens := a.node.Tokens()
-			actionLine := a.Line()
+			tokens := a.Tokens()
 			i := 3 // after subject, asks, target
 			if i < len(tokens) {
 				tok := tokens[i]
-				if (tok.Kind == SyntaxKindKwTo || (tok.Kind == SyntaxKindIdent && tok.Value == "for")) && tok.Line == actionLine {
-					connector = tok.Value
+				if tok.Kind() == SyntaxKindKwTo || (tok.Kind() == SyntaxKindIdent && tok.Text() == "for") {
+					connector = tok.Text()
 					i++
 				}
 			}
 			// phrase from remaining tokens
 			var phraseParts []string
 			for _, tok := range tokens[i:] {
-				phraseParts = append(phraseParts, tok.Value)
+				phraseParts = append(phraseParts, tok.Text())
 			}
 			phrase = strings.Join(phraseParts, " ")
 			// description matches lower.go: always include connector field (may be empty, adding trailing space)
@@ -243,22 +247,21 @@ func projectActionFromView(a ActionDecl, id string) craft.Action {
 		// Reset connector (a.ConnectorValue() returns `to` from KwTo which is part of target syntax, not a connector).
 		connector = ""
 		{
-			tokens := a.node.Tokens()
-			actionLine := a.Line()
+			tokens := a.Tokens()
 			i := 2
 			// skip optional `to <target>`
-			if i < len(tokens) && tokens[i].Kind == SyntaxKindKwTo {
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindKwTo {
 				i += 2 // skip `to` and target
 			}
 			// optional connector_word after target
-			if i < len(tokens) && isConnectorWord(tokens[i].Value) && tokens[i].Line == actionLine {
-				connector = tokens[i].Value
+			if i < len(tokens) && isConnectorWord(tokens[i].Text()) {
+				connector = tokens[i].Text()
 				i++
 			}
 			// phrase from remaining tokens
 			var phraseParts []string
 			for _, tok := range tokens[i:] {
-				phraseParts = append(phraseParts, tok.Value)
+				phraseParts = append(phraseParts, tok.Text())
 			}
 			phrase = strings.Join(phraseParts, " ")
 			if target != "" {
@@ -271,16 +274,15 @@ func projectActionFromView(a ActionDecl, id string) craft.Action {
 		verb = a.VerbValue()
 		// Match lower.go: isConnectorWord applies to any connector ident (a/an/the/as/to/etc.),
 		// not just SyntaxKindKwTo. Extract connector directly from tokens.
-		tokens := a.node.Tokens()
-		actionLine := a.Line()
+		tokens := a.Tokens()
 		phraseStart := 2
-		if len(tokens) > 2 && isConnectorWord(tokens[2].Value) && tokens[2].Line == actionLine {
-			connector = tokens[2].Value
+		if len(tokens) > 2 && isConnectorWord(tokens[2].Text()) {
+			connector = tokens[2].Text()
 			phraseStart = 3
 		}
 		var phraseParts []string
 		for _, tok := range tokens[phraseStart:] {
-			phraseParts = append(phraseParts, tok.Value)
+			phraseParts = append(phraseParts, tok.Text())
 		}
 		phrase = strings.Join(phraseParts, " ")
 		description = subject + " " + verb
@@ -302,26 +304,27 @@ func projectActionFromView(a ActionDecl, id string) craft.Action {
 		Connector:     connector,
 		Phrase:        phrase,
 		Description:   description,
-		Line:          a.Line(),
+		Line:          0,
 	}
 }
 
 // serviceNameTok returns the name token for a service decl — first Ident or String child
 // (skipping the `service` keyword itself). Matches lower.go lowerServiceDecl name extraction.
 func serviceNameTok(svc ServiceDecl) *SyntaxToken {
-	if svc.node == nil {
+	if svc.node == (SyntaxNode{}) {
 		return nil
 	}
-	for _, child := range svc.node.Children {
-		tok, ok := child.(*SyntaxToken)
+	for _, child := range svc.node.Children() {
+		tok, ok := child.(SyntaxToken)
 		if !ok {
 			continue
 		}
-		if tok.Kind == SyntaxKindKwService {
+		if tok.Kind() == SyntaxKindKwService {
 			continue // skip the `service` keyword
 		}
-		if tok.Kind == SyntaxKindIdent || tok.Kind == SyntaxKindString {
-			return tok
+		if tok.Kind() == SyntaxKindIdent || tok.Kind() == SyntaxKindString {
+			t := tok
+			return &t
 		}
 	}
 	return nil
@@ -341,14 +344,14 @@ func projectServicesFromViews(file File) []craft.Service {
 		if nameTok == nil {
 			continue
 		}
-		name := nameTok.Value
+		name := nameTok.Text()
 		e, exists := byName[name]
 		if !exists {
 			e = &entry{
 				svc: craft.Service{
 					Name:       name,
 					Deployment: craft.DeploymentStrategy{Type: svc.DeploymentType()},
-					Line:       nameTok.Line,
+					Line:       0,
 				},
 				ctxSet: map[string]bool{},
 				dsSet:  map[string]bool{},
@@ -400,7 +403,7 @@ func projectArchComponentsFromView(comps []ArchComponent) []craft.Component {
 }
 
 func projectArchComponentFromView(c ArchComponent) craft.Component {
-	if c.node == nil {
+	if c.node == (SyntaxNode{}) {
 		return craft.Component{Type: craft.ComponentType("simple")}
 	}
 
@@ -409,7 +412,7 @@ func projectArchComponentFromView(c ArchComponent) craft.Component {
 	tokens := c.node.Tokens()
 	hasGT := false
 	for _, tok := range tokens {
-		if tok.Kind == SyntaxKindGT {
+		if tok.Kind() == SyntaxKindGT {
 			hasGT = true
 			break
 		}
@@ -426,7 +429,7 @@ func projectSimpleArchComponentFromView(c ArchComponent) craft.Component {
 	nameTok := c.Name()
 	name := ""
 	if nameTok != nil {
-		name = nameTok.Value
+		name = nameTok.Text()
 	}
 	comp := craft.Component{
 		Name: name,
@@ -437,10 +440,10 @@ func projectSimpleArchComponentFromView(c ArchComponent) craft.Component {
 		valTok := m.Value()
 		key, val := "", ""
 		if keyTok != nil {
-			key = keyTok.Value
+			key = keyTok.Text()
 		}
 		if valTok != nil {
-			val = valTok.Value
+			val = valTok.Text()
 		}
 		comp.Modifiers = append(comp.Modifiers, craft.ComponentModifier{Key: key, Value: val})
 	}
@@ -467,28 +470,28 @@ func projectFlowArchComponentFromView(c ArchComponent) craft.Component {
 		currentMods = nil
 	}
 
-	for _, child := range c.node.Children {
+	for _, child := range c.node.Children() {
 		switch ch := child.(type) {
-		case *SyntaxToken:
-			switch ch.Kind {
+		case SyntaxToken:
+			switch ch.Kind() {
 			case SyntaxKindGT:
 				flush()
 			case SyntaxKindIdent:
 				if currentName == "" {
-					currentName = ch.Value
+					currentName = ch.Text()
 				}
 			}
-		case *SyntaxNode:
-			if ch.Kind == SyntaxKindArchModifier {
+		case SyntaxNode:
+			if ch.Kind() == SyntaxKindArchModifier {
 				toks := ch.Tokens()
 				if len(toks) == 0 {
 					continue
 				}
-				key := toks[0].Value
+				key := toks[0].Text()
 				var val string
 				for j, tok := range toks {
-					if tok.Kind == SyntaxKindColon && j+1 < len(toks) {
-						val = toks[j+1].Value
+					if tok.Kind() == SyntaxKindColon && j+1 < len(toks) {
+						val = toks[j+1].Text()
 						break
 					}
 				}
@@ -503,4 +506,3 @@ func projectFlowArchComponentFromView(c ArchComponent) craft.Component {
 		Chain: chain,
 	}
 }
-

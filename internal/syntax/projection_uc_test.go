@@ -16,11 +16,11 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
   when PaymentProcessing listens "Funds Reserved"
     PaymentProcessing asks AccountManagement to verify destination account
 }`
-	f, diags := syntax.Parse(src)
+	g, li, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.ProjectFromTree(f)
+	doc := syntax.ProjectFromTree(syntax.Root(g), li)
 	if len(doc.UseCases) != 1 {
 		t.Fatalf("expected 1 use case, got %d", len(doc.UseCases))
 	}
