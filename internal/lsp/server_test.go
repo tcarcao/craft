@@ -2960,3 +2960,86 @@ func TestDefinition_ExposureToTarget(t *testing.T) {
 		})
 	}
 }
+
+func TestIncrementalSync(t *testing.T) {
+	// Start with "actor user Alice" and incrementally rename "Alice" to "Carol"
+	// by replacing chars 11–16 (0-based) on line 0 with "Carol".
+	const initial = "actor user Alice"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br) //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///incremental.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": initial,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(200 * time.Millisecond)
+
+	// Send incremental change: replace "Alice" (chars 11–16) with "Carol"
+	changeParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri, "version": 2},
+		"contentChanges": []map[string]interface{}{
+			{
+				"range": map[string]interface{}{
+					"start": map[string]interface{}{"line": 0, "character": 11},
+					"end":   map[string]interface{}{"line": 0, "character": 16},
+				},
+				"text": "Carol",
+			},
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didChange", Params: changeParams}) //nolint:errcheck
+	time.Sleep(200 * time.Millisecond)
+
+	// Request hover on the name to verify it was parsed as "Carol"
+	id++
+	hoverID := id
+	hoverParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": 12},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &hoverID, Method: "textDocument/hover", Params: hoverParams}) //nolint:errcheck
+
+	var hoverResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == hoverID {
+			hoverResp = msg
+			break
+		}
+	}
+	if hoverResp.ID == nil {
+		t.Fatal("timed out waiting for hover response")
+	}
+
+	// The hover result must mention "Carol", not "Alice"
+	if hoverResp.Result == nil {
+		t.Fatal("hover returned null result — parse may have used stale content")
+	}
+	if !strings.Contains(string(hoverResp.Result), "Carol") {
+		t.Errorf("hover result does not contain 'Carol': %s", hoverResp.Result)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                              //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}

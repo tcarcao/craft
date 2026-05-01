@@ -70,6 +70,28 @@ func lspPosFromOffset(li green.LineIndex, src string, offset green.TextSize) pro
 	return protocol.Position{Line: lspLine(line), Character: startChar}
 }
 
+// applyIncrementalChange applies one LSP incremental text change to content.
+// r is in LSP coordinates (0-based line and character); li must be the
+// LineIndex for content BEFORE this change is applied.
+func applyIncrementalChange(content string, li green.LineIndex, r protocol.Range, newText string) string {
+	start := int(li.Offset(int(r.Start.Line)+1, int(r.Start.Character)+1))
+	end := int(li.Offset(int(r.End.Line)+1, int(r.End.Character)+1))
+	n := len(content)
+	if start < 0 {
+		start = 0
+	}
+	if start > n {
+		start = n
+	}
+	if end < 0 {
+		end = 0
+	}
+	if end > n {
+		end = n
+	}
+	return content[:start] + newText + content[end:]
+}
+
 // findDeclNameAtLine returns the name token of the first actor, domain, or
 // service declaration whose name token falls on cursorLine (1-based).
 func findDeclNameAtLine(file syntax.File, li green.LineIndex, cursorLine int) *syntax.SyntaxToken {
@@ -176,7 +198,7 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// S4: semanticTokens (full) with actor/domain/service token types.
 			// S5: definition (go-to-definition), executeCommand (custom LSP commands).
 			// S7: foldingRange (arch blocks + labelled segments).
-			TextDocumentSync:       protocol.TextDocumentSyncKindFull,
+			TextDocumentSync:       protocol.TextDocumentSyncKindIncremental,
 			DocumentSymbolProvider: true,
 			HoverProvider:          true,
 			DefinitionProvider:     true,
@@ -569,7 +591,19 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 		return nil
 	}
 	uri := string(params.TextDocument.URI)
-	content := params.ContentChanges[len(params.ContentChanges)-1].Text
+
+	// Start from the stored content; use empty string if file not yet known.
+	content := ""
+	if f := s.ws.Get(uri); f != nil {
+		content = f.Content
+	}
+	li := green.NewLineIndex(content)
+
+	for _, change := range params.ContentChanges {
+		content = applyIncrementalChange(content, li, change.Range, change.Text)
+		li = green.NewLineIndex(content)
+	}
+
 	s.ws.Change(uri, content)
 	s.notifyLogTrace(ctx, fmt.Sprintf("didChange: parsed %s", uri))
 	s.scheduleDiagnostics(ctx, uri)
