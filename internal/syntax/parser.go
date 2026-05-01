@@ -782,8 +782,34 @@ func (p *Parser) parseTrigger(whenLine int) []craft.Diagnostic {
 
 	// The first token is the actor/domain subject.
 	subjectTok := p.peek()
+
+	// cron trigger: when cron "0 * * * *"
+	if subjectTok.Type == lexer.TokenIdent && subjectTok.Value == "cron" {
+		p.consumeAs(SyntaxKindKwCron)
+		if p.peek().Type == lexer.TokenString {
+			p.consumeAs(SyntaxKindString)
+		} else {
+			diags = append(diags, p.diagUnexpected(p.peek(), "cron expression string (e.g. \"0 * * * *\")"))
+		}
+		p.builder.FinishNode()
+		return diags
+	}
+
+	// periodic trigger: when every "1h"
+	if subjectTok.Type == lexer.TokenIdent && subjectTok.Value == "every" {
+		p.consumeAs(SyntaxKindKwEvery)
+		if p.peek().Type == lexer.TokenString {
+			p.consumeAs(SyntaxKindString)
+		} else {
+			diags = append(diags, p.diagUnexpected(p.peek(), "duration string (e.g. \"1h\")"))
+		}
+		p.builder.FinishNode()
+		return diags
+	}
+
 	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
 		diags = append(diags, p.diagUnexpected(subjectTok, "trigger subject (actor/domain name)"))
+		p.consumeAs(SyntaxKindError) // consume bad token to unblock the action loop
 		p.builder.FinishNode()
 		return diags
 	}

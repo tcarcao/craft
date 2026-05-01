@@ -232,6 +232,80 @@ func TestParseTree_ActorsBlockSyntaxTree(t *testing.T) {
 	}
 }
 
+func TestRecovery_TriggerBadSubjectConsumed(t *testing.T) {
+	// A bad token in the trigger subject position must not leave the token
+	// stream stuck, which would cause the action loop to spin on the same token.
+	src := "use_case \"X\" {\n  when 42 bad stuff\n    Domain asks Other to something\n}"
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatal("expected at least one diagnostic for bad trigger subject")
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	// Parser must not loop: the use_case node must be closed (test completes without hanging).
+}
+
+func TestParseTree_CronTrigger(t *testing.T) {
+	src := "use_case \"Nightly\" {\n  when cron \"0 0 * * *\"\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	root := syntax.Root(g)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	scenarios := ucNodes[0].ChildNodes(syntax.SyntaxKindScenario)
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	trigger := scenarios[0].ChildNodes(syntax.SyntaxKindTrigger)
+	if len(trigger) != 1 {
+		t.Fatalf("expected 1 trigger node, got %d", len(trigger))
+	}
+	cronKw := trigger[0].ChildToken(syntax.SyntaxKindKwCron)
+	if cronKw == nil || cronKw.Text() != "cron" {
+		t.Errorf("expected cron keyword token in trigger, got %v", cronKw)
+	}
+}
+
+func TestParseTree_EveryTrigger(t *testing.T) {
+	src := "use_case \"Polling\" {\n  when every \"5m\"\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	root := syntax.Root(g)
+	ucDecls := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucDecls) == 0 {
+		t.Fatal("expected 1 use_case node")
+	}
+	scenarios := ucDecls[0].ChildNodes(syntax.SyntaxKindScenario)
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	trigger := scenarios[0].ChildNodes(syntax.SyntaxKindTrigger)
+	if len(trigger) == 0 {
+		t.Fatal("expected 1 trigger node")
+	}
+	everyKw := trigger[0].ChildToken(syntax.SyntaxKindKwEvery)
+	if everyKw == nil || everyKw.Text() != "every" {
+		t.Errorf("expected every keyword token in trigger, got %v", everyKw)
+	}
+}
+
+func TestParseTree_CronTriggerMissingString(t *testing.T) {
+	src := "use_case \"Bad\" {\n  when cron\n}"
+	_, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Error("expected diagnostic for missing cron expression string")
+	}
+}
+
 // TestRecovery_NestedBraceInServiceField verifies that a service field whose
 // value accidentally contains `{...}` does not cause the parser to consume
 // the wrong `}` as the service block's closing brace, which would prevent
