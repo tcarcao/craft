@@ -580,6 +580,11 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 		if p.peek().Type != lexer.TokenColon {
 			diags = append(diags, p.diagUnexpected(p.peek(), ":"))
 			p.builder.FinishNode()
+			// Consume the unexpected token if it cannot start a new field or end
+			// the block, to avoid cascade diagnostics on the same position.
+			if next := p.peek().Type; next != lexer.TokenIdent && next != lexer.TokenRBrace {
+				p.consume()
+			}
 			continue
 		}
 		p.consumeAs(SyntaxKindColon)
