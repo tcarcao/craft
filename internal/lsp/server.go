@@ -273,18 +273,19 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		if nameTok == nil {
 			continue
 		}
-		nameLine, _ := f.LineIndex.LineCol(nameTok.Offset())
 		ctxNames := svc.Contexts()
-		ctxLines := svc.ContextLines()
+		ctxToks := svc.ContextTokens()
 		for i, ctxName := range ctxNames {
-			// Match by context token line when available; fall back to the
-			// service name line for services parsed without line tracking
-			// (e.g. from the ANTLR adapter path).
-			ctxLine := nameLine
-			if i < len(ctxLines) {
-				ctxLine = ctxLines[i]
+			if i >= len(ctxToks) {
+				continue
 			}
+			ctxLine, ctxCol := f.LineIndex.LineCol(ctxToks[i].Offset())
 			if ctxLine != cursorLine {
+				continue
+			}
+			// cursorChar is 1-based; ctxCol is 1-based start of this token.
+			// Only match if the cursor falls within [ctxCol, ctxCol+len(ctxName)).
+			if cursorChar < ctxCol || cursorChar >= ctxCol+len(ctxName) {
 				continue
 			}
 			domSym, ok := sema.ResolveServiceContext(rm, uri, nameTok.Text(), ctxName)

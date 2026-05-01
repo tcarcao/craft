@@ -2651,3 +2651,108 @@ func TestSemanticTokens_StringLength(t *testing.T) {
 	cancel()
 	_ = errCh
 }
+
+func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
+	// L1:  domain Auth {
+	// L2:    Login
+	// L3:  }
+	// L4:  domain Profile {
+	// L5:    UserData
+	// L6:  }
+	// L7:  services {
+	// L8:    UserSvc {
+	// L9:      contexts: Auth, Profile
+	// L10:   }
+	// L11: }
+	const craftSrc = "domain Auth {\n  Login\n}\ndomain Profile {\n  UserData\n}\nservices {\n  UserSvc {\n    contexts: Auth, Profile\n  }\n}"
+
+	tests := []struct {
+		name       string
+		cursorLine uint32
+		cursorChar uint32
+		wantLine   uint32
+		wantChar   uint32
+	}{
+		// "Auth" on L9 (0-based: line 8), col 14 → Auth domain at line 0 col 7
+		{name: "first-context", cursorLine: 8, cursorChar: 14, wantLine: 0, wantChar: 7},
+		// "Profile" on L9 col 20 → Profile domain at line 3 col 7
+		{name: "second-context", cursorLine: 8, cursorChar: 20, wantLine: 3, wantChar: 7},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			serverIn, testOut := io.Pipe()
+			testIn, serverOut := io.Pipe()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			defer testOut.Close()
+			go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+			br := bufio.NewReader(testIn)
+
+			id := 1
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+				Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+			readMsg(br) //nolint:errcheck
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+			const uri = "file:///ctx_tokoffset.craft"
+			openParams, _ := json.Marshal(map[string]interface{}{
+				"textDocument": map[string]interface{}{
+					"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+				},
+			})
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+			time.Sleep(300 * time.Millisecond)
+
+			id++
+			defID := id
+			defParams, _ := json.Marshal(map[string]interface{}{
+				"textDocument": map[string]interface{}{"uri": uri},
+				"position":     map[string]interface{}{"line": tc.cursorLine, "character": tc.cursorChar},
+			})
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &defID, Method: "textDocument/definition", Params: defParams}) //nolint:errcheck
+
+			var defResp lspMsg
+			deadline := time.Now().Add(4 * time.Second)
+			for time.Now().Before(deadline) {
+				msg, err := readMsg(br)
+				if err != nil {
+					t.Fatalf("reading: %v", err)
+				}
+				if msg.ID != nil && *msg.ID == defID {
+					defResp = msg
+					break
+				}
+			}
+			if defResp.ID == nil {
+				t.Fatal("timed out waiting for definition response")
+			}
+
+			var locs []struct {
+				Range struct {
+					Start struct {
+						Line      uint32 `json:"line"`
+						Character uint32 `json:"character"`
+					} `json:"start"`
+				} `json:"range"`
+			}
+			if err := json.Unmarshal(defResp.Result, &locs); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if len(locs) == 0 {
+				t.Fatalf("empty locations; cursor at (%d,%d)", tc.cursorLine, tc.cursorChar)
+			}
+			if locs[0].Range.Start.Line != tc.wantLine {
+				t.Errorf("line: got %d want %d", locs[0].Range.Start.Line, tc.wantLine)
+			}
+			if locs[0].Range.Start.Character != tc.wantChar {
+				t.Errorf("char: got %d want %d", locs[0].Range.Start.Character, tc.wantChar)
+			}
+
+			id2 := 99
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+			readMsg(br)                                                              //nolint:errcheck
+			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+		})
+	}
+}
