@@ -57,7 +57,15 @@ func (li LineIndex) LineCol(offset TextSize) (line, col int) {
 func (li LineIndex) Offset(line, col int) TextSize {
 	lineStart := TextSize(0)
 	if line > 1 {
-		lineStart = li.newlineOffsets[line-2] + 1
+		idx := line - 2
+		if idx < len(li.newlineOffsets) {
+			lineStart = li.newlineOffsets[idx] + 1
+		} else {
+			// Line number beyond EOF — clamp to the start of the last known line.
+			if len(li.newlineOffsets) > 0 {
+				lineStart = li.newlineOffsets[len(li.newlineOffsets)-1] + 1
+			}
+		}
 	}
 	return lineStart + TextSize(col-1)
 }
