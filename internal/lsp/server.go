@@ -685,9 +685,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		tokLine, _ := f.LineIndex.LineCol(nameTok.Offset())
 		startLine := lspLine(tokLine)
 		endLine := lspLine(svc.EndLine(f.LineIndex))
-		if endLine < startLine {
-			endLine = startLine
-		}
+		endLine = max(endLine, startLine)
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindModule,
@@ -719,9 +717,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		tokLine, _ := f.LineIndex.LineCol(nameTok.Offset())
 		startLine := lspLine(tokLine)
 		endLine := lspLine(d.EndLine(f.LineIndex))
-		if endLine < startLine {
-			endLine = startLine
-		}
+		endLine = max(endLine, startLine)
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindNamespace,
@@ -737,9 +733,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		}
 		startLine := lspLine(uc.Line(f.LineIndex))
 		endLine := lspLine(uc.EndLine(f.LineIndex))
-		if endLine < startLine {
-			endLine = startLine
-		}
+		endLine = max(endLine, startLine)
 		name := ""
 		if titleTok := uc.Title(); titleTok != nil {
 			name = titleTok.Text()
@@ -755,9 +749,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 	for _, arch := range file.Archs() {
 		startLine := lspLine(arch.Line(f.LineIndex))
 		endLine := lspLine(arch.EndLine(f.LineIndex))
-		if endLine < startLine {
-			endLine = startLine
-		}
+		endLine = max(endLine, startLine)
 		name := ""
 		if nameTok := arch.Name(); nameTok != nil {
 			name = nameTok.Text()
@@ -780,9 +772,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		}
 		expStartLine := lspLine(exp.Line(f.LineIndex))
 		expEndLine := lspLine(exp.EndLine(f.LineIndex))
-		if expEndLine < expStartLine {
-			expEndLine = expStartLine
-		}
+		expEndLine = max(expEndLine, expStartLine)
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindInterface,
