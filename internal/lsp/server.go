@@ -683,13 +683,17 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			continue
 		}
 		tokLine, _ := f.LineIndex.LineCol(nameTok.Offset())
-		line := lspLine(tokLine)
+		startLine := lspLine(tokLine)
+		endLine := lspLine(svc.EndLine(f.LineIndex))
+		if endLine < startLine {
+			endLine = startLine
+		}
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindModule,
 			Detail:         "service",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
+			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
 		})
 	}
 	for _, a := range file.Actors() {
@@ -697,8 +701,8 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		if nameTok == nil {
 			continue
 		}
-		tokLine, _ := f.LineIndex.LineCol(nameTok.Offset())
-		line := lspLine(tokLine)
+		actorLine := a.Line(f.LineIndex)
+		line := lspLine(actorLine)
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindObject,
@@ -713,13 +717,17 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			continue
 		}
 		tokLine, _ := f.LineIndex.LineCol(nameTok.Offset())
-		line := lspLine(tokLine)
+		startLine := lspLine(tokLine)
+		endLine := lspLine(d.EndLine(f.LineIndex))
+		if endLine < startLine {
+			endLine = startLine
+		}
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindNamespace,
 			Detail:         "domain",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
+			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
 		})
 	}
 	for _, uc := range file.UseCases() {
@@ -727,8 +735,11 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		if kwTok == nil {
 			continue
 		}
-		tokLine, _ := f.LineIndex.LineCol(kwTok.Offset())
-		line := lspLine(tokLine)
+		startLine := lspLine(uc.Line(f.LineIndex))
+		endLine := lspLine(uc.EndLine(f.LineIndex))
+		if endLine < startLine {
+			endLine = startLine
+		}
 		name := ""
 		if titleTok := uc.Title(); titleTok != nil {
 			name = titleTok.Text()
@@ -737,13 +748,16 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Name:   name,
 			Kind:   protocol.SymbolKindEvent, // closest match for use-case-level interactions
 			Detail: "use_case",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
+			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
 		})
 	}
 	for _, arch := range file.Archs() {
-		archLine := arch.Line(f.LineIndex)
-		line := lspLine(archLine)
+		startLine := lspLine(arch.Line(f.LineIndex))
+		endLine := lspLine(arch.EndLine(f.LineIndex))
+		if endLine < startLine {
+			endLine = startLine
+		}
 		name := ""
 		if nameTok := arch.Name(); nameTok != nil {
 			name = nameTok.Text()
@@ -755,8 +769,8 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Name:           name,
 			Kind:           protocol.SymbolKindPackage,
 			Detail:         "arch",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
+			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
 		})
 	}
 	for _, exp := range file.Exposures() {
@@ -764,14 +778,17 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		if nameTok == nil {
 			continue
 		}
-		expLine := exp.Line(f.LineIndex)
-		line := lspLine(expLine)
+		expStartLine := lspLine(exp.Line(f.LineIndex))
+		expEndLine := lspLine(exp.EndLine(f.LineIndex))
+		if expEndLine < expStartLine {
+			expEndLine = expStartLine
+		}
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindInterface,
 			Detail:         "exposure",
-			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			SelectionRange: protocol.Range{Start: protocol.Position{Line: expStartLine}, End: protocol.Position{Line: expStartLine}},
+			Range:          protocol.Range{Start: protocol.Position{Line: expStartLine}, End: protocol.Position{Line: expEndLine}},
 		})
 	}
 	return syms, nil

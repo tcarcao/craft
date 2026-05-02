@@ -3207,3 +3207,97 @@ func TestCompletion_ServiceContextsFieldValue_TreePath(t *testing.T) {
 	readMsg(br)
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})
 }
+
+func TestDocumentSymbol_RangeEndPositions(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatalf("reading initialize response: %v", err)
+	}
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// services block: line 0 "services {", line 1 "  Auth {", line 2 "    contexts: Login", line 3 "  }", line 4 "}"
+	craftSrc := "services {\n  Auth {\n    contexts: Login\n  }\n}\n"
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///sym_test.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	id = 2
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id,
+		Method: "textDocument/documentSymbol",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///sym_test.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == id {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for documentSymbol response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("documentSymbol error: %s", resp.Error)
+	}
+
+	var syms []struct {
+		Name  string `json:"name"`
+		Range struct {
+			Start struct{ Line int `json:"line"` } `json:"start"`
+			End   struct{ Line int `json:"line"` } `json:"end"`
+		} `json:"range"`
+	}
+	if err := json.Unmarshal(resp.Result, &syms); err != nil {
+		t.Fatalf("unmarshal documentSymbol result: %v", err)
+	}
+	if len(syms) == 0 {
+		t.Fatal("expected at least 1 symbol")
+	}
+	auth := syms[0]
+	if auth.Name != "Auth" {
+		t.Fatalf("expected first symbol Auth, got %q", auth.Name)
+	}
+	if auth.Range.Start.Line >= auth.Range.End.Line {
+		t.Errorf("Range.End.Line (%d) should be > Range.Start.Line (%d) for multi-line service block",
+			auth.Range.End.Line, auth.Range.Start.Line)
+	}
+	if auth.Range.End.Line != 3 {
+		t.Errorf("expected Range.End.Line == 3 (closing `}` of Auth service), got %d", auth.Range.End.Line)
+	}
+	cancel()
+}
