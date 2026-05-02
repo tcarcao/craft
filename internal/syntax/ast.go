@@ -298,6 +298,16 @@ func (a ActorDecl) Name() *SyntaxToken {
 	return a.node.ChildToken(SyntaxKindIdent)
 }
 
+// Line returns the 1-based source line of the actor name token using li.
+func (a ActorDecl) Line(li green.LineIndex) int {
+	tok := a.Name()
+	if tok == nil {
+		return nodeFirstTokenLine(a.node, li)
+	}
+	line, _ := li.LineCol(tok.Offset())
+	return line
+}
+
 // DomainDecl is a typed view over a SyntaxKindDomainDecl node.
 type DomainDecl struct{ node SyntaxNode }
 
@@ -507,6 +517,17 @@ func (s ServiceDecl) Contexts() []string { return s.parseServiceBody().Contexts 
 // TODO(Task 10): rewire to LineIndex; entries are 0 in interim.
 func (s ServiceDecl) ContextLines() []int { return s.parseServiceBody().ContextLines }
 
+// ContextLinesWith returns the 1-based source line of each context name token using li.
+func (s ServiceDecl) ContextLinesWith(li green.LineIndex) []int {
+	toks := s.ContextTokens()
+	lines := make([]int, len(toks))
+	for i, tok := range toks {
+		line, _ := li.LineCol(tok.Offset())
+		lines[i] = line
+	}
+	return lines
+}
+
 // ContextTokens returns the raw SyntaxToken for each name in the contexts: list.
 // Use tok.Offset() + a LineIndex to compute LSP positions for inlay hints.
 func (s ServiceDecl) ContextTokens() []SyntaxToken {
@@ -710,6 +731,16 @@ func (u UseCaseDecl) Title() *SyntaxToken   { return u.node.ChildToken(SyntaxKin
 
 // EndLine returns the 1-based line of the closing `}` using li.
 func (u UseCaseDecl) EndLine(li green.LineIndex) int { return nodeEndLine(u.node, li) }
+
+// Line returns the 1-based source line of the `use_case` keyword using li.
+func (u UseCaseDecl) Line(li green.LineIndex) int {
+	tok := u.Keyword()
+	if tok == nil {
+		return nodeFirstTokenLine(u.node, li)
+	}
+	line, _ := li.LineCol(tok.Offset())
+	return line
+}
 
 // Scenarios returns all ScenarioDecl views within this use case.
 func (u UseCaseDecl) Scenarios() []ScenarioDecl {
@@ -1333,6 +1364,9 @@ func (e ExposureDecl) parseExposureBody() exposureBodyFields {
 
 // Line returns the 1-based source line of the `exposure` keyword using li.
 func (e ExposureDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(e.node, li) }
+
+// EndLine returns the 1-based line of the closing `}` using li.
+func (e ExposureDecl) EndLine(li green.LineIndex) int { return nodeEndLine(e.node, li) }
 
 // To returns the `to:` target names.
 func (e ExposureDecl) To() []string { return e.parseExposureBody().To }

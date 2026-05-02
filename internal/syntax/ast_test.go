@@ -627,3 +627,72 @@ func TestResyncToTopLevel_EmitsErrorNode(t *testing.T) {
 		t.Error("SyntaxKindErrorNode does not contain the 'extra' token")
 	}
 }
+
+func TestUseCaseDecl_Line(t *testing.T) {
+	src := "use_case \"Register\" {\n  when Actor creates Account\n}"
+	g, li, _ := syntax.Parse(src)
+	file := syntax.AsFile(syntax.Root(g))
+	ucs := file.UseCases()
+	if len(ucs) != 1 {
+		t.Fatalf("expected 1 use_case, got %d", len(ucs))
+	}
+	if got := ucs[0].Line(li); got != 1 {
+		t.Errorf("UseCaseDecl.Line = %d, want 1", got)
+	}
+}
+
+func TestExposureDecl_EndLine(t *testing.T) {
+	src := "exposure MyAPI {\n  to: ServiceA\n}"
+	g, li, _ := syntax.Parse(src)
+	file := syntax.AsFile(syntax.Root(g))
+	exps := file.Exposures()
+	if len(exps) != 1 {
+		t.Fatalf("expected 1 exposure, got %d", len(exps))
+	}
+	if got := exps[0].EndLine(li); got != 3 {
+		t.Errorf("ExposureDecl.EndLine = %d, want 3", got)
+	}
+}
+
+func TestActorDecl_Line(t *testing.T) {
+	src := "actor user Alice"
+	g, li, _ := syntax.Parse(src)
+	file := syntax.AsFile(syntax.Root(g))
+	actors := file.Actors()
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor, got %d", len(actors))
+	}
+	if got := actors[0].Line(li); got != 1 {
+		t.Errorf("ActorDecl.Line = %d, want 1", got)
+	}
+}
+
+func TestActorDecl_Line_SecondLine(t *testing.T) {
+	src := "\nactor user Alice"
+	g, li, _ := syntax.Parse(src)
+	file := syntax.AsFile(syntax.Root(g))
+	actors := file.Actors()
+	if len(actors) != 1 {
+		t.Fatalf("expected 1 actor, got %d", len(actors))
+	}
+	if got := actors[0].Line(li); got != 2 {
+		t.Errorf("ActorDecl.Line = %d, want 2", got)
+	}
+}
+
+func TestServiceDecl_ContextLinesWith(t *testing.T) {
+	src := "services {\n  Auth {\n    contexts: UserAuth, TokenAuth\n  }\n}"
+	g, li, _ := syntax.Parse(src)
+	file := syntax.AsFile(syntax.Root(g))
+	svcs := file.Services()
+	if len(svcs) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(svcs))
+	}
+	lines := svcs[0].ContextLinesWith(li)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 context lines, got %d: %v", len(lines), lines)
+	}
+	if lines[0] != 3 || lines[1] != 3 {
+		t.Errorf("expected both context lines == 3, got %v", lines)
+	}
+}
