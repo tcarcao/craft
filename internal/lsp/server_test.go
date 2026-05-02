@@ -3301,3 +3301,104 @@ func TestDocumentSymbol_RangeEndPositions(t *testing.T) {
 	}
 	cancel()
 }
+
+func TestFoldingRanges_UseCaseAndExposure(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	defer testOut.Close()
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatalf("reading initialize response: %v", err)
+	}
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// use_case on lines 0-3, exposure on lines 4-7 (0-indexed)
+	craftSrc := "use_case \"Reg\" {\n  when Actor acts\n    Auth validates\n}\nexposure MyAPI {\n  to: Actor\n  through: Auth\n}\n"
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///fold_test.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	id = 2
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id,
+		Method: "textDocument/foldingRange",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///fold_test.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == id {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for foldingRange response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("foldingRange error: %s", resp.Error)
+	}
+
+	var ranges []struct {
+		StartLine uint32 `json:"startLine"`
+		EndLine   uint32 `json:"endLine"`
+	}
+	if err := json.Unmarshal(resp.Result, &ranges); err != nil {
+		t.Fatalf("unmarshal foldingRange result: %v", err)
+	}
+
+	if len(ranges) < 2 {
+		t.Fatalf("expected at least 2 folding ranges, got %d: %v", len(ranges), ranges)
+	}
+
+	foundUC := false
+	for _, r := range ranges {
+		if r.StartLine == 0 && r.EndLine == 3 {
+			foundUC = true
+		}
+	}
+	if !foundUC {
+		t.Errorf("expected use_case fold [0,3], got: %v", ranges)
+	}
+
+	foundExp := false
+	for _, r := range ranges {
+		if r.StartLine == 4 && r.EndLine == 7 {
+			foundExp = true
+		}
+	}
+	if !foundExp {
+		t.Errorf("expected exposure fold [4,7], got: %v", ranges)
+	}
+	cancel()
+}

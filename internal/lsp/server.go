@@ -1261,6 +1261,55 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 		}
 	}
 
+	for _, svc := range file.Services() {
+		svcStart := svc.Line(li)
+		svcEnd := svc.EndLine(li)
+		if svcStart <= 0 || svcEnd <= svcStart {
+			continue
+		}
+		ranges = append(ranges, protocol.FoldingRange{
+			StartLine: uint32(svcStart - 1),
+			EndLine:   uint32(svcEnd - 1),
+			Kind:      protocol.RegionFoldingRange,
+		})
+	}
+	for _, d := range file.Domains() {
+		dStart := d.Line(li)
+		dEnd := d.EndLine(li)
+		if dStart <= 0 || dEnd <= dStart {
+			continue
+		}
+		ranges = append(ranges, protocol.FoldingRange{
+			StartLine: uint32(dStart - 1),
+			EndLine:   uint32(dEnd - 1),
+			Kind:      protocol.RegionFoldingRange,
+		})
+	}
+	for _, uc := range file.UseCases() {
+		ucStart := uc.Line(li)
+		ucEnd := uc.EndLine(li)
+		if ucStart <= 0 || ucEnd <= ucStart {
+			continue
+		}
+		ranges = append(ranges, protocol.FoldingRange{
+			StartLine: uint32(ucStart - 1),
+			EndLine:   uint32(ucEnd - 1),
+			Kind:      protocol.RegionFoldingRange,
+		})
+	}
+	for _, exp := range file.Exposures() {
+		expStart := exp.Line(li)
+		expEnd := exp.EndLine(li)
+		if expStart <= 0 || expEnd <= expStart {
+			continue
+		}
+		ranges = append(ranges, protocol.FoldingRange{
+			StartLine: uint32(expStart - 1),
+			EndLine:   uint32(expEnd - 1),
+			Kind:      protocol.RegionFoldingRange,
+		})
+	}
+
 	return ranges, nil
 }
 
