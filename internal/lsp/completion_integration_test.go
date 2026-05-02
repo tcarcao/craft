@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/tcarcao/craft/internal/lsp"
+	"github.com/tcarcao/craft/internal/workspace"
+	"go.lsp.dev/protocol"
 )
 
 // completionItem is the subset of fields used in completion assertions.
@@ -370,5 +372,40 @@ func TestCompletion_ActorsBlock(t *testing.T) {
 		if !hasLabel(items, actorType) {
 			t.Errorf("expected actor type %q in actors block completions, got: %v", actorType, labelList(items))
 		}
+	}
+}
+
+func TestCompletion_AfterAsksVerb_ReturnsDomainAndServiceOnly(t *testing.T) {
+	w := workspace.New(nil)
+	w.Open("file:///domain.craft", "domain Auth {\n  Login\n  Register\n}\n")
+	w.Open("file:///service.craft", "services {\n  PaymentService {\n    contexts: Login\n    language: golang\n  }\n}\n")
+	// use_case file: line 2 is "    Auth asks " — cursor at character 14 (after the space following "asks")
+	w.Open("file:///uc.craft", "use_case \"Register User\" {\n  when Actor creates Account\n    Auth asks \n}\n")
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: "file:///uc.craft"},
+			Position:     protocol.Position{Line: 2, Character: 14},
+		},
+	}
+
+	result := lsp.ExportedBuildCompletions(w, "file:///uc.craft", params)
+	if result == nil {
+		t.Fatal("expected completion list, got nil")
+	}
+
+	labels := make(map[string]bool)
+	for _, item := range result.Items {
+		labels[item.Label] = true
+	}
+
+	if !labels["Login"] {
+		t.Errorf("expected bounded context 'Login' in completions, got labels: %v", labels)
+	}
+	if !labels["PaymentService"] {
+		t.Errorf("expected service 'PaymentService' in completions, got labels: %v", labels)
+	}
+	if labels["Actor"] {
+		t.Errorf("actor 'Actor' should NOT appear in action-verb completions, got labels: %v", labels)
 	}
 }

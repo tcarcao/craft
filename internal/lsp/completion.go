@@ -21,6 +21,7 @@ const (
 	ctxActorsBlock
 	ctxUseCaseTop
 	ctxUseCaseAction
+	ctxUseCaseActionVerb // cursor after `asks` or `returns` — suggest domain/service names
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -145,6 +146,9 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, lines []string, c
 		return ctxActorsBlock
 	case "use_case":
 		if isActionLine(linePrefix) {
+			if isAfterActionVerb(linePrefix) {
+				return ctxUseCaseActionVerb
+			}
 			return ctxUseCaseAction
 		}
 		return ctxUseCaseTop
@@ -181,6 +185,16 @@ func isActionLine(linePrefix string) bool {
 	return firstWord != "when"
 }
 
+// isAfterActionVerb returns true when linePrefix has exactly two whitespace-separated
+// tokens and the second is `asks` or `returns`.
+func isAfterActionVerb(linePrefix string) bool {
+	fields := strings.Fields(strings.TrimSpace(linePrefix))
+	if len(fields) != 2 {
+		return false
+	}
+	return fields[1] == "asks" || fields[1] == "returns"
+}
+
 // buildCompletions is the main dispatcher: detects cursor context and returns
 // the appropriate CompletionList. Returns nil when no completions apply.
 func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.CompletionParams) *protocol.CompletionList {
@@ -211,6 +225,8 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return actorTypeCompletions()
 	case ctxUseCaseTop:
 		return whenKeywordCompletion()
+	case ctxUseCaseActionVerb:
+		return domainAndServiceSymbolCompletions(ws)
 	case ctxUseCaseAction:
 		return allSymbolCompletions(ws)
 	case ctxExposeField:
@@ -321,6 +337,31 @@ func bcSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
+// domainAndServiceSymbolCompletions returns bounded contexts and services.
+// Used after action verbs (asks, returns) where the target is a domain context
+// or service, not an actor.
+func domainAndServiceSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
+	wsSym := ws.WorkspaceSymbols()
+	var items []protocol.CompletionItem
+	for name := range wsSym.Services {
+		items = append(items, protocol.CompletionItem{
+			Label:  name,
+			Kind:   protocol.CompletionItemKindModule,
+			Detail: "service",
+		})
+	}
+	for domName, dom := range wsSym.Domains {
+		for _, bc := range dom.BoundedContexts {
+			items = append(items, protocol.CompletionItem{
+				Label:  bc,
+				Kind:   protocol.CompletionItemKindModule,
+				Detail: "bounded context (domain: " + domName + ")",
+			})
+		}
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
+
 func domainBodyCompletions() *protocol.CompletionList {
 	return &protocol.CompletionList{IsIncomplete: false, Items: nil}
 }
@@ -413,3 +454,6 @@ func serviceSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList 
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
+
+// ExportedBuildCompletions is a test-only export of buildCompletions.
+var ExportedBuildCompletions = buildCompletions
