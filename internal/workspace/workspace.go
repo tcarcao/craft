@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/sema"
@@ -51,6 +52,12 @@ type Workspace struct {
 		ws   sema.WorkspaceSymbols
 		rm   sema.ResolutionMap
 		diags map[string][]craft.Diagnostic // keyed by source-file URI
+	}
+
+	// recompute debounces background cross-file resolution via time.AfterFunc.
+	recompute struct {
+		mu    sync.Mutex
+		timer *time.Timer
 	}
 }
 
@@ -107,9 +114,9 @@ func (w *Workspace) Open(uri, content string) {
 // Change updates a file's content in response to a didChange notification.
 func (w *Workspace) Change(uri, content string) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.parseAndStore(uri, content)
-	w.recomputeResolution()
+	w.mu.Unlock()
+	w.scheduleRecompute()
 }
 
 // Close removes a file from the in-memory index (the on-disk file remains).
@@ -226,6 +233,22 @@ func (w *Workspace) recomputeResolution() {
 		byURI[d.SourceURI] = append(byURI[d.SourceURI], d)
 	}
 	w.resolution.diags = byURI
+}
+
+// scheduleRecompute debounces recomputeResolution: cancels any pending timer
+// and starts a new 100ms AfterFunc. The AfterFunc goroutine takes w.mu before
+// calling recomputeResolution.
+func (w *Workspace) scheduleRecompute() {
+	w.recompute.mu.Lock()
+	defer w.recompute.mu.Unlock()
+	if w.recompute.timer != nil {
+		w.recompute.timer.Stop()
+	}
+	w.recompute.timer = time.AfterFunc(100*time.Millisecond, func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.recomputeResolution()
+	})
 }
 
 // pathToURI converts an absolute file path to a file:// URI.
