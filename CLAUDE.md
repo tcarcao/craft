@@ -6,7 +6,7 @@
 
 Craft is a domain-specific language (DSL) for modeling business use cases and domain interactions. It generates visual diagrams (C4, domain-flow, sequence) from `.craft` source files.
 
-**Tech Stack:** Go 1.22, Docker / Podman, GitHub Actions.
+**Tech Stack:** Go 1.23, Docker / Podman, GitHub Actions.
 
 ---
 
