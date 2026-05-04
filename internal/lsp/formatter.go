@@ -12,7 +12,8 @@ import (
 //   - block content indented 2 spaces per level
 //   - colons: no space before, one space after
 //   - commas: no space before, one space after
-//   - use_case and arch blocks preserved verbatim
+//   - use_case blocks formatted with 2-space when / 4-space actions / blank line between scenarios
+//   - arch blocks preserved verbatim (free-form component chain syntax)
 func FormatDocument(content string) string {
 	if content == "" {
 		return "\n"
@@ -40,9 +41,11 @@ func FormatDocument(content string) string {
 		first = false
 
 		switch node.Kind() {
-		case syntax.SyntaxKindUseCaseDecl, syntax.SyntaxKindArchDecl:
-			// Preserve original formatting for constructs with
-			// semantic indentation (scenario / arch section lines).
+		case syntax.SyntaxKindUseCaseDecl:
+			formatUseCaseDecl(&sb, node)
+		case syntax.SyntaxKindArchDecl:
+			// Preserve original formatting: arch component chains use
+			// free-form indentation that the formatter does not rewrite.
 			r := node.TextRange()
 			sb.WriteString(strings.TrimSpace(content[r.Start:r.End]))
 		default:
@@ -54,6 +57,37 @@ func FormatDocument(content string) string {
 		sb.WriteByte('\n')
 	}
 	return sb.String()
+}
+
+// formatUseCaseDecl formats a use_case block with canonical indentation:
+// each `when` scenario at 2-space indent, actions at 4-space indent,
+// blank line between scenarios.
+func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
+	uc := syntax.AsUseCaseDecl(node)
+
+	sb.WriteString("use_case")
+	if title := uc.Title(); title != nil {
+		sb.WriteString(` "`)
+		sb.WriteString(title.Text())
+		sb.WriteByte('"')
+	}
+	sb.WriteString(" {\n")
+
+	for i, sc := range uc.Scenarios() {
+		if i > 0 {
+			sb.WriteByte('\n') // blank line between scenarios
+		}
+		sb.WriteString("  when ")
+		sb.WriteString(sc.Trigger().Description())
+		sb.WriteByte('\n')
+		for _, action := range sc.Actions() {
+			sb.WriteString("    ")
+			sb.WriteString(action.Description())
+			sb.WriteByte('\n')
+		}
+	}
+
+	sb.WriteByte('}')
 }
 
 // formatDecl formats a single top-level declaration into sb.
@@ -87,6 +121,14 @@ func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 
 		case syntax.SyntaxKindComma:
 			sb.WriteByte(',')
+
+		case syntax.SyntaxKindString:
+			sep := tokenSeparator(tokens, i, depth, needsNewline)
+			needsNewline = false
+			sb.WriteString(sep)
+			sb.WriteByte('"')
+			sb.WriteString(tok.Text())
+			sb.WriteByte('"')
 
 		default:
 			sep := tokenSeparator(tokens, i, depth, needsNewline)

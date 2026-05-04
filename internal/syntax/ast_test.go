@@ -680,6 +680,160 @@ func TestActorDecl_Line_SecondLine(t *testing.T) {
 	}
 }
 
+// TestActionDecl_ConnectorValue verifies that ConnectorValue returns the correct
+// connector for both KwTo and plain ident connectors (a, an, for, etc.).
+func TestActionDecl_ConnectorValue(t *testing.T) {
+	cases := []struct {
+		src       string
+		wantKind  string
+		wantConn  string
+	}{
+		// sync_action with 'to' keyword
+		{`use_case "X" { when U does x
+  Auth asks DB to check email
+}`, "sync_action", "to"},
+		// sync_action with 'for' ident connector
+		{`use_case "X" { when U does x
+  Auth asks DB for user data
+}`, "sync_action", "for"},
+		// sync_action with no connector
+		{`use_case "X" { when U does x
+  Auth asks DB check email
+}`, "sync_action", ""},
+		// internal_action with article 'an'
+		{`use_case "X" { when U does x
+  Wallet creates an unconfirmed reservation
+}`, "internal_action", "an"},
+		// internal_action with 'the'
+		{`use_case "X" { when U does x
+  Auth validates the email format
+}`, "internal_action", "the"},
+		// internal_action without connector
+		{`use_case "X" { when U does x
+  Auth validates email
+}`, "internal_action", ""},
+	}
+	for _, tc := range cases {
+		tree := astParse(tc.src)
+		f := syntax.AsFile(tree)
+		ucs := f.UseCases()
+		if len(ucs) == 0 {
+			t.Fatalf("no use cases: %q", tc.src)
+		}
+		actions := ucs[0].Scenarios()[0].Actions()
+		if len(actions) == 0 {
+			t.Fatalf("no actions: %q", tc.src)
+		}
+		a := actions[0]
+		if got := a.Kind(); got != tc.wantKind {
+			t.Errorf("src=%q: Kind() = %q, want %q", tc.src, got, tc.wantKind)
+		}
+		if got := a.ConnectorValue(); got != tc.wantConn {
+			t.Errorf("src=%q: ConnectorValue() = %q, want %q", tc.src, got, tc.wantConn)
+		}
+	}
+}
+
+// TestTriggerDecl_KeywordSubjectName verifies that ActorName / ContextName
+// return the correct name even when the lexer classifies the identifier as a
+// keyword (e.g. "Actor" → TokenKwActor, "Service" → TokenKwService).
+func TestTriggerDecl_KeywordSubjectName(t *testing.T) {
+	cases := []struct {
+		src     string
+		wantAct string
+	}{
+		{`use_case "X" { when Actor initiates x }`, "Actor"},
+		{`use_case "X" { when Service validates x }`, "Service"},
+		{`use_case "X" { when Domain processes x }`, "Domain"},
+	}
+	for _, tc := range cases {
+		tree := astParse(tc.src)
+		f := syntax.AsFile(tree)
+		ucs := f.UseCases()
+		if len(ucs) == 0 {
+			t.Fatalf("no use cases: %q", tc.src)
+		}
+		scenarios := ucs[0].Scenarios()
+		if len(scenarios) == 0 {
+			t.Fatalf("no scenarios: %q", tc.src)
+		}
+		got := scenarios[0].Trigger().ActorName()
+		if got != tc.wantAct {
+			t.Errorf("src=%q: ActorName() = %q, want %q", tc.src, got, tc.wantAct)
+		}
+	}
+}
+
+// TestActionDecl_Description_ConnectorPreservation verifies that connector words
+// stored as SyntaxKindIdent (a, an, the, etc.) are preserved in Description().
+func TestActionDecl_Description_ConnectorPreservation(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{
+			`use_case "X" { when User does x
+  Wallet creates an unconfirmed VAS reservation
+}`,
+			"Wallet creates an unconfirmed VAS reservation",
+		},
+		{
+			`use_case "X" { when User does x
+  Auth validates the email format
+}`,
+			"Auth validates the email format",
+		},
+		{
+			`use_case "X" { when User does x
+  System schedules a retry
+}`,
+			"System schedules a retry",
+		},
+	}
+	for _, tc := range cases {
+		tree := astParse(tc.src)
+		f := syntax.AsFile(tree)
+		ucs := f.UseCases()
+		if len(ucs) == 0 {
+			t.Fatalf("no use cases: %q", tc.src)
+		}
+		actions := ucs[0].Scenarios()[0].Actions()
+		if len(actions) == 0 {
+			t.Fatalf("no actions: %q", tc.src)
+		}
+		got := actions[0].Description()
+		if got != tc.want {
+			t.Errorf("Description() = %q, want %q", got, tc.want)
+		}
+	}
+}
+
+// TestTriggerDecl_Description verifies Description() reconstructs the trigger
+// text correctly, including quoted event strings.
+func TestTriggerDecl_Description(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`use_case "X" { when Business_User creates Account }`, "Business_User creates Account"},
+		{`use_case "X" { when Auth listens "User Registered" }`, `Auth listens "User Registered"`},
+		{`use_case "X" { when "Order Placed" }`, `"Order Placed"`},
+		{`use_case "X" { when Actor initiates action }`, "Actor initiates action"},
+	}
+	for _, tc := range cases {
+		tree := astParse(tc.src)
+		f := syntax.AsFile(tree)
+		ucs := f.UseCases()
+		if len(ucs) == 0 {
+			t.Fatalf("no use cases: %q", tc.src)
+		}
+		got := ucs[0].Scenarios()[0].Trigger().Description()
+		if got != tc.want {
+			t.Errorf("src=%q: Description() = %q, want %q", tc.src, got, tc.want)
+		}
+	}
+}
+
 func TestServiceDecl_ContextLinesWith(t *testing.T) {
 	src := "services {\n  Auth {\n    contexts: UserAuth, TokenAuth\n  }\n}"
 	g, li, _ := syntax.Parse(src)

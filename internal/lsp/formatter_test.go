@@ -83,14 +83,21 @@ func TestFormatDocument_ParseErrorPreservesContent(t *testing.T) {
 	}
 }
 
-func TestFormatDocument_UseCasePreservedVerbatim(t *testing.T) {
-	input := "use_case \"Registration\" {\n  when Actor initiates x\n    Auth validates email\n}"
+func TestFormatDocument_UseCaseFormatted(t *testing.T) {
+	// Messy indentation: extra spaces on when, no blank line between scenarios.
+	input := "use_case \"Registration\" {\n    when Actor initiates x\n      Auth validates email\n    when Actor does y\n      Auth validates token\n}"
 	got := FormatDocument(input)
-	if !strings.Contains(got, "use_case \"Registration\"") {
-		t.Errorf("FormatDocument: use_case block should be preserved\ngot:\n%s", got)
+	checks := []string{
+		"use_case \"Registration\" {",
+		"\n  when Actor initiates x\n",
+		"\n    Auth validates email\n",
+		"\n\n  when Actor does y\n",
+		"\n    Auth validates token\n",
 	}
-	if !strings.Contains(got, "  when Actor initiates x") {
-		t.Errorf("FormatDocument: use_case inner content should be preserved\ngot:\n%s", got)
+	for _, want := range checks {
+		if !strings.Contains(got, want) {
+			t.Errorf("FormatDocument use_case: missing %q\ngot:\n%s", want, got)
+		}
 	}
 }
 
@@ -102,5 +109,21 @@ func TestFormatDocument_MixedUseCaseAndService(t *testing.T) {
 	}
 	if !strings.Contains(got, "service Foo {") {
 		t.Errorf("FormatDocument: service should be formatted\ngot:\n%s", got)
+	}
+}
+
+func TestFormatDocument_QuotedServiceNameRoundTrip(t *testing.T) {
+	// "Order Service" has a space — must be quoted in output; losing quotes breaks DSL.
+	input := `service "Order Service"{language:golang contexts:Cart,Checkout}`
+	got := FormatDocument(input)
+	checks := []string{
+		`service "Order Service" {`,
+		"\n  language: golang",
+		"\n  contexts: Cart, Checkout",
+	}
+	for _, want := range checks {
+		if !strings.Contains(got, want) {
+			t.Errorf("FormatDocument quoted service: missing %q\ngot:\n%s", want, got)
+		}
 	}
 }

@@ -836,11 +836,10 @@ func (p *Parser) parseTrigger(whenLine int) []craft.Diagnostic {
 		p.builder.FinishNode()
 		return diags
 	}
-	subjectKind := SyntaxKindIdent
-	if k, found := lexerKindToSyntaxKindMap[subjectTok.Type]; found {
-		subjectKind = k
-	}
-	p.consumeAs(subjectKind)
+	// Always emit the trigger subject as SyntaxKindIdent so that ActorName() /
+	// ContextName() (which call ChildToken(SyntaxKindIdent)) find it correctly,
+	// even when the lexer classifies it as a keyword (e.g. "Actor" → TokenKwActor).
+	p.consumeAs(SyntaxKindIdent)
 
 	// The second token is the verb.  If it is `listens` (ident), this is domain_listen.
 	verbTok := p.peek()
@@ -911,11 +910,10 @@ func (p *Parser) parseAction(counter *int) []craft.Diagnostic {
 		return diags
 	}
 	actionLine := subjectTok.Line
-	subjectKind := SyntaxKindIdent
-	if k, found := lexerKindToSyntaxKindMap[subjectTok.Type]; found {
-		subjectKind = k
-	}
-	p.consumeAs(subjectKind)
+	// Always emit the action subject as SyntaxKindIdent so that SubjectName()
+	// (which calls ChildToken(SyntaxKindIdent)) finds it correctly, even when
+	// the lexer classifies it as a keyword (e.g. "Service" → TokenKwService).
+	p.consumeAs(SyntaxKindIdent)
 
 	verbTok := p.peek()
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {

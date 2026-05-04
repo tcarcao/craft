@@ -42,6 +42,20 @@ func nodeFirstTokenCol(node SyntaxNode, li green.LineIndex) int {
 	return col
 }
 
+// connectorAt returns tokens[i] if it is a connector (KwTo or an isConnectorWord
+// ident), or nil. Matches the grammar connector_word set plus the `to` keyword.
+func connectorAt(tokens []SyntaxToken, i int) *SyntaxToken {
+	if i >= len(tokens) {
+		return nil
+	}
+	tok := tokens[i]
+	if tok.Kind() == SyntaxKindKwTo || isConnectorWord(tok.Text()) {
+		t := tok
+		return &t
+	}
+	return nil
+}
+
 // isAstFieldSentinel returns true when tokens[i] is a field keyword or ident followed
 // by a colon — the start of a new field definition.
 func isAstFieldSentinel(tokens []SyntaxToken, i int) bool {
@@ -723,6 +737,9 @@ func (s ServiceDecl) DeploymentTargetTokens() []SyntaxToken {
 	return nil
 }
 
+// AsUseCaseDecl wraps a SyntaxKindUseCaseDecl node as a typed view.
+func AsUseCaseDecl(n SyntaxNode) UseCaseDecl { return UseCaseDecl{node: n} }
+
 // UseCaseDecl is a typed view over a SyntaxKindUseCaseDecl node.
 type UseCaseDecl struct{ node SyntaxNode }
 
@@ -855,6 +872,21 @@ func (t TriggerDecl) EventValue() string {
 	return ""
 }
 
+// Description returns the human-readable trigger line (without the leading `when`).
+// String tokens are wrapped in double quotes.
+func (t TriggerDecl) Description() string {
+	tokens := t.node.Tokens()
+	parts := make([]string, 0, len(tokens))
+	for _, tok := range tokens {
+		if tok.Kind() == SyntaxKindString {
+			parts = append(parts, `"`+tok.Text()+`"`)
+		} else {
+			parts = append(parts, tok.Text())
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // EventCol returns the 1-based column of the event token using li.
 func (t TriggerDecl) EventCol(li green.LineIndex) int {
 	tokens := t.node.Tokens()
@@ -899,8 +931,21 @@ func (a ActionDecl) Verb() *SyntaxToken {
 	)
 }
 
-// Connector returns the 'to' keyword if present.
-func (a ActionDecl) Connector() *SyntaxToken { return a.node.ChildToken(SyntaxKindKwTo) }
+// Connector returns the connector token between verb and phrase, or nil.
+// For sync_action: tokens[3] (after subject, asks, target).
+// For internal_action: tokens[2] (after subject, verb).
+// For return_action: the KwTo token (different positional semantics — `to <target>`).
+func (a ActionDecl) Connector() *SyntaxToken {
+	tokens := a.node.Tokens()
+	switch a.Kind() {
+	case "sync_action":
+		return connectorAt(tokens, 3)
+	case "internal_action":
+		return connectorAt(tokens, 2)
+	default:
+		return a.node.ChildToken(SyntaxKindKwTo)
+	}
+}
 
 // Kind returns "sync_action", "async_action", "return_action", or "internal_action".
 // Mirrors lowerAction classification in lower.go.
@@ -1055,7 +1100,7 @@ func (a ActionDecl) PhraseText() string {
 	switch a.Kind() {
 	case "sync_action":
 		start = 3 // subject, asks, target
-		if start < len(tokens) && (tokens[start].Kind() == SyntaxKindKwTo || isConnectorWord(tokens[start].Text())) {
+		if connectorAt(tokens, start) != nil {
 			start++ // skip connector
 		}
 	case "return_action":
@@ -1063,12 +1108,12 @@ func (a ActionDecl) PhraseText() string {
 		if start < len(tokens) && tokens[start].Kind() == SyntaxKindKwTo {
 			start += 2 // skip `to target`
 		}
-		if start < len(tokens) && isConnectorWord(tokens[start].Text()) {
+		if connectorAt(tokens, start) != nil {
 			start++
 		}
 	case "internal_action":
 		start = 2 // subject, verb
-		if start < len(tokens) && isConnectorWord(tokens[start].Text()) {
+		if connectorAt(tokens, start) != nil {
 			start++
 		}
 	case "async_action":
@@ -1091,14 +1136,8 @@ func (a ActionDecl) Description() string {
 	switch a.Kind() {
 	case "sync_action":
 		target := a.TargetName()
+		connector := a.ConnectorValue()
 		phrase := a.PhraseText()
-		// Read connector from tokens[3] directly: ConnectorValue() only finds KwTo,
-		// missing "for" ident connectors.
-		var connector string
-		tokens := a.node.Tokens()
-		if len(tokens) > 3 && (tokens[3].Kind() == SyntaxKindKwTo || isConnectorWord(tokens[3].Text())) {
-			connector = tokens[3].Text()
-		}
 		desc := subject + " asks " + target
 		if connector != "" {
 			desc += " " + connector
@@ -1116,7 +1155,7 @@ func (a ActionDecl) Description() string {
 			return fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
 		}
 		return fmt.Sprintf("%s returns %s", subject, phrase)
-	default:
+	default: // internal_action
 		connector := a.ConnectorValue()
 		phrase := a.PhraseText()
 		desc := subject + " " + verb

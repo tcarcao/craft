@@ -815,12 +815,16 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	result := craftExtractionResult{}
 
 	for _, svc := range wsSym.Services {
+		contexts := svc.Contexts
+		if contexts == nil {
+			contexts = []string{}
+		}
 		result.Services = append(result.Services, craftServiceEntry{
 			Name:          svc.Name,
 			URI:           svc.URI,
 			StartLine:     svc.Line,
 			EndLine:       svc.EndLine,
-			Contexts:      svc.Contexts,
+			Contexts:      contexts,
 			InCurrentFile: currentFileURI != "" && svc.URI == currentFileURI,
 		})
 	}
@@ -1146,7 +1150,7 @@ type craftServiceEntry struct {
 	URI           string   `json:"uri"`
 	StartLine     int      `json:"startLine"`
 	EndLine       int      `json:"endLine"`
-	Contexts      []string `json:"contexts,omitempty"`
+	Contexts      []string `json:"contexts"`
 	InCurrentFile bool     `json:"inCurrentFile,omitempty"`
 }
 
