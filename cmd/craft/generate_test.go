@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -497,6 +498,64 @@ func TestGenerateCmd_FormatMermaid(t *testing.T) {
 		msg := err.Error()
 		if !strings.Contains(msg, "puml") || !strings.Contains(msg, "mermaid") {
 			t.Errorf("error should list allowed formats, got: %s", msg)
+		}
+	})
+}
+
+func TestGenerateCmd_Stdout(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	if err := os.WriteFile(src, simpleCraft(), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("stdout single type writes to cmd.OutOrStdout", func(t *testing.T) {
+		var buf bytes.Buffer
+		root := newRootCmd()
+		root.SetOut(&buf)
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--format", "mermaid", "--stdout"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate --stdout: %v", err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "flowchart LR") {
+			t.Errorf("expected mermaid source on stdout, got:\n%s", out)
+		}
+	})
+
+	t.Run("stdout with split errors", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--stdout", "--split"})
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected error for --stdout --split")
+		}
+		if !strings.Contains(err.Error(), "split") {
+			t.Errorf("error should mention --split, got: %s", err)
+		}
+	})
+
+	t.Run("stdout with type all errors", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "all", "--stdout"})
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected error for --stdout --type all")
+		}
+		if !strings.Contains(err.Error(), "single") {
+			t.Errorf("error should mention single-diagram requirement, got: %s", err)
+		}
+	})
+
+	t.Run("stdout with output errors", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--stdout", "--output", tmp})
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected error for --stdout --output")
+		}
+		if !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Errorf("error should mention mutual exclusion, got: %s", err)
 		}
 	})
 }

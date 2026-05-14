@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,7 @@ func generateCmd() *cobra.Command {
 	var useCaseFilter []string
 	var split bool
 	var format string
+	var stdout bool
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -52,6 +54,23 @@ func generateCmd() *cobra.Command {
 			default:
 				return fmt.Errorf("--format must be one of puml|mermaid|mermaid-md, got %q", format)
 			}
+
+			if stdout {
+				if outputDir != "" {
+					return fmt.Errorf("--stdout and --output are mutually exclusive")
+				}
+				if split {
+					return fmt.Errorf("--stdout is incompatible with --split (only one diagram per invocation)")
+				}
+				if diagType == "all" || strings.Contains(diagType, ",") {
+					return fmt.Errorf("--stdout requires a single diagram (drop --type all or pick one type)")
+				}
+				if len(args) != 1 {
+					return fmt.Errorf("--stdout requires exactly one input file, got %d", len(args))
+				}
+			}
+
+			stdoutW := cmd.OutOrStdout()
 
 			files, err := resolveFiles(args)
 			if err != nil {
@@ -96,7 +115,7 @@ func generateCmd() *cobra.Command {
 					focusServices: focusServices,
 					focusContexts: focusContexts,
 				}
-				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter, split, format); err != nil {
+				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, stdoutW); err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 			}
@@ -114,10 +133,11 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&useCaseFilter, "use-case", nil, "comma-separated use case slugs or names to render (detailed-domain and sequence only)")
 	cmd.Flags().BoolVar(&split, "split", false, "emit one file per use case (detailed-domain and sequence only)")
 	cmd.Flags().StringVar(&format, "format", "puml", "output format: puml|mermaid|mermaid-md")
+	cmd.Flags().BoolVar(&stdout, "stdout", false, "write to stdout instead of files (single diagram only)")
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string) error {
+func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer) error {
 	// If the user supplied --use-case, validate that every requested value
 	// matches some use case in this file. Only used for domain/sequence
 	// types — c4 keeps full model for structural completeness.
@@ -190,6 +210,12 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			outFile = filepath.Join(outDir, base+"-sequence."+ext)
 		}
 
+		if stdout {
+			if _, err := stdoutW.Write(content); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := os.WriteFile(outFile, content, 0644); err != nil {
 			return err
 		}
