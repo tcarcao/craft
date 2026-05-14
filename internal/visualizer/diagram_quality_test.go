@@ -379,3 +379,27 @@ func TestC4Diagram_EventsAllRendered(t *testing.T) {
 		}
 	}
 }
+
+func TestSlugify(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Release due VAS work to fulfillment", "release-due-vas-work-to-fulfillment"},
+		{"One-time VAS — fulfillment through provider apply", "one-time-vas-fulfillment-through-provider-apply"},
+		{"VAS application rejected by provider", "vas-application-rejected-by-provider"},
+		{"Provider silent — fulfillment timeout", "provider-silent-fulfillment-timeout"},
+		{"Time-based VAS — scheduled finish", "time-based-vas-scheduled-finish"},
+		{"  leading and trailing  ", "leading-and-trailing"},
+		{"already-a-slug", "already-a-slug"},
+		{"Mixed_Case_With_Numbers_123", "mixed-case-with-numbers-123"},
+		{"!!! punctuation only !!!", "punctuation-only"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := Slugify(tc.in); got != tc.want {
+				t.Fatalf("Slugify(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
