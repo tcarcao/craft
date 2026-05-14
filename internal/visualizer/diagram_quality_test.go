@@ -198,3 +198,36 @@ func TestDomainArchitectureDiagram_NoSelfLoops(t *testing.T) {
 		}
 	}
 }
+
+func TestC4Diagram_IncludesCRONActor(t *testing.T) {
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{
+			Name:     "Sched",
+			Contexts: []string{"Scheduler"},
+		}},
+		UseCases: []craft.UseCase{{
+			Name: "tick",
+			Scenarios: []craft.Scenario{{
+				ID: "s1",
+				Trigger: craft.Trigger{
+					Type:  craft.TriggerTypeExternal,
+					Actor: "CRON",
+					Verb:  "fires",
+				},
+				Actions: []craft.Action{{
+					Type:    craft.ActionTypeInternal,
+					Context: "Scheduler",
+					Phrase:  "ticks",
+				}},
+			}},
+		}},
+		Actors: []craft.Actor{{Name: "CRON", Type: craft.ActorTypeSystem}},
+	}
+	puml, _, err := New().GenerateC4WithFormat(doc, C4ModeBoundaries, false, FormatPUML)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if !strings.Contains(string(puml), "System_Ext(CRON,") {
+		t.Fatalf("CRON actor missing from generated C4 PUML\n--- PUML ---\n%s", puml)
+	}
+}

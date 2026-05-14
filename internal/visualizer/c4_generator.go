@@ -166,8 +166,7 @@ func (g *C4DiagramGenerator) analyzeUserInteractions() {
 
 				// Only add actors that interact with focused services (or all if no focus)
 				// Skip actors that are actually bounded contexts defined in a service
-				if scenario.Trigger.Actor != "" && !strings.HasPrefix(strings.ToUpper(scenario.Trigger.Actor), "CRON") &&
-					g.findServiceForDomain(scenario.Trigger.Actor) == "" {
+				if scenario.Trigger.Actor != "" && g.findServiceForDomain(scenario.Trigger.Actor) == "" {
 					shouldAddActor := !g.hasFocus // No focus - add all actors
 
 					if g.hasFocus {
@@ -511,8 +510,7 @@ func (g *C4DiagramGenerator) hasArchitectureComponents() bool {
 
 func (g *C4DiagramGenerator) isUserInteraction(trigger craft.Trigger) bool {
 	return trigger.Type == craft.TriggerTypeExternal &&
-		trigger.Actor != "" &&
-		!strings.HasPrefix(strings.ToUpper(trigger.Actor), "CRON")
+		trigger.Actor != ""
 }
 
 func (g *C4DiagramGenerator) extractDomainsFromActions(actions []craft.Action) []string {
