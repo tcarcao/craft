@@ -27,6 +27,7 @@ func generateCmd() *cobra.Command {
 	var noDatabases bool
 	var focusServices []string
 	var focusContexts []string
+	var useCaseFilter []string
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -86,7 +87,7 @@ func generateCmd() *cobra.Command {
 					focusServices: focusServices,
 					focusContexts: focusContexts,
 				}
-				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts); err != nil {
+				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter); err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 			}
@@ -101,10 +102,25 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noDatabases, "no-databases", false, "hide data-store containers from C4 diagram")
 	cmd.Flags().StringSliceVar(&focusServices, "focus", nil, "comma-separated services to focus on in C4 diagram")
 	cmd.Flags().StringSliceVar(&focusContexts, "focus-context", nil, "comma-separated bounded contexts to focus on in C4 diagram")
+	cmd.Flags().StringSliceVar(&useCaseFilter, "use-case", nil, "comma-separated use case slugs or names to render (detailed-domain and sequence only)")
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options) error {
+func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string) error {
+	// If the user supplied --use-case, validate that every requested value
+	// matches some use case in this file. Only used for domain/sequence
+	// types — c4 keeps full model for structural completeness.
+	if len(useCaseFilter) > 0 {
+		_, missing := visualizer.FilterUseCases(model, useCaseFilter)
+		if len(missing) > 0 {
+			available := make([]string, 0, len(model.UseCases))
+			for _, uc := range model.UseCases {
+				available = append(available, visualizer.Slugify(uc.Name))
+			}
+			return fmt.Errorf("no use case matches %v (available: %s)", missing, strings.Join(available, ", "))
+		}
+	}
+
 	domainMode := visualizer.DomainModeDetailed
 	if strings.ToLower(mode) == "architecture" {
 		domainMode = visualizer.DomainModeArchitecture
@@ -142,7 +158,11 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			outFile = filepath.Join(outDir, base+"-c4.puml")
 
 		case "domain":
-			data, _, err := v.GenerateDomainDiagramWithModeAndFormat(model, domainMode, visualizer.FormatPUML)
+			diagModel := model
+			if len(useCaseFilter) > 0 {
+				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
+			}
+			data, _, err := v.GenerateDomainDiagramWithModeAndFormat(diagModel, domainMode, visualizer.FormatPUML)
 			if err != nil {
 				return fmt.Errorf("domain: %w", err)
 			}
@@ -150,7 +170,11 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			outFile = filepath.Join(outDir, base+"-domain.puml")
 
 		case "sequence":
-			data, _, err := v.GenerateDomainDiagramWithTypeAndModeAndFormat(model, visualizer.DiagramTypeSequence, domainMode, visualizer.FormatPUML)
+			diagModel := model
+			if len(useCaseFilter) > 0 {
+				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
+			}
+			data, _, err := v.GenerateDomainDiagramWithTypeAndModeAndFormat(diagModel, visualizer.DiagramTypeSequence, domainMode, visualizer.FormatPUML)
 			if err != nil {
 				return fmt.Errorf("sequence: %w", err)
 			}

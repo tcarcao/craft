@@ -190,3 +190,101 @@ func TestGenerateCmd_C4InvalidBoundaries(t *testing.T) {
 		t.Error("expected error for --boundaries invalid, got nil")
 	}
 }
+
+func TestGenerateCmd_UseCaseFilter(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	craftSrc := []byte(`actor user Bob
+
+services {
+  Svc {
+    contexts: BC1
+  }
+}
+
+use_case "Alpha use case" {
+    when Bob does thing
+        BC1 thinks something
+        BC1 notifies "AlphaEvent"
+}
+
+use_case "Beta use case" {
+    when Bob does other
+        BC1 reacts
+        BC1 notifies "BetaEvent"
+}
+`)
+	if err := os.WriteFile(src, craftSrc, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("filter detailed-domain by slug", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--use-case", "alpha-use-case", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, "test-domain.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "AlphaEvent") {
+			t.Errorf("expected AlphaEvent in domain output, got: %s", content)
+		}
+		if strings.Contains(content, "BetaEvent") {
+			t.Errorf("unexpected BetaEvent in filtered domain output, got: %s", content)
+		}
+	})
+
+	t.Run("filter sequence by exact name", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "sequence", "--use-case", "Beta use case", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(tmp, "test-sequence.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "== Beta use case ==") {
+			t.Errorf("expected Beta section header, got: %s", content)
+		}
+		if strings.Contains(content, "== Alpha use case ==") {
+			t.Errorf("unexpected Alpha section in filtered sequence, got: %s", content)
+		}
+	})
+
+	t.Run("no match exits non-zero with available slugs in error", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--use-case", "nonexistent", "--output", tmp})
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected error for nonexistent use case, got nil")
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "nonexistent") {
+			t.Errorf("expected error to mention requested value 'nonexistent', got: %s", msg)
+		}
+		if !strings.Contains(msg, "alpha-use-case") || !strings.Contains(msg, "beta-use-case") {
+			t.Errorf("expected error to list available slugs, got: %s", msg)
+		}
+	})
+
+	t.Run("c4 silently ignores --use-case", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "c4", "--use-case", "alpha-use-case", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate c4: %v", err)
+		}
+		// File should exist and contain BOTH events (full model rendered, filter ignored)
+		data, err := os.ReadFile(filepath.Join(tmp, "test-c4.puml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "AlphaEvent") || !strings.Contains(string(data), "BetaEvent") {
+			t.Errorf("--use-case should not filter c4; expected both events in output")
+		}
+	})
+}
