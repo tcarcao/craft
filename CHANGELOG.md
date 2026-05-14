@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1] — 2026-05-14
+
+### Fixed
+- Docker server image (`tiagocarcao/craft`) build for v2.8.0 failed because `build/package/Dockerfile` pinned `golang:1.23-alpine` for the builder stage, while v2.8.0's `go.mod` requires Go ≥ 1.25. Bumped the builder image to `golang:1.25-alpine`. No code changes from v2.8.0; CLI binaries and Homebrew tap for v2.8.0 were unaffected.
+
+---
+
 ## [2.8.0] — 2026-05-14
 
 ### Added
