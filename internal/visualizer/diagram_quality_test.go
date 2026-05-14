@@ -110,3 +110,46 @@ func TestGeneratedPUML_DeclaresUnicodeCapableFont(t *testing.T) {
 		})
 	}
 }
+
+func TestDomainDiagram_DomainsNotClassifiedAsActors(t *testing.T) {
+	// Model where a bounded context ("BC1") is also a trigger actor —
+	// reproduces the "VASFulfillment as stickman" bug from vas.craft.
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{
+			Name:     "Svc",
+			Contexts: []string{"BC1"},
+		}},
+		UseCases: []craft.UseCase{{
+			Name: "starts",
+			Scenarios: []craft.Scenario{{
+				ID: "s1",
+				Trigger: craft.Trigger{
+					Type:  craft.TriggerTypeExternal,
+					Actor: "BC1",
+					Verb:  "begins",
+				},
+				Actions: []craft.Action{{
+					Type:    craft.ActionTypeInternal,
+					Context: "BC1",
+					Phrase:  "work",
+				}},
+			}},
+		}},
+	}
+	puml, _, err := New().GenerateDomainDiagramWithModeAndFormat(doc, DomainModeDetailed, FormatPUML)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	pumlStr := string(puml)
+	// BC1 must be declared as a frame (domain), never as `actor BC1` /
+	// `boundary BC1` / `participant BC1`.
+	forbidden := []string{"actor BC1", "boundary BC1", "participant BC1"}
+	for _, f := range forbidden {
+		if strings.Contains(pumlStr, f) {
+			t.Fatalf("domain BC1 leaked into actor declarations as %q\n--- PUML ---\n%s", f, pumlStr)
+		}
+	}
+	if !strings.Contains(pumlStr, `frame "BC1"`) {
+		t.Fatalf("domain BC1 missing frame declaration\n--- PUML ---\n%s", pumlStr)
+	}
+}

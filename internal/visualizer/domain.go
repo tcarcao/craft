@@ -265,27 +265,41 @@ func (g *PlantUMLGenerator) processTrigger(useCaseName string, scenario craft.Sc
 	switch trigger.Type {
 	case craft.TriggerTypeExternal:
 		// External actor triggers the flow
-		if trigger.Actor != "" {
-			g.actors[trigger.Actor] = true
-			g.stepCounter++
-
-			// Find the first domain in the actions to connect to
+		if trigger.Actor == "" {
+			return
+		}
+		if g.knownDomain(trigger.Actor) {
+			// The "actor" is actually a bounded context. Record it as a
+			// domain and emit the first action as an internal step rather
+			// than an external→domain edge.
+			g.domains[trigger.Actor] = true
 			if len(scenario.Actions) > 0 {
 				firstAction := scenario.Actions[0]
 				if firstAction.Context != "" {
 					g.domains[firstAction.Context] = true
-
-					description := fmt.Sprintf("%s %s", trigger.Verb, trigger.Phrase)
-					g.flows = append(g.flows, FlowStep{
-						StepNumber:  g.stepCounter,
-						From:        trigger.Actor,
-						To:          firstAction.Context,
-						Description: description,
-						Type:        "trigger",
-						UseCase:     useCaseName,
-						ScenarioID:  scenario.ID,
-					})
 				}
+			}
+			return
+		}
+		g.actors[trigger.Actor] = true
+		g.stepCounter++
+
+		// Find the first domain in the actions to connect to
+		if len(scenario.Actions) > 0 {
+			firstAction := scenario.Actions[0]
+			if firstAction.Context != "" {
+				g.domains[firstAction.Context] = true
+
+				description := fmt.Sprintf("%s %s", trigger.Verb, trigger.Phrase)
+				g.flows = append(g.flows, FlowStep{
+					StepNumber:  g.stepCounter,
+					From:        trigger.Actor,
+					To:          firstAction.Context,
+					Description: description,
+					Type:        "trigger",
+					UseCase:     useCaseName,
+					ScenarioID:  scenario.ID,
+				})
 			}
 		}
 	case craft.TriggerTypeEvent:
@@ -647,6 +661,34 @@ func (g *PlantUMLGenerator) getSortedDomains() []string {
 	}
 	sort.Strings(domains)
 	return domains
+}
+
+// knownDomain returns true if name is a bounded context declared by any
+// service or a domain/sub-domain. Used to prevent the detailed-domain
+// generator from rendering domains as stickman actors when they appear in
+// trigger positions like `when VASFulfillment starts ...`.
+func (g *PlantUMLGenerator) knownDomain(name string) bool {
+	if name == "" || g.model == nil {
+		return false
+	}
+	for _, svc := range g.model.Services {
+		for _, ctx := range svc.Contexts {
+			if ctx == name {
+				return true
+			}
+		}
+	}
+	for _, d := range g.model.Domains {
+		if d.Name == name {
+			return true
+		}
+		for _, bc := range d.BoundedContexts {
+			if bc == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (g *PlantUMLGenerator) getSortedActors() []string {
