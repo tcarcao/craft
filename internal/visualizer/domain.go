@@ -996,17 +996,19 @@ func (g *PlantUMLArchitectureGenerator) buildArchitecturePlantUMLContent() strin
 		sb.WriteString("\n")
 	}
 
-	// Generate connections (unlabeled and unduplicated)
+	// Generate connections (unlabeled, deduplicated, no self-loops).
 	sb.WriteString("' Subdomain connections\n")
 	for connectionKey := range g.connections {
 		parts := strings.Split(connectionKey, "->")
-		if len(parts) == 2 {
-			fromAlias := g.getElementAliasForArchitecture(parts[0])
-			toAlias := g.getElementAliasForArchitecture(parts[1])
-			if fromAlias != "" && toAlias != "" {
-				sb.WriteString(fmt.Sprintf("%s --> %s\n", fromAlias, toAlias))
-			}
+		if len(parts) != 2 {
+			continue
 		}
+		fromAlias := g.getElementAliasForArchitecture(parts[0])
+		toAlias := g.getElementAliasForArchitecture(parts[1])
+		if fromAlias == "" || toAlias == "" || fromAlias == toAlias {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("%s --> %s\n", fromAlias, toAlias))
 	}
 
 	sb.WriteString("\n@enduml")

@@ -153,3 +153,48 @@ func TestDomainDiagram_DomainsNotClassifiedAsActors(t *testing.T) {
 		t.Fatalf("domain BC1 missing frame declaration\n--- PUML ---\n%s", pumlStr)
 	}
 }
+
+func TestDomainArchitectureDiagram_NoSelfLoops(t *testing.T) {
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{Name: "Svc", Contexts: []string{"BC1", "BC2"}}},
+		UseCases: []craft.UseCase{{
+			Name: "u",
+			Scenarios: []craft.Scenario{{
+				ID: "s1",
+				Trigger: craft.Trigger{
+					Type: craft.TriggerTypeExternal, Actor: "User", Verb: "x",
+				},
+				Actions: []craft.Action{
+					{Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "thinks"},
+					{Type: craft.ActionTypeSync, Context: "BC1", TargetContext: "BC2", Phrase: "asks"},
+				},
+			}},
+		}},
+		Actors: []craft.Actor{{Name: "User", Type: craft.ActorTypeUser}},
+	}
+	puml, _, err := New().GenerateDomainDiagramWithModeAndFormat(doc, DomainModeArchitecture, FormatPUML)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	// Scan each connection line. A self-loop has identical source and dest aliases.
+	for _, line := range strings.Split(string(puml), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, " --> ") {
+			continue
+		}
+		// Format: "alias --> alias" (optionally followed by a label)
+		parts := strings.SplitN(line, " --> ", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		from := strings.TrimSpace(parts[0])
+		to := strings.TrimSpace(parts[1])
+		// Drop everything after the second token in `to` (any " : label" or trailing tokens).
+		if idx := strings.Index(to, " "); idx > 0 {
+			to = to[:idx]
+		}
+		if from == to {
+			t.Fatalf("self-loop %q in architecture-mode domain diagram\n--- PUML ---\n%s", line, puml)
+		}
+	}
+}
