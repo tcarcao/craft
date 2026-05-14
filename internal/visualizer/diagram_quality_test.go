@@ -74,3 +74,39 @@ func TestGeneratedPUML_HasNoHandwrittenSkinparam(t *testing.T) {
 		})
 	}
 }
+
+func TestGeneratedPUML_DeclaresUnicodeCapableFont(t *testing.T) {
+	viz := New()
+	doc := minimalDoc()
+	// Inject an em-dash into a use case name so the test fixture exercises the path.
+	doc.UseCases[0].Name = "Time-based — scheduled"
+	cases := []struct {
+		name string
+		gen  func() ([]byte, error)
+	}{
+		{"domain-detailed", func() ([]byte, error) {
+			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(doc, DomainModeDetailed, FormatPUML)
+			return b, err
+		}},
+		{"domain-architecture", func() ([]byte, error) {
+			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(doc, DomainModeArchitecture, FormatPUML)
+			return b, err
+		}},
+		{"sequence", func() ([]byte, error) {
+			b, _, err := viz.GenerateDomainDiagramWithTypeAndModeAndFormat(
+				doc, DiagramTypeSequence, DomainModeDetailed, FormatPUML)
+			return b, err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			puml, err := tc.gen()
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			if !strings.Contains(string(puml), "skinparam defaultFontName") {
+				t.Fatalf("generated PUML must declare a Unicode-capable defaultFontName\n--- PUML ---\n%s", puml)
+			}
+		})
+	}
+}

@@ -546,7 +546,8 @@ func (g *PlantUMLGenerator) buildPlantUMLContent() string {
 	// Header and styling
 	sb.WriteString("@startuml\n")
 	sb.WriteString("left to right direction\n")
-	sb.WriteString("skinparam backgroundColor white\n\n")
+	sb.WriteString("skinparam backgroundColor white\n")
+	sb.WriteString("skinparam defaultFontName SansSerif\n\n")
 
 	// Domain styling
 	sb.WriteString("' Domain styling with frames\n")
@@ -905,7 +906,8 @@ func (g *PlantUMLArchitectureGenerator) buildArchitecturePlantUMLContent() strin
 	// Header and styling
 	sb.WriteString("@startuml\n")
 	sb.WriteString("left to right direction\n")
-	sb.WriteString("skinparam backgroundColor white\n\n")
+	sb.WriteString("skinparam backgroundColor white\n")
+	sb.WriteString("skinparam defaultFontName SansSerif\n\n")
 
 	// Subdomain styling - use different styling for architecture view
 	sb.WriteString("' Subdomain styling with frames\n")
