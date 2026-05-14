@@ -488,11 +488,3 @@ func TestMermaidFormatConstants(t *testing.T) {
 	}
 }
 
-func TestMermaidWrappersExistButReturnNotImplemented(t *testing.T) {
-	viz := New()
-	doc := minimalDoc()
-
-	if _, err := viz.GenerateC4Mermaid(doc, C4ModeBoundaries, false); err == nil {
-		t.Error("GenerateC4Mermaid: expected not-implemented error, got nil")
-	}
-}

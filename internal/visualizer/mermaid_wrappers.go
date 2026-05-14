@@ -1,8 +1,6 @@
 package visualizer
 
 import (
-	"errors"
-
 	"github.com/tcarcao/craft/internal/visualizer/mermaid"
 	craft "github.com/tcarcao/craft/pkg/craft"
 )
@@ -24,5 +22,8 @@ func (v *Visualizer) GenerateSequenceDiagramMermaid(doc *craft.CraftDoc, mode Do
 // support them) — see docs/superpowers/specs/2026-05-14-mermaid-output-mode-design.md
 // for the fallback policy.
 func (v *Visualizer) GenerateC4Mermaid(doc *craft.CraftDoc, c4Mode C4GenerationMode, showDatabases bool) (string, error) {
-	return "", errors.New("GenerateC4Mermaid: not yet implemented")
+	// c4Mode is accepted for parity with the PlantUML side, but Mermaid C4
+	// has no boundaries/transparent distinction.
+	_ = c4Mode
+	return mermaid.C4(doc, showDatabases)
 }
