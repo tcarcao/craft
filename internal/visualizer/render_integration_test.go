@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -312,4 +313,80 @@ func TestVAS_SplitRenders(t *testing.T) {
 		t.Fatalf("expected em-dash use case content in PUML, got: %s", puml)
 	}
 	assertRendersClean(t, endpoint, string(puml))
+}
+
+// TestVAS_MermaidSequenceRenders proves the Mermaid sequence generator
+// produces source the actual mermaid-cli renderer accepts. End-to-end check
+// for the new --format mermaid path.
+//
+// We feed the input via Files (host->container copy) and read the SVG back
+// with CopyFileFromContainer instead of a bind mount — bind mounts under
+// macOS+podman hit uid/perm issues that have nothing to do with what we're
+// actually verifying here.
+func TestVAS_MermaidSequenceRenders(t *testing.T) {
+	ctx := context.Background()
+
+	src, err := os.ReadFile("testdata/vas.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	greenRoot, li, _ := syntax.Parse(string(src))
+	tree := syntax.Root(greenRoot)
+	doc := syntax.ProjectFromTree(tree, li)
+
+	mermaidSrc, err := visualizer.New().GenerateSequenceDiagramMermaid(doc, visualizer.DomainModeDetailed)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	tmp := t.TempDir()
+	inPath := filepath.Join(tmp, "input.mmd")
+	if err := os.WriteFile(inPath, []byte(mermaidSrc), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := testcontainers.ContainerRequest{
+		Image: "minlag/mermaid-cli:latest",
+		// /tmp is world-writable so mmdc (non-root) can write output.svg there.
+		Cmd: []string{"-i", "/tmp/input.mmd", "-o", "/tmp/output.svg"},
+		Files: []testcontainers.ContainerFile{
+			{HostFilePath: inPath, ContainerFilePath: "/tmp/input.mmd", FileMode: 0o644},
+		},
+		WaitingFor: wait.ForExit().WithExitTimeout(120 * time.Second),
+	}
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		t.Skipf("mermaid-cli container unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Terminate(ctx) })
+
+	state, err := c.State(ctx)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if state.ExitCode != 0 {
+		logs, _ := c.Logs(ctx)
+		var logBuf []byte
+		if logs != nil {
+			logBuf, _ = io.ReadAll(logs)
+			_ = logs.Close()
+		}
+		t.Fatalf("mmdc exited non-zero (%d):\n%s", state.ExitCode, snippet(logBuf))
+	}
+
+	rc, err := c.CopyFileFromContainer(ctx, "/tmp/output.svg")
+	if err != nil {
+		t.Fatalf("copy output: %v", err)
+	}
+	defer rc.Close()
+	out, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("mmdc produced empty SVG")
+	}
 }
