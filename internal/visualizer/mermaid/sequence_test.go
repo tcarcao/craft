@@ -85,6 +85,38 @@ func TestSequenceMermaid_UseCaseAsNoteOver(t *testing.T) {
 	}
 }
 
+func TestSequenceMermaid_OmitsUnreferencedActors(t *testing.T) {
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{Name: "Svc", Contexts: []string{"BC1"}}},
+		Actors: []craft.Actor{
+			{Name: "Bob", Type: craft.ActorTypeUser},
+			{Name: "Alice", Type: craft.ActorTypeUser},
+		},
+		UseCases: []craft.UseCase{{
+			Name: "Alpha",
+			Scenarios: []craft.Scenario{{
+				ID: "s1",
+				Trigger: craft.Trigger{
+					Type: craft.TriggerTypeExternal, Actor: "Bob", Verb: "starts",
+				},
+				Actions: []craft.Action{
+					{Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "work"},
+				},
+			}},
+		}},
+	}
+	out, err := Sequence(doc)
+	if err != nil {
+		t.Fatalf("Sequence: %v", err)
+	}
+	if !strings.Contains(out, "participant Bob") {
+		t.Fatalf("expected 'participant Bob' (the triggering actor):\n%s", out)
+	}
+	if strings.Contains(out, "participant Alice") {
+		t.Fatalf("Alice should not appear as a participant (no scenario triggers her):\n%s", out)
+	}
+}
+
 func TestSequenceMermaid_EmptyDocStillValid(t *testing.T) {
 	out, err := Sequence(&craft.CraftDoc{})
 	if err != nil {

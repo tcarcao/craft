@@ -66,8 +66,11 @@ func writeDetailedNodes(b *strings.Builder, doc *craft.CraftDoc) {
 		seen[name] = true
 		fmt.Fprintf(b, "    %s[%q]\n", safeID(name), name)
 	}
+	used := referencedActors(doc)
 	for _, a := range doc.Actors {
-		add(a.Name)
+		if used[a.Name] {
+			add(a.Name)
+		}
 	}
 	for _, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {

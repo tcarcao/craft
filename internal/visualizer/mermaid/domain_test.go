@@ -117,6 +117,40 @@ func TestDomainMermaid_ExternalTriggerEdge(t *testing.T) {
 	}
 }
 
+func TestDomainMermaid_OmitsUnreferencedActors(t *testing.T) {
+	// Model declares two actors but only Bob triggers a scenario.
+	// Alice must NOT appear in the rendered nodes.
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{Name: "Svc", Contexts: []string{"BC1"}}},
+		Actors: []craft.Actor{
+			{Name: "Bob", Type: craft.ActorTypeUser},
+			{Name: "Alice", Type: craft.ActorTypeUser},
+		},
+		UseCases: []craft.UseCase{{
+			Name: "Alpha",
+			Scenarios: []craft.Scenario{{
+				ID: "s1",
+				Trigger: craft.Trigger{
+					Type: craft.TriggerTypeExternal, Actor: "Bob", Verb: "starts",
+				},
+				Actions: []craft.Action{
+					{Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "work"},
+				},
+			}},
+		}},
+	}
+	out, err := Domain(doc, false)
+	if err != nil {
+		t.Fatalf("Domain: %v", err)
+	}
+	if !strings.Contains(out, `Bob["Bob"]`) {
+		t.Fatalf("expected Bob node (the triggering actor) in output:\n%s", out)
+	}
+	if strings.Contains(out, `Alice["Alice"]`) {
+		t.Fatalf("Alice should not appear (no scenario triggers her):\n%s", out)
+	}
+}
+
 func TestDomainMermaid_ListenTriggerRoutedThroughPublisher(t *testing.T) {
 	doc := &craft.CraftDoc{
 		Services: []craft.Service{{Name: "Svc", Contexts: []string{"BC1", "BC2"}}},

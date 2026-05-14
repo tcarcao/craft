@@ -48,8 +48,11 @@ func collectParticipants(doc *craft.CraftDoc) []string {
 		seen[name] = true
 		ordered = append(ordered, name)
 	}
+	used := referencedActors(doc)
 	for _, a := range doc.Actors {
-		add(a.Name)
+		if used[a.Name] {
+			add(a.Name)
+		}
 	}
 	for _, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
