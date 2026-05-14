@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.8.2] — 2026-05-14
+
+### Added
+- Three new server endpoints exposing Mermaid source for the VS Code extension to render client-side:
+  - `POST /preview/mermaid/domain` → Mermaid `flowchart LR` source
+  - `POST /preview/mermaid/sequence` → Mermaid `sequenceDiagram` source
+  - `POST /preview/mermaid/c4` → Mermaid `c4Diagram` source
+- All three mirror the existing `/preview/{domain,c4}` JSON envelope. `PreviewResponse.Data` carries plain text (not base64) — the client renders the source itself.
+
+---
+
 ## [2.8.1] — 2026-05-14
 
 ### Fixed
