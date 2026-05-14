@@ -429,3 +429,92 @@ use_case "Beta use case" {
 		}
 	})
 }
+
+func TestGenerateCmd_FormatMermaid(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	if err := os.WriteFile(src, simpleCraft(), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("default format is puml", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(tmp, "test-domain.puml")); err != nil {
+			t.Errorf("expected test-domain.puml: %v", err)
+		}
+	})
+
+	t.Run("format mermaid emits .mmd with flowchart header", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--format", "mermaid", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		path := filepath.Join(tmp, "test-domain.mmd")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected %s: %v", path, err)
+		}
+		if !strings.HasPrefix(string(data), "flowchart LR\n") {
+			t.Errorf(".mmd contents should start with 'flowchart LR':\n%s", data)
+		}
+	})
+
+	t.Run("format mermaid-md emits .md with fenced block", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "sequence", "--format", "mermaid-md", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		path := filepath.Join(tmp, "test-sequence.md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected %s: %v", path, err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "```mermaid\n") {
+			t.Errorf(".md contents should contain fenced mermaid block:\n%s", content)
+		}
+		if !strings.Contains(content, "sequenceDiagram\n") {
+			t.Errorf(".md contents should contain mermaid source:\n%s", content)
+		}
+		if !strings.HasPrefix(content, "# ") {
+			t.Errorf(".md contents should start with '# <title>':\n%s", content)
+		}
+	})
+
+	t.Run("invalid format errors with allowed list", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--format", "nonsense", "--output", tmp})
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected error for invalid format")
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "puml") || !strings.Contains(msg, "mermaid") {
+			t.Errorf("error should list allowed formats, got: %s", msg)
+		}
+	})
+}
+
+// simpleCraft returns a minimal valid .craft source for CLI tests.
+func simpleCraft() []byte {
+	return []byte(`actor user Bob
+
+services {
+  Svc {
+    contexts: BC1
+  }
+}
+
+use_case "Alpha" {
+    when Bob does thing
+        BC1 thinks something
+        BC1 notifies "AlphaEvent"
+}
+`)
+}
