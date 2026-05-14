@@ -403,3 +403,78 @@ func TestSlugify(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterUseCases(t *testing.T) {
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{Name: "Svc", Contexts: []string{"BC1"}}},
+		UseCases: []craft.UseCase{
+			{Name: "Release due work"},
+			{Name: "One-time — apply"},
+			{Name: "Application rejected"},
+		},
+		Actors: []craft.Actor{{Name: "User", Type: craft.ActorTypeUser}},
+	}
+
+	t.Run("match by slug", func(t *testing.T) {
+		out, missing := FilterUseCases(doc, []string{"one-time-apply"})
+		if len(missing) != 0 {
+			t.Fatalf("expected no missing, got %v", missing)
+		}
+		if len(out.UseCases) != 1 || out.UseCases[0].Name != "One-time — apply" {
+			t.Fatalf("expected one matching use case 'One-time — apply', got %+v", out.UseCases)
+		}
+	})
+
+	t.Run("match by exact name", func(t *testing.T) {
+		out, missing := FilterUseCases(doc, []string{"Application rejected"})
+		if len(missing) != 0 {
+			t.Fatalf("expected no missing, got %v", missing)
+		}
+		if len(out.UseCases) != 1 || out.UseCases[0].Name != "Application rejected" {
+			t.Fatalf("expected one matching use case, got %+v", out.UseCases)
+		}
+	})
+
+	t.Run("multiple values keep source order", func(t *testing.T) {
+		out, missing := FilterUseCases(doc, []string{"application-rejected", "release-due-work"})
+		if len(missing) != 0 {
+			t.Fatalf("expected no missing, got %v", missing)
+		}
+		if len(out.UseCases) != 2 {
+			t.Fatalf("expected 2 use cases, got %d", len(out.UseCases))
+		}
+		if out.UseCases[0].Name != "Release due work" || out.UseCases[1].Name != "Application rejected" {
+			t.Fatalf("expected source order preserved, got %+v", out.UseCases)
+		}
+	})
+
+	t.Run("unmatched values reported", func(t *testing.T) {
+		out, missing := FilterUseCases(doc, []string{"release-due-work", "nonexistent"})
+		if len(out.UseCases) != 1 {
+			t.Fatalf("expected 1 matched use case, got %d", len(out.UseCases))
+		}
+		if len(missing) != 1 || missing[0] != "nonexistent" {
+			t.Fatalf("expected missing=[nonexistent], got %v", missing)
+		}
+	})
+
+	t.Run("empty filter returns all", func(t *testing.T) {
+		out, missing := FilterUseCases(doc, nil)
+		if len(missing) != 0 {
+			t.Fatalf("expected no missing, got %v", missing)
+		}
+		if len(out.UseCases) != len(doc.UseCases) {
+			t.Fatalf("expected all %d use cases, got %d", len(doc.UseCases), len(out.UseCases))
+		}
+	})
+
+	t.Run("filtered doc shares non-usecase fields with source", func(t *testing.T) {
+		out, _ := FilterUseCases(doc, []string{"release-due-work"})
+		if len(out.Services) != len(doc.Services) || out.Services[0].Name != doc.Services[0].Name {
+			t.Fatalf("expected Services preserved")
+		}
+		if len(out.Actors) != len(doc.Actors) {
+			t.Fatalf("expected Actors preserved")
+		}
+	})
+}
