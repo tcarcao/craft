@@ -288,6 +288,34 @@ func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 	}
 }
 
+// handlePreviewMermaidSequence returns Mermaid sequenceDiagram source for the
+// given Craft DSL. Response.Data is plain text, NOT base64.
+func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req DomainPreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+			return
+		}
+		arch, err := parseDSL(req.DSL)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+			return
+		}
+		mode := visualizer.DomainModeDetailed
+		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
+			mode = visualizer.DomainModeArchitecture
+		}
+		src, err := s.viz.GenerateSequenceDiagramMermaid(arch, mode)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src})
+	}
+}
+
 func (s *Server) handlePreviewC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4PreviewRequest
@@ -526,6 +554,7 @@ func main() {
 
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/domain", server.handlePreviewMermaidDomain()).Methods("POST")
+	r.HandleFunc("/preview/mermaid/sequence", server.handlePreviewMermaidSequence()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
 
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")

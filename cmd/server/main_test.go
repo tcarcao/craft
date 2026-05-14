@@ -73,3 +73,30 @@ func TestHandlePreviewMermaidDomain_ReturnsMermaidSource(t *testing.T) {
 		t.Fatalf("expected Mermaid flowchart header in data, got: %s", resp.Data)
 	}
 }
+
+func TestHandlePreviewMermaidSequence_ReturnsMermaidSource(t *testing.T) {
+	body := strings.NewReader(`{
+		"dsl": "actor user Bob\n\nservices {\n  Svc { contexts: BC1 }\n}\n\nuse_case \"Alpha\" {\n  when Bob does thing\n    BC1 thinks something\n}\n"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/preview/mermaid/sequence", body)
+	rr := httptest.NewRecorder()
+	server, err := NewServer()
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	server.handlePreviewMermaidSequence()(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var resp PreviewResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.Success {
+		t.Fatalf("success=false: %s", resp.Error)
+	}
+	if !strings.HasPrefix(resp.Data, "sequenceDiagram\n") {
+		t.Fatalf("expected Mermaid sequenceDiagram header in data, got: %s", resp.Data)
+	}
+}
