@@ -136,27 +136,53 @@ func (g *C4DiagramGenerator) getServicesWithUserInteractions() []string {
 	return result
 }
 
-// createDirectUserToServiceRelations creates direct relationships from users to services
+// createDirectUserToServiceRelations creates a relation from each actor to
+// the specific container(s) it actually triggers in a use case. We walk the
+// use cases: for every external-trigger scenario whose actor is in g.actors,
+// find the first action's context that maps to a known non-database
+// container and emit a single edge.
 func (g *C4DiagramGenerator) createDirectUserToServiceRelations() {
-	for _, services := range g.userInteractionMap {
-		for _, serviceName := range services {
-			serviceContainers := g.getServiceContainers(serviceName)
-
-			for actor := range g.actors {
-				for _, serviceContainer := range serviceContainers {
-					// Skip database containers
-					if !g.isDatabaseContainer(g.containers[serviceContainer]) {
-						relation := C4Relation{
-							From:        actor,
-							To:          serviceContainer,
-							Description: "Interacts directly",
-							Technology:  "Direct API",
-							Type:        "uses",
-						}
-						g.systemRelations = append(g.systemRelations, relation)
-					}
+	type edge struct {
+		from, to string
+	}
+	seen := map[edge]bool{}
+	for _, useCase := range g.model.UseCases {
+		for _, scenario := range useCase.Scenarios {
+			if scenario.Trigger.Type != craft.TriggerTypeExternal {
+				continue
+			}
+			actor := scenario.Trigger.Actor
+			if actor == "" || !g.actors[actor] {
+				continue
+			}
+			// Find the first action context that maps to a known container.
+			var toContainer string
+			for _, action := range scenario.Actions {
+				if action.Context == "" {
+					continue
+				}
+				toContainer = g.findDomainContainer(action.Context)
+				if toContainer != "" {
+					break
 				}
 			}
+			if toContainer == "" {
+				continue
+			}
+			if g.isDatabaseContainer(g.containers[toContainer]) {
+				continue
+			}
+			if seen[edge{actor, toContainer}] {
+				continue
+			}
+			seen[edge{actor, toContainer}] = true
+			g.systemRelations = append(g.systemRelations, C4Relation{
+				From:        actor,
+				To:          toContainer,
+				Description: "Triggers",
+				Technology:  "Direct API",
+				Type:        "uses",
+			})
 		}
 	}
 }
@@ -617,29 +643,82 @@ func (g *C4DiagramGenerator) buildC4PlantUML(diagramType C4DiagramType) string {
 	return sb.String()
 }
 
-// addIconIncludes adds necessary icon includes
+// addIconIncludes adds icon stdlib includes used by the diagram.
+// Language sprites are emitted only for languages declared by services in the
+// model — keeps generated PUML focused and avoids loading sprites no one
+// references.
 func (g *C4DiagramGenerator) addIconIncludes(sb *strings.Builder) {
+	// Database / queue icons — kept unconditional: cost is low and presence is
+	// driven by containers populated later in the pipeline.
 	sb.WriteString("!include <tupadr3/devicons/database>\n")
 	sb.WriteString("!include <tupadr3/devicons2/postgresql>\n")
 	sb.WriteString("!include <tupadr3/devicons/mysql>\n")
 	sb.WriteString("!include <tupadr3/devicons2/redis>\n")
 	sb.WriteString("!include <tupadr3/devicons2/mongodb>\n")
-	sb.WriteString("!include <tupadr3/devicons2/go>\n")
-	sb.WriteString("!include <tupadr3/devicons2/java>\n")
-	sb.WriteString("!include <tupadr3/devicons2/python>\n")
-	sb.WriteString("!include <tupadr3/devicons2/nodejs>\n")
-	sb.WriteString("!include <tupadr3/devicons2/javascript>\n")
-	sb.WriteString("!include <tupadr3/devicons2/rust>\n")
-	sb.WriteString("!include <tupadr3/devicons2/dot_net>\n")
-	sb.WriteString("!include <tupadr3/devicons2/php>\n")
-	sb.WriteString("!include <tupadr3/devicons2/ruby>\n")
-	sb.WriteString("!include <tupadr3/devicons2/kotlin>\n")
-	sb.WriteString("!include <tupadr3/devicons2/ruby>\n")
+
+	// Language icons — only for languages actually declared by services.
+	for _, inc := range g.requiredLanguageIncludes() {
+		sb.WriteString("!include <" + inc + ">\n")
+	}
+
+	// Generic / actor icons referenced unconditionally by C4 elements.
 	sb.WriteString("!include <tupadr3/font-awesome-5/code>\n")
 	sb.WriteString("!include <tupadr3/font-awesome-5/mobile>\n")
 	sb.WriteString("!include <tupadr3/font-awesome-5/globe>\n")
 	sb.WriteString("!include <tupadr3/font-awesome-5/shield_alt>\n")
 	sb.WriteString("!include <tupadr3/font-awesome-5/list>\n")
+}
+
+// languageIncludePaths maps sprite names returned by getServiceIcon to their
+// tupadr3 stdlib paths. Keep in sync with getServiceIcon.
+// Note: `rust` lives under devicons/ — devicons2/rust does not exist in the
+// PlantUML stdlib and breaks renderers >= v1.2025.x.
+var languageIncludePaths = map[string]string{
+	"go":         "tupadr3/devicons2/go",
+	"java":       "tupadr3/devicons2/java",
+	"python":     "tupadr3/devicons2/python",
+	"nodejs":     "tupadr3/devicons2/nodejs",
+	"javascript": "tupadr3/devicons2/javascript",
+	"rust":       "tupadr3/devicons/rust",
+	"dot_net":    "tupadr3/devicons2/dot_net",
+	"php":        "tupadr3/devicons2/php",
+	"ruby":       "tupadr3/devicons2/ruby",
+	"kotlin":     "tupadr3/devicons2/kotlin",
+	"swift":      "tupadr3/devicons2/swift",
+}
+
+// requiredLanguageIncludes returns deduplicated tupadr3 paths for every
+// language declared by services in the model, in stable order.
+func (g *C4DiagramGenerator) requiredLanguageIncludes() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, svc := range g.model.Services {
+		if svc.Language == "" {
+			continue
+		}
+		name := spriteNameFromAttr(g.getServiceIcon(svc.Language))
+		inc, ok := languageIncludePaths[name]
+		if !ok || seen[inc] {
+			continue
+		}
+		seen[inc] = true
+		out = append(out, inc)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// spriteNameFromAttr extracts X from `, $sprite="X"`. Returns "" if absent.
+func spriteNameFromAttr(attr string) string {
+	_, rest, ok := strings.Cut(attr, `$sprite="`)
+	if !ok {
+		return ""
+	}
+	name, _, ok := strings.Cut(rest, `"`)
+	if !ok {
+		return ""
+	}
+	return name
 }
 
 // buildContextDiagram builds system context diagram

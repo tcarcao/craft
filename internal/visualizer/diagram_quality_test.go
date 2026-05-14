@@ -231,3 +231,58 @@ func TestC4Diagram_IncludesCRONActor(t *testing.T) {
 		t.Fatalf("CRON actor missing from generated C4 PUML\n--- PUML ---\n%s", puml)
 	}
 }
+
+func TestC4Diagram_ActorOnlyConnectsToTriggeredDomains(t *testing.T) {
+	// Two actors and two domains. Actor1 triggers BC1, Actor2 triggers BC2.
+	// Diagram must NOT contain Actor1→BC2 or Actor2→BC1 edges.
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{{
+			Name:     "Svc",
+			Contexts: []string{"BC1", "BC2"},
+		}},
+		UseCases: []craft.UseCase{{
+			Name: "uc",
+			Scenarios: []craft.Scenario{
+				{
+					ID: "s1",
+					Trigger: craft.Trigger{
+						Type: craft.TriggerTypeExternal, Actor: "Actor1", Verb: "calls",
+					},
+					Actions: []craft.Action{{
+						Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "do",
+					}},
+				},
+				{
+					ID: "s2",
+					Trigger: craft.Trigger{
+						Type: craft.TriggerTypeExternal, Actor: "Actor2", Verb: "calls",
+					},
+					Actions: []craft.Action{{
+						Type: craft.ActionTypeInternal, Context: "BC2", Phrase: "do",
+					}},
+				},
+			},
+		}},
+		Actors: []craft.Actor{
+			{Name: "Actor1", Type: craft.ActorTypeUser},
+			{Name: "Actor2", Type: craft.ActorTypeUser},
+		},
+	}
+	puml, _, err := New().GenerateC4WithFormat(doc, C4ModeBoundaries, false, FormatPUML)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	s := string(puml)
+	if strings.Contains(s, "Rel(Actor1, BC2,") {
+		t.Fatalf("unexpected edge Actor1→BC2\n--- PUML ---\n%s", s)
+	}
+	if strings.Contains(s, "Rel(Actor2, BC1,") {
+		t.Fatalf("unexpected edge Actor2→BC1\n--- PUML ---\n%s", s)
+	}
+	if !strings.Contains(s, "Rel(Actor1, BC1,") {
+		t.Fatalf("missing expected edge Actor1→BC1\n--- PUML ---\n%s", s)
+	}
+	if !strings.Contains(s, "Rel(Actor2, BC2,") {
+		t.Fatalf("missing expected edge Actor2→BC2\n--- PUML ---\n%s", s)
+	}
+}
