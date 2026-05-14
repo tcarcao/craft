@@ -286,3 +286,96 @@ func TestC4Diagram_ActorOnlyConnectsToTriggeredDomains(t *testing.T) {
 		t.Fatalf("missing expected edge Actor2→BC2\n--- PUML ---\n%s", s)
 	}
 }
+
+// TestC4Diagram_EventsAllRendered builds a model with multiple distinct
+// events between the SAME domain pair, plus an external-trigger scenario
+// that publishes, to catch both the "missing publish in external-trigger
+// scenarios" and the "dedup-by-pair" hypotheses at once.
+func TestC4Diagram_EventsAllRendered(t *testing.T) {
+	doc := &craft.CraftDoc{
+		Services: []craft.Service{
+			{Name: "SvcA", Contexts: []string{"BC1"}},
+			{Name: "SvcB", Contexts: []string{"BC2"}},
+		},
+		UseCases: []craft.UseCase{
+			{
+				Name: "publish-via-external",
+				Scenarios: []craft.Scenario{{
+					ID: "s1",
+					Trigger: craft.Trigger{
+						Type: craft.TriggerTypeExternal, Actor: "Timer", Verb: "fires",
+					},
+					Actions: []craft.Action{
+						// Two distinct events between the SAME pair BC1→EQ — this
+						// is what the (From,To)-only dedup collapses today.
+						{Type: craft.ActionTypeAsync, Context: "BC1", Event: "EventX"},
+						{Type: craft.ActionTypeAsync, Context: "BC1", Event: "EventZ"},
+					},
+				}},
+			},
+			{
+				Name: "publish-via-listen",
+				Scenarios: []craft.Scenario{{
+					ID: "s2",
+					Trigger: craft.Trigger{
+						Type:    craft.TriggerTypeDomainListen,
+						Context: "BC2",
+						Event:   "EventX",
+					},
+					Actions: []craft.Action{
+						{Type: craft.ActionTypeAsync, Context: "BC2", Event: "EventY"},
+					},
+				}},
+			},
+			{
+				Name: "consume-z",
+				Scenarios: []craft.Scenario{{
+					ID: "s3z",
+					Trigger: craft.Trigger{
+						Type:    craft.TriggerTypeDomainListen,
+						Context: "BC2",
+						Event:   "EventZ",
+					},
+					Actions: []craft.Action{
+						{Type: craft.ActionTypeInternal, Context: "BC2", Phrase: "handles z"},
+					},
+				}},
+			},
+			{
+				Name: "consume-y",
+				Scenarios: []craft.Scenario{{
+					ID: "s3",
+					Trigger: craft.Trigger{
+						Type:    craft.TriggerTypeDomainListen,
+						Context: "BC1",
+						Event:   "EventY",
+					},
+					Actions: []craft.Action{
+						{Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "handles"},
+					},
+				}},
+			},
+		},
+		Actors: []craft.Actor{{Name: "Timer", Type: craft.ActorTypeSystem}},
+	}
+	puml, _, err := New().GenerateC4WithFormat(doc, C4ModeBoundaries, false, FormatPUML)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	s := string(puml)
+	// We expect Event_Queue edges for every distinct event, including BOTH
+	// EventX and EventZ from BC1 (same pair, different events).
+	expected := []string{
+		`Rel(BC1, Event_Queue, "EventX"`,
+		`Rel(BC1, Event_Queue, "EventZ"`,
+		`Rel(Event_Queue, BC2, "EventX"`,
+		`Rel(Event_Queue, BC2, "EventZ"`,
+		`Rel(BC2, Event_Queue, "EventY"`,
+		`Rel(Event_Queue, BC1, "EventY"`,
+	}
+	for _, e := range expected {
+		if !strings.Contains(s, e) {
+			t.Fatalf("missing expected edge: %s\n--- PUML ---\n%s", e, s)
+		}
+	}
+}

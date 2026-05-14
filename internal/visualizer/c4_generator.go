@@ -470,31 +470,26 @@ func (g *C4DiagramGenerator) deduplicateRelationships() {
 	g.relations = g.deduplicateRelationshipSlice(g.relations)
 }
 
-// deduplicateRelationshipSlice removes duplicates from a relationship slice
+// deduplicateRelationshipSlice removes duplicates from a relationship slice.
+//
+// The key MUST include Description: two events between the same domain pair
+// (e.g. VasApplication→Event_Queue "VasApplied" and VasApplication→Event_Queue
+// "VasApplicationFailed") share From/To but are distinct edges that must both
+// render. Keying by (From,To) alone collapsed N events down to 1 per pair.
+// We preserve insertion order so diagram layout stays stable run-to-run.
 func (g *C4DiagramGenerator) deduplicateRelationshipSlice(relationships []C4Relation) []C4Relation {
-	seen := make(map[string]C4Relation)
-	
+	seen := make(map[string]struct{}, len(relationships))
+	result := make([]C4Relation, 0, len(relationships))
+
 	for _, relation := range relationships {
-		// Create a unique key based on From->To pair
-		key := fmt.Sprintf("%s->%s", relation.From, relation.To)
-		
-		// If we haven't seen this relationship before, or if the current one has more detail, keep it
-		if existing, exists := seen[key]; !exists {
-			seen[key] = relation
-		} else {
-			// If the new relation has a more detailed description, prefer it
-			if len(relation.Description) > len(existing.Description) {
-				seen[key] = relation
-			}
+		key := fmt.Sprintf("%s->%s|%s", relation.From, relation.To, relation.Description)
+		if _, exists := seen[key]; exists {
+			continue
 		}
-	}
-	
-	// Convert map back to slice
-	result := make([]C4Relation, 0, len(seen))
-	for _, relation := range seen {
+		seen[key] = struct{}{}
 		result = append(result, relation)
 	}
-	
+
 	return result
 }
 
