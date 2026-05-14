@@ -40,7 +40,6 @@ func (g *PlantUMLSequenceGenerator) GenerateSequenceDiagram(model *craft.CraftDo
 	var sb strings.Builder
 	sb.WriteString("@startuml\n")
 	sb.WriteString("skinparam backgroundColor white\n")
-	sb.WriteString("skinparam handwritten false\n")
 	sb.WriteString("skinparam sequenceMessageAlign center\n\n")
 
 	// Process each use case
