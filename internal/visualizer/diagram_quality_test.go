@@ -478,3 +478,27 @@ func TestFilterUseCases(t *testing.T) {
 		}
 	})
 }
+
+func TestMermaidFormatConstants(t *testing.T) {
+	if FormatMermaid != "mermaid" {
+		t.Errorf("FormatMermaid = %q, want %q", FormatMermaid, "mermaid")
+	}
+	if FormatMermaidMD != "mermaid-md" {
+		t.Errorf("FormatMermaidMD = %q, want %q", FormatMermaidMD, "mermaid-md")
+	}
+}
+
+func TestMermaidWrappersExistButReturnNotImplemented(t *testing.T) {
+	viz := New()
+	doc := minimalDoc()
+
+	if _, err := viz.GenerateDomainDiagramMermaid(doc, DomainModeDetailed); err == nil {
+		t.Error("GenerateDomainDiagramMermaid: expected not-implemented error, got nil")
+	}
+	if _, err := viz.GenerateSequenceDiagramMermaid(doc, DomainModeDetailed); err == nil {
+		t.Error("GenerateSequenceDiagramMermaid: expected not-implemented error, got nil")
+	}
+	if _, err := viz.GenerateC4Mermaid(doc, C4ModeBoundaries, false); err == nil {
+		t.Error("GenerateC4Mermaid: expected not-implemented error, got nil")
+	}
+}

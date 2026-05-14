@@ -18,10 +18,12 @@ func New() *Visualizer {
 type SupportedFormat string
 
 const (
-	FormatPNG  SupportedFormat = "png"
-	FormatSVG  SupportedFormat = "svg"
-	FormatPDF  SupportedFormat = "pdf"
-	FormatPUML SupportedFormat = "puml"
+	FormatPNG       SupportedFormat = "png"
+	FormatSVG       SupportedFormat = "svg"
+	FormatPDF       SupportedFormat = "pdf"
+	FormatPUML      SupportedFormat = "puml"
+	FormatMermaid   SupportedFormat = "mermaid"
+	FormatMermaidMD SupportedFormat = "mermaid-md"
 )
 
 // GeneratePlantUMLWithFormat generates PlantUML diagram in specified format
