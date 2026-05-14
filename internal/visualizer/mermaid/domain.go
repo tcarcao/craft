@@ -85,6 +85,7 @@ func writeDetailedEdges(b *strings.Builder, doc *craft.CraftDoc) {
 	step := 0
 	for _, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
+			step = writeTriggerEdge(b, doc, sc.Trigger, sc.Actions, step)
 			for _, act := range sc.Actions {
 				step++
 				switch act.Type {
@@ -107,6 +108,62 @@ func writeDetailedEdges(b *strings.Builder, doc *craft.CraftDoc) {
 			}
 		}
 	}
+}
+
+// writeTriggerEdge emits an edge for the scenario trigger (if applicable),
+// increments the step counter, and returns the new counter value.
+// External triggers connect actor -> first action's context.
+// Listen triggers connect publisher domain -> listener (skipping the edge
+// if no publisher is found in the doc, but still consuming a step number
+// so subsequent action numbers stay in parity with the PlantUML side).
+func writeTriggerEdge(b *strings.Builder, doc *craft.CraftDoc, t craft.Trigger, actions []craft.Action, step int) int {
+	switch t.Type {
+	case craft.TriggerTypeExternal:
+		if t.Actor == "" {
+			return step
+		}
+		var target string
+		for _, a := range actions {
+			if a.Context != "" {
+				target = a.Context
+				break
+			}
+		}
+		if target == "" {
+			return step
+		}
+		step++
+		desc := strings.TrimSpace(t.Verb + " " + t.Phrase)
+		fmt.Fprintf(b, "    %s -- \"%d. %s\" --> %s\n",
+			safeID(t.Actor), step, desc, safeID(target))
+	case craft.TriggerTypeDomainListen:
+		if t.Context == "" || t.Event == "" {
+			return step
+		}
+		step++
+		publisher := findEventPublisher(doc, t.Event)
+		if publisher != "" {
+			fmt.Fprintf(b, "    %s -- \"%d. %s\" --> %s\n",
+				safeID(publisher), step, t.Event, safeID(t.Context))
+		}
+	}
+	return step
+}
+
+// findEventPublisher returns the context of the first ActionTypeAsync action
+// in doc whose Event matches the given name. Returns "" if no publisher is
+// found in the (possibly filtered) doc.
+func findEventPublisher(doc *craft.CraftDoc, event string) string {
+	for _, uc := range doc.UseCases {
+		for _, sc := range uc.Scenarios {
+			for _, act := range sc.Actions {
+				if act.Type == craft.ActionTypeAsync && act.Event == event && act.Context != "" {
+					return act.Context
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // safeID renders a Mermaid-safe identifier from a human-readable name.
