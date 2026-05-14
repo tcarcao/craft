@@ -10,7 +10,8 @@ import (
 // GenerateDomainDiagramMermaid renders a Craft domain diagram as Mermaid source.
 // Both DomainModeDetailed and DomainModeArchitecture are supported.
 func (v *Visualizer) GenerateDomainDiagramMermaid(doc *craft.CraftDoc, mode DomainMode) (string, error) {
-	return "", errors.New("GenerateDomainDiagramMermaid: not yet implemented")
+	architecture := mode == DomainModeArchitecture
+	return mermaid.Domain(doc, architecture)
 }
 
 // GenerateSequenceDiagramMermaid renders a Craft sequence diagram as Mermaid source.
