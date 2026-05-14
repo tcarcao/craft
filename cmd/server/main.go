@@ -258,6 +258,36 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 	}
 }
 
+// handlePreviewMermaidDomain returns Mermaid source text (not a rendered image)
+// for the given Craft DSL. Response.Data carries plain text, NOT base64.
+// Clients are expected to render the source themselves (e.g. via mermaid.js
+// in a webview).
+func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req DomainPreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+			return
+		}
+		arch, err := parseDSL(req.DSL)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+			return
+		}
+		mode := visualizer.DomainModeDetailed
+		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
+			mode = visualizer.DomainModeArchitecture
+		}
+		src, err := s.viz.GenerateDomainDiagramMermaid(arch, mode)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src})
+	}
+}
+
 func (s *Server) handlePreviewC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4PreviewRequest
@@ -495,6 +525,7 @@ func main() {
 	r.HandleFunc("/download/{type}", server.handleDownloadDiagram()).Methods("GET")
 
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
+	r.HandleFunc("/preview/mermaid/domain", server.handlePreviewMermaidDomain()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
 
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
