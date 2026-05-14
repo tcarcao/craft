@@ -3,6 +3,7 @@ package visualizer
 import (
 	"errors"
 
+	"github.com/tcarcao/craft/internal/visualizer/mermaid"
 	craft "github.com/tcarcao/craft/pkg/craft"
 )
 
@@ -14,7 +15,7 @@ func (v *Visualizer) GenerateDomainDiagramMermaid(doc *craft.CraftDoc, mode Doma
 
 // GenerateSequenceDiagramMermaid renders a Craft sequence diagram as Mermaid source.
 func (v *Visualizer) GenerateSequenceDiagramMermaid(doc *craft.CraftDoc, mode DomainMode) (string, error) {
-	return "", errors.New("GenerateSequenceDiagramMermaid: not yet implemented")
+	return mermaid.Sequence(doc)
 }
 
 // GenerateC4Mermaid renders a Craft C4 diagram as Mermaid source using the

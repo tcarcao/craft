@@ -495,9 +495,6 @@ func TestMermaidWrappersExistButReturnNotImplemented(t *testing.T) {
 	if _, err := viz.GenerateDomainDiagramMermaid(doc, DomainModeDetailed); err == nil {
 		t.Error("GenerateDomainDiagramMermaid: expected not-implemented error, got nil")
 	}
-	if _, err := viz.GenerateSequenceDiagramMermaid(doc, DomainModeDetailed); err == nil {
-		t.Error("GenerateSequenceDiagramMermaid: expected not-implemented error, got nil")
-	}
 	if _, err := viz.GenerateC4Mermaid(doc, C4ModeBoundaries, false); err == nil {
 		t.Error("GenerateC4Mermaid: expected not-implemented error, got nil")
 	}
