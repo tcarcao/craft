@@ -32,6 +32,7 @@ func generateCmd() *cobra.Command {
 	var split bool
 	var format string
 	var stdout bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -115,7 +116,7 @@ func generateCmd() *cobra.Command {
 					focusServices: focusServices,
 					focusContexts: focusContexts,
 				}
-				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, stdoutW); err != nil {
+				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, stdoutW, force); err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 			}
@@ -134,10 +135,11 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&split, "split", false, "emit one file per use case (detailed-domain and sequence only)")
 	cmd.Flags().StringVar(&format, "format", "puml", "output format: puml|mermaid|mermaid-md")
 	cmd.Flags().BoolVar(&stdout, "stdout", false, "write to stdout instead of files (single diagram only)")
+	cmd.Flags().BoolVar(&force, "force", false, "allow overwriting existing .md files when --format=mermaid-md")
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer) error {
+func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer, force bool) error {
 	// If the user supplied --use-case, validate that every requested value
 	// matches some use case in this file. Only used for domain/sequence
 	// types — c4 keeps full model for structural completeness.
@@ -179,7 +181,7 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			}
 			// Architecture mode silently ignores --split — it is structural.
 			if split && domainMode == visualizer.DomainModeDetailed {
-				if err := emitSplitDomainFiles(v, diagModel, base, outDir, domainMode, format); err != nil {
+				if err := emitSplitDomainFiles(v, diagModel, base, outDir, domainMode, format, force); err != nil {
 					return fmt.Errorf("domain: %w", err)
 				}
 				continue
@@ -197,7 +199,7 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
 			}
 			if split {
-				if err := emitSplitSequenceFiles(v, diagModel, base, outDir, domainMode, format); err != nil {
+				if err := emitSplitSequenceFiles(v, diagModel, base, outDir, domainMode, format, force); err != nil {
 					return fmt.Errorf("sequence: %w", err)
 				}
 				continue
@@ -216,6 +218,11 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			}
 			continue
 		}
+		if !stdout && strings.HasSuffix(outFile, ".md") && !force {
+			if _, err := os.Stat(outFile); err == nil {
+				return fmt.Errorf("refusing to overwrite %q (use --force to overwrite)", outFile)
+			}
+		}
 		if err := os.WriteFile(outFile, content, 0644); err != nil {
 			return err
 		}
@@ -229,16 +236,16 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 // prefixed with a per-format title (PlantUML `title`, mermaid `%% comment`,
 // or markdown `# heading`). Use cases with zero scenarios are skipped with
 // a stderr note.
-func emitSplitDomainFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode, format string) error {
-	return emitSplitFiles(model, base, outDir, "domain", format, func(single *craft.CraftDoc) ([]byte, string, error) {
+func emitSplitDomainFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode, format string, force bool) error {
+	return emitSplitFiles(model, base, outDir, "domain", format, force, func(single *craft.CraftDoc) ([]byte, string, error) {
 		return renderDomain(v, single, mode, format)
 	})
 }
 
 // emitSplitSequenceFiles writes one sequence file per use case. Same
 // semantics as emitSplitDomainFiles.
-func emitSplitSequenceFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode, format string) error {
-	return emitSplitFiles(model, base, outDir, "sequence", format, func(single *craft.CraftDoc) ([]byte, string, error) {
+func emitSplitSequenceFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode, format string, force bool) error {
+	return emitSplitFiles(model, base, outDir, "sequence", format, force, func(single *craft.CraftDoc) ([]byte, string, error) {
 		return renderSequence(v, single, mode, format)
 	})
 }
@@ -247,7 +254,7 @@ func emitSplitSequenceFiles(v *visualizer.Visualizer, model *craft.CraftDoc, bas
 // case using the supplied generator. Empty use cases are skipped with a
 // stderr message. Each file gets a per-format title injected by injectTitle.
 // Detects slug collisions and errors before writing the conflicting file.
-func emitSplitFiles(model *craft.CraftDoc, base, outDir, diagSuffix, format string, generate func(*craft.CraftDoc) ([]byte, string, error)) error {
+func emitSplitFiles(model *craft.CraftDoc, base, outDir, diagSuffix, format string, force bool, generate func(*craft.CraftDoc) ([]byte, string, error)) error {
 	seenSlugs := make(map[string]string) // slug -> original name (for collision diagnostics)
 	for _, uc := range model.UseCases {
 		if len(uc.Scenarios) == 0 {
@@ -268,6 +275,11 @@ func emitSplitFiles(model *craft.CraftDoc, base, outDir, diagSuffix, format stri
 		}
 		titled := injectTitle(data, uc.Name, format)
 		outFile := filepath.Join(outDir, fmt.Sprintf("%s-%s-%s.%s", base, diagSuffix, slug, ext))
+		if strings.HasSuffix(outFile, ".md") && !force {
+			if _, err := os.Stat(outFile); err == nil {
+				return fmt.Errorf("refusing to overwrite %q (use --force to overwrite)", outFile)
+			}
+		}
 		if err := os.WriteFile(outFile, titled, 0644); err != nil {
 			return err
 		}

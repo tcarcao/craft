@@ -560,6 +560,66 @@ func TestGenerateCmd_Stdout(t *testing.T) {
 	})
 }
 
+func TestGenerateCmd_MermaidMDNoClobber(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	if err := os.WriteFile(src, simpleCraft(), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("refuses to overwrite existing .md without --force", func(t *testing.T) {
+		target := filepath.Join(tmp, "test-domain.md")
+		if err := os.WriteFile(target, []byte("# pre-existing\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--format", "mermaid-md", "--output", tmp})
+		err := root.Execute()
+		if err == nil {
+			t.Fatal("expected error refusing to overwrite existing .md")
+		}
+		if !strings.Contains(err.Error(), "refusing to overwrite") {
+			t.Errorf("expected refusal message, got: %s", err)
+		}
+		data, _ := os.ReadFile(target)
+		if string(data) != "# pre-existing\n" {
+			t.Errorf("pre-existing file was modified despite refusal")
+		}
+	})
+
+	t.Run("--force overwrites existing .md", func(t *testing.T) {
+		target := filepath.Join(tmp, "test-sequence.md")
+		if err := os.WriteFile(target, []byte("# pre-existing\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "sequence", "--format", "mermaid-md", "--output", tmp, "--force"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("--force should allow overwrite: %v", err)
+		}
+		data, _ := os.ReadFile(target)
+		if !strings.Contains(string(data), "```mermaid") {
+			t.Errorf("expected overwritten content to be mermaid-md output, got:\n%s", data)
+		}
+	})
+
+	t.Run("puml format does not trigger no-clobber (overwrites silently)", func(t *testing.T) {
+		target := filepath.Join(tmp, "test-domain.puml")
+		if err := os.WriteFile(target, []byte("stale-content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--format", "puml", "--output", tmp})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("puml overwrite should be silent: %v", err)
+		}
+		data, _ := os.ReadFile(target)
+		if !strings.Contains(string(data), "@startuml") {
+			t.Errorf("puml file should be overwritten with generated content")
+		}
+	})
+}
+
 // simpleCraft returns a minimal valid .craft source for CLI tests.
 func simpleCraft() []byte {
 	return []byte(`actor user Bob
