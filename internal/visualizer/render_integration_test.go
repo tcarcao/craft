@@ -280,3 +280,36 @@ func TestVAS_AllDiagramsRender(t *testing.T) {
 		})
 	}
 }
+
+// TestVAS_SplitRenders proves that a single split-mode file produced by
+// filtering vas.craft to one em-dash-bearing use case still renders cleanly
+// through PlantUML. End-to-end check that Slugify, FilterUseCases, and
+// Unicode handling cooperate.
+func TestVAS_SplitRenders(t *testing.T) {
+	endpoint := plantUMLEndpoint(t)
+	src, err := os.ReadFile("testdata/vas.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	greenRoot, li, _ := syntax.Parse(string(src))
+	tree := syntax.Root(greenRoot)
+	doc := syntax.ProjectFromTree(tree, li)
+
+	filtered, missing := visualizer.FilterUseCases(doc, []string{"one-time-vas-fulfillment-through-provider-apply"})
+	if len(missing) != 0 {
+		t.Fatalf("expected to match the em-dash use case, missing: %v", missing)
+	}
+	if len(filtered.UseCases) != 1 {
+		t.Fatalf("expected exactly one matched use case, got %d", len(filtered.UseCases))
+	}
+
+	puml, _, err := visualizer.New().GenerateDomainDiagramWithModeAndFormat(filtered, visualizer.DomainModeDetailed, visualizer.FormatPUML)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	// Verify the use case content made it through.
+	if !strings.Contains(string(puml), "fulfillment") {
+		t.Fatalf("expected em-dash use case content in PUML, got: %s", puml)
+	}
+	assertRendersClean(t, endpoint, string(puml))
+}
