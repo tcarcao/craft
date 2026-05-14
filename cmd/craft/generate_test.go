@@ -288,3 +288,144 @@ use_case "Beta use case" {
 		}
 	})
 }
+
+func TestGenerateCmd_Split(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	craftSrc := []byte(`actor user Bob
+
+services {
+  Svc {
+    contexts: BC1
+  }
+}
+
+use_case "Alpha use case" {
+    when Bob does thing
+        BC1 thinks something
+        BC1 notifies "AlphaEvent"
+}
+
+use_case "Beta use case" {
+    when Bob does other
+        BC1 reacts
+        BC1 notifies "BetaEvent"
+}
+`)
+	if err := os.WriteFile(src, craftSrc, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("split domain emits one file per use case", func(t *testing.T) {
+		dir := filepath.Join(tmp, "split-domain")
+		if err := os.Mkdir(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--split", "--output", dir})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		alphaPath := filepath.Join(dir, "test-domain-alpha-use-case.puml")
+		betaPath := filepath.Join(dir, "test-domain-beta-use-case.puml")
+		if _, err := os.Stat(alphaPath); err != nil {
+			t.Fatalf("expected alpha split file: %v", err)
+		}
+		if _, err := os.Stat(betaPath); err != nil {
+			t.Fatalf("expected beta split file: %v", err)
+		}
+		// Monolithic file should NOT be present.
+		if _, err := os.Stat(filepath.Join(dir, "test-domain.puml")); !os.IsNotExist(err) {
+			t.Errorf("split mode should not emit monolithic test-domain.puml")
+		}
+	})
+
+	t.Run("split sequence emits one file per use case with title directive", func(t *testing.T) {
+		dir := filepath.Join(tmp, "split-seq")
+		if err := os.Mkdir(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "sequence", "--split", "--output", dir})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "test-sequence-alpha-use-case.puml"))
+		if err != nil {
+			t.Fatalf("expected alpha sequence file: %v", err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "title Alpha use case") {
+			t.Errorf("expected `title Alpha use case` in split file, got: %s", content)
+		}
+	})
+
+	t.Run("type all split — c4 single, domain and sequence split", func(t *testing.T) {
+		dir := filepath.Join(tmp, "split-all")
+		if err := os.Mkdir(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "all", "--split", "--output", dir})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		expected := []string{
+			"test-c4.puml",
+			"test-domain-alpha-use-case.puml",
+			"test-domain-beta-use-case.puml",
+			"test-sequence-alpha-use-case.puml",
+			"test-sequence-beta-use-case.puml",
+		}
+		for _, name := range expected {
+			if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+				t.Errorf("expected %s to exist: %v", name, err)
+			}
+		}
+		// Monolithic domain/sequence files NOT present.
+		if _, err := os.Stat(filepath.Join(dir, "test-domain.puml")); !os.IsNotExist(err) {
+			t.Errorf("expected no monolithic test-domain.puml")
+		}
+		if _, err := os.Stat(filepath.Join(dir, "test-sequence.puml")); !os.IsNotExist(err) {
+			t.Errorf("expected no monolithic test-sequence.puml")
+		}
+	})
+
+	t.Run("split combined with use-case filter emits only filtered files", func(t *testing.T) {
+		dir := filepath.Join(tmp, "split-filter")
+		if err := os.Mkdir(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--split", "--use-case", "beta-use-case", "--output", dir})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "test-domain-beta-use-case.puml")); err != nil {
+			t.Errorf("expected beta split file: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "test-domain-alpha-use-case.puml")); !os.IsNotExist(err) {
+			t.Errorf("expected no alpha file when filtered to beta")
+		}
+	})
+
+	t.Run("split with --mode architecture emits single file", func(t *testing.T) {
+		dir := filepath.Join(tmp, "split-arch")
+		if err := os.Mkdir(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "domain", "--mode", "architecture", "--split", "--output", dir})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "test-domain.puml")); err != nil {
+			t.Errorf("expected single test-domain.puml in architecture mode, got: %v", err)
+		}
+		// No per-use-case files.
+		matches, _ := filepath.Glob(filepath.Join(dir, "test-domain-*.puml"))
+		if len(matches) > 0 {
+			t.Errorf("expected no split files in architecture mode, got: %v", matches)
+		}
+	})
+}

@@ -28,6 +28,7 @@ func generateCmd() *cobra.Command {
 	var focusServices []string
 	var focusContexts []string
 	var useCaseFilter []string
+	var split bool
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -87,7 +88,7 @@ func generateCmd() *cobra.Command {
 					focusServices: focusServices,
 					focusContexts: focusContexts,
 				}
-				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter); err != nil {
+				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter, split); err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
 			}
@@ -103,10 +104,11 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&focusServices, "focus", nil, "comma-separated services to focus on in C4 diagram")
 	cmd.Flags().StringSliceVar(&focusContexts, "focus-context", nil, "comma-separated bounded contexts to focus on in C4 diagram")
 	cmd.Flags().StringSliceVar(&useCaseFilter, "use-case", nil, "comma-separated use case slugs or names to render (detailed-domain and sequence only)")
+	cmd.Flags().BoolVar(&split, "split", false, "emit one file per use case (detailed-domain and sequence only)")
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string) error {
+func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool) error {
 	// If the user supplied --use-case, validate that every requested value
 	// matches some use case in this file. Only used for domain/sequence
 	// types — c4 keeps full model for structural completeness.
@@ -162,6 +164,13 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			if len(useCaseFilter) > 0 {
 				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
 			}
+			// Architecture mode silently ignores --split — it is structural.
+			if split && domainMode == visualizer.DomainModeDetailed {
+				if err := emitSplitDomainFiles(v, diagModel, base, outDir, domainMode); err != nil {
+					return fmt.Errorf("domain: %w", err)
+				}
+				continue
+			}
 			data, _, err := v.GenerateDomainDiagramWithModeAndFormat(diagModel, domainMode, visualizer.FormatPUML)
 			if err != nil {
 				return fmt.Errorf("domain: %w", err)
@@ -173,6 +182,12 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 			diagModel := model
 			if len(useCaseFilter) > 0 {
 				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
+			}
+			if split {
+				if err := emitSplitSequenceFiles(v, diagModel, base, outDir, domainMode); err != nil {
+					return fmt.Errorf("sequence: %w", err)
+				}
+				continue
 			}
 			data, _, err := v.GenerateDomainDiagramWithTypeAndModeAndFormat(diagModel, visualizer.DiagramTypeSequence, domainMode, visualizer.FormatPUML)
 			if err != nil {
@@ -188,6 +203,78 @@ func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outD
 		fmt.Println(outFile)
 	}
 	return nil
+}
+
+// emitSplitDomainFiles writes one detailed-domain PUML per use case. Each
+// output file contains a single use case from the filtered model and is
+// prefixed with a PlantUML `title` directive matching the use case name.
+// Use cases with zero scenarios are skipped with a stderr note.
+func emitSplitDomainFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode) error {
+	return emitSplitFiles(model, base, outDir, "domain", func(single *craft.CraftDoc) ([]byte, error) {
+		data, _, err := v.GenerateDomainDiagramWithModeAndFormat(single, mode, visualizer.FormatPUML)
+		return data, err
+	})
+}
+
+// emitSplitSequenceFiles writes one sequence PUML per use case. Same
+// semantics as emitSplitDomainFiles.
+func emitSplitSequenceFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode) error {
+	return emitSplitFiles(model, base, outDir, "sequence", func(single *craft.CraftDoc) ([]byte, error) {
+		data, _, err := v.GenerateDomainDiagramWithTypeAndModeAndFormat(single, visualizer.DiagramTypeSequence, mode, visualizer.FormatPUML)
+		return data, err
+	})
+}
+
+// emitSplitFiles iterates use cases in the model and writes one file per use
+// case using the supplied generator. Empty use cases are skipped with a
+// stderr message. Each file gets a `title <use case name>` directive
+// inserted right after `@startuml`. Detects slug collisions and errors before
+// writing the conflicting file.
+func emitSplitFiles(model *craft.CraftDoc, base, outDir, diagSuffix string, generate func(*craft.CraftDoc) ([]byte, error)) error {
+	seenSlugs := make(map[string]string) // slug -> original name (for collision diagnostics)
+	for _, uc := range model.UseCases {
+		if len(uc.Scenarios) == 0 {
+			fmt.Fprintf(os.Stderr, "craft generate: skipped %q (no scenarios)\n", uc.Name)
+			continue
+		}
+		slug := visualizer.Slugify(uc.Name)
+		if prev, ok := seenSlugs[slug]; ok {
+			return fmt.Errorf("duplicate slug %q from use cases %q and %q — rename one", slug, prev, uc.Name)
+		}
+		seenSlugs[slug] = uc.Name
+
+		single := *model
+		single.UseCases = []craft.UseCase{uc}
+		data, err := generate(&single)
+		if err != nil {
+			return fmt.Errorf("%s: %w", uc.Name, err)
+		}
+		titled := injectTitle(data, uc.Name)
+		outFile := filepath.Join(outDir, fmt.Sprintf("%s-%s-%s.puml", base, diagSuffix, slug))
+		if err := os.WriteFile(outFile, titled, 0644); err != nil {
+			return err
+		}
+		fmt.Println(outFile)
+	}
+	return nil
+}
+
+// injectTitle inserts `title <name>\n` immediately after the first
+// `@startuml\n` line of puml. If `@startuml\n` isn't found (defensive),
+// returns puml unchanged.
+func injectTitle(puml []byte, name string) []byte {
+	const marker = "@startuml\n"
+	idx := strings.Index(string(puml), marker)
+	if idx < 0 {
+		return puml
+	}
+	insertAt := idx + len(marker)
+	titleLine := []byte("title " + name + "\n")
+	out := make([]byte, 0, len(puml)+len(titleLine))
+	out = append(out, puml[:insertAt]...)
+	out = append(out, titleLine...)
+	out = append(out, puml[insertAt:]...)
+	return out
 }
 
 // baseName strips directory and extension from a file path.
