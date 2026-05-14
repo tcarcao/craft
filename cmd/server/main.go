@@ -316,6 +316,40 @@ func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
 	}
 }
 
+// handlePreviewMermaidC4 returns Mermaid c4Diagram source for the given
+// Craft DSL. Response.Data is plain text, NOT base64. boundariesMode is
+// accepted for parity with the PlantUML side but Mermaid's experimental
+// c4Diagram has no equivalent — currently no-op.
+func (s *Server) handlePreviewMermaidC4() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req C4PreviewRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+			return
+		}
+		arch, err := parseDSL(req.DSL)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
+			return
+		}
+		boundariesMode := visualizer.C4ModeBoundaries
+		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
+			boundariesMode = visualizer.C4ModeTransparent
+		}
+		showDatabases := true
+		if req.ShowDatabases != nil {
+			showDatabases = *req.ShowDatabases
+		}
+		src, err := s.viz.GenerateC4Mermaid(arch, boundariesMode, showDatabases)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src})
+	}
+}
+
 func (s *Server) handlePreviewC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4PreviewRequest
@@ -555,6 +589,7 @@ func main() {
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/domain", server.handlePreviewMermaidDomain()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/sequence", server.handlePreviewMermaidSequence()).Methods("POST")
+	r.HandleFunc("/preview/mermaid/c4", server.handlePreviewMermaidC4()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
 
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
