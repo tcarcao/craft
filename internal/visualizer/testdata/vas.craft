@@ -1,0 +1,135 @@
+// =============================================================================
+// VAS fulfillment — Craft choreography for meetings (Confluence BC + MR !2118)
+// =============================================================================
+//
+// Kafka subjects (streaming-governance — literal topic names):
+//   • com.olx.realestate_vas.Vas
+//       Scheduler → fulfillment handoff, fulfillment-driven outcomes, vas-topic facts for subscribers.
+//   • com.olx.realestate_vasapplication.VasApplication
+//       Commands for the application/provider aggregate and application-local facts.
+//
+// Notation in flows below:
+//   • notifies "EventName" — async publication (Kafka choreography across units / teams).
+//   • asks VasLifecycle … — synchronous step inside VasManagementService: Fulfillment applies lifecycle
+//       updates before emitting vas-topic outcomes so persistence does not race downstream consumers.
+//   • Craft may warn that VasFulfilled / VasFulfillmentFailed / VasFulfillmentTimedOut have no in-file
+//       listeners; other bounded contexts subscribe off-diagram — intentional.
+//
+// -----------------------------------------------------------------------------
+// Craft quoted string → MR Avro record short name (namespace com.olx.<domain> — verify on MR branch)
+// -----------------------------------------------------------------------------
+//
+// vasapplication — com.olx.realestate_vasapplication.*
+//   "RequestVasApplication"        RequestVasApplication
+//   "RequestEndOfVasApplication"   RequestVasFinish              // optional rename in MR to match Craft
+//   "VasApplicationAcknowledged"   VasApplicationAcknowledged
+//   "VasApplicationFailed"         VasApplicationFailed
+//   "VasTerminated"                VasApplicationEnded       // Craft alias in flows
+//
+// vas — com.olx.realestate_vas.*
+//   "VASReadyForFulfillment"       map to concrete scheduler Vas* payload(s), not one universal MR row
+//   "VasApplied"                   extension vs MR ~2118 — add Avro or merge into Acknowledged
+//   "VasFulfilled"                 VasFulfilled
+//   "VasFulfillmentFailed"         VasFulfillmentFailed
+//   "VasFulfillmentTimedOut"       VasFulfillmentTimedOut
+//
+// Confluence canvas wording → streaming shapes above:
+//   VASFulfillmentRequested      → RequestVasApplication
+//   VASFulfillmentFinish         → RequestEndOfVasApplication (vasapplication; avoids "VAS finish" wording)
+//   Provider outcome vocabulary  → VasApplicationAcknowledged | VasApplied | VasApplicationFailed | VasTerminated
+
+actors {
+    system CRON
+    system FulfillmentTimer
+    system VasLifecycleTimer
+}
+
+domains {
+    VAS {
+        VASScheduler
+        VASFulfillment
+        VasLifecycle
+    }
+    VasProvider {
+        VasApplication
+    }
+}
+
+services {
+    VasManagementService {
+        contexts: VASScheduler,
+            VASFulfillment,
+            VasLifecycle
+        language: golang
+        deployment: rolling
+    }
+    VasApplicationServiceA {
+        contexts: VasApplication
+        language: golang
+        deployment: rolling
+    }
+}
+
+// --- Flows ---
+use_case "Release due VAS work to fulfillment" {
+    when CRON advances schedule
+        VASScheduler selects VAS deliveries that are due from snapshot
+        VASScheduler notifies "VASReadyForFulfillment"
+}
+
+use_case "One-time VAS — fulfillment through provider apply" {
+    when VASFulfillment starts fulfillment of a VAS
+        VASFulfillment validates snapshot parameters are present
+        VASFulfillment notifies "RequestVasApplication"
+
+    when VasApplication listens "RequestVasApplication"
+        VasApplication delegates apply through provider translator
+        VasApplication notifies "VasApplicationAcknowledged"
+        // VasApplicationAcknowledged -> I know I will have to Apply a VAS and it will happen at some point in the future
+
+    when VASFulfillment listens "VasApplicationAcknowledged"
+        VASFulfillment records correlation for vasFulfillmentId
+
+    when VasApplication has applied VAS
+        VasApplication notifies "VasApplied"
+        // VasApplied -> a VAS was applied
+
+    when VASFulfillment listens "VasApplied"
+        VASFulfillment advances internal VAS lifecycle for succeeded delivery
+        VASFulfillment asks VasLifecycle to record fulfillment outcome on VAS aggregate
+        VASFulfillment notifies "VasFulfilled"
+}
+
+use_case "VAS application rejected by provider" {
+    when VasApplication listens "RequestVasApplication"
+        VasApplication delegates apply through provider translator
+        VasApplication notifies "VasApplicationFailed"
+
+    when VASFulfillment listens "VasApplicationFailed"
+        VASFulfillment classifies failure and exhausts retry policy when applicable
+        VASFulfillment asks VasLifecycle to record terminal failure for the VAS attempt
+        VASFulfillment notifies "VasFulfillmentFailed"
+}
+
+use_case "Provider silent — fulfillment timeout" {
+    when FulfillmentTimer fires fulfillment deadline sweep
+        VASFulfillment finds pending correlations past deadline
+        VASFulfillment asks VasLifecycle to record timeout outcome for the VAS attempt
+        VASFulfillment notifies "VasFulfillmentTimedOut"
+        VASFulfillment notifies "RequestEndOfVasApplication" // -> invalidation from VasFulfilment into VasApplication
+}
+
+// Time-based VAS: reuse apply/start scenarios when snapshot includes end_time.
+// End-of-window command on vasapplication only — see header "Why there is no VasFulfillmentFinished".
+
+use_case "Time-based VAS — scheduled finish" {
+    when VasLifecycleTimer fires configured end_time for active time_based VAS
+        VASFulfillment notifies "RequestEndOfVasApplication"
+
+    when VasApplication listens "RequestEndOfVasApplication"
+        VasApplication delegates finish through provider translator
+        VasApplication notifies "VasApplicationEnded"
+
+    when VasLifecycle listens "VasApplicationEnded"
+        VasLifecycle records time-based VAS as ended
+}
