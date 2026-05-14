@@ -328,7 +328,7 @@ This flows from "who and what exists" to "how it's built" to "what happens."
 After generating or editing a `.craft` file, the user can run `craft` to validate and inspect it:
 
 - `craft validate <file>` — parse and lint; reports errors and warnings, exits 1 on errors
-- `craft generate <file>` — produce PlantUML diagram files
+- `craft generate <file>` — produce diagram files (PlantUML by default; `--format mermaid` or `--format mermaid-md` for Mermaid output, `--split` for one file per use case, `--use-case` to filter)
 - `craft inspect <file>` — dump the parsed model as structured text or JSON
 
 Glob patterns work for file arguments: `craft validate docs/**/*.craft`
