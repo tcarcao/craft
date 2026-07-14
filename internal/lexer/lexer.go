@@ -111,10 +111,11 @@ func (t Token) String() string {
 
 // Lexer scans a string of Craft DSL source.
 type Lexer struct {
-	src    []rune
-	pos    int // current position in src
-	line   int // current 1-based line
-	col    int // current 1-based column
+	src      []rune
+	pos      int  // current position in src
+	line     int  // current 1-based line
+	col      int  // current 1-based column
+	prevRune rune // rune just consumed by advance(); 0 at start of input
 }
 
 // New creates a Lexer for the given source text.
@@ -145,12 +146,21 @@ func (l *Lexer) Next() Token {
 
 	ch := l.src[l.pos]
 
+	// A comment may only begin when the '/' is at the start of the input or
+	// immediately preceded by whitespace. This keeps slashes inside prose
+	// (URLs like http://api, ratios like 50/50) from being mis-lexed as
+	// comments — a non-whitespace-preceded '/' falls through to the default
+	// case below and is scanned as TokenError, which the parser sweeps into
+	// prose text.
+	precededByWS := l.pos == 0 ||
+		l.prevRune == ' ' || l.prevRune == '\t' || l.prevRune == '\n' || l.prevRune == '\r'
+
 	switch {
-	case ch == '/' && l.peek(1) == '/' && l.peek(2) == '/':
+	case precededByWS && ch == '/' && l.peek(1) == '/' && l.peek(2) == '/':
 		return l.scanDocComment()
-	case ch == '/' && l.peek(1) == '/':
+	case precededByWS && ch == '/' && l.peek(1) == '/':
 		return l.scanLineComment()
-	case ch == '/' && l.peek(1) == '*':
+	case precededByWS && ch == '/' && l.peek(1) == '*':
 		return l.scanBlockComment()
 	case ch == '{':
 		return l.consume(TokenLBrace)
@@ -368,13 +378,15 @@ func (l *Lexer) token(tt TokenType, val string) Token {
 
 func (l *Lexer) advance() {
 	if l.pos < len(l.src) {
-		if l.src[l.pos] == '\n' {
+		ch := l.src[l.pos]
+		if ch == '\n' {
 			l.line++
 			l.col = 1
 		} else {
 			l.col++
 		}
 		l.pos++
+		l.prevRune = ch
 	}
 }
 

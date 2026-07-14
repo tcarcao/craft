@@ -1,6 +1,7 @@
 package syntax_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/internal/syntax"
@@ -420,5 +421,54 @@ func TestProse_SpecialCharsUnquoted(t *testing.T) {
 	}
 	if got := act.ConnectorValue(); got != "for" {
 		t.Fatalf("connector = %q, want %q", got, "for")
+	}
+}
+
+// TestProse_TrailingCommentAfterWhitespaceIsSeparated verifies that a
+// trailing "// TODO" preceded by whitespace is NOT swept into the action's
+// prose phrase (unlike bare TokenError punctuation, e.g. a lone '/' — see
+// TestProse_SpecialCharsUnquoted): collectPhrase stops at the comment token,
+// so the action's Description() reads "Auth checks x" and the comment
+// survives as trivia elsewhere in the tree.
+func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
+	src := `use_case "x" {
+  when User taps Button
+    Auth checks x  // TODO
+}`
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", diags)
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	uc := syntax.AsUseCaseDecl(ucNodes[0])
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	actions := scenarios[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	act := actions[0]
+	if got := act.PhraseText(); got != "x" {
+		t.Fatalf("phrase = %q, want %q (comment must not be swept into prose)", got, "x")
+	}
+	if got := act.Description(); got != "Auth checks x" {
+		t.Fatalf("description = %q, want %q", got, "Auth checks x")
+	}
+	// The "// TODO" comment must still appear as trivia somewhere in the tree.
+	hasComment := false
+	for _, tok := range root.AllTokens() {
+		if tok.Kind() == syntax.SyntaxKindLineComment && strings.Contains(tok.Text(), "TODO") {
+			hasComment = true
+			break
+		}
+	}
+	if !hasComment {
+		t.Error("expected trailing '// TODO' comment to be preserved as trivia in the tree")
 	}
 }
