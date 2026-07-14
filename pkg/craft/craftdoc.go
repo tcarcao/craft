@@ -86,12 +86,12 @@ type Scenario struct {
 
 // Trigger describes what initiates a scenario.
 type Trigger struct {
-	Type        TriggerType `json:"type"`
-	Actor       string      `json:"actor,omitempty"`
-	Verb        string      `json:"verb,omitempty"`
-	Phrase      string      `json:"phrase,omitempty"`
-	Context     string      `json:"context,omitempty"`
-	Event       string      `json:"event,omitempty"`
+	Type    TriggerType `json:"type"`
+	Actor   string      `json:"actor,omitempty"`
+	Verb    string      `json:"verb,omitempty"`
+	Phrase  string      `json:"phrase,omitempty"`
+	Context string      `json:"context,omitempty"`
+	Event   string      `json:"event,omitempty"`
 	// Ref holds the full typed-ref text (e.g. "vas.VasApplied" or
 	// "bc:re/billing") for a domain_listen trigger whose event was written
 	// as a ref rather than a quoted string. Empty for the legacy
