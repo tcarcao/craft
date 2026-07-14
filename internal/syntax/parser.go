@@ -598,6 +598,10 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 			p.consumeAs(SyntaxKindKwLanguage)
 		case "deployment":
 			p.consumeAs(SyntaxKindKwDeployment)
+		case "opslevel":
+			p.consumeAs(SyntaxKindKwOpsLevel)
+		case "repo":
+			p.consumeAs(SyntaxKindKwRepo)
 		default:
 			p.consumeAs(SyntaxKindIdent)
 		}
@@ -628,6 +632,14 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 		case "deployment":
 			dd := p.parseDeploymentSpec()
 			diags = append(diags, dd...)
+		case "opslevel":
+			if p.peek().Type == lexer.TokenIdent {
+				p.consumeAs(SyntaxKindIdent)
+			} else {
+				diags = append(diags, p.diagUnexpected(p.peek(), "opslevel identifier"))
+			}
+		case "repo":
+			p.parseRef()
 		default:
 			// Unknown field — emit diagnostic and skip to next line.
 			diags = append(diags, p.diagUnexpected(tok, "field name (contexts, data-stores, language) or `}`"))

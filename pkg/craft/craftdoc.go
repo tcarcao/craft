@@ -67,6 +67,8 @@ type Service struct {
 	DataStores []string           `json:"dataStores,omitempty"`
 	Language   string             `json:"language,omitempty"`
 	Deployment DeploymentStrategy `json:"deployment,omitempty"`
+	OpsLevel   string             `json:"opsLevel,omitempty"`
+	Repo       string             `json:"repo,omitempty"`
 	Line       int                `json:"line,omitempty"`
 }
 

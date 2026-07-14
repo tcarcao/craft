@@ -155,12 +155,13 @@ func isAstFieldSentinel(tokens []SyntaxToken, i int) bool {
 	}
 	k := tokens[i].Kind()
 	return k == SyntaxKindIdent || k == SyntaxKindKwContexts || k == SyntaxKindKwDataStores ||
-		k == SyntaxKindKwLanguage || k == SyntaxKindKwDeployment
+		k == SyntaxKindKwLanguage || k == SyntaxKindKwDeployment ||
+		k == SyntaxKindKwOpsLevel || k == SyntaxKindKwRepo
 }
 
 // serviceFieldName returns the field name string for a token that is a service
-// body field keyword (contexts, data-stores, language, deployment) or a plain
-// ident. Returns "" for other token kinds.
+// body field keyword (contexts, data-stores, language, deployment, opslevel,
+// repo) or a plain ident. Returns "" for other token kinds.
 func serviceFieldName(tok SyntaxToken) string {
 	switch tok.Kind() {
 	case SyntaxKindKwContexts:
@@ -171,6 +172,10 @@ func serviceFieldName(tok SyntaxToken) string {
 		return "language"
 	case SyntaxKindKwDeployment:
 		return "deployment"
+	case SyntaxKindKwOpsLevel:
+		return "opslevel"
+	case SyntaxKindKwRepo:
+		return "repo"
 	case SyntaxKindIdent:
 		return tok.Text()
 	}
@@ -517,6 +522,26 @@ func (sf ServiceField) IsDeployment() bool {
 	return sf.node.ChildToken(SyntaxKindKwDeployment) != nil
 }
 
+// IsOpsLevel reports whether this is an opslevel: field.
+func (sf ServiceField) IsOpsLevel() bool {
+	return sf.node.ChildToken(SyntaxKindKwOpsLevel) != nil
+}
+
+// IsRepo reports whether this is a repo: field.
+func (sf ServiceField) IsRepo() bool {
+	return sf.node.ChildToken(SyntaxKindKwRepo) != nil
+}
+
+// Ref returns the RefDecl view of this field's value when it was parsed via
+// parseRef (e.g. repo:), or nil if the field has no ref-wrapped value.
+func (sf ServiceField) Ref() *RefDecl {
+	n := sf.node.ChildNode(SyntaxKindRef)
+	if n == nil {
+		return nil
+	}
+	return &RefDecl{node: *n}
+}
+
 // DomainsBlock is a typed view over a SyntaxKindDomainsBlock node.
 type DomainsBlock struct{ node SyntaxNode }
 
@@ -570,6 +595,7 @@ type serviceBodyFields struct {
 	Language        string
 	DeploymentType  string
 	DeploymentRules []struct{ Percentage, Target string }
+	OpsLevel        string
 }
 
 // parseServiceBody scans the service body tokens and extracts field values.
@@ -601,6 +627,25 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 		case "language":
 			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
 				f.Language = tokens[i].Text()
+				i++
+			}
+		case "opslevel":
+			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
+				f.OpsLevel = tokens[i].Text()
+				i++
+			}
+		case "repo":
+			// The repo: value is a ref (possibly multi-token, e.g. a
+			// slash-bearing slug) wrapped in a SyntaxKindRef node by
+			// parseRef. Its text is read via the tree (ServiceDecl.Repo,
+			// ServiceField.Ref) rather than here; just skip past its
+			// tokens to keep this flat scan's cursor in sync.
+			for i < len(tokens) {
+				isNextFieldSentinel := serviceFieldName(tokens[i]) != "" &&
+					i+1 < len(tokens) && tokens[i+1].Kind() == SyntaxKindColon
+				if tokens[i].Kind() == SyntaxKindRBrace || isNextFieldSentinel {
+					break
+				}
 				i++
 			}
 		case "deployment":
@@ -742,6 +787,29 @@ func (s ServiceDecl) Language() string { return s.parseServiceBody().Language }
 
 // DeploymentType returns the deployment strategy type (e.g. "canary"), or empty string.
 func (s ServiceDecl) DeploymentType() string { return s.parseServiceBody().DeploymentType }
+
+// OpsLevel returns the opslevel: value (the OpsLevel alias), or "" if absent.
+func (s ServiceDecl) OpsLevel() string { return s.parseServiceBody().OpsLevel }
+
+// Repo returns the repo: value as its full ref text (e.g.
+// "olxeu/realestate/subscriptions"), or "" if absent. The value was parsed
+// via parseRef, so a slash-bearing slug is read back as one contiguous
+// string via RefDecl.RefText().
+func (s ServiceDecl) Repo() string {
+	// Mirrors Language()'s duplicate handling: if repo: appears more than
+	// once, the last occurrence wins (no diagnostic — parser-level dup
+	// detection is out of scope for Task 6; see task brief).
+	var repo string
+	for _, f := range s.Fields() {
+		if !f.IsRepo() {
+			continue
+		}
+		if ref := f.Ref(); ref != nil {
+			repo = ref.RefText()
+		}
+	}
+	return repo
+}
 
 // DeploymentRules returns the percentage→target rules for parameterised deployment.
 func (s ServiceDecl) DeploymentRules() []struct{ Percentage, Target string } {

@@ -417,6 +417,12 @@ func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
 		if e.svc.Language == "" {
 			e.svc.Language = svc.Language()
 		}
+		if e.svc.OpsLevel == "" {
+			e.svc.OpsLevel = svc.OpsLevel()
+		}
+		if e.svc.Repo == "" {
+			e.svc.Repo = svc.Repo()
+		}
 		if e.svc.Deployment.Type == "" {
 			e.svc.Deployment.Type = svc.DeploymentType()
 		}

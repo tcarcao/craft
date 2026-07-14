@@ -669,3 +669,45 @@ func TestContextMap_HangRegression_BareKeywordRightEndpoint(t *testing.T) {
 		t.Errorf("round-trip mismatch (parser did not fully consume input)\nwant: %q\ngot:  %q", src, got)
 	}
 }
+
+// TestServiceAnchors covers Task 6: the optional `opslevel:` / `repo:`
+// service properties. `repo:` is parsed via parseRef so a slash-bearing
+// slug (e.g. "olxeu/realestate/subscriptions") is captured as one value.
+func TestServiceAnchors(t *testing.T) {
+	src := `services {
+  SubscriptionsApi {
+    contexts: Subscriptions
+    opslevel: subscriptions-api
+    repo: olxeu/realestate/subscriptions
+  }
+}`
+	gn, li, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	// Round-trip: the block must reassemble to the exact source text.
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	root := syntax.Root(gn)
+	doc := syntax.ProjectFromTree(root, li)
+	if len(doc.Services) != 1 {
+		t.Fatalf("want 1 service, got %d: %+v", len(doc.Services), doc.Services)
+	}
+	svc := doc.Services[0]
+	if svc.OpsLevel != "subscriptions-api" || svc.Repo != "olxeu/realestate/subscriptions" {
+		t.Fatalf("anchors = %q / %q", svc.OpsLevel, svc.Repo)
+	}
+
+	// Also verify the AST accessors directly.
+	file := syntax.AsFile(root)
+	astSvc := file.Services()[0]
+	if got := astSvc.OpsLevel(); got != "subscriptions-api" {
+		t.Errorf("ServiceDecl.OpsLevel() = %q, want %q", got, "subscriptions-api")
+	}
+	if got := astSvc.Repo(); got != "olxeu/realestate/subscriptions" {
+		t.Errorf("ServiceDecl.Repo() = %q, want %q", got, "olxeu/realestate/subscriptions")
+	}
+}
