@@ -5,7 +5,8 @@
 package model
 
 // CraftDoc is the parser-agnostic canonical representation of a parsed .craft file.
-// Experimental: stabilizes at v0.1.
+// It is re-exported from pkg/craft as the stable public API type; see that
+// package's stability contract.
 type CraftDoc struct {
 	Architectures []ArchBlock `json:"architectures,omitempty"`
 	Exposures     []Exposure  `json:"exposures,omitempty"`

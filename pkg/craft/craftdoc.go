@@ -1,6 +1,11 @@
-// Package craft is the stable public Go API for the Craft DSL toolchain: the
-// canonical CraftDoc document model, the Diagnostic type, and the Parse /
-// ParseFiles entry points. (Stability contract set in Task 8.)
+// Package craft is the stable public Go API for the Craft DSL toolchain.
+//
+// It provides the canonical document model (CraftDoc and its component types),
+// the Diagnostic type, and the Parse / ParseFiles entry points for parsing
+// Craft source in-process. As of v2.10.0 this package is stable and follows
+// semantic versioning: existing exported names, struct fields, and JSON tags
+// will not change or be removed within a major version; additions are allowed
+// in minor releases. Requires Go 1.25 or newer to import.
 package craft
 
 import "github.com/tcarcao/craft/internal/model"
