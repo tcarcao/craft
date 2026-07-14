@@ -3,8 +3,11 @@ package syntax_test
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/pkg/craft"
 )
 
 func parseRoot(t *testing.T, src string) syntax.SyntaxNode {
@@ -594,5 +597,75 @@ func TestContextMap_Edges(t *testing.T) {
 	}
 	if got := astEdges[0].Right(); got != "service:subscriptions-api" {
 		t.Errorf("astEdges[0].Right() = %q, want %q", got, "service:subscriptions-api")
+	}
+}
+
+// parseWithHangGuard runs syntax.Parse on its own goroutine behind a short
+// watchdog timeout, so a parser infinite loop fails this single test fast
+// (a few seconds) instead of hanging the entire `go test` run until the
+// outer test binary timeout kills it.
+func parseWithHangGuard(t *testing.T, src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
+	t.Helper()
+	type result struct {
+		gn    *green.GreenNode
+		li    green.LineIndex
+		diags []craft.Diagnostic
+	}
+	done := make(chan result, 1)
+	go func() {
+		gn, li, diags := syntax.Parse(src)
+		done <- result{gn, li, diags}
+	}()
+	select {
+	case r := <-done:
+		return r.gn, r.li, r.diags
+	case <-time.After(5 * time.Second):
+		t.Fatalf("syntax.Parse(%q) did not terminate within 5s (parser infinite loop)", src)
+		return nil, green.LineIndex{}, nil
+	}
+}
+
+// TestContextMap_HangRegression_BareKeywordLeftEndpoint locks in the Task 5
+// fix for a parser infinite loop: a bare keyword-as-ident LEFT endpoint with
+// no following ':' (the literal word "service", not "service:x") reaches
+// parseEdgeStmt's endpoint gate (which accepts TokenIdent||isAnyKeywordAsIdent)
+// but, before the fix, made parseRef() consume ZERO tokens — the kind-prefix
+// branch requires an immediately-following ':', and the fallback loop only
+// recognises TokenIdent/TokenNumber, not the keyword-as-ident token type a
+// bare "service" lexes as. parseEdgeStmt then made zero progress, and
+// parseContextMapBlock's `for !p.atEOF() && ...` loop called it again on the
+// exact same position forever (this hung `go test` before the fix). The fix
+// makes parseRef always consume its first token when called on an
+// ident/keyword-as-ident start, guaranteeing forward progress.
+func TestContextMap_HangRegression_BareKeywordLeftEndpoint(t *testing.T) {
+	src := "context_map {\n  service realized_by service:x\n}"
+	gn, _, diags := parseWithHangGuard(t, src)
+
+	if len(diags) == 0 {
+		t.Fatalf("expected at least one diagnostic for malformed edge, got none")
+	}
+	// The parser must still fully consume the block through the closing `}`
+	// rather than aborting partway (which would itself indicate leftover
+	// unconsumed tokens from the malformed endpoint).
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch (parser did not fully consume input)\nwant: %q\ngot:  %q", src, got)
+	}
+}
+
+// TestContextMap_HangRegression_BareKeywordRightEndpoint is the mirror image
+// of TestContextMap_HangRegression_BareKeywordLeftEndpoint for the RIGHT
+// endpoint: `term:x contrasts domain` — a valid left ref, a valid edge verb,
+// then a bare keyword-as-ident right endpoint ("domain") with no colon. The
+// same zero-progress hazard applied to the right endpoint's call to
+// parseRef() before the fix.
+func TestContextMap_HangRegression_BareKeywordRightEndpoint(t *testing.T) {
+	src := "context_map {\n  term:x contrasts domain\n}"
+	gn, _, diags := parseWithHangGuard(t, src)
+
+	if len(diags) == 0 {
+		t.Fatalf("expected at least one diagnostic for malformed edge, got none")
+	}
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch (parser did not fully consume input)\nwant: %q\ngot:  %q", src, got)
 	}
 }

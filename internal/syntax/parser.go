@@ -1740,7 +1740,17 @@ func (p *Parser) parseContextMapBlock() []craft.Diagnostic {
 		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 			break
 		}
+		posBefore := p.pos
 		diags = append(diags, p.parseEdgeStmt()...)
+		// Belt-and-suspenders forward-progress guard: parseEdgeStmt (via
+		// parseEdgeEndpoint) is written to always consume at least one
+		// token, but if that invariant is ever broken by a future edit,
+		// force one token of progress here rather than spinning forever on
+		// the same position.
+		if p.pos == posBefore {
+			diags = append(diags, p.diagUnexpected(p.peek(), "a node reference, edge keyword, or `}`"))
+			p.consumeAs(SyntaxKindError)
+		}
 	}
 
 	if p.atEOF() {
@@ -1773,7 +1783,7 @@ func (p *Parser) parseEdgeStmt() []craft.Diagnostic {
 		p.builder.FinishNode()
 		return diags
 	}
-	p.parseRef() // left endpoint
+	diags = append(diags, p.parseEdgeEndpoint()...) // left endpoint
 
 	verb := p.peek()
 	if verb.Type == lexer.TokenIdent && isEdgeKeyword(verb.Value) {
@@ -1790,9 +1800,70 @@ func (p *Parser) parseEdgeStmt() []craft.Diagnostic {
 		p.builder.FinishNode()
 		return diags
 	}
-	p.parseRef() // right endpoint
+	diags = append(diags, p.parseEdgeEndpoint()...) // right endpoint
 
 	p.builder.FinishNode()
+	return diags
+}
+
+// parseEdgeEndpoint parses one context_map edge endpoint (the left or right
+// side of the edge verb). The caller has already gated entry to
+// TokenIdent||isAnyKeywordAsIdent.
+//
+// It deliberately does NOT call parseRef() unconditionally the way the
+// original Task 5 implementation did. parseRef()'s kind-prefix branch only
+// consumes a token when it is immediately followed by ':', and its
+// fallback continuation loop only recognises the TokenIdent/TokenNumber
+// token TYPES — not the distinct keyword token types that keyword-as-ident
+// words (e.g. "domain"/"service"/"bc"/"term") lex as. So calling parseRef
+// on a BARE keyword-as-ident endpoint with no following ':' made it consume
+// zero tokens; parseEdgeStmt then also made zero progress, and
+// parseContextMapBlock's loop called it again on the same position forever
+// — the Task 5 hang (`context_map { service realized_by service:x }`,
+// `context_map { term:x contrasts domain }`).
+//
+// The fix mirrors the established idiom at the other parseRef call sites
+// (parseAsksAction, parseNotifiesAction, parseTrigger's listens branch):
+// only call parseRef() when the token is TokenIdent, or when a
+// keyword-as-ident is immediately followed by ':' (parseRef's own
+// kind-prefix branch handles that shape correctly, e.g. "service:x"). A
+// bare keyword-as-ident with no colon is instead consumed directly here via
+// consumeAs, guaranteeing forward progress without ever entering parseRef's
+// zero-progress hole. This local fix — rather than patching the shared
+// parseRef — keeps the other 3 parseRef call sites (which already silently
+// accept a bare keyword-as-ident target/subject with no diagnostic, by
+// design) completely unchanged.
+//
+// It additionally flags one specific shape as a diagnostic: a bare
+// occurrence of one of the reserved node-slug kind words (domain/bc/term/
+// service — see isSlugKind) with no following ':' is almost certainly a
+// missing "`:name`" typo rather than an intentional unqualified reference,
+// so it is reported here. This is a pure ref-shape/syntax check — it does
+// NOT validate which endpoint kinds may legally connect to which (that
+// endpoint-kind pairing validation is sema's job, Task 7, and is
+// deliberately out of scope here).
+func (p *Parser) parseEdgeEndpoint() []craft.Diagnostic {
+	var diags []craft.Diagnostic
+	tok := p.peek()
+	if tok.Type == lexer.TokenIdent {
+		p.parseRef()
+		return diags
+	}
+	// keyword-as-ident.
+	hasColon := p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == tok.Line && adjacentTokens(tok, p.peekAt(1))
+	if hasColon {
+		p.parseRef() // e.g. "service:subscriptions-api" — parseRef's kind-prefix branch handles this shape.
+		return diags
+	}
+	if isSlugKind(tok.Value) {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/dangling-slug-kind",
+			Message:  fmt.Sprintf("%q is a reserved node-slug kind word and must be followed by ':<name>' (e.g. %s:name); used bare it is not a valid reference", tok.Value, tok.Value),
+			Severity: craft.SeverityError,
+			Range:    tokenRange(tok),
+		})
+	}
+	p.consumeAs(SyntaxKindIdent) // guarantee forward progress either way
 	return diags
 }
 
