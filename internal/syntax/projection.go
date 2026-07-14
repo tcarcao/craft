@@ -4,17 +4,17 @@ import (
 	"fmt"
 
 	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/internal/model"
 )
 
-// ProjectFromTree projects a lossless red SyntaxNode tree into a *craft.CraftDoc
+// ProjectFromTree projects a lossless red SyntaxNode tree into a *model.CraftDoc
 // using typed views directly — no lower.go dependency.
-func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
+func ProjectFromTree(root SyntaxNode, li green.LineIndex) *model.CraftDoc {
 	if root == (SyntaxNode{}) {
-		return &craft.CraftDoc{UseCases: []craft.UseCase{}}
+		return &model.CraftDoc{UseCases: []model.UseCase{}}
 	}
 	file := AsFile(root)
-	doc := &craft.CraftDoc{UseCases: []craft.UseCase{}}
+	doc := &model.CraftDoc{UseCases: []model.UseCase{}}
 
 	// Services
 	doc.Services = projectServicesFromViews(file, li)
@@ -30,9 +30,9 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 			continue // malformed — skip
 		}
 		actorLine, _ := li.LineCol(nameTok.Offset())
-		doc.Actors = append(doc.Actors, craft.Actor{
+		doc.Actors = append(doc.Actors, model.Actor{
 			Name: nameTok.Text(),
-			Type: craft.ActorType(typeVal),
+			Type: model.ActorType(typeVal),
 			Line: actorLine,
 		})
 	}
@@ -50,7 +50,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 				bcNames = append(bcNames, bcTok.Text())
 			}
 		}
-		doc.Domains = append(doc.Domains, craft.Domain{
+		doc.Domains = append(doc.Domains, model.Domain{
 			Name:            stringAwareText(*nameTok),
 			BoundedContexts: bcNames,
 		})
@@ -62,18 +62,18 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 		if uc.Title() == nil {
 			continue
 		}
-		outUC := craft.UseCase{
+		outUC := model.UseCase{
 			Name:      uc.Name(), // unquoted title text (Bug 8a fix)
-			Scenarios: []craft.Scenario{},
+			Scenarios: []model.Scenario{},
 		}
 		for _, sc := range uc.Scenarios() {
 			counter++
 			scenID := fmt.Sprintf("scenario_%d", counter)
 			trigger := projectTriggerFromView(sc.Trigger())
-			outSc := craft.Scenario{
+			outSc := model.Scenario{
 				ID:      scenID,
 				Trigger: trigger,
-				Actions: []craft.Action{},
+				Actions: []model.Action{},
 			}
 			for _, action := range sc.Actions() {
 				// Mirror lowerAction: two paths increment counter twice and skip the action.
@@ -106,10 +106,10 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 		if nameTok != nil {
 			name = nameTok.Text()
 		}
-		ab := craft.ArchBlock{
+		ab := model.ArchBlock{
 			Name:         name,
-			Presentation: []craft.Component{},
-			Gateway:      []craft.Component{},
+			Presentation: []model.Component{},
+			Gateway:      []model.Component{},
 		}
 		for _, section := range a.Sections() {
 			kwTok := section.Keyword()
@@ -133,7 +133,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 		if nameTok == nil {
 			continue
 		}
-		doc.Exposures = append(doc.Exposures, craft.Exposure{
+		doc.Exposures = append(doc.Exposures, model.Exposure{
 			Name:     nameTok.Text(),
 			To:       e.To(),
 			Contexts: e.Contexts(),
@@ -148,7 +148,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 			if left == "" || verb == "" || right == "" {
 				continue // malformed — skip
 			}
-			doc.ContextMap = append(doc.ContextMap, craft.Edge{
+			doc.ContextMap = append(doc.ContextMap, model.Edge{
 				Left:  left,
 				Verb:  verb,
 				Right: right,
@@ -159,7 +159,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 	return doc
 }
 
-func projectTriggerFromView(t TriggerDecl) craft.Trigger {
+func projectTriggerFromView(t TriggerDecl) model.Trigger {
 	kind := t.Kind()
 	var actor, context, event, verb, phrase, ref string
 	switch kind {
@@ -198,8 +198,8 @@ func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 		// Match lower.go: uses Sprintf without TrimSpace, producing trailing space when phrase="".
 		description = fmt.Sprintf("when %s %s %s", actor, verb, phrase)
 	}
-	return craft.Trigger{
-		Type:        craft.TriggerType(kind),
+	return model.Trigger{
+		Type:        model.TriggerType(kind),
 		Actor:       actor,
 		Verb:        verb,
 		Phrase:      phrase,
@@ -210,7 +210,7 @@ func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 	}
 }
 
-func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Action {
+func projectActionFromView(a ActionDecl, id string, li green.LineIndex) model.Action {
 	kind := a.Kind()
 	subject := a.SubjectName()
 	target := a.TargetName()
@@ -311,9 +311,9 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 	if toks := a.Tokens(); len(toks) > 0 {
 		actionLine, _ = li.LineCol(toks[0].Offset())
 	}
-	return craft.Action{
+	return model.Action{
 		ID:            id,
-		Type:          craft.ActionType(kind),
+		Type:          model.ActionType(kind),
 		Context:       subject,
 		Verb:          verb,
 		TargetContext: target,
@@ -348,9 +348,9 @@ func serviceNameTok(svc ServiceDecl) *SyntaxToken {
 	return nil
 }
 
-func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
+func projectServicesFromViews(file File, li green.LineIndex) []model.Service {
 	type entry struct {
-		svc    craft.Service
+		svc    model.Service
 		ctxSet map[string]bool
 		dsSet  map[string]bool
 	}
@@ -369,9 +369,9 @@ func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
 		if !exists {
 			svcLine, _ := li.LineCol(nameTok.Offset())
 			e = &entry{
-				svc: craft.Service{
+				svc: model.Service{
 					Name:       name,
-					Deployment: craft.DeploymentStrategy{Type: svc.DeploymentType()},
+					Deployment: model.DeploymentStrategy{Type: svc.DeploymentType()},
 					Line:       svcLine,
 				},
 				ctxSet: map[string]bool{},
@@ -406,7 +406,7 @@ func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
 		}
 		if len(e.svc.Deployment.Rules) == 0 {
 			for _, r := range svc.DeploymentRules() {
-				e.svc.Deployment.Rules = append(e.svc.Deployment.Rules, craft.DeploymentRule{
+				e.svc.Deployment.Rules = append(e.svc.Deployment.Rules, model.DeploymentRule{
 					Percentage: r.Percentage,
 					Target:     r.Target,
 				})
@@ -414,24 +414,24 @@ func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
 		}
 	}
 
-	out := make([]craft.Service, 0, len(order))
+	out := make([]model.Service, 0, len(order))
 	for _, name := range order {
 		out = append(out, byName[name].svc)
 	}
 	return out
 }
 
-func projectArchComponentsFromView(comps []ArchComponent) []craft.Component {
-	var out []craft.Component
+func projectArchComponentsFromView(comps []ArchComponent) []model.Component {
+	var out []model.Component
 	for _, c := range comps {
 		out = append(out, projectArchComponentFromView(c))
 	}
 	return out
 }
 
-func projectArchComponentFromView(c ArchComponent) craft.Component {
+func projectArchComponentFromView(c ArchComponent) model.Component {
 	if c.node == (SyntaxNode{}) {
-		return craft.Component{Type: craft.ComponentType("simple")}
+		return model.Component{Type: model.ComponentType("simple")}
 	}
 
 	// Detect flow vs simple by looking for GT token in the node's tokens.
@@ -452,15 +452,15 @@ func projectArchComponentFromView(c ArchComponent) craft.Component {
 }
 
 // projectSimpleArchComponentFromView builds a simple Component from an ArchComponent view.
-func projectSimpleArchComponentFromView(c ArchComponent) craft.Component {
+func projectSimpleArchComponentFromView(c ArchComponent) model.Component {
 	nameTok := c.Name()
 	name := ""
 	if nameTok != nil {
 		name = nameTok.Text()
 	}
-	comp := craft.Component{
+	comp := model.Component{
 		Name: name,
-		Type: craft.ComponentType("simple"),
+		Type: model.ComponentType("simple"),
 	}
 	for _, m := range c.Modifiers() {
 		keyTok := m.Key()
@@ -475,25 +475,25 @@ func projectSimpleArchComponentFromView(c ArchComponent) craft.Component {
 			// modifier value (e.g. Comp[label:"some value"]) projects unquoted.
 			val = stringAwareText(*valTok)
 		}
-		comp.Modifiers = append(comp.Modifiers, craft.ComponentModifier{Key: key, Value: val})
+		comp.Modifiers = append(comp.Modifiers, model.ComponentModifier{Key: key, Value: val})
 	}
 	return comp
 }
 
 // projectFlowArchComponentFromView builds a flow Component (chain) from an ArchComponent view.
 // Mirrors lowerFlowComponent in lower.go.
-func projectFlowArchComponentFromView(c ArchComponent) craft.Component {
-	var chain []craft.Component
+func projectFlowArchComponentFromView(c ArchComponent) model.Component {
+	var chain []model.Component
 	var currentName string
-	var currentMods []craft.ComponentModifier
+	var currentMods []model.ComponentModifier
 
 	flush := func() {
 		if currentName == "" {
 			return
 		}
-		chain = append(chain, craft.Component{
+		chain = append(chain, model.Component{
 			Name:      currentName,
-			Type:      craft.ComponentType("simple"),
+			Type:      model.ComponentType("simple"),
 			Modifiers: currentMods,
 		})
 		currentName = ""
@@ -528,14 +528,14 @@ func projectFlowArchComponentFromView(c ArchComponent) craft.Component {
 						break
 					}
 				}
-				currentMods = append(currentMods, craft.ComponentModifier{Key: key, Value: val})
+				currentMods = append(currentMods, model.ComponentModifier{Key: key, Value: val})
 			}
 		}
 	}
 	flush()
 
-	return craft.Component{
-		Type:  craft.ComponentType("flow"),
+	return model.Component{
+		Type:  model.ComponentType("flow"),
 		Chain: chain,
 	}
 }

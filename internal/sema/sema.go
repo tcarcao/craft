@@ -2,11 +2,16 @@
 // S3: actor namespace + duplicate-name rule.
 // S4: domain namespace + duplicate-name for domains + cross-kind-name-reuse warning.
 // S5: service namespace + ResolutionMap population + unresolved-reference +
-//     invalid-reference-target rules + AnalyzeWorkspace for cross-file resolution.
+//
+//	invalid-reference-target rules + AnalyzeWorkspace for cross-file resolution.
+//
 // S6: use_case namespace + duplicate-use-case-name rule + extend unresolved-reference
-//     to use-case trigger subjects and action parties.
+//
+//	to use-case trigger subjects and action parties.
+//
 // S8: exposure collection + invalid-exposure-target validation (to:→actor,
-//     through:→service, contexts:→domain/service).
+//
+//	through:→service, contexts:→domain/service).
 package sema
 
 import (
@@ -15,8 +20,8 @@ import (
 	"runtime/debug"
 
 	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/internal/model"
 	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // lineToLSP converts a 1-based source line to a 0-based LSP line number.
@@ -220,7 +225,7 @@ type UseCaseRefTarget struct {
 // directly via typed view methods — no lower/AST conversion is needed.
 // Returns the symbol table and any semantic diagnostics.
 // li is the LineIndex for resolving byte offsets to line/col; pass it for accurate positions.
-func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (syms Symbols, diags []craft.Diagnostic) {
+func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (syms Symbols, diags []model.Diagnostic) {
 	var lineIdx green.LineIndex
 	hasLI := len(li) > 0
 	if hasLI {
@@ -235,10 +240,10 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				"panic", fmt.Sprintf("%v", r),
 				"stack", string(debug.Stack()),
 			)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/sema/sema-panic",
 				Message:  fmt.Sprintf("internal sema error: %v", r),
-				Severity: craft.SeverityError,
+				Severity: model.SeverityError,
 			})
 		}
 	}()
@@ -266,13 +271,13 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		}
 		if prev, dup := seenActors[nameTok.Text()]; dup {
 			startChar := colToLSP(sym.Column)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("actor %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
-				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+				Severity: model.SeverityError,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
 				},
 			})
 			continue
@@ -320,13 +325,13 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		}
 		if prev, dup := seenDomains[nameContent]; dup {
 			startChar := colToLSP(sym.Column)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameContent, prev.Line),
-				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+				Severity: model.SeverityError,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
 				},
 			})
 			continue
@@ -385,13 +390,13 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		}
 		if prev, dup := seenServices[nameContent]; dup {
 			startChar := colToLSP(sym.Column)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
 				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameContent, prev.Line),
-				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+				Severity: model.SeverityError,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
 				},
 			})
 			continue
@@ -404,17 +409,17 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	for name, actorSym := range seenActors {
 		if domSym, clash := seenDomains[name]; clash {
 			startChar := colToLSP(domSym.Column)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code: "craft/sema/cross-kind-name-reuse",
 				Message: fmt.Sprintf(
 					"%q is declared as both an actor (line %d) and a domain (line %d); "+
 						"consider renaming to avoid confusion",
 					name, actorSym.Line, domSym.Line,
 				),
-				Severity: craft.SeverityWarning,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(domSym.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(domSym.Line), Character: startChar + len(name)},
+				Severity: model.SeverityWarning,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(domSym.Line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(domSym.Line), Character: startChar + len(name)},
 				},
 			})
 		}
@@ -439,15 +444,15 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		}
 		sym := UseCaseSymbol{Name: name, Line: ucLine, EndLine: ucEndLine, URI: uri}
 		if prev, dup := seenUseCases[name]; dup {
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code: "craft/sema/duplicate-use-case-name",
 				Message: fmt.Sprintf(
 					"use_case %q already declared (first seen at line %d)", name, prev.Line,
 				),
-				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(ucLine)},
-					End:   craft.Position{Line: lineToLSP(ucLine), Character: len(name)},
+				Severity: model.SeverityError,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(ucLine)},
+					End:   model.Position{Line: lineToLSP(ucLine), Character: len(name)},
 				},
 			})
 			continue
@@ -561,7 +566,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 // MergeWorkspaceSymbols merges per-file symbol tables into a workspace-level
 // index. Cross-file duplicate service declarations emit a warning diagnostic
 // with SourceURI set to the second file that declares the same name.
-func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craft.Diagnostic) {
+func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []model.Diagnostic) {
 	ws := WorkspaceSymbols{
 		Actors:          make(map[string]ActorSymbol),
 		Domains:         make(map[string]DomainSymbol),
@@ -570,7 +575,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 		Services:        make(map[string]ServiceSymbol),
 		UseCases:        make(map[string]UseCaseSymbol),
 	}
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 	for _, syms := range perFile {
 		for _, a := range syms.Actors {
 			ws.Actors[a.Name] = a
@@ -584,17 +589,17 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 		for _, s := range syms.Services {
 			if prev, dup := ws.Services[s.Name]; dup && prev.URI != s.URI {
 				startChar := colToLSP(s.Column)
-				diags = append(diags, craft.Diagnostic{
+				diags = append(diags, model.Diagnostic{
 					Code: "craft/sema/duplicate-name",
 					Message: fmt.Sprintf(
 						"service %q already declared in %s (line %d)",
 						s.Name, prev.URI, prev.Line,
 					),
-					Severity:  craft.SeverityWarning,
+					Severity:  model.SeverityWarning,
 					SourceURI: s.URI,
-					Range: craft.Range{
-						Start: craft.Position{Line: lineToLSP(s.Line), Character: startChar},
-						End:   craft.Position{Line: lineToLSP(s.Line), Character: startChar + len(s.Name)},
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(s.Line), Character: startChar},
+						End:   model.Position{Line: lineToLSP(s.Line), Character: startChar + len(s.Name)},
 					},
 				})
 				// Keep the first declaration in the map so resolution is stable.
@@ -616,12 +621,12 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []craf
 // ResolutionMap and returns workspace-level diagnostics (unresolved references,
 // etc.). The caller should first call MergeWorkspaceSymbols and pass its
 // outputs; merge-phase diagnostics (cross-file duplicates) are returned there.
-func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (ResolutionMap, []craft.Diagnostic) {
+func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (ResolutionMap, []model.Diagnostic) {
 	rm := ResolutionMap{
 		ServiceContexts: make(map[serviceContextKey]DomainSymbol),
 		UseCaseRefs:     make(map[useCaseRefKey]UseCaseRefTarget),
 	}
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	for uri, syms := range perFile {
 		for _, svc := range syms.Services {
@@ -636,20 +641,20 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 						rm.ServiceContexts[key] = domByName
 						continue
 					}
-				startChar := colToLSP(svc.Column)
-				diags = append(diags, craft.Diagnostic{
-					Code: "craft/sema/unresolved-reference",
-					Message: fmt.Sprintf(
-						"service %q references context %q which is not declared in any domain",
-						svc.Name, ctxName,
-					),
-					Severity:  craft.SeverityError,
-					SourceURI: uri,
-					Range: craft.Range{
-						Start: craft.Position{Line: lineToLSP(svc.Line), Character: startChar},
-						End:   craft.Position{Line: lineToLSP(svc.Line), Character: startChar + len(svc.Name)},
-					},
-				})
+					startChar := colToLSP(svc.Column)
+					diags = append(diags, model.Diagnostic{
+						Code: "craft/sema/unresolved-reference",
+						Message: fmt.Sprintf(
+							"service %q references context %q which is not declared in any domain",
+							svc.Name, ctxName,
+						),
+						Severity:  model.SeverityError,
+						SourceURI: uri,
+						Range: model.Range{
+							Start: model.Position{Line: lineToLSP(svc.Line), Character: startChar},
+							End:   model.Position{Line: lineToLSP(svc.Line), Character: startChar + len(svc.Name)},
+						},
+					})
 					continue
 				}
 				rm.ServiceContexts[key] = domSym
@@ -673,14 +678,14 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 				continue
 			}
 			startChar := colToLSP(ref.Column)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:      "craft/sema/unresolved-reference",
 				Message:   fmt.Sprintf("use-case participant %q is not declared as an actor, domain, or service", ref.Name),
-				Severity:  craft.SeverityWarning,
+				Severity:  model.SeverityWarning,
 				SourceURI: uri,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(ref.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(ref.Line), Character: startChar + len(ref.Name)},
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(ref.Line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(ref.Line), Character: startChar + len(ref.Name)},
 				},
 			})
 		}
@@ -692,9 +697,9 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 	// architecture components that aren't modelled as DSL declarations).
 	for uri, syms := range perFile {
 		for _, exp := range syms.Exposures {
-			expRange := craft.Range{
-				Start: craft.Position{Line: lineToLSP(exp.Line)},
-				End:   craft.Position{Line: lineToLSP(exp.Line), Character: len(exp.Name)},
+			expRange := model.Range{
+				Start: model.Position{Line: lineToLSP(exp.Line)},
+				End:   model.Position{Line: lineToLSP(exp.Line), Character: len(exp.Name)},
 			}
 			// `to:` must name actors.
 			for _, name := range exp.To {
@@ -702,20 +707,20 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					continue // correct — actor reference
 				}
 				if _, isDomain := ws.Domains[name]; isDomain {
-					diags = append(diags, craft.Diagnostic{
+					diags = append(diags, model.Diagnostic{
 						Code:      "craft/sema/invalid-exposure-target",
 						Message:   fmt.Sprintf("exposure %q: `to:` target %q is a domain, not an actor — use actor declarations for `to:` targets", exp.Name, name),
-						Severity:  craft.SeverityError,
+						Severity:  model.SeverityError,
 						SourceURI: uri,
 						Range:     expRange,
 					})
 					continue
 				}
 				if _, isService := ws.Services[name]; isService {
-					diags = append(diags, craft.Diagnostic{
+					diags = append(diags, model.Diagnostic{
 						Code:      "craft/sema/invalid-exposure-target",
 						Message:   fmt.Sprintf("exposure %q: `to:` target %q is a service, not an actor — use actor declarations for `to:` targets", exp.Name, name),
-						Severity:  craft.SeverityError,
+						Severity:  model.SeverityError,
 						SourceURI: uri,
 						Range:     expRange,
 					})
@@ -728,20 +733,20 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					continue // correct — service reference
 				}
 				if _, isActor := ws.Actors[name]; isActor {
-					diags = append(diags, craft.Diagnostic{
+					diags = append(diags, model.Diagnostic{
 						Code:      "craft/sema/invalid-exposure-target",
 						Message:   fmt.Sprintf("exposure %q: `through:` target %q is an actor, not a service — use service declarations for `through:` targets", exp.Name, name),
-						Severity:  craft.SeverityError,
+						Severity:  model.SeverityError,
 						SourceURI: uri,
 						Range:     expRange,
 					})
 					continue
 				}
 				if _, isDomain := ws.Domains[name]; isDomain {
-					diags = append(diags, craft.Diagnostic{
+					diags = append(diags, model.Diagnostic{
 						Code:      "craft/sema/invalid-exposure-target",
 						Message:   fmt.Sprintf("exposure %q: `through:` target %q is a domain, not a service — use service declarations for `through:` targets", exp.Name, name),
-						Severity:  craft.SeverityError,
+						Severity:  model.SeverityError,
 						SourceURI: uri,
 						Range:     expRange,
 					})
@@ -760,10 +765,10 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					continue
 				}
 				if _, isActor := ws.Actors[name]; isActor {
-					diags = append(diags, craft.Diagnostic{
+					diags = append(diags, model.Diagnostic{
 						Code:      "craft/sema/invalid-exposure-target",
 						Message:   fmt.Sprintf("exposure %q: `contexts:` target %q is an actor — use domain or service declarations for `contexts:` targets", exp.Name, name),
-						Severity:  craft.SeverityError,
+						Severity:  model.SeverityError,
 						SourceURI: uri,
 						Range:     expRange,
 					})
@@ -796,17 +801,17 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					continue
 				}
 				startChar := colToLSP(sr.Col)
-				diags = append(diags, craft.Diagnostic{
+				diags = append(diags, model.Diagnostic{
 					Code: "craft/sema/unresolved-ref-local",
 					Message: fmt.Sprintf(
 						"%s slug %q names no %s declared in this file-set; the hub is authoritative for cross-context resolution",
 						sr.Kind, sr.Text, sr.Kind,
 					),
-					Severity:  craft.SeverityWarning,
+					Severity:  model.SeverityWarning,
 					SourceURI: uri,
-					Range: craft.Range{
-						Start: craft.Position{Line: lineToLSP(sr.Line), Character: startChar},
-						End:   craft.Position{Line: lineToLSP(sr.Line), Character: startChar + len(sr.Text)},
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(sr.Line), Character: startChar},
+						End:   model.Position{Line: lineToLSP(sr.Line), Character: startChar + len(sr.Text)},
 					},
 				})
 			}

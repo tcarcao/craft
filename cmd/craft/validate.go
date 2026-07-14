@@ -6,8 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
@@ -16,6 +14,22 @@ type validateResult struct {
 	Line     int    `json:"line,omitempty"`
 	Severity string `json:"severity"`
 	Message  string `json:"message"`
+}
+
+// runValidate parses the given file contents through pkg/craft.ParseFiles and
+// maps diagnostics to validateResult. No I/O, no os.Exit — testable.
+func runValidate(contents map[string][]byte, _ bool) []validateResult {
+	_, diags, _ := craft.ParseFiles(contents)
+	results := make([]validateResult, 0, len(diags))
+	for _, d := range diags {
+		results = append(results, validateResult{
+			File:     d.SourceURI, // bare filename (plan D6)
+			Line:     d.Range.Start.Line + 1,
+			Severity: string(d.Severity),
+			Message:  d.Message,
+		})
+	}
+	return results
 }
 
 func validateCmd() *cobra.Command {
@@ -32,10 +46,8 @@ func validateCmd() *cobra.Command {
 				return err
 			}
 
-			perFileTrees := make(map[string]syntax.SyntaxNode)
-			perFileSyms := make(map[string]sema.Symbols)
+			contents := make(map[string][]byte, len(files))
 			var results []validateResult
-
 			for _, file := range files {
 				content, err := os.ReadFile(file)
 				if err != nil {
@@ -46,69 +58,14 @@ func validateCmd() *cobra.Command {
 					})
 					continue
 				}
-
-				uri := "file://" + file
-				greenRoot, li, parseDiags := syntax.Parse(string(content))
-				_ = li
-				tree := syntax.Root(greenRoot)
-				perFileTrees[uri] = tree
-
-				for _, d := range parseDiags {
-					results = append(results, validateResult{
-						File:     file,
-						Line:     d.Range.Start.Line + 1,
-						Severity: string(d.Severity),
-						Message:  d.Message,
-					})
-				}
-
-				syms, semaDiags := sema.AnalyzeFile(uri, tree)
-				perFileSyms[uri] = syms
-				for _, d := range semaDiags {
-					results = append(results, validateResult{
-						File:     file,
-						Line:     d.Range.Start.Line + 1,
-						Severity: string(d.Severity),
-						Message:  d.Message,
-					})
-				}
+				contents[file] = content
 			}
 
-			// Cross-file resolution and workspace-level lint.
-			if len(perFileSyms) > 0 {
-				ws, wsDiags := sema.MergeWorkspaceSymbols(perFileSyms)
-				for _, d := range wsDiags {
-					results = append(results, validateResult{
-						File:     d.SourceURI,
-						Line:     d.Range.Start.Line + 1,
-						Severity: string(d.Severity),
-						Message:  d.Message,
-					})
-				}
-
-				_, resDiags := sema.AnalyzeWorkspace(perFileSyms, ws)
-				for _, d := range resDiags {
-					results = append(results, validateResult{
-						File:     d.SourceURI,
-						Line:     d.Range.Start.Line + 1,
-						Severity: string(d.Severity),
-						Message:  d.Message,
-					})
-				}
-
-				for _, d := range sema.LintWorkspace(perFileTrees, ws) {
-					results = append(results, validateResult{
-						File:     d.SourceURI,
-						Line:     d.Range.Start.Line + 1,
-						Severity: string(d.Severity),
-						Message:  d.Message,
-					})
-				}
-			}
+			results = append(results, runValidate(contents, strict)...)
 
 			switch format {
 			case "json":
-				enc := json.NewEncoder(os.Stdout)
+				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				enc.Encode(results)
 			default:

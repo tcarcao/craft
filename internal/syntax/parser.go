@@ -16,7 +16,7 @@ import (
 
 	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/lexer"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/internal/model"
 )
 
 // Parser is a recursive-descent parser for Craft DSL.
@@ -32,7 +32,7 @@ type Parser struct {
 
 // Parse parses src and returns the green root, a LineIndex, and any diagnostics.
 // A non-nil GreenNode is always returned (island parsing preserved).
-func Parse(src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
+func Parse(src string) (*green.GreenNode, green.LineIndex, []model.Diagnostic) {
 	li := green.NewLineIndex(src)
 	l := lexer.New(src)
 	p := &Parser{tokens: l.All(), src: src, li: li}
@@ -42,9 +42,9 @@ func Parse(src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
 
 // --- main parse loop ---
 
-func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
+func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 	p.builder.StartNode(SyntaxKindFile)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Global counter for scenario_N / action_N IDs across all use_cases in the file,
 	// matching ANTLR's numbering scheme.
@@ -93,9 +93,9 @@ func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
 }
 
 // parseActorStatement parses: actor <type> <name>
-func (p *Parser) parseActorStatement() []craft.Diagnostic {
+func (p *Parser) parseActorStatement() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindActorDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia (comments).
 	p.attachTrivia()
@@ -132,9 +132,9 @@ func (p *Parser) parseActorStatement() []craft.Diagnostic {
 }
 
 // parseImportStatement parses: import "<path>"
-func (p *Parser) parseImportStatement() []craft.Diagnostic {
+func (p *Parser) parseImportStatement() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindImportDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	p.attachTrivia()
 	p.consumeAs(SyntaxKindKwImport)
@@ -153,9 +153,9 @@ func (p *Parser) parseImportStatement() []craft.Diagnostic {
 }
 
 // parseActorsBlock parses: actors { <actor_definition>* }
-func (p *Parser) parseActorsBlock() []craft.Diagnostic {
+func (p *Parser) parseActorsBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindActorsBlock)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `actors`.
 	p.attachTrivia()
@@ -211,10 +211,10 @@ func (p *Parser) parseActorsBlock() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed actors block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
 		p.builder.FinishNode()
@@ -226,9 +226,9 @@ func (p *Parser) parseActorsBlock() []craft.Diagnostic {
 }
 
 // parseDomainStatement parses: domain <name> { <bounded_context>* }
-func (p *Parser) parseDomainStatement() []craft.Diagnostic {
+func (p *Parser) parseDomainStatement() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindDomainDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `domain`.
 	p.attachTrivia()
@@ -256,10 +256,10 @@ func (p *Parser) parseDomainStatement() []craft.Diagnostic {
 	diags = append(diags, d...)
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed domain block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(nameTok),
 		})
 		p.builder.FinishNode()
@@ -273,9 +273,9 @@ func (p *Parser) parseDomainStatement() []craft.Diagnostic {
 
 // parseDomainsBlock parses: domains { <domain_block>* }
 // where each domain_block is: <name> { <bounded_context>* }
-func (p *Parser) parseDomainsBlock() []craft.Diagnostic {
+func (p *Parser) parseDomainsBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindDomainsBlock)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `domains`.
 	p.attachTrivia()
@@ -319,10 +319,10 @@ func (p *Parser) parseDomainsBlock() []craft.Diagnostic {
 		diags = append(diags, d...)
 
 		if p.atEOF() {
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/unclosed-block",
 				Message:  "unclosed domain block (missing `}`)",
-				Severity: craft.SeverityError,
+				Severity: model.SeverityError,
 				Range:    tokenRange(nameTok),
 			})
 			p.builder.FinishNode()
@@ -334,10 +334,10 @@ func (p *Parser) parseDomainsBlock() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed domains block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
 		p.builder.FinishNode()
@@ -353,9 +353,9 @@ func (p *Parser) parseDomainsBlock() []craft.Diagnostic {
 // Duplicates are silently deduplicated (keeping first occurrence), matching
 // ANTLR behavior and the v1 spec.
 // Emits BoundedContext nodes into the current builder scope.
-func (p *Parser) parseBoundedContextList() []craft.Diagnostic {
+func (p *Parser) parseBoundedContextList() []model.Diagnostic {
 	seen := make(map[string]bool)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		// Attach trivia inside the context list.
@@ -408,9 +408,9 @@ func isDomainNameToken(tt lexer.TokenType) bool {
 // parseServicesBlock parses: services { <service_block>* }
 // Each service_block is: <name> { <field>* } where name is an ident,
 // hyphenated-ident, or quoted string.
-func (p *Parser) parseServicesBlock() []craft.Diagnostic {
+func (p *Parser) parseServicesBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindServicesBlock)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `services`.
 	p.attachTrivia()
@@ -477,13 +477,13 @@ func (p *Parser) parseServicesBlock() []craft.Diagnostic {
 		diags = append(diags, d...)
 
 		if p.atEOF() {
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/unclosed-block",
 				Message:  fmt.Sprintf("unclosed service block for %q (missing `}`)", name),
-				Severity: craft.SeverityError,
-				Range: craft.Range{
-					Start: craft.Position{Line: lspLine(nameLine)},
-					End:   craft.Position{Line: lspLine(nameLine)},
+				Severity: model.SeverityError,
+				Range: model.Range{
+					Start: model.Position{Line: lspLine(nameLine)},
+					End:   model.Position{Line: lspLine(nameLine)},
 				},
 			})
 			p.builder.FinishNode()
@@ -495,10 +495,10 @@ func (p *Parser) parseServicesBlock() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed services block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(p.peek()),
 		})
 		p.builder.FinishNode()
@@ -511,9 +511,9 @@ func (p *Parser) parseServicesBlock() []craft.Diagnostic {
 
 // parseServiceStatement parses: service <name> { <field>* }
 // This is the singular top-level service form (Q11).
-func (p *Parser) parseServiceStatement() []craft.Diagnostic {
+func (p *Parser) parseServiceStatement() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindServiceDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `service`.
 	p.attachTrivia()
@@ -549,13 +549,13 @@ func (p *Parser) parseServiceStatement() []craft.Diagnostic {
 	diags = append(diags, d...)
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  fmt.Sprintf("unclosed service block for %q (missing `}`)", name),
-			Severity: craft.SeverityError,
-			Range: craft.Range{
-				Start: craft.Position{Line: lspLine(nameLine)},
-				End:   craft.Position{Line: lspLine(nameLine)},
+			Severity: model.SeverityError,
+			Range: model.Range{
+				Start: model.Position{Line: lspLine(nameLine)},
+				End:   model.Position{Line: lspLine(nameLine)},
 			},
 		})
 		p.builder.FinishNode()
@@ -569,8 +569,8 @@ func (p *Parser) parseServiceStatement() []craft.Diagnostic {
 // parseServiceBody parses the fields inside a service { ... } block.
 // Each field is wrapped in a SyntaxKindServiceField node so that tree-based
 // completion context detection can identify which field the cursor is in.
-func (p *Parser) parseServiceBody() []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func (p *Parser) parseServiceBody() []model.Diagnostic {
+	var diags []model.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
@@ -713,9 +713,9 @@ func isServiceNameKeyword(tt lexer.TokenType) bool {
 // parseUseCaseBlock parses: use_case "<name>" { <scenario>* }
 // A scenario is: when <trigger> <action>*
 // counter is the global ID counter shared across all use_cases in the file.
-func (p *Parser) parseUseCaseBlock(counter *int) []craft.Diagnostic {
+func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindUseCaseDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `use_case`.
 	p.attachTrivia()
@@ -757,10 +757,10 @@ func (p *Parser) parseUseCaseBlock(counter *int) []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  fmt.Sprintf("unclosed use_case block for %q (missing `}`)", name),
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(ucTok),
 		})
 		p.builder.FinishNode()
@@ -774,9 +774,9 @@ func (p *Parser) parseUseCaseBlock(counter *int) []craft.Diagnostic {
 // parseScenario parses one `when <trigger>` clause plus its following action lines.
 // counter is a shared global ID counter (pointer) for scenario_N / action_N IDs,
 // matching ANTLR's numbering scheme where both scenarios and actions share one counter.
-func (p *Parser) parseScenario(counter *int) []craft.Diagnostic {
+func (p *Parser) parseScenario(counter *int) []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindScenario)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// consume `when` as contextual keyword
 	whenTok := p.peek()
@@ -806,9 +806,9 @@ func (p *Parser) parseScenario(counter *int) []craft.Diagnostic {
 // Two forms:
 //   - external:      `when <actor> <verb> <phrase>`
 //   - domain_listen: `when <domain> listens "<event>"`
-func (p *Parser) parseTrigger(whenLine int) []craft.Diagnostic {
+func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindTrigger)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// event trigger: when "<EventName>"  (no subject identifier)
 	if p.peek().Type == lexer.TokenString {
@@ -911,9 +911,9 @@ func isConnectorWord(v string) bool {
 //	<domain> notifies "<event>"              → async_action
 //	<domain> returns [to <target>] <phrase>  → return_action
 //	<domain> <verb> <phrase>                 → internal_action
-func (p *Parser) parseAction(counter *int) []craft.Diagnostic {
+func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindAction)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	subjectTok := p.peek()
 	if subjectTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(subjectTok.Type) {
@@ -996,8 +996,8 @@ func (p *Parser) parseAsksAction(line int) {
 }
 
 // parseNotifiesAction parses the "<event>" or event-ident after `notifies`.
-func (p *Parser) parseNotifiesAction() []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func (p *Parser) parseNotifiesAction() []model.Diagnostic {
+	var diags []model.Diagnostic
 	eventTok := p.peek()
 	if eventTok.Type == lexer.TokenString {
 		p.consumeAs(SyntaxKindString)
@@ -1075,9 +1075,9 @@ func (p *Parser) collectPhrase(actionLine int) {
 
 // parseArchBlock parses: arch <name>? { <arch_sections> }
 // where arch_sections is one or more presentation: or gateway: labelled lists.
-func (p *Parser) parseArchBlock() []craft.Diagnostic {
+func (p *Parser) parseArchBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindArchDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `arch`.
 	p.attachTrivia()
@@ -1129,11 +1129,11 @@ func (p *Parser) parseArchBlock() []craft.Diagnostic {
 
 			if label != "presentation" && label != "gateway" {
 				// Unknown section label — warn.
-				diags = append(diags, craft.Diagnostic{
+				diags = append(diags, model.Diagnostic{
 					Code:     "craft/syntax/unknown-arch-section",
 					Message:  fmt.Sprintf("unknown arch section %q; expected presentation or gateway", label),
-					Severity: craft.SeverityWarning,
-					Range:    craft.Range{Start: craft.Position{Line: lspLine(labelLine)}},
+					Severity: model.SeverityWarning,
+					Range:    model.Range{Start: model.Position{Line: lspLine(labelLine)}},
 				})
 			}
 		} else {
@@ -1144,10 +1144,10 @@ func (p *Parser) parseArchBlock() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed arch block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(archTok),
 		})
 		p.builder.FinishNode()
@@ -1160,8 +1160,8 @@ func (p *Parser) parseArchBlock() []craft.Diagnostic {
 
 // parseArchComponentList parses an arch component list, emitting ArchComponent
 // nodes into the current builder scope.
-func (p *Parser) parseArchComponentList() []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func (p *Parser) parseArchComponentList() []model.Diagnostic {
+	var diags []model.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		// Stop if we see the start of another section label (ident:).
@@ -1185,9 +1185,9 @@ func (p *Parser) parseArchComponentList() []craft.Diagnostic {
 // parseArchComponent parses a single component entry as an ArchComponent node.
 // Flow chains (a > b > c) become a single ArchComponent node containing all
 // sub-components and the `>` tokens (matching prior behavior).
-func (p *Parser) parseArchComponent() []craft.Diagnostic {
+func (p *Parser) parseArchComponent() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindArchComponent)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Parse the first component with optional modifiers.
 	ok, d := p.parseComponentWithModifiers()
@@ -1210,8 +1210,8 @@ func (p *Parser) parseArchComponent() []craft.Diagnostic {
 
 // parseComponentWithModifiers emits component tokens (name + optional modifiers)
 // directly into the current builder scope. Returns true if a component was parsed.
-func (p *Parser) parseComponentWithModifiers() (bool, []craft.Diagnostic) {
-	var diags []craft.Diagnostic
+func (p *Parser) parseComponentWithModifiers() (bool, []model.Diagnostic) {
+	var diags []model.Diagnostic
 
 	nameTok := p.peek()
 	if nameTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(nameTok.Type) {
@@ -1235,8 +1235,8 @@ func (p *Parser) parseComponentWithModifiers() (bool, []craft.Diagnostic) {
 }
 
 // parseModifierList emits ArchModifier nodes into the current builder scope.
-func (p *Parser) parseModifierList() []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func (p *Parser) parseModifierList() []model.Diagnostic {
+	var diags []model.Diagnostic
 
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBracket {
 		keyTok := p.peek()
@@ -1567,11 +1567,11 @@ var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
 	lexer.TokenDocComment:   SyntaxKindDocComment,
 }
 
-func (p *Parser) diagUnexpected(tok lexer.Token, expected string) craft.Diagnostic {
-	return craft.Diagnostic{
+func (p *Parser) diagUnexpected(tok lexer.Token, expected string) model.Diagnostic {
+	return model.Diagnostic{
 		Code:     "craft/syntax/unexpected-token",
 		Message:  fmt.Sprintf("unexpected %q, expected %s", tok.Value, expected),
-		Severity: craft.SeverityError,
+		Severity: model.SeverityError,
 		Range:    tokenRange(tok),
 	}
 }
@@ -1580,7 +1580,7 @@ func (p *Parser) diagUnexpected(tok lexer.Token, expected string) craft.Diagnost
 // tok is the TokenError produced by the lexer; tok.Column is the 1-based column
 // of the opening `"`, and tok.Value is the partial content (no quotes).
 // The range spans from the opening `"` through the last consumed character.
-func (p *Parser) diagUnterminatedString(tok lexer.Token) craft.Diagnostic {
+func (p *Parser) diagUnterminatedString(tok lexer.Token) model.Diagnostic {
 	line := tok.Line - 1
 	if line < 0 {
 		line = 0
@@ -1591,22 +1591,22 @@ func (p *Parser) diagUnterminatedString(tok lexer.Token) craft.Diagnostic {
 	}
 	// +1 for the opening `"` that is part of the token but not in tok.Value.
 	end := col + 1 + len([]rune(tok.Value))
-	return craft.Diagnostic{
+	return model.Diagnostic{
 		Code:     "craft/syntax/unterminated-string",
 		Message:  fmt.Sprintf("unterminated string literal %q", tok.Value),
-		Severity: craft.SeverityError,
-		Range: craft.Range{
-			Start: craft.Position{Line: line, Character: col},
-			End:   craft.Position{Line: line, Character: end},
+		Severity: model.SeverityError,
+		Range: model.Range{
+			Start: model.Position{Line: line, Character: col},
+			End:   model.Position{Line: line, Character: end},
 		},
 	}
 }
 
-func (p *Parser) diagNotImplemented(tok lexer.Token) craft.Diagnostic {
-	return craft.Diagnostic{
+func (p *Parser) diagNotImplemented(tok lexer.Token) model.Diagnostic {
+	return model.Diagnostic{
 		Code:     "craft/syntax/not-yet-implemented",
 		Message:  fmt.Sprintf("construct starting with %q is not yet supported by parser v2; use --parser=antlr for full support", tok.Value),
-		Severity: craft.SeverityWarning,
+		Severity: model.SeverityWarning,
 		Range:    tokenRange(tok),
 	}
 }
@@ -1619,7 +1619,7 @@ func lspLine(line int) int {
 	return line - 1
 }
 
-func tokenRange(tok lexer.Token) craft.Range {
+func tokenRange(tok lexer.Token) model.Range {
 	// LSP lines are 0-based; lexer lines are 1-based.
 	line := tok.Line - 1
 	if line < 0 {
@@ -1630,9 +1630,9 @@ func tokenRange(tok lexer.Token) craft.Range {
 		col = 0
 	}
 	end := col + len([]rune(tok.Value))
-	return craft.Range{
-		Start: craft.Position{Line: line, Character: col},
-		End:   craft.Position{Line: line, Character: end},
+	return model.Range{
+		Start: model.Position{Line: line, Character: col},
+		End:   model.Position{Line: line, Character: end},
 	}
 }
 
@@ -1640,9 +1640,9 @@ func tokenRange(tok lexer.Token) craft.Range {
 
 // parseExposureBlock parses: exposure <name> { to: ... contexts: ... through: ... }
 // Field keywords (to, contexts, through) are contextual identifiers per Q3.
-func (p *Parser) parseExposureBlock() []craft.Diagnostic {
+func (p *Parser) parseExposureBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindExposureDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `exposure`.
 	p.attachTrivia()
@@ -1724,10 +1724,10 @@ func (p *Parser) parseExposureBlock() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed exposure block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(kwTok),
 		})
 		p.builder.FinishNode()
@@ -1743,9 +1743,9 @@ func (p *Parser) parseExposureBlock() []craft.Diagnostic {
 // (realized_by/also_realizes/same_as/contrasts/distinct_from) matched by
 // value, like asks/notifies elsewhere (Q3). Endpoint kind validation
 // (bc -> service, etc.) is sema's job (Task 7), not the parser's.
-func (p *Parser) parseContextMapBlock() []craft.Diagnostic {
+func (p *Parser) parseContextMapBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindContextMapDecl)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	// Attach leading trivia before `context_map`.
 	p.attachTrivia()
@@ -1780,10 +1780,10 @@ func (p *Parser) parseContextMapBlock() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed context_map block (missing `}`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(kwTok),
 		})
 		p.builder.FinishNode()
@@ -1798,9 +1798,9 @@ func (p *Parser) parseContextMapBlock() []craft.Diagnostic {
 // context_map block, emitting it as a SyntaxKindEdgeStmt node wrapping two
 // SyntaxKindRef children (left/right endpoints) and one SyntaxKindEdgeKw
 // token (the verb).
-func (p *Parser) parseEdgeStmt() []craft.Diagnostic {
+func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindEdgeStmt)
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	left := p.peek()
 	if left.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(left.Type) {
@@ -1868,8 +1868,8 @@ func (p *Parser) parseEdgeStmt() []craft.Diagnostic {
 // NOT validate which endpoint kinds may legally connect to which (that
 // endpoint-kind pairing validation is sema's job, Task 7, and is
 // deliberately out of scope here).
-func (p *Parser) parseEdgeEndpoint() []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func (p *Parser) parseEdgeEndpoint() []model.Diagnostic {
+	var diags []model.Diagnostic
 	tok := p.peek()
 	if tok.Type == lexer.TokenIdent {
 		p.parseRef()
@@ -1882,10 +1882,10 @@ func (p *Parser) parseEdgeEndpoint() []craft.Diagnostic {
 		return diags
 	}
 	if isSlugKind(tok.Value) {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/dangling-slug-kind",
 			Message:  fmt.Sprintf("%q is a reserved node-slug kind word and must be followed by ':<name>' (e.g. %s:name); used bare it is not a valid reference", tok.Value, tok.Value),
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(tok),
 		})
 	}
@@ -2051,8 +2051,8 @@ func (p *Parser) parseIdentListWithLines() {
 
 // parseDeploymentSpec parses a deployment spec, emitting tokens into the
 // current builder scope.
-func (p *Parser) parseDeploymentSpec() []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func (p *Parser) parseDeploymentSpec() []model.Diagnostic {
+	var diags []model.Diagnostic
 
 	typeTok := p.peek()
 	if typeTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(typeTok.Type) {
@@ -2096,10 +2096,10 @@ func (p *Parser) parseDeploymentSpec() []craft.Diagnostic {
 	}
 
 	if p.atEOF() {
-		diags = append(diags, craft.Diagnostic{
+		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed deployment rule list (missing `)`)",
-			Severity: craft.SeverityError,
+			Severity: model.SeverityError,
 			Range:    tokenRange(typeTok),
 		})
 		return diags

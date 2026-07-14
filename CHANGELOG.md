@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.10.0] — 2026-07-14
+
+### Added
+- **Importable parse API in `pkg/craft`.** External Go modules can now `import "github.com/tcarcao/craft/pkg/craft"` and parse Craft source in-process instead of shelling out to the CLI:
+  - `craft.Parse(filename string, src []byte) (*craft.CraftDoc, []craft.Diagnostic, error)` — single file; every diagnostic's `SourceURI` is normalized to the `filename` you pass (uniform with `ParseFiles`, no `file://` prefix).
+  - `craft.ParseFiles(files map[string][]byte) (*craft.CraftDoc, []craft.Diagnostic, error)` — multi-file merge plus cross-file resolution and lint. Files are processed in ascending filename order and each diagnostic batch is stable-sorted, so the merged model and the diagnostic slice are deterministic; each diagnostic's `SourceURI` is the map key you supplied.
+  - Diagnostics are returned as data; the `error` slot is reserved for programmer errors. Neither function does file I/O.
+- `LICENSE` file (MIT), matching the README's stated license.
+- `pkg/craft` now declares a real stability contract (semver, stable as of 2.10.0). Requires Go 1.25+ to import.
+
+### Changed
+- `pkg/craft` is no longer marked "Experimental". The `CraftDoc`/`Diagnostic` type *definitions* moved to an internal leaf package (`internal/model`) and are re-exported from `pkg/craft` as type aliases — identity and JSON tags are unchanged, so no existing output or importer is affected.
+- `cmd/craft`'s `check`, `inspect`, and `validate` are now thin wrappers over `pkg/craft.Parse`/`ParseFiles` rather than duplicating the parse+sema orchestration, guaranteeing the CLI and library cannot drift.
+- `validate`'s workspace-level diagnostic lines now print the bare filename (consistent with per-file lines) instead of a `file://`-prefixed path.
+- `check --lsp-json`'s actor symbol list now derives from the parsed document rather than the raw syntax tree, so a malformed name-only actor (no resolvable type) is excluded from symbols, consistent with the canonical model, instead of being emitted with an empty type. Its diagnostics also now carry a uniform `sourceUri` (the file path passed to `check`) rather than a mix of empty and `file://`-prefixed values.
+
+### Notes
+- No changes to the Craft language, grammar, or semantics. Diagnostic positions are byte-identical to v2.9.0.
+
 ## [2.9.0] — 2026-07-14
 
 ### Added

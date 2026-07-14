@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/internal/model"
 	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // edgeRealizationVerbs require a `bc:` left endpoint and a `service:` right endpoint.
@@ -128,7 +128,7 @@ func slugName(text string) string {
 // domain:/bc:/service: slug, it also appends a SlugRefSite for later
 // cross-file resolution (term: is skipped — see SlugRefSite). text == ""
 // (no ref present) is a no-op.
-func checkSlugRef(uri, text string, line, col int, diags *[]craft.Diagnostic, refs *[]SlugRefSite) {
+func checkSlugRef(uri, text string, line, col int, diags *[]model.Diagnostic, refs *[]SlugRefSite) {
 	if text == "" {
 		return
 	}
@@ -150,16 +150,16 @@ func checkSlugRef(uri, text string, line, col int, diags *[]craft.Diagnostic, re
 	})
 }
 
-func malformedSlugDiag(uri, text, reason string, line, col int) craft.Diagnostic {
+func malformedSlugDiag(uri, text, reason string, line, col int) model.Diagnostic {
 	startChar := colToLSP(col)
-	return craft.Diagnostic{
+	return model.Diagnostic{
 		Code:      "craft/sema/malformed-slug",
 		Message:   fmt.Sprintf("malformed node slug %q: %s", text, reason),
-		Severity:  craft.SeverityError,
+		Severity:  model.SeverityError,
 		SourceURI: uri,
-		Range: craft.Range{
-			Start: craft.Position{Line: lineToLSP(line), Character: startChar},
-			End:   craft.Position{Line: lineToLSP(line), Character: startChar + len(text)},
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(text)},
 		},
 	}
 }
@@ -169,8 +169,8 @@ func malformedSlugDiag(uri, text, reason string, line, col int) craft.Diagnostic
 // (malformed-slug) and flags legacy quoted notifies/listens strings
 // (deprecated-string-ref). Also returns well-formed slug refs collected for
 // cross-file resolution (AnalyzeWorkspace).
-func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI bool) ([]craft.Diagnostic, []SlugRefSite) {
-	var diags []craft.Diagnostic
+func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI bool) ([]model.Diagnostic, []SlugRefSite) {
+	var diags []model.Diagnostic
 	var refs []SlugRefSite
 
 	for _, uc := range file.UseCases() {
@@ -223,17 +223,17 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 	return diags, refs
 }
 
-func deprecatedStringRefDiag(uri, verb, event string, line, col int) craft.Diagnostic {
+func deprecatedStringRefDiag(uri, verb, event string, line, col int) model.Diagnostic {
 	startChar := colToLSP(col)
 	tokLen := eventTokenLen(event, true)
-	return craft.Diagnostic{
+	return model.Diagnostic{
 		Code:      "craft/lint/deprecated-string-ref",
 		Message:   fmt.Sprintf("%s %q uses the legacy quoted-string form; migrate to a typed ref", verb, event),
-		Severity:  craft.SeverityWarning,
+		Severity:  model.SeverityWarning,
 		SourceURI: uri,
-		Range: craft.Range{
-			Start: craft.Position{Line: lineToLSP(line), Character: startChar},
-			End:   craft.Position{Line: lineToLSP(line), Character: startChar + tokLen},
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + tokLen},
 		},
 	}
 }
@@ -242,8 +242,8 @@ func deprecatedStringRefDiag(uri, verb, event string, line, col int) craft.Diagn
 // against its verb (edge-endpoint-kind) and each endpoint's slug shape
 // (malformed-slug). Also returns well-formed slug refs collected for
 // cross-file resolution.
-func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, hasLI bool) ([]craft.Diagnostic, []SlugRefSite) {
-	var diags []craft.Diagnostic
+func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, hasLI bool) ([]model.Diagnostic, []SlugRefSite) {
+	var diags []model.Diagnostic
 	var refs []SlugRefSite
 
 	for _, cm := range file.ContextMaps() {
@@ -282,16 +282,16 @@ func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, h
 	return diags, refs
 }
 
-func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) craft.Diagnostic {
+func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) model.Diagnostic {
 	startChar := colToLSP(col)
-	return craft.Diagnostic{
+	return model.Diagnostic{
 		Code:      "craft/sema/edge-endpoint-kind",
 		Message:   fmt.Sprintf("edge %q %s %q requires %s", left, verb, right, requirement),
-		Severity:  craft.SeverityError,
+		Severity:  model.SeverityError,
 		SourceURI: uri,
-		Range: craft.Range{
-			Start: craft.Position{Line: lineToLSP(line), Character: startChar},
-			End:   craft.Position{Line: lineToLSP(line), Character: startChar + len(left)},
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(left)},
 		},
 	}
 }
@@ -299,8 +299,8 @@ func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col 
 // validateServiceAnchors flags a repeated opslevel: or repo: field within a
 // single service block (duplicate-service-anchor). Every occurrence after
 // the first is reported.
-func validateServiceAnchors(uri string, file syntax.File, li green.LineIndex, hasLI bool) []craft.Diagnostic {
-	var diags []craft.Diagnostic
+func validateServiceAnchors(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
+	var diags []model.Diagnostic
 	for _, svc := range file.Services() {
 		svcName := ""
 		if nameTok := svc.Name(); nameTok != nil {
@@ -325,20 +325,20 @@ func validateServiceAnchors(uri string, file syntax.File, li green.LineIndex, ha
 	return diags
 }
 
-func duplicateAnchorDiag(uri, field, svcName string, f syntax.ServiceField, li green.LineIndex, hasLI bool) craft.Diagnostic {
+func duplicateAnchorDiag(uri, field, svcName string, f syntax.ServiceField, li green.LineIndex, hasLI bool) model.Diagnostic {
 	line, col := 0, 0
 	if hasLI {
 		line, col = f.Line(li), f.Col(li)
 	}
 	startChar := colToLSP(col)
-	return craft.Diagnostic{
+	return model.Diagnostic{
 		Code:      "craft/sema/duplicate-service-anchor",
 		Message:   fmt.Sprintf("service %q: %q is already declared; only one `%s:` is allowed per service", svcName, field, field),
-		Severity:  craft.SeverityError,
+		Severity:  model.SeverityError,
 		SourceURI: uri,
-		Range: craft.Range{
-			Start: craft.Position{Line: lineToLSP(line), Character: startChar},
-			End:   craft.Position{Line: lineToLSP(line), Character: startChar + len(field)},
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(field)},
 		},
 	}
 }

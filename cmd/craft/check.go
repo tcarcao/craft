@@ -6,8 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
@@ -33,24 +31,20 @@ func checkCmd() *cobra.Command {
 				return fmt.Errorf("cannot read %s: %w", args[0], err)
 			}
 
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-
-			greenRoot, li, parseDiags := syntax.Parse(string(content))
-			tree := syntax.Root(greenRoot)
-			doc := syntax.ProjectFromTree(tree, li)
-
-			uri := "file://" + args[0]
-			_, semaDiags := sema.AnalyzeFile(uri, tree)
-
-			allDiags := append(parseDiags, semaDiags...)
+			doc, allDiags, err := craft.Parse(args[0], content)
+			if err != nil {
+				return err
+			}
 			if allDiags == nil {
 				allDiags = []craft.Diagnostic{}
 			}
 
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+
 			if lspJSON {
 				diagBytes, _ := json.Marshal(allDiags)
-				symbols := buildSymbolsJSON(tree)
+				symbols := buildSymbolsJSON(doc)
 				symBytes, _ := json.Marshal(symbols)
 				return enc.Encode(lspJSONOutput{
 					CraftDoc:    doc,
@@ -73,19 +67,21 @@ type symbolInfo struct {
 	Type string `json:"type,omitempty"`
 }
 
-func buildSymbolsJSON(tree syntax.SyntaxNode) []symbolInfo {
-	file := syntax.AsFile(tree)
+// buildSymbolsJSON derives the --lsp-json actor symbol list from the parsed
+// document's Actors (Line is 0, matching prior behavior; no syntax tree
+// needed). Because it reads the canonical CraftDoc, an actor the projection
+// rejects as malformed — a name with no resolvable type, e.g. `actor Foo` —
+// is consistently excluded here too, rather than emitted with an empty type
+// as the old raw-tree walk did. This keeps the symbol list aligned with the
+// model the rest of the toolchain sees.
+func buildSymbolsJSON(doc *craft.CraftDoc) []symbolInfo {
 	var out []symbolInfo
-	for _, a := range file.Actors() {
-		nameTok := a.Name()
-		if nameTok == nil {
-			continue
-		}
+	for _, a := range doc.Actors {
 		out = append(out, symbolInfo{
-			Name: nameTok.Text(),
+			Name: a.Name,
 			Kind: "actor",
 			Line: 0,
-			Type: a.ActorTypeValue(),
+			Type: string(a.Type),
 		})
 	}
 	return out

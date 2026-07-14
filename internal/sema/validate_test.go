@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tcarcao/craft/internal/model"
 	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // diagRuleName returns the short rule name of a diagnostic code (the part
@@ -19,7 +19,7 @@ func diagRuleName(code string) string {
 	return code
 }
 
-func diagCodes(diags []craft.Diagnostic) []string {
+func diagCodes(diags []model.Diagnostic) []string {
 	out := make([]string, len(diags))
 	for i, d := range diags {
 		out[i] = d.Code
@@ -27,7 +27,7 @@ func diagCodes(diags []craft.Diagnostic) []string {
 	return out
 }
 
-func assertHasDiag(t *testing.T, diags []craft.Diagnostic, rule string) {
+func assertHasDiag(t *testing.T, diags []model.Diagnostic, rule string) {
 	t.Helper()
 	for _, d := range diags {
 		if diagRuleName(d.Code) == rule {
@@ -37,7 +37,7 @@ func assertHasDiag(t *testing.T, diags []craft.Diagnostic, rule string) {
 	t.Fatalf("expected a %q diagnostic, got %v", rule, diagCodes(diags))
 }
 
-func assertNoDiag(t *testing.T, diags []craft.Diagnostic, rule string) {
+func assertNoDiag(t *testing.T, diags []model.Diagnostic, rule string) {
 	t.Helper()
 	for _, d := range diags {
 		if diagRuleName(d.Code) == rule {
@@ -46,7 +46,7 @@ func assertNoDiag(t *testing.T, diags []craft.Diagnostic, rule string) {
 	}
 }
 
-func assertDiagCount(t *testing.T, diags []craft.Diagnostic, rule string, want int) {
+func assertDiagCount(t *testing.T, diags []model.Diagnostic, rule string, want int) {
 	t.Helper()
 	got := 0
 	for _, d := range diags {
@@ -59,7 +59,7 @@ func assertDiagCount(t *testing.T, diags []craft.Diagnostic, rule string, want i
 	}
 }
 
-func assertSeverity(t *testing.T, diags []craft.Diagnostic, rule string, want craft.Severity) {
+func assertSeverity(t *testing.T, diags []model.Diagnostic, rule string, want model.Severity) {
 	t.Helper()
 	for _, d := range diags {
 		if diagRuleName(d.Code) == rule {
@@ -78,7 +78,7 @@ func TestValidate_MalformedSlug(t *testing.T) {
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertHasDiag(t, diags, "malformed-slug")
-	assertSeverity(t, diags, "malformed-slug", craft.SeverityError)
+	assertSeverity(t, diags, "malformed-slug", model.SeverityError)
 }
 
 func TestValidate_MalformedSlug_BadNamespaceShape(t *testing.T) {
@@ -119,7 +119,7 @@ func TestValidate_EdgeEndpointKind(t *testing.T) {
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertHasDiag(t, diags, "edge-endpoint-kind")
-	assertSeverity(t, diags, "edge-endpoint-kind", craft.SeverityError)
+	assertSeverity(t, diags, "edge-endpoint-kind", model.SeverityError)
 }
 
 func TestValidate_EdgeEndpointKind_RealizedByWrongDirection(t *testing.T) {
@@ -137,7 +137,7 @@ func TestValidate_DeprecatedStringRef(t *testing.T) {
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertDiagCount(t, diags, "deprecated-string-ref", 2)
-	assertSeverity(t, diags, "deprecated-string-ref", craft.SeverityWarning)
+	assertSeverity(t, diags, "deprecated-string-ref", model.SeverityWarning)
 }
 
 func TestValidate_TypedRefs_NoDeprecatedStringRef(t *testing.T) {
@@ -158,7 +158,7 @@ func TestValidate_DuplicateServiceAnchor_OpsLevel(t *testing.T) {
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertDiagCount(t, diags, "duplicate-service-anchor", 1)
-	assertSeverity(t, diags, "duplicate-service-anchor", craft.SeverityError)
+	assertSeverity(t, diags, "duplicate-service-anchor", model.SeverityError)
 }
 
 func TestValidate_DuplicateServiceAnchor_Repo(t *testing.T) {
@@ -188,8 +188,8 @@ func TestValidate_DuplicateServiceAnchor_QuotedServiceName(t *testing.T) {
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertDiagCount(t, diags, "duplicate-service-anchor", 1)
-	assertSeverity(t, diags, "duplicate-service-anchor", craft.SeverityError)
-	var got *craft.Diagnostic
+	assertSeverity(t, diags, "duplicate-service-anchor", model.SeverityError)
+	var got *model.Diagnostic
 	for i := range diags {
 		if diagRuleName(diags[i].Code) == "duplicate-service-anchor" {
 			got = &diags[i]
@@ -235,5 +235,5 @@ context_map {
 	ws, _ := sema.MergeWorkspaceSymbols(perFile)
 	_, diags := sema.AnalyzeWorkspace(perFile, ws)
 	assertHasDiag(t, diags, "unresolved-ref-local")
-	assertSeverity(t, diags, "unresolved-ref-local", craft.SeverityWarning)
+	assertSeverity(t, diags, "unresolved-ref-local", model.SeverityWarning)
 }
