@@ -2462,13 +2462,25 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 
 	case "return_action":
 		// toks: [subject, returns, (to, target)?, (connector?), phrase...]
-		// connector is always SyntaxKindIdent for return_action (parser
-		// guarantee). Uses PhraseStartIndex for the same reason as
-		// sync_action above: stay in lockstep with the AST's phrase start.
-		if conn := action.Connector(); conn != nil && tokLineNum(*conn) == actionLine && isConnectorWord(conn.Text()) {
-			emit(*conn, connIdx)
+		// NOTE: action.Connector() must NOT be used here — for return_action
+		// it returns the KwTo target-introducer token (`to` in
+		// "returns to <target>"), not the free-text connector word
+		// (with/for/...) that parseReturnsAction allows regardless of
+		// whether a target is present. Pass 1's kind→type table already
+		// classifies SyntaxKindKwTo as craft-connector-word, so re-emitting
+		// it here would double-emit it, and the real connector word would
+		// never be classified. Return-action targets are always a single
+		// token (never a multi-token slug ref), so walk positionally
+		// instead, mirroring phraseStartIndex's return_action branch in
+		// internal/syntax/ast.go.
+		start := 2
+		if start < len(toks) && toks[start].Kind() == syntax.SyntaxKindKwTo {
+			start += 2 // skip `to target`
 		}
-		start := action.PhraseStartIndex()
+		if start < len(toks) && tokLineNum(toks[start]) == actionLine && isConnectorWord(toks[start].Text()) {
+			emit(toks[start], connIdx)
+			start++
+		}
 		for _, tok := range toks[start:] {
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue

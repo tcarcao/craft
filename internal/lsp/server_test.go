@@ -2537,6 +2537,273 @@ func TestSemanticTokens_SlugTarget(t *testing.T) {
 	}
 }
 
+// TestSemanticTokens_ReturnActionConnectorNoTarget is a regression test for a
+// bug where classifyActionIdents' return_action case called
+// ActionDecl.Connector(), which for return_action returns the KwTo
+// target-introducer token (not the free-text connector word). When a
+// return_action has no `to <target>` at all, Connector() returns nil, so the
+// real connector word (e.g. "with") was never classified as
+// craft-connector-word. This asserts "with" IS classified and "success" is
+// craft-phrase-word.
+func TestSemanticTokens_ReturnActionConnectorNoTarget(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "ReturnNoTarget" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions returns with success
+	// Line 3: }
+	// col math (0-based): "    Subscriptions returns with success"
+	//   col 4:  Subscriptions (len 13) — subject
+	//   col 18: returns        (len 7)  — verb keyword (Pass 1)
+	//   col 26: with           (len 4)  — connector → craft-connector-word
+	//   col 31: success        (len 7)  — phrase word → craft-phrase-word
+	src := "use_case \"ReturnNoTarget\" {\n  when SomeActor does SomeThing\n    Subscriptions returns with success\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///return_no_target.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(src),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///return_no_target.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for return-no-target token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftPhraseWord = 33
+	const craftConnectorWord = 29
+
+	// "with" at line 2, col 26, len 4 → connector word, tokenType 29.
+	if tok, ok := byPos[[2]uint32{2, 26}]; !ok {
+		t.Error("with not found at line 2 col 26")
+	} else if tok.tokenType != craftConnectorWord {
+		t.Errorf("with: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "success" at line 2, col 31, len 7 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 31}]; !ok {
+		t.Error("success not found at line 2 col 31")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("success: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+}
+
+// TestSemanticTokens_ReturnActionConnectorWithTarget is a regression test for
+// a bug where classifyActionIdents' return_action case called
+// ActionDecl.Connector(), which for return_action returns the KwTo
+// target-introducer token. When a `to <target>` IS present, this caused the
+// KwTo token to be double-emitted as craft-connector-word (once by Pass 1's
+// kind→type table, once by classifyActionIdents, since the return_action
+// case — unlike sync_action — lacked a "Pass 1 already emits this" guard),
+// while the real connector word (e.g. "with") still went unclassified. This
+// asserts the target-introducer "to" is emitted exactly ONCE, "with" IS
+// classified as craft-connector-word, and "success" is craft-phrase-word.
+func TestSemanticTokens_ReturnActionConnectorWithTarget(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "ReturnWithTarget" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions returns to Target with success
+	// Line 3: }
+	// col math (0-based): "    Subscriptions returns to Target with success"
+	//   col 4:  Subscriptions (len 13) — subject
+	//   col 18: returns        (len 7)  — verb keyword (Pass 1)
+	//   col 26: to             (len 2)  — target-introducer, craft-connector-word (Pass 1), exactly once
+	//   col 29: Target         (len 6)  — target
+	//   col 36: with           (len 4)  — connector → craft-connector-word
+	//   col 41: success        (len 7)  — phrase word → craft-phrase-word
+	src := "use_case \"ReturnWithTarget\" {\n  when SomeActor does SomeThing\n    Subscriptions returns to Target with success\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///return_with_target.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(src),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///return_with_target.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for return-with-target token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	// occurrences (not a map) so duplicate emissions at the same position are
+	// detectable rather than silently overwritten.
+	var occurrences []absToken
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		occurrences = append(occurrences, absToken{curLine, curChar, ln, tt})
+	}
+
+	byPos := make(map[[2]uint32]absToken)
+	for _, tok := range occurrences {
+		byPos[[2]uint32{tok.line, tok.startChar}] = tok
+	}
+
+	const craftPhraseWord = 33
+	const craftConnectorWord = 29
+
+	// "to" at line 2, col 26 must be emitted exactly once.
+	toCount := 0
+	for _, tok := range occurrences {
+		if tok.line == 2 && tok.startChar == 26 {
+			toCount++
+		}
+	}
+	if toCount != 1 {
+		t.Errorf("to: emitted %d times at line 2 col 26, want exactly 1", toCount)
+	}
+	if tok, ok := byPos[[2]uint32{2, 26}]; ok && tok.tokenType != craftConnectorWord {
+		t.Errorf("to: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "with" at line 2, col 36, len 4 → connector word, tokenType 29.
+	if tok, ok := byPos[[2]uint32{2, 36}]; !ok {
+		t.Error("with not found at line 2 col 36")
+	} else if tok.tokenType != craftConnectorWord {
+		t.Errorf("with: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "success" at line 2, col 41, len 7 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 41}]; !ok {
+		t.Error("success not found at line 2 col 41")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("success: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+}
+
 // TestSemanticTokens_DomainListenTriggerColumn is a regression test for a bug
 // where domain_listen trigger subjects (e.g. "VASScheduling" in
 // "when VASScheduling listens ...") were emitted at col 0 instead of their
