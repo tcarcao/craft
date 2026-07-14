@@ -1,6 +1,9 @@
 package craft
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/tcarcao/craft/internal/sema"
 	"github.com/tcarcao/craft/internal/syntax"
 )
@@ -37,4 +40,85 @@ func parseOne(filename, src string) (*CraftDoc, []Diagnostic) {
 	diags = append(diags, parseDiags...)
 	diags = append(diags, semaDiags...)
 	return doc, diags
+}
+
+// ParseFiles parses and merges multiple Craft source files into one document
+// model, mirroring `craft inspect` (merge) plus `craft validate` (full
+// workspace analysis: cross-file resolution and lint). Files are processed in
+// ascending map-key order, so the merged model and the diagnostic slice are
+// deterministic regardless of Go map iteration order.
+//
+// Every returned diagnostic's SourceURI is set to the originating map key (the
+// bare filename you supplied — no file:// prefix). Diagnostics are data, not
+// errors; err is currently always nil. Performs no file I/O.
+func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
+	keys := make([]string, 0, len(files))
+	for k := range files {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	merged := &CraftDoc{}
+	diags := []Diagnostic{}
+	perFileTrees := make(map[string]syntax.SyntaxNode, len(files))
+	perFileSyms := make(map[string]sema.Symbols, len(files))
+
+	for _, key := range keys {
+		uri := "file://" + key
+		greenRoot, li, parseDiags := syntax.Parse(string(files[key]))
+		tree := syntax.Root(greenRoot)
+		perFileTrees[uri] = tree
+
+		doc := syntax.ProjectFromTree(tree, li)
+		mergeDoc(merged, doc)
+
+		diags = append(diags, stampURI(parseDiags, key)...)
+
+		syms, semaDiags := sema.AnalyzeFile(uri, tree)
+		perFileSyms[uri] = syms
+		diags = append(diags, stampURI(semaDiags, key)...)
+	}
+
+	if len(perFileSyms) > 0 {
+		ws, wsDiags := sema.MergeWorkspaceSymbols(perFileSyms)
+		diags = append(diags, remapURIs(wsDiags)...)
+
+		_, resDiags := sema.AnalyzeWorkspace(perFileSyms, ws)
+		diags = append(diags, remapURIs(resDiags)...)
+
+		diags = append(diags, remapURIs(sema.LintWorkspace(perFileTrees, ws))...)
+	}
+
+	return merged, diags, nil
+}
+
+// mergeDoc appends every slice field of src onto dst. All CraftDoc slices are
+// merged (not just the four `inspect` reads) so the library returns a complete
+// model.
+func mergeDoc(dst, src *CraftDoc) {
+	dst.Architectures = append(dst.Architectures, src.Architectures...)
+	dst.Exposures = append(dst.Exposures, src.Exposures...)
+	dst.Services = append(dst.Services, src.Services...)
+	dst.UseCases = append(dst.UseCases, src.UseCases...)
+	dst.Domains = append(dst.Domains, src.Domains...)
+	dst.Actors = append(dst.Actors, src.Actors...)
+	dst.ContextMap = append(dst.ContextMap, src.ContextMap...)
+}
+
+// stampURI sets SourceURI = key on a copy-safe slice (the passes return fresh
+// slices per file, so in-place mutation is fine).
+func stampURI(diags []Diagnostic, key string) []Diagnostic {
+	for i := range diags {
+		diags[i].SourceURI = key
+	}
+	return diags
+}
+
+// remapURIs converts the internal "file://"+key SourceURI set by the workspace
+// passes back to the bare map key the caller supplied.
+func remapURIs(diags []Diagnostic) []Diagnostic {
+	for i := range diags {
+		diags[i].SourceURI = strings.TrimPrefix(diags[i].SourceURI, "file://")
+	}
+	return diags
 }
