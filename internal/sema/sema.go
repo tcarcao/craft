@@ -2,11 +2,16 @@
 // S3: actor namespace + duplicate-name rule.
 // S4: domain namespace + duplicate-name for domains + cross-kind-name-reuse warning.
 // S5: service namespace + ResolutionMap population + unresolved-reference +
-//     invalid-reference-target rules + AnalyzeWorkspace for cross-file resolution.
+//
+//	invalid-reference-target rules + AnalyzeWorkspace for cross-file resolution.
+//
 // S6: use_case namespace + duplicate-use-case-name rule + extend unresolved-reference
-//     to use-case trigger subjects and action parties.
+//
+//	to use-case trigger subjects and action parties.
+//
 // S8: exposure collection + invalid-exposure-target validation (to:→actor,
-//     through:→service, contexts:→domain/service).
+//
+//	through:→service, contexts:→domain/service).
 package sema
 
 import (
@@ -15,8 +20,8 @@ import (
 	"runtime/debug"
 
 	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/internal/model"
+	"github.com/tcarcao/craft/internal/syntax"
 )
 
 // lineToLSP converts a 1-based source line to a 0-based LSP line number.
@@ -636,20 +641,20 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 						rm.ServiceContexts[key] = domByName
 						continue
 					}
-				startChar := colToLSP(svc.Column)
-				diags = append(diags, model.Diagnostic{
-					Code: "craft/sema/unresolved-reference",
-					Message: fmt.Sprintf(
-						"service %q references context %q which is not declared in any domain",
-						svc.Name, ctxName,
-					),
-					Severity:  model.SeverityError,
-					SourceURI: uri,
-					Range: model.Range{
-						Start: model.Position{Line: lineToLSP(svc.Line), Character: startChar},
-						End:   model.Position{Line: lineToLSP(svc.Line), Character: startChar + len(svc.Name)},
-					},
-				})
+					startChar := colToLSP(svc.Column)
+					diags = append(diags, model.Diagnostic{
+						Code: "craft/sema/unresolved-reference",
+						Message: fmt.Sprintf(
+							"service %q references context %q which is not declared in any domain",
+							svc.Name, ctxName,
+						),
+						Severity:  model.SeverityError,
+						SourceURI: uri,
+						Range: model.Range{
+							Start: model.Position{Line: lineToLSP(svc.Line), Character: startChar},
+							End:   model.Position{Line: lineToLSP(svc.Line), Character: startChar + len(svc.Name)},
+						},
+					})
 					continue
 				}
 				rm.ServiceContexts[key] = domSym
