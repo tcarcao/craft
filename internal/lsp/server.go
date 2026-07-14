@@ -344,8 +344,13 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 				continue
 			}
 			// cursorChar is 1-based; ctxCol is 1-based start of this token.
-			// Only match if the cursor falls within [ctxCol, ctxCol+len(ctxName)).
-			if cursorChar < ctxCol || cursorChar >= ctxCol+len(ctxName) {
+			// Only match if the cursor falls within [ctxCol, ctxCol+rawLen), where
+			// rawLen is the token's raw span width (quotes included, if any) —
+			// using the unquoted ctxName's length here would leave the cursor
+			// hit-test short for quoted context entries. ctxName (unquoted) is
+			// still used below for the resolution-map lookup key.
+			rawLen := len(ctxToks[i].Text())
+			if cursorChar < ctxCol || cursorChar >= ctxCol+rawLen {
 				continue
 			}
 			domSym, ok := sema.ResolveServiceContext(rm, uri, nameTok.Text(), ctxName)

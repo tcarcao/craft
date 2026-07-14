@@ -2859,6 +2859,102 @@ func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
 	}
 }
 
+// TestDefinition_ServiceContext_QuotedName is part of the task-8a ripple-audit
+// coverage: ServiceDecl.ContextTokens() returns raw tokens that may be
+// SyntaxKindString. Go-to-definition must use the token's raw span width
+// (quotes included) for the cursor hit-test, since that's what's actually on
+// screen — not the unquoted ctxName's length, which is too short. Before the
+// fix, a cursor over the last character of a quoted `contexts: "Login"` entry
+// (just before the closing quote) fell outside the (too-narrow) hit-test
+// window and go-to-definition silently failed.
+func TestDefinition_ServiceContext_QuotedName(t *testing.T) {
+	// L0: domain Login {
+	// L1:   Login
+	// L2: }
+	// L3: services {
+	// L4:   UserSvc {
+	// L5:     contexts: "Login"
+	// L6:   }
+	// L7: }
+	const craftSrc = "domain Login {\n  Login\n}\nservices {\n  UserSvc {\n    contexts: \"Login\"\n  }\n}"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///ctx_quoted.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Cursor over the 'n' of "Login" on L5 (0-based line 5, char 19) — the
+	// last character of the quoted name, just before the closing quote.
+	id++
+	defID := id
+	defParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 5, "character": 19},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &defID, Method: "textDocument/definition", Params: defParams}) //nolint:errcheck
+
+	var defResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == defID {
+			defResp = msg
+			break
+		}
+	}
+	if defResp.ID == nil {
+		t.Fatal("timed out waiting for definition response")
+	}
+
+	var locs []struct {
+		Range struct {
+			Start struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"start"`
+		} `json:"range"`
+	}
+	if err := json.Unmarshal(defResp.Result, &locs); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(locs) == 0 {
+		t.Fatal("expected a definition location for quoted contexts: \"Login\", got none")
+	}
+	// domain Login is declared at line 0, char 7 (0-based).
+	if locs[0].Range.Start.Line != 0 {
+		t.Errorf("line: got %d want 0", locs[0].Range.Start.Line)
+	}
+	if locs[0].Range.Start.Character != 7 {
+		t.Errorf("char: got %d want 7", locs[0].Range.Start.Character)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
 func TestRename_ActorName(t *testing.T) {
 	// L1: actor user Alice
 	// L2: use_case "T" {
