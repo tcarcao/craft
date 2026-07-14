@@ -304,7 +304,7 @@ func validateServiceAnchors(uri string, file syntax.File, li green.LineIndex, ha
 	for _, svc := range file.Services() {
 		svcName := ""
 		if nameTok := svc.Name(); nameTok != nil {
-			svcName = nameTok.Text()
+			svcName = syntax.StringAwareText(*nameTok)
 		}
 		seenOpsLevel, seenRepo := false, false
 		for _, f := range svc.Fields() {

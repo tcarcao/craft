@@ -165,6 +165,48 @@ services {
 	}
 }
 
+// TestAnalyzeFile_DuplicateServiceName_Quoted is the Fix-2 regression lock:
+// ServiceDecl.Name() used to be Ident-only (ChildToken(SyntaxKindIdent)),
+// so a QUOTED service name (service_name = identifier | STRING per
+// docs/GRAMMAR.md) resolved to a nil name token and was silently skipped by
+// the duplicate-name scan below — two services both quoted "Payment Service"
+// would never collide. Name() must also match SyntaxKindString so a quoted
+// declaration participates in the same-package duplicate check.
+func TestAnalyzeFile_DuplicateServiceName_Quoted(t *testing.T) {
+	src := `
+service "Payment Service" {
+  contexts: Payment
+}
+service "Payment Service" {
+  contexts: Billing
+}
+`
+	syms, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	if len(diags) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %d: %v", len(diags), diags)
+	}
+	if diags[0].Code != "craft/sema/duplicate-name" {
+		t.Errorf("expected code craft/sema/duplicate-name, got %q", diags[0].Code)
+	}
+	// The message uses %q to quote the name for display; if nameTok.Text()
+	// were the raw (still-quoted) source text, this would render the DSL
+	// quotes escaped inside %q's own quoting (`"\"Payment Service\""`)
+	// instead of the clean unquoted content.
+	// AnalyzeFile is called without a LineIndex (matching this file's other
+	// tests), so line numbers are unresolved (0) — only the name content is
+	// under test here.
+	wantMsg := `service "Payment Service" already declared (first seen at line 0)`
+	if diags[0].Message != wantMsg {
+		t.Errorf("message = %q, want %q", diags[0].Message, wantMsg)
+	}
+	if len(syms.Services) != 1 {
+		t.Errorf("expected 1 service symbol (first declaration only), got %d", len(syms.Services))
+	}
+	if syms.Services[0].Name != "Payment Service" {
+		t.Errorf("expected symbol name %q (unquoted), got %q", "Payment Service", syms.Services[0].Name)
+	}
+}
+
 func TestAnalyzeWorkspace_ResolvesServiceContext(t *testing.T) {
 	fileA := sema.Symbols{
 		Domains: []sema.DomainSymbol{

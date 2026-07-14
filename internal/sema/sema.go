@@ -286,6 +286,14 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if nameTok == nil {
 			continue
 		}
+		// nameContent is the unquoted semantic value (identical to
+		// nameTok.Text() for a bare ident; strips quotes for a quoted
+		// name). Used everywhere the name is read as CONTENT — symbol
+		// name, dup-key, message. The Range End below intentionally keeps
+		// using nameTok.Text()'s raw length, since that must match the
+		// on-disk token span (quotes included) for the diagnostic to
+		// underline the right source range.
+		nameContent := syntax.StringAwareText(*nameTok)
 		var bcNames []string
 		for _, bc := range d.BoundedContexts() {
 			bcTok := bc.Name()
@@ -302,7 +310,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			domEndLine = d.EndLine(lineIdx)
 		}
 		sym := DomainSymbol{
-			Name:            nameTok.Text(),
+			Name:            nameContent,
 			BoundedContexts: bcNames,
 			Line:            domLine,
 			Column:          domCol,
@@ -310,11 +318,11 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			IsGrouped:       d.IsGrouped(),
 			URI:             uri,
 		}
-		if prev, dup := seenDomains[nameTok.Text()]; dup {
+		if prev, dup := seenDomains[nameContent]; dup {
 			startChar := colToLSP(sym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
+				Message:  fmt.Sprintf("domain %q already declared (first seen at line %d)", nameContent, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
 					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
@@ -323,7 +331,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			})
 			continue
 		}
-		seenDomains[nameTok.Text()] = sym
+		seenDomains[nameContent] = sym
 		syms.Domains = append(syms.Domains, sym)
 
 		// Collect bounded context positions for each BC in this domain.
@@ -352,6 +360,10 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if nameTok == nil {
 			continue
 		}
+		// nameContent is the unquoted semantic value — see the matching
+		// comment in the domains loop above for why the Range End below
+		// still uses nameTok.Text()'s raw (possibly-quoted) length.
+		nameContent := syntax.StringAwareText(*nameTok)
 		svcLine, svcCol := 0, 0
 		if hasLI {
 			svcLine, svcCol = lineIdx.LineCol(nameTok.Offset())
@@ -361,7 +373,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			svcEndLine = s.EndLine(lineIdx)
 		}
 		sym := ServiceSymbol{
-			Name:       nameTok.Text(),
+			Name:       nameContent,
 			Contexts:   s.Contexts(),
 			DataStores: s.DataStores(),
 			Language:   s.Language(),
@@ -371,11 +383,11 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			IsGrouped:  s.IsGrouped(),
 			URI:        uri,
 		}
-		if prev, dup := seenServices[nameTok.Text()]; dup {
+		if prev, dup := seenServices[nameContent]; dup {
 			startChar := colToLSP(sym.Column)
 			diags = append(diags, craft.Diagnostic{
 				Code:     "craft/sema/duplicate-name",
-				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameTok.Text(), prev.Line),
+				Message:  fmt.Sprintf("service %q already declared (first seen at line %d)", nameContent, prev.Line),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
 					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
@@ -384,7 +396,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			})
 			continue
 		}
-		seenServices[nameTok.Text()] = sym
+		seenServices[nameContent] = sym
 		syms.Services = append(syms.Services, sym)
 	}
 

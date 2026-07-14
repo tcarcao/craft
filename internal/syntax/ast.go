@@ -499,8 +499,13 @@ type DomainDecl struct{ node SyntaxNode }
 // Keyword returns the 'domain' keyword token.
 func (d DomainDecl) Keyword() *SyntaxToken { return d.node.ChildToken(SyntaxKindKwDomain) }
 
-// Name returns the identifier token for the domain's name.
-func (d DomainDecl) Name() *SyntaxToken { return d.node.ChildToken(SyntaxKindIdent) }
+// Name returns the identifier-or-string token for the domain's name. A
+// quoted domain name (if the grammar ever allows one — service names
+// already do, per docs/GRAMMAR.md service_name = identifier | STRING) lexes
+// as SyntaxKindString, not SyntaxKindIdent, so both kinds are accepted here
+// (mirrors ServiceDecl.Name() below). Content-reading callers must go
+// through StringAwareText, not Text(), to get the unquoted value.
+func (d DomainDecl) Name() *SyntaxToken { return d.node.ChildToken(SyntaxKindIdent, SyntaxKindString) }
 
 // IsGrouped returns true when the domain was declared inside a domains { } block.
 // Standalone domains begin with the `domain` keyword; grouped domains begin with their name.
@@ -649,7 +654,17 @@ func (b ActorsBlock) EndLine(li green.LineIndex) int { return nodeEndLine(b.node
 type ServiceDecl struct{ node SyntaxNode }
 
 func (s ServiceDecl) Keyword() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwService) }
-func (s ServiceDecl) Name() *SyntaxToken    { return s.node.ChildToken(SyntaxKindIdent) }
+
+// Name returns the identifier-or-string token for the service's name. The
+// grammar allows a QUOTED service name (docs/GRAMMAR.md: service_name =
+// identifier | STRING), which lexes as SyntaxKindString, not SyntaxKindIdent
+// — so both kinds are accepted here (previously Ident-only, which made
+// Name() return nil for a quoted service and silently broke callers that
+// used it for duplicate-name detection; see serviceNameTok in projection.go
+// for the same first-Ident-or-String pattern this mirrors). Content-reading
+// callers must go through StringAwareText, not Text(), to get the unquoted
+// value; position/offset-only callers are unaffected.
+func (s ServiceDecl) Name() *SyntaxToken { return s.node.ChildToken(SyntaxKindIdent, SyntaxKindString) }
 
 // IsGrouped returns true when the service was declared inside a services { } block.
 func (s ServiceDecl) IsGrouped() bool {

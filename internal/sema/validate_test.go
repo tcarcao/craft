@@ -176,6 +176,34 @@ func TestValidate_DuplicateServiceAnchor_Repo(t *testing.T) {
 	assertDiagCount(t, diags, "duplicate-service-anchor", 1)
 }
 
+// TestValidate_DuplicateServiceAnchor_QuotedServiceName is the Fix-2
+// regression lock for validateServiceAnchors: before the fix, svc.Name()
+// returned nil for a quoted service name, so svcName stayed "" and the
+// diagnostic rendered `service "": ...` instead of the actual (unquoted)
+// service name.
+func TestValidate_DuplicateServiceAnchor_QuotedServiceName(t *testing.T) {
+	src := `service "Foo Service" {
+  opslevel: foo-api
+  opslevel: bar-api
+}`
+	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	assertDiagCount(t, diags, "duplicate-service-anchor", 1)
+	assertSeverity(t, diags, "duplicate-service-anchor", craft.SeverityError)
+	var got *craft.Diagnostic
+	for i := range diags {
+		if diagRuleName(diags[i].Code) == "duplicate-service-anchor" {
+			got = &diags[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("no duplicate-service-anchor diagnostic found in %v", diagCodes(diags))
+	}
+	wantMsg := `service "Foo Service": "opslevel" is already declared; only one ` + "`opslevel:`" + ` is allowed per service`
+	if got.Message != wantMsg {
+		t.Errorf("message = %q, want %q", got.Message, wantMsg)
+	}
+}
+
 func TestValidate_ServiceAnchors_NoDuplicate(t *testing.T) {
 	src := `services {
   Foo {

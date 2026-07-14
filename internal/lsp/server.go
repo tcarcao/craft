@@ -353,7 +353,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			if cursorChar < ctxCol || cursorChar >= ctxCol+rawLen {
 				continue
 			}
-			domSym, ok := sema.ResolveServiceContext(rm, uri, nameTok.Text(), ctxName)
+			domSym, ok := sema.ResolveServiceContext(rm, uri, syntax.StringAwareText(*nameTok), ctxName)
 			if !ok {
 				continue
 			}
@@ -697,7 +697,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		endLine := lspLine(svc.EndLine(f.LineIndex))
 		endLine = max(endLine, startLine)
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           nameTok.Text(),
+			Name:           syntax.StringAwareText(*nameTok),
 			Kind:           protocol.SymbolKindModule,
 			Detail:         "service",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
@@ -729,7 +729,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		endLine := lspLine(d.EndLine(f.LineIndex))
 		endLine = max(endLine, startLine)
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           nameTok.Text(),
+			Name:           syntax.StringAwareText(*nameTok),
 			Kind:           protocol.SymbolKindNamespace,
 			Detail:         "domain",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
@@ -1387,7 +1387,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
-					Value: "domain: " + nameTok.Text(),
+					Value: "domain: " + syntax.StringAwareText(*nameTok),
 				},
 			}, nil
 		}
@@ -1403,7 +1403,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			continue
 		}
 		if nameLine == cursorLine {
-			detail := "service: " + nameTok.Text()
+			detail := "service: " + syntax.StringAwareText(*nameTok)
 			if lang := svc.Language(); lang != "" {
 				detail += " (" + lang + ")"
 			}
@@ -1653,7 +1653,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 				if ctxName != oldName {
 					continue
 				}
-				domSym, ok := sema.ResolveServiceContext(rm, wf.URI, svcNameTok.Text(), ctxName)
+				domSym, ok := sema.ResolveServiceContext(rm, wf.URI, syntax.StringAwareText(*svcNameTok), ctxName)
 				if !ok || domSym.URI != uri {
 					continue
 				}
