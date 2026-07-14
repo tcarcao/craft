@@ -73,6 +73,8 @@ func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
 			diags = append(diags, p.parseArchBlock()...)
 		case lexer.TokenKwExposure:
 			diags = append(diags, p.parseExposureBlock()...)
+		case lexer.TokenKwContextMap:
+			diags = append(diags, p.parseContextMapBlock()...)
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -1371,7 +1373,8 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 		lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
 		lexer.TokenKwService, lexer.TokenKwServices,
-		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure:
+		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure,
+		lexer.TokenKwContextMap:
 		return true
 	}
 	return false
@@ -1516,6 +1519,7 @@ var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
 	lexer.TokenKwUseCase:    SyntaxKindKwUseCase,
 	lexer.TokenKwArch:       SyntaxKindKwArch,
 	lexer.TokenKwExposure:   SyntaxKindKwExposure,
+	lexer.TokenKwContextMap: SyntaxKindKwContextMap,
 	lexer.TokenIdent:        SyntaxKindIdent,
 	lexer.TokenString:       SyntaxKindString,
 	lexer.TokenNumber:       SyntaxKindNumber,
@@ -1708,6 +1712,99 @@ func (p *Parser) parseExposureBlock() []craft.Diagnostic {
 	return diags
 }
 
+// parseContextMapBlock parses: context_map { edge_stmt* }
+// edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword
+// (realized_by/also_realizes/same_as/contrasts/distinct_from) matched by
+// value, like asks/notifies elsewhere (Q3). Endpoint kind validation
+// (bc -> service, etc.) is sema's job (Task 7), not the parser's.
+func (p *Parser) parseContextMapBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindContextMapDecl)
+	var diags []craft.Diagnostic
+
+	// Attach leading trivia before `context_map`.
+	p.attachTrivia()
+	kwTok := p.peek()
+	p.consumeAs(SyntaxKindKwContextMap)
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindLBrace)
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Attach trivia inside block (also swallows insignificant whitespace/newlines).
+		p.attachTrivia()
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+		diags = append(diags, p.parseEdgeStmt()...)
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed context_map block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseEdgeStmt parses a single `ref EDGE_KW ref` edge statement inside a
+// context_map block, emitting it as a SyntaxKindEdgeStmt node wrapping two
+// SyntaxKindRef children (left/right endpoints) and one SyntaxKindEdgeKw
+// token (the verb).
+func (p *Parser) parseEdgeStmt() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindEdgeStmt)
+	var diags []craft.Diagnostic
+
+	left := p.peek()
+	if left.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(left.Type) {
+		diags = append(diags, p.diagUnexpected(left, "a node reference (e.g. bc:re/subscriptions)"))
+		p.consumeAs(SyntaxKindError)
+		p.builder.FinishNode()
+		return diags
+	}
+	p.parseRef() // left endpoint
+
+	verb := p.peek()
+	if verb.Type == lexer.TokenIdent && isEdgeKeyword(verb.Value) {
+		p.consumeAs(SyntaxKindEdgeKw)
+	} else {
+		diags = append(diags, p.diagUnexpected(verb, "an edge keyword (realized_by/also_realizes/same_as/contrasts/distinct_from)"))
+		p.builder.FinishNode()
+		return diags
+	}
+
+	right := p.peek()
+	if right.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(right.Type) {
+		diags = append(diags, p.diagUnexpected(right, "a node reference (e.g. service:subscriptions-api)"))
+		p.builder.FinishNode()
+		return diags
+	}
+	p.parseRef() // right endpoint
+
+	p.builder.FinishNode()
+	return diags
+}
+
+// isEdgeKeyword reports whether s is a recognised context_map edge verb.
+func isEdgeKeyword(s string) bool {
+	switch s {
+	case "realized_by", "also_realizes", "same_as", "contrasts", "distinct_from":
+		return true
+	}
+	return false
+}
+
 // parseRef consumes ONE reference at the current position and emits it as a
 // single SyntaxKindRef node, wrapping every token that belongs to it. A ref
 // is a contiguous same-line run of ident/number/`:`/`/` tokens, in one of two
@@ -1897,4 +1994,3 @@ func (p *Parser) parseDeploymentSpec() []craft.Diagnostic {
 	p.consumeAs(SyntaxKindRParen)
 	return diags
 }
-

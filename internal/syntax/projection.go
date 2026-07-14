@@ -10,7 +10,6 @@ import (
 
 // ProjectFromTree projects a lossless red SyntaxNode tree into a *craft.CraftDoc
 // using typed views directly — no lower.go dependency.
-//
 func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 	if root == (SyntaxNode{}) {
 		return &craft.CraftDoc{UseCases: []craft.UseCase{}}
@@ -142,6 +141,21 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 			Contexts: e.Contexts(),
 			Through:  e.Through(),
 		})
+	}
+
+	// ContextMap edges
+	for _, cm := range file.ContextMaps() {
+		for _, e := range cm.Edges() {
+			left, verb, right := e.Left(), e.Verb(), e.Right()
+			if left == "" || verb == "" || right == "" {
+				continue // malformed — skip
+			}
+			doc.ContextMap = append(doc.ContextMap, craft.Edge{
+				Left:  left,
+				Verb:  verb,
+				Right: right,
+			})
+		}
 	}
 
 	return doc

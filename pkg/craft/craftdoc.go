@@ -10,6 +10,17 @@ type CraftDoc struct {
 	UseCases      []UseCase   `json:"useCases"`
 	Domains       []Domain    `json:"domains,omitempty"`
 	Actors        []Actor     `json:"actors,omitempty"`
+	ContextMap    []Edge      `json:"contextMap,omitempty"`
+}
+
+// Edge is one authored typed edge from a context_map block, connecting two
+// node slugs (e.g. "bc:re/subscriptions") with a verb (e.g. "realized_by").
+// Endpoint-kind validation (bc -> service, etc.) is a sema concern, not
+// captured here — this is a shape-only projection of the parsed edges.
+type Edge struct {
+	Left  string `json:"left"`
+	Verb  string `json:"verb"`
+	Right string `json:"right"`
 }
 
 // ArchBlock represents a named architecture with presentation and gateway components.

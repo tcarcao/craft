@@ -331,6 +331,18 @@ func (f File) Exposures() []ExposureDecl {
 	return result
 }
 
+// ContextMaps returns all ContextMapDecl views.
+func (f File) ContextMaps() []ContextMapDecl {
+	if f.isZero() {
+		return nil
+	}
+	var result []ContextMapDecl
+	for _, n := range f.node.ChildNodes(SyntaxKindContextMapDecl) {
+		result = append(result, ContextMapDecl{node: n})
+	}
+	return result
+}
+
 // ActorBlocks returns all top-level actors{} block views in document order.
 func (f File) ActorBlocks() []ActorsBlock {
 	if f.isZero() {
@@ -1657,4 +1669,62 @@ func (r DeploymentRule) Arrow() *SyntaxToken {
 		return nil
 	}
 	return r.node.ChildToken(SyntaxKindArrow)
+}
+
+// ContextMapDecl is a typed view over a SyntaxKindContextMapDecl node — the
+// context_map { } block of authored typed edges between node slugs (Task 5).
+type ContextMapDecl struct{ node SyntaxNode }
+
+// Keyword returns the 'context_map' keyword token.
+func (c ContextMapDecl) Keyword() *SyntaxToken {
+	return c.node.ChildToken(SyntaxKindKwContextMap)
+}
+
+// Line returns the 1-based source line of the `context_map` keyword using li.
+func (c ContextMapDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(c.node, li) }
+
+// EndLine returns the 1-based line of the closing `}` using li.
+func (c ContextMapDecl) EndLine(li green.LineIndex) int { return nodeEndLine(c.node, li) }
+
+// Edges returns all EdgeDecl views within this context_map block.
+func (c ContextMapDecl) Edges() []EdgeDecl {
+	var result []EdgeDecl
+	for _, n := range c.node.ChildNodes(SyntaxKindEdgeStmt) {
+		result = append(result, EdgeDecl{node: n})
+	}
+	return result
+}
+
+// EdgeDecl is a typed view over a SyntaxKindEdgeStmt node — a single typed
+// edge `ref EDGE_KW ref` inside a context_map block (Task 5).
+type EdgeDecl struct{ node SyntaxNode }
+
+// Left returns the raw source text of the left-hand endpoint reference (via
+// RefText — NEVER Name(), which would truncate a kind-prefixed slug like
+// "bc:re/subscriptions" down to just "bc"). Empty if malformed.
+func (e EdgeDecl) Left() string {
+	refs := e.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 1 {
+		return ""
+	}
+	return RefDecl{node: refs[0]}.RefText()
+}
+
+// Right returns the raw source text of the right-hand endpoint reference
+// (via RefText — see Left). Empty if malformed.
+func (e EdgeDecl) Right() string {
+	refs := e.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 2 {
+		return ""
+	}
+	return RefDecl{node: refs[1]}.RefText()
+}
+
+// Verb returns the edge keyword token text (e.g. "realized_by"), or "" if malformed.
+func (e EdgeDecl) Verb() string {
+	tok := e.node.ChildToken(SyntaxKindEdgeKw)
+	if tok == nil {
+		return ""
+	}
+	return tok.Text()
 }

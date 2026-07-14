@@ -46,6 +46,7 @@ const (
 	SyntaxKindKwUseCase
 	SyntaxKindKwArch
 	SyntaxKindKwExposure
+	SyntaxKindKwContextMap // hard keyword `context_map`
 
 	// --- Contextual keywords (parser-resolved from TokenIdent) ---
 	SyntaxKindKwWhen
@@ -69,6 +70,11 @@ const (
 	SyntaxKindKwEvery  // contextual keyword `every` (in when clause)
 	SyntaxKindKwImport // hard keyword `import`
 
+	// SyntaxKindEdgeKw is the contextual keyword for a context_map edge verb:
+	// one of realized_by/also_realizes/same_as/contrasts/distinct_from (Task 5).
+	// Matched by value from TokenIdent, like asks/notifies elsewhere.
+	SyntaxKindEdgeKw
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -90,13 +96,16 @@ const (
 	SyntaxKindTrigger
 	SyntaxKindAction
 	SyntaxKindArchDecl
-	SyntaxKindArchSection   // presentation or gateway section
+	SyntaxKindArchSection // presentation or gateway section
 	SyntaxKindArchComponent
 	SyntaxKindArchModifier
 	SyntaxKindExposureDecl
 	SyntaxKindDeploymentRule
-	SyntaxKindErrorNode // wraps tokens that could not form a valid construct
-	SyntaxKindRef         // wraps a name ident at a reference site (e.g. contexts: field values)
+	SyntaxKindErrorNode    // wraps tokens that could not form a valid construct
+	SyntaxKindRef          // wraps a name ident at a reference site (e.g. contexts: field values)
 	SyntaxKindServiceField // wraps one field declaration (keyword + colon + values) in a service body
 	SyntaxKindImportDecl   // import "path/to/file.craft"
+
+	SyntaxKindContextMapDecl // context_map { edge_stmt* }
+	SyntaxKindEdgeStmt       // ref EDGE_KW ref, inside a context_map block
 )

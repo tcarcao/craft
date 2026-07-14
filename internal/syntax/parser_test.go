@@ -535,3 +535,64 @@ func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
 		t.Errorf("notifies ref = %q, want %q", got, "vas.VasFulfilled")
 	}
 }
+
+// TestContextMap_Edges is the Task 5 TDD lock for the new `context_map { }`
+// top-level block: edge_stmt := ref EDGE_KW ref, where EDGE_KW is a
+// contextual keyword (realized_by/also_realizes/same_as/contrasts/
+// distinct_from) matched by value, like asks/notifies. Asserts edges surface
+// through the pkg/craft projection layer with Left/Right taken from
+// RefText() — NOT Name(), which would truncate a kind-prefixed slug like
+// "bc:re/subscriptions" down to just "bc".
+func TestContextMap_Edges(t *testing.T) {
+	src := `context_map {
+  bc:re/subscriptions realized_by service:subscriptions-api
+  term:subscriptions/dunning contrasts term:billing/dunning
+}`
+	gn, li, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	// Round-trip: the block must reassemble to the exact source text.
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	root := syntax.Root(gn)
+	doc := syntax.ProjectFromTree(root, li)
+	edges := doc.ContextMap
+	if len(edges) != 2 {
+		t.Fatalf("want 2 edges, got %d: %+v", len(edges), edges)
+	}
+	if edges[0].Left != "bc:re/subscriptions" || edges[0].Verb != "realized_by" || edges[0].Right != "service:subscriptions-api" {
+		t.Fatalf("edge0 = %+v", edges[0])
+	}
+	if edges[1].Left != "term:subscriptions/dunning" || edges[1].Verb != "contrasts" || edges[1].Right != "term:billing/dunning" {
+		t.Fatalf("edge1 = %+v", edges[1])
+	}
+
+	// Also verify the raw syntax-tree shape directly (belt-and-braces on the
+	// AST layer, independent of the projection layer).
+	cmNodes := root.ChildNodes(syntax.SyntaxKindContextMapDecl)
+	if len(cmNodes) != 1 {
+		t.Fatalf("expected 1 context_map node, got %d", len(cmNodes))
+	}
+	file := syntax.AsFile(root)
+	cms := file.ContextMaps()
+	if len(cms) != 1 {
+		t.Fatalf("expected 1 ContextMapDecl view, got %d", len(cms))
+	}
+	astEdges := cms[0].Edges()
+	if len(astEdges) != 2 {
+		t.Fatalf("expected 2 EdgeDecl views, got %d", len(astEdges))
+	}
+	if got := astEdges[0].Left(); got != "bc:re/subscriptions" {
+		t.Errorf("astEdges[0].Left() = %q, want %q", got, "bc:re/subscriptions")
+	}
+	if got := astEdges[0].Verb(); got != "realized_by" {
+		t.Errorf("astEdges[0].Verb() = %q, want %q", got, "realized_by")
+	}
+	if got := astEdges[0].Right(); got != "service:subscriptions-api" {
+		t.Errorf("astEdges[0].Right() = %q, want %q", got, "service:subscriptions-api")
+	}
+}

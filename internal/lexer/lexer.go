@@ -52,10 +52,10 @@ const (
 
 	// S7: arch keyword + flow/modifier punctuation.
 	// presentation/gateway remain plain identifiers per Q3.
-	TokenKwArch    // arch
-	TokenGT        // > (component flow operator)
-	TokenLBracket  // [ (component modifier open)
-	TokenRBracket  // ] (component modifier close)
+	TokenKwArch   // arch
+	TokenGT       // > (component flow operator)
+	TokenLBracket // [ (component modifier open)
+	TokenRBracket // ] (component modifier close)
 
 	// S8: exposure keyword. Field keywords (to, through, contexts) are plain
 	// identifiers per Q3.
@@ -78,31 +78,37 @@ const (
 	// Top-level structural keywords
 	TokenKwImport // import
 
+	// context_map block keyword (Task 5). Edge keywords (realized_by,
+	// also_realizes, same_as, contrasts, distinct_from) remain plain
+	// identifiers, matched by value in the parser like asks/notifies (Q3).
+	TokenKwContextMap // context_map
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
 
 var keywords = map[string]TokenType{
-	"actor":    TokenKwActor,
-	"actors":   TokenKwActors,
-	"user":     TokenKwUser,
-	"system":   TokenKwSystem,
-	"service":  TokenKwService,
-	"domain":   TokenKwDomain,
-	"domains":  TokenKwDomains,
-	"services": TokenKwServices,
-	"use_case": TokenKwUseCase,
-	"arch":     TokenKwArch,
-	"exposure": TokenKwExposure,
-	"import":   TokenKwImport,
+	"actor":       TokenKwActor,
+	"actors":      TokenKwActors,
+	"user":        TokenKwUser,
+	"system":      TokenKwSystem,
+	"service":     TokenKwService,
+	"domain":      TokenKwDomain,
+	"domains":     TokenKwDomains,
+	"services":    TokenKwServices,
+	"use_case":    TokenKwUseCase,
+	"arch":        TokenKwArch,
+	"exposure":    TokenKwExposure,
+	"import":      TokenKwImport,
+	"context_map": TokenKwContextMap,
 }
 
 // Token is a scanned unit from the source.
 type Token struct {
-	Type    TokenType
-	Value   string
-	Line    int // 1-based
-	Column  int // 1-based (byte offset within the line)
+	Type   TokenType
+	Value  string
+	Line   int // 1-based
+	Column int // 1-based (byte offset within the line)
 }
 
 func (t Token) String() string {
