@@ -1704,6 +1704,59 @@ func (p *Parser) parseExposureBlock() []craft.Diagnostic {
 	return diags
 }
 
+// parseRef consumes ONE reference at the current position and emits it as a
+// single SyntaxKindRef node, wrapping every token that belongs to it. A ref
+// is a contiguous same-line run of ident/number/`:`/`/` tokens, in one of two
+// shapes:
+//
+//   - event ref (dotted, no `kind:` prefix): vas.VasApplied
+//   - node slug: [kind:][ns/]name, e.g. bc:re/subscriptions
+//
+// Returns the leading kind word ("domain"/"bc"/"term"/"service") if a
+// recognised `kind:` prefix was present, else "". It does not validate the
+// kind's legitimacy beyond capturing it — sema (a later task) does that.
+//
+// parseRef is a standalone helper: as of Task 3 it is not called from any
+// production parse path. Tasks 4-6 wire it into notifies/listens/asks,
+// context_map edges, and repo: anchors.
+func (p *Parser) parseRef() string {
+	p.builder.StartNode(SyntaxKindRef)
+	line := p.peek().Line
+	kind := ""
+	first := p.peek()
+	// leading kind word + ':'. "domain"/"service" lex as hard keywords, not
+	// TokenIdent, so accept the same keyword-as-ident set the rest of the
+	// parser uses (isAnyKeywordAsIdent) in addition to plain idents.
+	if (first.Type == lexer.TokenIdent || isAnyKeywordAsIdent(first.Type)) &&
+		p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == line {
+		if isSlugKind(first.Value) {
+			kind = first.Value
+		}
+		p.consumeAs(SyntaxKindIdent) // kind word
+		p.consumeAs(SyntaxKindColon) // ':'
+	}
+	for !p.atEOF() && p.peek().Line == line {
+		t := p.peek()
+		if t.Type == lexer.TokenIdent || t.Type == lexer.TokenNumber ||
+			(t.Type == lexer.TokenError && t.Value == "/") {
+			p.consumeAs(SyntaxKindIdent)
+			continue
+		}
+		break
+	}
+	p.builder.FinishNode()
+	return kind
+}
+
+// isSlugKind reports whether s is a recognised node-slug kind word.
+func isSlugKind(s string) bool {
+	switch s {
+	case "domain", "bc", "term", "service":
+		return true
+	}
+	return false
+}
+
 // parseIdentList parses a comma-separated ident list, emitting tokens into the
 // current builder scope.
 func (p *Parser) parseIdentList() {

@@ -372,6 +372,28 @@ type RefDecl struct{ node SyntaxNode }
 // Name returns the identifier token inside this ref node.
 func (r RefDecl) Name() *SyntaxToken { return r.node.ChildToken(SyntaxKindIdent) }
 
+// RefText returns the raw source text of a reference wrapped by parseRef —
+// e.g. "vas.VasApplied" or "bc:re/subscriptions". A valid ref has no
+// whitespace between its tokens, so concatenating the node's non-trivia
+// token texts reconstructs the exact original span.
+func (r RefDecl) RefText() string {
+	var sb strings.Builder
+	for _, tok := range r.node.Tokens() {
+		sb.WriteString(tok.Text())
+	}
+	return sb.String()
+}
+
+// RefKind returns the leading kind word ("domain"/"bc"/"term"/"service") if
+// this ref used a recognised `kind:` prefix, else "".
+func (r RefDecl) RefKind() string {
+	toks := r.node.Tokens()
+	if len(toks) >= 2 && toks[0].Kind() == SyntaxKindIdent && toks[1].Kind() == SyntaxKindColon && isSlugKind(toks[0].Text()) {
+		return toks[0].Text()
+	}
+	return ""
+}
+
 // ServiceField is a typed view over a SyntaxKindServiceField node.
 type ServiceField struct{ node SyntaxNode }
 
