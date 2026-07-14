@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/internal/model"
 	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/pkg/craft"
 )
 
 func parseRoot(t *testing.T, src string) syntax.SyntaxNode {
@@ -607,12 +607,12 @@ func TestContextMap_Edges(t *testing.T) {
 // watchdog timeout, so a parser infinite loop fails this single test fast
 // (a few seconds) instead of hanging the entire `go test` run until the
 // outer test binary timeout kills it.
-func parseWithHangGuard(t *testing.T, src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
+func parseWithHangGuard(t *testing.T, src string) (*green.GreenNode, green.LineIndex, []model.Diagnostic) {
 	t.Helper()
 	type result struct {
 		gn    *green.GreenNode
 		li    green.LineIndex
-		diags []craft.Diagnostic
+		diags []model.Diagnostic
 	}
 	done := make(chan result, 1)
 	go func() {

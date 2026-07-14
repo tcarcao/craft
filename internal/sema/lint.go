@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/internal/model"
 	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/pkg/craft"
 )
 
 // LintWorkspace runs style and consistency checks across all workspace files.
@@ -20,12 +20,12 @@ import (
 // An optional perFileLineIndices map (uri→LineIndex) enables accurate position reporting.
 // Returns diagnostics with SourceURI populated so callers can route each
 // finding to the correct file.
-func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, perFileLineIndices ...map[string]green.LineIndex) []craft.Diagnostic {
+func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, perFileLineIndices ...map[string]green.LineIndex) []model.Diagnostic {
 	var lis map[string]green.LineIndex
 	if len(perFileLineIndices) > 0 {
 		lis = perFileLineIndices[0]
 	}
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 	diags = append(diags, lintDeadEvents(perFileTrees, lis)...)
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
 	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
@@ -45,7 +45,7 @@ func eventTokenLen(name string, isString bool) int {
 	return len(name)
 }
 
-func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []craft.Diagnostic {
+func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
 	type pubSite struct {
 		uri, event string
 		line, col  int
@@ -85,17 +85,17 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]gr
 		}
 	}
 
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 	for event, site := range published {
 		if !consumed[event] {
 			startChar := colToLSP(site.col)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/lint/dead-event",
 				Message:  fmt.Sprintf("event %q is published but never consumed", event),
-				Severity: craft.SeverityWarning,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(site.line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(site.line), Character: startChar + site.tokenLen},
+				Severity: model.SeverityWarning,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(site.line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(site.line), Character: startChar + site.tokenLen},
 				},
 				SourceURI: site.uri,
 			})
@@ -108,7 +108,7 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]gr
 // Warning: an actor is declared but never appears as the subject of any
 // external trigger (`when <Actor> …`) in any workspace file.
 
-func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols) []craft.Diagnostic {
+func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols) []model.Diagnostic {
 	if len(ws.Actors) == 0 {
 		return nil
 	}
@@ -136,17 +136,17 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 		}
 	}
 
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 	for name, sym := range ws.Actors {
 		if !used[name] {
 			startChar := colToLSP(sym.Column)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/lint/unused-actor",
 				Message:  fmt.Sprintf("actor %q is defined but never used as a trigger subject", name),
-				Severity: craft.SeverityWarning,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(sym.Line), Character: startChar + len(name)},
+				Severity: model.SeverityWarning,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(name)},
 				},
 				SourceURI: sym.URI,
 			})
@@ -161,9 +161,9 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 
 var pastTenseRe = regexp.MustCompile(`(?i)\b\w+(ed|en)\b`)
 
-func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []craft.Diagnostic {
+func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
 	reported := map[string]bool{}
-	var diags []craft.Diagnostic
+	var diags []model.Diagnostic
 
 	check := func(event, uri string, line, col int, isString bool) {
 		if event == "" || reported[event] {
@@ -172,13 +172,13 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 		reported[event] = true
 		if !pastTenseRe.MatchString(strings.ToLower(event)) {
 			startChar := colToLSP(col)
-			diags = append(diags, craft.Diagnostic{
+			diags = append(diags, model.Diagnostic{
 				Code:     "craft/lint/event-not-past-tense",
 				Message:  fmt.Sprintf("event %q does not appear to use past tense", event),
-				Severity: craft.SeverityWarning,
-				Range: craft.Range{
-					Start: craft.Position{Line: lineToLSP(line), Character: startChar},
-					End:   craft.Position{Line: lineToLSP(line), Character: startChar + eventTokenLen(event, isString)},
+				Severity: model.SeverityWarning,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(line), Character: startChar},
+					End:   model.Position{Line: lineToLSP(line), Character: startChar + eventTokenLen(event, isString)},
 				},
 				SourceURI: uri,
 			})
