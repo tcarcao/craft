@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.9.0] — 2026-07-14
+
+### Added
+- **Craft DSL vNext grammar** — a backward-compatible evolution toward typed, code-anchored references (ticket 018):
+  - **Flexible unquoted narrative** — step prose accepts special characters without quotes (`X asks Y for 1! & 2! and/maybe *`). A comment now begins only at a whitespace-preceded `//`, so `http://api`, `50/50`, and `and/maybe` stay in prose.
+  - **Typed references** on `notifies`/`listens`/`asks` — event refs (`notifies vas.VasApplied`) and node slugs `[kind:][namespace/]name` (`bc:re/subscriptions`, `term:billing/dunning`, `service:subscriptions-api`). Slug segments may be words that lex as keywords (e.g. `term:user/account`).
+  - **`context_map { }` block** with five typed edges: `realized_by`, `also_realizes` (bc → service), `same_as`, `contrasts`, `distinct_from` (term ↔ term).
+  - **Service anchors** `opslevel:` and `repo:` (identity, not file paths).
+  - **Local validation** — `craft validate` emits `craft/sema/malformed-slug`, `craft/sema/edge-endpoint-kind`, `craft/sema/duplicate-service-anchor` (errors) and `craft/lint/deprecated-string-ref`, `craft/sema/unresolved-ref-local` (warnings). Cross-validation against code facts remains the hub's job.
+- Authoring docs updated: the `craft-dsl` skill and the VitePress guide now teach the vNext syntax.
+
+### Changed
+- Quoted event strings (`notifies "X"` / `listens "X"`) still parse but are **deprecated** — they emit `craft/lint/deprecated-string-ref`. Migrate to typed refs.
+
+### Fixed
+- Quoted string literals now round-trip byte-for-byte (a pre-existing corruption dropped the opening quote and duplicated the last content character; the lossless round-trip test had been silently scanning zero corpus files).
+- Flexible-prose punctuation (e.g. `(1! & 2!)`) no longer gains spurious spaces in generated diagram/JSON output.
+- Quoted service/domain declaration names now resolve correctly in validation and LSP (duplicate detection, diagnostics, rename).
+
+---
+
 ## [2.8.2] — 2026-05-14
 
 ### Added
