@@ -1,6 +1,7 @@
 package syntax_test
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,31 +12,49 @@ import (
 )
 
 // TestRoundTrip verifies that the green tree reassembles to the exact source text
-// for every fixture in testdata/corpus/.
+// for every fixture in testdata/corpus/, walked RECURSIVELY.
+//
+// This test used to call os.ReadDir (non-recursive) on the corpus root, but
+// all 55 corpus .craft files live in subdirectories (02_domains/,
+// 06_exposures/, ...), so the loop iterated only top-level dir entries,
+// skipped them all as non-.craft, and tested nothing — the round-trip
+// guarantee was vacuously "green". filepath.WalkDir fixes that.
 func TestRoundTrip(t *testing.T) {
 	corpus := "../../testdata/corpus"
-	entries, err := os.ReadDir(corpus)
-	if err != nil {
+	if _, err := os.Stat(corpus); err != nil {
 		t.Skipf("corpus not found: %v", err)
 	}
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".craft") {
-			continue
+	count := 0
+	err := filepath.WalkDir(corpus, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		path := filepath.Join(corpus, e.Name())
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".craft") {
+			return nil
+		}
+		count++
 		src, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}
-		t.Run(e.Name(), func(t *testing.T) {
+		rel, _ := filepath.Rel(corpus, path)
+		t.Run(rel, func(t *testing.T) {
 			g, _, _ := syntax.Parse(string(src))
 			got := reassembleGreen(g)
 			if got != string(src) {
 				t.Errorf("round-trip mismatch for %s\nwant: %q\ngot:  %q",
-					e.Name(), string(src), got)
+					rel, string(src), got)
 			}
 		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", corpus, err)
 	}
+	if count == 0 {
+		t.Fatalf("no .craft files found under %s — corpus walk is broken", corpus)
+	}
+	t.Logf("round-tripped %d corpus .craft files", count)
 }
 
 func reassembleGreen(g *green.GreenNode) string {

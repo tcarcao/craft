@@ -21,9 +21,13 @@ use_case "Order Placement" {
   when Customer places order
     Order validates items
     Order creates order record
-    Order notifies "Order Created"
+    Order notifies order.OrderCreated
 }
 ```
+
+::: tip
+`order.OrderCreated` is a **typed event ref** — a dotted qualified id. The older quoted-string form (`notifies "Order Created"`) still parses but is deprecated; see [Deprecated: Quoted Event Strings](#deprecated-quoted-event-strings) below.
+:::
 
 ## Triggers
 
@@ -52,18 +56,20 @@ when <actor> <verb> [connector] <phrase>
 Initiated by events:
 
 ```craft
-when "Order Placed"
-when "User Registered"
-when "Payment Processed"
+when order.OrderPlaced
+when auth.UserRegistered
+when payment.PaymentProcessed
 ```
 
 **Syntax:**
 ```craft
-when "<event name>"
+when <event_ref>
 ```
 
+An `<event_ref>` is a dotted qualified id — the FQ Avro record name / OpenAPI `operationId` the event corresponds to in code. No quotes, no `kind:` prefix, no `/`.
+
 ::: tip
-Use past tense for event names: "Order Placed" not "Place Order"
+Use past tense for event names: `order.OrderPlaced` not `order.PlaceOrder`
 :::
 
 ### Domain Listener Triggers
@@ -71,14 +77,14 @@ Use past tense for event names: "Order Placed" not "Place Order"
 Domains reacting to events:
 
 ```craft
-when Payment listens "Order Created"
-when Notification listens "User Registered"
-when Inventory listens "Order Cancelled"
+when Payment listens order.OrderCreated
+when Notification listens auth.UserRegistered
+when Inventory listens order.OrderCancelled
 ```
 
 **Syntax:**
 ```craft
-when <domain> listens "<event name>"
+when <domain> listens <event_ref>
 ```
 
 ### CRON Triggers
@@ -114,6 +120,10 @@ Payment asks Gateway for transaction status
 <domain> asks <domain> [connector] <phrase>
 ```
 
+The target can also be a **node slug** for a cross-context/typed reference: `Subscriptions asks bc:re/billing for a fresh charge attempt`. See [Node Slugs](/language/overview) — a bare domain name like `Inventory` is still the normal short form.
+
+The trailing `<phrase>` accepts special characters unquoted (`! & * / # ? +`), e.g. `Subscriptions asks bc:re/billing for a fresh charge attempt (1! & 2!)` — no need to quote punctuation.
+
 **Use when:** One domain needs an immediate response from another.
 
 ### Asynchronous Actions
@@ -121,17 +131,21 @@ Payment asks Gateway for transaction status
 Publish events:
 
 ```craft
-Order notifies "Order Created"
-Payment notifies "Payment Processed"
-Profile notifies "User Updated"
+Order notifies order.OrderCreated
+Payment notifies payment.PaymentProcessed
+Profile notifies profile.UserUpdated
 ```
 
 **Syntax:**
 ```craft
-<domain> notifies "<event name>"
+<domain> notifies <event_ref>
 ```
 
 **Use when:** Other domains might want to react, but the publisher doesn't need a response.
+
+::: tip
+`notifies "Order Created"` (quoted string) still parses but is **deprecated** — `craft validate` emits a `craft/lint/deprecated-string-ref` warning and points at the typed-ref form.
+:::
 
 ### Internal Actions
 
@@ -169,6 +183,17 @@ Gateway returns to Payment the transaction result
 
 **Use when:** A domain returns data, especially in response to an `asks` action.
 
+## Deprecated: Quoted Event Strings
+
+Older `.craft` files (and older docs) write event names as quoted strings:
+
+```craft
+Order notifies "Order Created"
+when Payment listens "Order Created"
+```
+
+This form still **parses** — `craft validate` won't reject it — but it's **deprecated**: every quoted event string emits a `craft/lint/deprecated-string-ref` warning pointing at the typed-ref replacement. Prefer the typed-ref form (`notifies order.OrderCreated`) in all new or extended files; only leave quoted strings where you're intentionally not migrating an existing file.
+
 ## Complete Example
 
 ```craft
@@ -179,22 +204,22 @@ use_case "Order Processing" {
     Order asks Inventory to reserve items
     Order calculates total amount
     Order asks Payment to create payment request
-    Order notifies "Order Created"
+    Order notifies order.OrderCreated
 
   // Domain listener: Payment reacts to Order Created
-  when Payment listens "Order Created"
+  when Payment listens order.OrderCreated
     Payment asks PaymentGateway to process transaction
     PaymentGateway returns to Payment the transaction result
     Payment updates payment status
-    Payment notifies "Payment Processed"
+    Payment notifies payment.PaymentProcessed
 
   // Domain listener: Notification reacts to Payment
-  when Notification listens "Payment Processed"
+  when Notification listens payment.PaymentProcessed
     Notification asks EmailService to send confirmation
     Notification asks SMSService to send notification
 
   // Domain listener: Inventory reacts to Payment
-  when Inventory listens "Payment Processed"
+  when Inventory listens payment.PaymentProcessed
     Inventory confirms reservation
     Inventory updates stock levels
 }
@@ -208,16 +233,16 @@ use_case "User Registration" {
     Authentication validates email format
     Authentication asks Database to check uniqueness
     Profile creates initial profile
-    Authentication notifies "User Registered"
+    Authentication notifies auth.UserRegistered
 
-  when Profile listens "User Registered"
+  when Profile listens auth.UserRegistered
     Profile asks Database to store profile
-    Profile notifies "Profile Created"
+    Profile notifies profile.ProfileCreated
 
-  when Notification listens "User Registered"
+  when Notification listens auth.UserRegistered
     Notification asks EmailService to send welcome email
 
-  when Analytics listens "User Registered"
+  when Analytics listens auth.UserRegistered
     Analytics records registration event
     Analytics updates metrics
 }
@@ -246,14 +271,14 @@ use_case "Process Payment" {
     Payment asks Gateway to charge card
     Gateway returns to Payment the transaction result
 
-  when Payment listens "Transaction Failed"
+  when Payment listens payment.TransactionFailed
     Payment creates retry attempt
-    Payment notifies "Payment Failed"
+    Payment notifies payment.PaymentFailed
 
-  when Order listens "Payment Failed"
+  when Order listens payment.PaymentFailed
     Order cancels order
     Order asks Inventory to release reservation
-    Order notifies "Order Cancelled"
+    Order notifies order.OrderCancelled
 }
 ```
 
@@ -263,14 +288,14 @@ use_case "Process Payment" {
 
 ✅ Good:
 ```craft
-Order notifies "Order Created"
-Payment notifies "Payment Processed"
+Order notifies order.OrderCreated
+Payment notifies payment.PaymentProcessed
 ```
 
 ❌ Bad:
 ```craft
-Order notifies "Create Order"
-Payment notifies "Process Payment"
+Order notifies order.CreateOrder
+Payment notifies payment.ProcessPayment
 ```
 
 ### Be Specific with Actions
@@ -309,7 +334,7 @@ use_case "Order Processing" {
   when Customer places order
     // 5-10 related actions
 
-  when Payment listens "Order Created"
+  when Payment listens order.OrderCreated
     // 3-5 related actions
 }
 ```
@@ -330,19 +355,19 @@ use_case "Everything" {
 use_case "Distributed Transaction" {
   when user initiates order
     Order creates order
-    Order notifies "Order Started"
+    Order notifies order.OrderStarted
 
-  when Payment listens "Order Started"
+  when Payment listens order.OrderStarted
     Payment charges customer
-    Payment notifies "Payment Completed"
+    Payment notifies payment.PaymentCompleted
 
-  when Inventory listens "Payment Completed"
+  when Inventory listens payment.PaymentCompleted
     Inventory ships items
-    Inventory notifies "Shipment Sent"
+    Inventory notifies inventory.ShipmentSent
 
-  when Order listens "Payment Failed"
+  when Order listens payment.PaymentFailed
     Order cancels order
-    Order notifies "Order Cancelled"
+    Order notifies order.OrderCancelled
 }
 ```
 
@@ -354,10 +379,10 @@ use_case "Order Management" {
   when user creates order
     OrderCommand validates order
     OrderCommand stores order
-    OrderCommand notifies "Order Created"
+    OrderCommand notifies order.OrderCreated
 
   // Query side
-  when OrderQuery listens "Order Created"
+  when OrderQuery listens order.OrderCreated
     OrderQuery updates read model
     OrderQuery indexes order data
 }

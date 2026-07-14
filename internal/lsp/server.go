@@ -344,8 +344,13 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 				continue
 			}
 			// cursorChar is 1-based; ctxCol is 1-based start of this token.
-			// Only match if the cursor falls within [ctxCol, ctxCol+len(ctxName)).
-			if cursorChar < ctxCol || cursorChar >= ctxCol+len(ctxName) {
+			// Only match if the cursor falls within [ctxCol, ctxCol+rawLen), where
+			// rawLen is the token's raw span width (quotes included, if any) —
+			// using the unquoted ctxName's length here would leave the cursor
+			// hit-test short for quoted context entries. ctxName (unquoted) is
+			// still used below for the resolution-map lookup key.
+			rawLen := len(ctxToks[i].Text())
+			if cursorChar < ctxCol || cursorChar >= ctxCol+rawLen {
 				continue
 			}
 			domSym, ok := sema.ResolveServiceContext(rm, uri, nameTok.Text(), ctxName)
@@ -413,14 +418,19 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	}
 
 	// Walk exposures: to: → actor, through: → service, contexts: → domain/service.
+	// ToTokens()/ThroughTokens()/ContextsTokens() return raw tokens (possibly
+	// SyntaxKindString): the cursor hit-test below must use the token's raw
+	// span width (tok.Text() — matches what's actually on screen, quotes and
+	// all), but the workspace symbol maps are keyed by unquoted names, so the
+	// lookup key must go through syntax.StringAwareText.
 	for _, exp := range file.Exposures() {
 		for _, tok := range exp.ToTokens() {
 			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			tokName := tok.Text()
-			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
+			rawLen := len(tok.Text())
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
-			if sym, ok := wsSym.Actors[tok.Text()]; ok && sym.Line > 0 {
+			if sym, ok := wsSym.Actors[syntax.StringAwareText(tok)]; ok && sym.Line > 0 {
 				startChar := uint32(0)
 				if sym.Column > 0 {
 					startChar = uint32(sym.Column - 1)
@@ -436,11 +446,11 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		}
 		for _, tok := range exp.ThroughTokens() {
 			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			tokName := tok.Text()
-			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
+			rawLen := len(tok.Text())
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
-			if sym, ok := wsSym.Services[tok.Text()]; ok && sym.Line > 0 {
+			if sym, ok := wsSym.Services[syntax.StringAwareText(tok)]; ok && sym.Line > 0 {
 				startChar := uint32(0)
 				if sym.Column > 0 {
 					startChar = uint32(sym.Column - 1)
@@ -456,11 +466,11 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		}
 		for _, tok := range exp.ContextsTokens() {
 			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			tokName := tok.Text()
-			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
+			rawLen := len(tok.Text())
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
-			name := tok.Text()
+			name := syntax.StringAwareText(tok)
 			if sym, ok := wsSym.Domains[name]; ok && sym.Line > 0 {
 				startChar := uint32(0)
 				if sym.Column > 0 {
@@ -734,10 +744,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		startLine := lspLine(uc.Line(f.LineIndex))
 		endLine := lspLine(uc.EndLine(f.LineIndex))
 		endLine = max(endLine, startLine)
-		name := ""
-		if titleTok := uc.Title(); titleTok != nil {
-			name = titleTok.Text()
-		}
+		name := uc.Name() // unquoted title text (Bug 8a fix)
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:   name,
 			Kind:   protocol.SymbolKindEvent, // closest match for use-case-level interactions
@@ -872,7 +879,7 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 			}
 			entryPoint, involved := extractUseCaseContextsFromView(uc)
 			result.UseCases = append(result.UseCases, craftUseCaseEntry{
-				Name:              titleTok.Text(),
+				Name:              uc.Name(), // unquoted title text (Bug 8a fix)
 				URI:               f.URI,
 				StartLine:         ucLine,
 				EndLine:           uc.EndLine(f.LineIndex),
@@ -1440,10 +1447,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		for _, sc := range uc.Scenarios() {
 			// Hover on the use_case name itself (line of use_case keyword).
 			if ucLine == cursorLine {
-				name := ""
-				if titleTok := uc.Title(); titleTok != nil {
-					name = titleTok.Text()
-				}
+				name := uc.Name() // unquoted title text (Bug 8a fix)
 				return &protocol.Hover{
 					Contents: protocol.MarkupContent{
 						Kind:  protocol.PlainText,
@@ -1943,11 +1947,9 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			if idx < 0 {
 				continue
 			}
+			// tok.Text() is the exact raw source text; for strings it already
+			// includes both quotes (Bug 8a fix), so no length adjustment needed.
 			length := uint32(len(tok.Text()))
-			if tok.Kind() == syntax.SyntaxKindString {
-				// Text() stores content without quotes; add 2 to cover "content".
-				length += 2
-			}
 			pos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
 			tokens = append(tokens, semanticToken{
 				line:      pos.Line,

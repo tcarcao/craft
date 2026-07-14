@@ -18,6 +18,7 @@
               "type": "sync_action",
               "context": "AccountService",
               "targetContext": "BalanceService",
+              "ref": "BalanceService",
               "connector": "to",
               "phrase": "get current balance",
               "description": "AccountService asks BalanceService to get current balance",

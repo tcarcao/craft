@@ -73,6 +73,8 @@ func (p *Parser) parseFile() (*green.GreenNode, []craft.Diagnostic) {
 			diags = append(diags, p.parseArchBlock()...)
 		case lexer.TokenKwExposure:
 			diags = append(diags, p.parseExposureBlock()...)
+		case lexer.TokenKwContextMap:
+			diags = append(diags, p.parseContextMapBlock()...)
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -596,6 +598,10 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 			p.consumeAs(SyntaxKindKwLanguage)
 		case "deployment":
 			p.consumeAs(SyntaxKindKwDeployment)
+		case "opslevel":
+			p.consumeAs(SyntaxKindKwOpsLevel)
+		case "repo":
+			p.consumeAs(SyntaxKindKwRepo)
 		default:
 			p.consumeAs(SyntaxKindIdent)
 		}
@@ -626,6 +632,14 @@ func (p *Parser) parseServiceBody() []craft.Diagnostic {
 		case "deployment":
 			dd := p.parseDeploymentSpec()
 			diags = append(diags, dd...)
+		case "opslevel":
+			if p.peek().Type == lexer.TokenIdent {
+				p.consumeAs(SyntaxKindIdent)
+			} else {
+				diags = append(diags, p.diagUnexpected(p.peek(), "opslevel identifier"))
+			}
+		case "repo":
+			p.parseRef()
 		default:
 			// Unknown field — emit diagnostic and skip to next line.
 			diags = append(diags, p.diagUnexpected(tok, "field name (contexts, data-stores, language) or `}`"))
@@ -852,12 +866,12 @@ func (p *Parser) parseTrigger(whenLine int) []craft.Diagnostic {
 
 	if verb == "listens" {
 		p.consumeAs(SyntaxKindKwListens)
-		// domain_listen: when <domain> listens "<event>"
+		// domain_listen: when <domain> listens "<event>" | <ref>
 		eventTok := p.peek()
 		if eventTok.Type == lexer.TokenString {
 			p.consumeAs(SyntaxKindString)
 		} else if eventTok.Type == lexer.TokenIdent {
-			p.consumeAs(SyntaxKindIdent)
+			p.parseRef()
 		}
 		p.builder.FinishNode()
 		return diags
@@ -962,7 +976,9 @@ func (p *Parser) parseAction(counter *int) []craft.Diagnostic {
 // The `asks` keyword token has already been consumed by parseAction.
 func (p *Parser) parseAsksAction(line int) {
 	targetTok := p.peek()
-	if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
+	if targetTok.Type == lexer.TokenIdent {
+		p.parseRef()
+	} else if isAnyKeywordAsIdent(targetTok.Type) {
 		p.consumeAs(SyntaxKindIdent)
 	}
 
@@ -985,7 +1001,9 @@ func (p *Parser) parseNotifiesAction() []craft.Diagnostic {
 	eventTok := p.peek()
 	if eventTok.Type == lexer.TokenString {
 		p.consumeAs(SyntaxKindString)
-	} else if eventTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(eventTok.Type) {
+	} else if eventTok.Type == lexer.TokenIdent {
+		p.parseRef()
+	} else if isAnyKeywordAsIdent(eventTok.Type) {
 		p.consumeAs(SyntaxKindIdent)
 	} else if eventTok.Type == lexer.TokenError {
 		diags = append(diags, p.diagUnterminatedString(eventTok))
@@ -1015,6 +1033,14 @@ func (p *Parser) parseReturnsAction(line int) {
 }
 
 // collectPhrase emits phrase tokens on actionLine into the current builder scope.
+//
+// The prose tail is display-only free text (see ActionDecl.PhraseText), so every
+// same-line token is swept in verbatim — including TokenError punctuation such as
+// `!`, `&`, `*`, `/` — until a line change, `}`, EOF, or a comment token ends it.
+// (peek() already skips comment tokens transparently when scanning for the next
+// token, so a trailing `//...` comment naturally falls on a later line or is
+// filtered before the line check below; the explicit comment case exists for
+// clarity/defensiveness even though peek() means it is not normally reachable.)
 func (p *Parser) collectPhrase(actionLine int) {
 	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 		return
@@ -1022,36 +1048,25 @@ func (p *Parser) collectPhrase(actionLine int) {
 	if p.peek().Line != actionLine {
 		return
 	}
-	startLine := actionLine
 	for {
 		tok := p.peek()
-		switch tok.Type {
-		case lexer.TokenRBrace, lexer.TokenEOF:
+		if tok.Type == lexer.TokenRBrace || tok.Type == lexer.TokenEOF {
 			return
-		case lexer.TokenIdent:
-			if tok.Line != startLine {
-				return
-			}
-			p.consumeAs(SyntaxKindIdent)
+		}
+		if tok.Line != actionLine {
+			return
+		}
+		switch tok.Type {
+		case lexer.TokenLineComment, lexer.TokenDocComment, lexer.TokenBlockComment:
+			return // trailing comment ends prose; trivia attaches normally
 		case lexer.TokenString:
-			if tok.Line != startLine {
-				return
-			}
 			p.consumeAs(SyntaxKindString)
 		case lexer.TokenNumber:
-			if tok.Line != startLine {
-				return
-			}
 			p.consumeAs(SyntaxKindNumber)
 		default:
-			if isAnyKeywordAsIdent(tok.Type) {
-				if tok.Line != startLine {
-					return
-				}
-				p.consumeAs(SyntaxKindIdent)
-				continue
-			}
-			return
+			// Idents, keywords-as-idents, and TokenError punctuation (! & * / # …)
+			// are all swept into prose as raw tokens.
+			p.consumeAs(SyntaxKindIdent)
 		}
 	}
 }
@@ -1370,7 +1385,8 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 		lexer.TokenKwActor, lexer.TokenKwActors,
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
 		lexer.TokenKwService, lexer.TokenKwServices,
-		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure:
+		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure,
+		lexer.TokenKwContextMap:
 		return true
 	}
 	return false
@@ -1409,7 +1425,21 @@ func (p *Parser) updatePrevEnd(tok lexer.Token) {
 		return
 	}
 	start := p.li.Offset(tok.Line, tok.Column)
-	p.prevEnd = start + green.TextSize(len(tok.Value))
+	p.prevEnd = start + green.TextSize(len(tokenText(tok)))
+}
+
+// tokenText returns the exact raw source text for tok, for green-tree Text
+// emission. For most token types this is tok.Value. TokenString is the
+// exception: Value is the unescaped string CONTENT without surrounding
+// quotes (kept as-is for content consumers — see EventValue()/Title()/etc.),
+// while Raw carries the verbatim source slice including both quotes and any
+// escape sequences. Using Value there would silently drop the quotes and
+// corrupt the round-trip (Bug 1); Raw is what makes the green tree lossless.
+func tokenText(tok lexer.Token) string {
+	if tok.Type == lexer.TokenString && tok.Raw != "" {
+		return tok.Raw
+	}
+	return tok.Value
 }
 
 // attachTrivia emits any line/block comment tokens at p.pos into the current
@@ -1449,7 +1479,7 @@ func (p *Parser) consume() lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value)
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tokenText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -1464,7 +1494,7 @@ func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(kind, tok.Value)
+	p.builder.Token(kind, tokenText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -1515,6 +1545,7 @@ var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
 	lexer.TokenKwUseCase:    SyntaxKindKwUseCase,
 	lexer.TokenKwArch:       SyntaxKindKwArch,
 	lexer.TokenKwExposure:   SyntaxKindKwExposure,
+	lexer.TokenKwContextMap: SyntaxKindKwContextMap,
 	lexer.TokenIdent:        SyntaxKindIdent,
 	lexer.TokenString:       SyntaxKindString,
 	lexer.TokenNumber:       SyntaxKindNumber,
@@ -1707,13 +1738,266 @@ func (p *Parser) parseExposureBlock() []craft.Diagnostic {
 	return diags
 }
 
+// parseContextMapBlock parses: context_map { edge_stmt* }
+// edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword
+// (realized_by/also_realizes/same_as/contrasts/distinct_from) matched by
+// value, like asks/notifies elsewhere (Q3). Endpoint kind validation
+// (bc -> service, etc.) is sema's job (Task 7), not the parser's.
+func (p *Parser) parseContextMapBlock() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindContextMapDecl)
+	var diags []craft.Diagnostic
+
+	// Attach leading trivia before `context_map`.
+	p.attachTrivia()
+	kwTok := p.peek()
+	p.consumeAs(SyntaxKindKwContextMap)
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindLBrace)
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Attach trivia inside block (also swallows insignificant whitespace/newlines).
+		p.attachTrivia()
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+		posBefore := p.pos
+		diags = append(diags, p.parseEdgeStmt()...)
+		// Belt-and-suspenders forward-progress guard: parseEdgeStmt (via
+		// parseEdgeEndpoint) is written to always consume at least one
+		// token, but if that invariant is ever broken by a future edit,
+		// force one token of progress here rather than spinning forever on
+		// the same position.
+		if p.pos == posBefore {
+			diags = append(diags, p.diagUnexpected(p.peek(), "a node reference, edge keyword, or `}`"))
+			p.consumeAs(SyntaxKindError)
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed context_map block (missing `}`)",
+			Severity: craft.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseEdgeStmt parses a single `ref EDGE_KW ref` edge statement inside a
+// context_map block, emitting it as a SyntaxKindEdgeStmt node wrapping two
+// SyntaxKindRef children (left/right endpoints) and one SyntaxKindEdgeKw
+// token (the verb).
+func (p *Parser) parseEdgeStmt() []craft.Diagnostic {
+	p.builder.StartNode(SyntaxKindEdgeStmt)
+	var diags []craft.Diagnostic
+
+	left := p.peek()
+	if left.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(left.Type) {
+		diags = append(diags, p.diagUnexpected(left, "a node reference (e.g. bc:re/subscriptions)"))
+		p.consumeAs(SyntaxKindError)
+		p.builder.FinishNode()
+		return diags
+	}
+	diags = append(diags, p.parseEdgeEndpoint()...) // left endpoint
+
+	verb := p.peek()
+	if verb.Type == lexer.TokenIdent && isEdgeKeyword(verb.Value) {
+		p.consumeAs(SyntaxKindEdgeKw)
+	} else {
+		diags = append(diags, p.diagUnexpected(verb, "an edge keyword (realized_by/also_realizes/same_as/contrasts/distinct_from)"))
+		p.builder.FinishNode()
+		return diags
+	}
+
+	right := p.peek()
+	if right.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(right.Type) {
+		diags = append(diags, p.diagUnexpected(right, "a node reference (e.g. service:subscriptions-api)"))
+		p.builder.FinishNode()
+		return diags
+	}
+	diags = append(diags, p.parseEdgeEndpoint()...) // right endpoint
+
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseEdgeEndpoint parses one context_map edge endpoint (the left or right
+// side of the edge verb). The caller has already gated entry to
+// TokenIdent||isAnyKeywordAsIdent.
+//
+// It deliberately does NOT call parseRef() unconditionally the way the
+// original Task 5 implementation did. parseRef()'s kind-prefix branch only
+// consumes a token when it is immediately followed by ':', and its
+// fallback continuation loop only recognises the TokenIdent/TokenNumber
+// token TYPES — not the distinct keyword token types that keyword-as-ident
+// words (e.g. "domain"/"service"/"bc"/"term") lex as. So calling parseRef
+// on a BARE keyword-as-ident endpoint with no following ':' made it consume
+// zero tokens; parseEdgeStmt then also made zero progress, and
+// parseContextMapBlock's loop called it again on the same position forever
+// — the Task 5 hang (`context_map { service realized_by service:x }`,
+// `context_map { term:x contrasts domain }`).
+//
+// The fix mirrors the established idiom at the other parseRef call sites
+// (parseAsksAction, parseNotifiesAction, parseTrigger's listens branch):
+// only call parseRef() when the token is TokenIdent, or when a
+// keyword-as-ident is immediately followed by ':' (parseRef's own
+// kind-prefix branch handles that shape correctly, e.g. "service:x"). A
+// bare keyword-as-ident with no colon is instead consumed directly here via
+// consumeAs, guaranteeing forward progress without ever entering parseRef's
+// zero-progress hole. This local fix — rather than patching the shared
+// parseRef — keeps the other 3 parseRef call sites (which already silently
+// accept a bare keyword-as-ident target/subject with no diagnostic, by
+// design) completely unchanged.
+//
+// It additionally flags one specific shape as a diagnostic: a bare
+// occurrence of one of the reserved node-slug kind words (domain/bc/term/
+// service — see isSlugKind) with no following ':' is almost certainly a
+// missing "`:name`" typo rather than an intentional unqualified reference,
+// so it is reported here. This is a pure ref-shape/syntax check — it does
+// NOT validate which endpoint kinds may legally connect to which (that
+// endpoint-kind pairing validation is sema's job, Task 7, and is
+// deliberately out of scope here).
+func (p *Parser) parseEdgeEndpoint() []craft.Diagnostic {
+	var diags []craft.Diagnostic
+	tok := p.peek()
+	if tok.Type == lexer.TokenIdent {
+		p.parseRef()
+		return diags
+	}
+	// keyword-as-ident.
+	hasColon := p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == tok.Line && adjacentTokens(tok, p.peekAt(1))
+	if hasColon {
+		p.parseRef() // e.g. "service:subscriptions-api" — parseRef's kind-prefix branch handles this shape.
+		return diags
+	}
+	if isSlugKind(tok.Value) {
+		diags = append(diags, craft.Diagnostic{
+			Code:     "craft/syntax/dangling-slug-kind",
+			Message:  fmt.Sprintf("%q is a reserved node-slug kind word and must be followed by ':<name>' (e.g. %s:name); used bare it is not a valid reference", tok.Value, tok.Value),
+			Severity: craft.SeverityError,
+			Range:    tokenRange(tok),
+		})
+	}
+	p.consumeAs(SyntaxKindIdent) // guarantee forward progress either way
+	return diags
+}
+
+// isEdgeKeyword reports whether s is a recognised context_map edge verb.
+func isEdgeKeyword(s string) bool {
+	switch s {
+	case "realized_by", "also_realizes", "same_as", "contrasts", "distinct_from":
+		return true
+	}
+	return false
+}
+
+// parseRef consumes ONE reference at the current position and emits it as a
+// single SyntaxKindRef node, wrapping every token that belongs to it. A ref
+// is a contiguous same-line run of ident/number/`:`/`/` tokens, in one of two
+// shapes:
+//
+//   - event ref (dotted, no `kind:` prefix): vas.VasApplied
+//   - node slug: [kind:][ns/]name, e.g. bc:re/subscriptions
+//
+// Returns the leading kind word ("domain"/"bc"/"term"/"service") if a
+// recognised `kind:` prefix was present, else "". It does not validate the
+// kind's legitimacy beyond capturing it — sema (a later task) does that.
+//
+// parseRef is a standalone helper: as of Task 3 it is not called from any
+// production parse path. Tasks 4-6 wire it into notifies/listens/asks,
+// context_map edges, and repo: anchors.
+func (p *Parser) parseRef() string {
+	p.builder.StartNode(SyntaxKindRef)
+	line := p.peek().Line
+	kind := ""
+	first := p.peek()
+	var prev lexer.Token
+	havePrev := false
+	// leading kind word + ':'. "domain"/"service" lex as hard keywords, not
+	// TokenIdent, so accept the same keyword-as-ident set the rest of the
+	// parser uses (isAnyKeywordAsIdent) in addition to plain idents.
+	if (first.Type == lexer.TokenIdent || isAnyKeywordAsIdent(first.Type)) &&
+		p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == line &&
+		adjacentTokens(first, p.peekAt(1)) {
+		if isSlugKind(first.Value) {
+			kind = first.Value
+		}
+		p.consumeAs(SyntaxKindIdent) // kind word
+		colonTok := p.peek()
+		p.consumeAs(SyntaxKindColon) // ':'
+		prev = colonTok
+		havePrev = true
+	}
+	// Bug fix (Task 4): the original Task 3 implementation only checked
+	// p.peek().Line == line here, with no adjacency check between
+	// consecutive tokens. That over-consumes past a ref's true boundary when
+	// it is immediately followed by whitespace-separated prose on the same
+	// line — e.g. `bc:re/billing to record outcome` (an asks target followed
+	// by connector + phrase) would swallow "to", "record", and "outcome" as
+	// if they were more ref segments, since they are also bare TokenIdent
+	// tokens on the same line. A ref must be a CONTIGUOUS run with no gaps.
+	for !p.atEOF() && p.peek().Line == line {
+		t := p.peek()
+		if t.Type != lexer.TokenIdent && t.Type != lexer.TokenNumber &&
+			!(t.Type == lexer.TokenError && t.Value == "/") {
+			break
+		}
+		if havePrev && !adjacentTokens(prev, t) {
+			break
+		}
+		p.consumeAs(SyntaxKindIdent)
+		prev = t
+		havePrev = true
+	}
+	p.builder.FinishNode()
+	return kind
+}
+
+// adjacentTokens reports whether b begins immediately where a ends, with no
+// intervening whitespace, on the same source line. parseRef uses this to
+// keep a reference to a single contiguous token run (e.g. "bc:re/billing")
+// instead of swallowing separate whitespace-delimited words that happen to
+// also lex as bare idents (e.g. a trailing "to record outcome" phrase).
+func adjacentTokens(a, b lexer.Token) bool {
+	return a.Line == b.Line && a.Column+len([]rune(a.Value)) == b.Column
+}
+
+// isSlugKind reports whether s is a recognised node-slug kind word.
+func isSlugKind(s string) bool {
+	switch s {
+	case "domain", "bc", "term", "service":
+		return true
+	}
+	return false
+}
+
 // parseIdentList parses a comma-separated ident list, emitting tokens into the
-// current builder scope.
+// current builder scope. A TokenString entry (a quoted name, e.g.
+// `contexts: "Some Name"`) is emitted as SyntaxKindString, not
+// SyntaxKindIdent — consumeAs always stores the raw source text regardless
+// of the kind passed in (tokenText returns tok.Raw for TokenString either
+// way, so this does not affect Token.Value/Raw or round-trip output), but
+// content-read call sites (stringAwareText and friends) dispatch on Kind()
+// to decide whether to unquote. Mislabeling a quoted entry as Ident would
+// make them silently skip unquoting and leak raw quotes into content.
 func (p *Parser) parseIdentList() {
 	for {
 		tok := p.peek()
 		switch {
-		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
+		case tok.Type == lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case tok.Type == lexer.TokenIdent:
 			p.consumeAs(SyntaxKindIdent)
 		case isKeywordUsedAsIdent(tok.Type):
 			p.consumeAs(SyntaxKindIdent)
@@ -1731,7 +2015,9 @@ func (p *Parser) parseIdentList() {
 // parseRefList parses a comma-separated ident list, wrapping each name in a
 // SyntaxKindRef node so that reference sites are structurally distinct from
 // declaration sites. The flat Tokens() result is unchanged — existing AST
-// scanning code remains correct.
+// scanning code remains correct. As in parseIdentList above, a TokenString
+// entry is emitted as SyntaxKindString (not SyntaxKindIdent) so Kind()-based
+// content dispatch (stringAwareText) can tell it apart from a bare ident.
 func (p *Parser) parseRefList() {
 	for {
 		tok := p.peek()
@@ -1741,7 +2027,11 @@ func (p *Parser) parseRefList() {
 			return
 		}
 		p.builder.StartNode(SyntaxKindRef)
-		p.consumeAs(SyntaxKindIdent)
+		if tok.Type == lexer.TokenString {
+			p.consumeAs(SyntaxKindString)
+		} else {
+			p.consumeAs(SyntaxKindIdent)
+		}
 		p.builder.FinishNode()
 		if p.peek().Type == lexer.TokenComma {
 			p.consumeAs(SyntaxKindComma)
@@ -1816,4 +2106,3 @@ func (p *Parser) parseDeploymentSpec() []craft.Diagnostic {
 	p.consumeAs(SyntaxKindRParen)
 	return diags
 }
-

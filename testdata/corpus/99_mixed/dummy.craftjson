@@ -18,6 +18,7 @@
               "type": "sync_action",
               "context": "VASScheduling",
               "targetContext": "Wallet",
+              "ref": "Wallet",
               "connector": "to",
               "phrase": "cancel the VAS reservation",
               "description": "VASScheduling asks Wallet to cancel the VAS reservation",

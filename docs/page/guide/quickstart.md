@@ -71,9 +71,9 @@ use_case "User Registration" {
     Authentication validates email format
     Authentication asks Database to check email uniqueness
     Profile creates user profile
-    Authentication notifies "User Registered"
+    Authentication notifies auth.UserRegistered
 
-  when Profile listens "User Registered"
+  when Profile listens auth.UserRegistered
     Profile asks EmailService to send welcome email
 }
 ```
@@ -83,10 +83,14 @@ use_case "User Registration" {
    - Authentication validates the email format
    - Authentication checks with the database if email is unique
    - Profile creates a user profile
-   - Authentication publishes a "User Registered" event
+   - Authentication publishes an `auth.UserRegistered` event
 
-2. When Profile hears the "User Registered" event:
+2. When Profile hears the `auth.UserRegistered` event:
    - Profile asks EmailService to send a welcome email
+
+::: tip
+`auth.UserRegistered` is a **typed event ref** — a dotted qualified id, not a quoted string. The old quoted form (`notifies "User Registered"`) still parses but is deprecated; typed refs are the recommended syntax.
+:::
 
 ## Complete Example
 
@@ -126,9 +130,9 @@ use_case "User Registration" {
     Authentication validates email format
     Authentication asks Database to check email uniqueness
     Profile creates user profile
-    Authentication notifies "User Registered"
+    Authentication notifies auth.UserRegistered
 
-  when Profile listens "User Registered"
+  when Profile listens auth.UserRegistered
     Profile asks EmailService to send welcome email
 }
 ```
@@ -154,15 +158,19 @@ Your diagram will show:
 ### Triggers
 Use cases start with triggers:
 - `when Customer does something` - External trigger from an actor
-- `when "Event Name"` - Event trigger
-- `when Domain listens "Event"` - Domain listening to an event
+- `when module.EventName` - Event trigger (typed event ref, a dotted qualified id)
+- `when Domain listens module.EventName` - Domain listening to an event
 
 ### Actions
 Four types of actions:
-1. **Sync** - `Domain asks Domain to do something`
-2. **Async** - `Domain notifies "Event Name"`
+1. **Sync** - `Domain asks Domain to do something` (target can also be a node slug like `bc:re/billing`)
+2. **Async** - `Domain notifies module.EventName`
 3. **Internal** - `Domain does something`
 4. **Return** - `Domain returns to Domain the result`
+
+::: tip
+The old quoted-string form (`when "Event Name"`, `notifies "Event Name"`) still parses but is deprecated in favor of typed event refs.
+:::
 
 ## Next Steps
 
@@ -186,12 +194,12 @@ use_case "Password Reset" {
     Authentication validates email exists
     Authentication generates reset token
     Authentication asks EmailService to send reset link
-    Authentication notifies "Reset Token Generated"
+    Authentication notifies auth.ResetTokenGenerated
 
   when Customer submits new password
     Authentication validates reset token
     Authentication updates password
-    Authentication notifies "Password Changed"
+    Authentication notifies auth.PasswordChanged
 }
 ```
 

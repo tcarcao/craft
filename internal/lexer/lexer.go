@@ -52,10 +52,10 @@ const (
 
 	// S7: arch keyword + flow/modifier punctuation.
 	// presentation/gateway remain plain identifiers per Q3.
-	TokenKwArch    // arch
-	TokenGT        // > (component flow operator)
-	TokenLBracket  // [ (component modifier open)
-	TokenRBracket  // ] (component modifier close)
+	TokenKwArch   // arch
+	TokenGT       // > (component flow operator)
+	TokenLBracket // [ (component modifier open)
+	TokenRBracket // ] (component modifier close)
 
 	// S8: exposure keyword. Field keywords (to, through, contexts) are plain
 	// identifiers per Q3.
@@ -78,31 +78,45 @@ const (
 	// Top-level structural keywords
 	TokenKwImport // import
 
+	// context_map block keyword (Task 5). Edge keywords (realized_by,
+	// also_realizes, same_as, contrasts, distinct_from) remain plain
+	// identifiers, matched by value in the parser like asks/notifies (Q3).
+	TokenKwContextMap // context_map
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
 
 var keywords = map[string]TokenType{
-	"actor":    TokenKwActor,
-	"actors":   TokenKwActors,
-	"user":     TokenKwUser,
-	"system":   TokenKwSystem,
-	"service":  TokenKwService,
-	"domain":   TokenKwDomain,
-	"domains":  TokenKwDomains,
-	"services": TokenKwServices,
-	"use_case": TokenKwUseCase,
-	"arch":     TokenKwArch,
-	"exposure": TokenKwExposure,
-	"import":   TokenKwImport,
+	"actor":       TokenKwActor,
+	"actors":      TokenKwActors,
+	"user":        TokenKwUser,
+	"system":      TokenKwSystem,
+	"service":     TokenKwService,
+	"domain":      TokenKwDomain,
+	"domains":     TokenKwDomains,
+	"services":    TokenKwServices,
+	"use_case":    TokenKwUseCase,
+	"arch":        TokenKwArch,
+	"exposure":    TokenKwExposure,
+	"import":      TokenKwImport,
+	"context_map": TokenKwContextMap,
 }
 
 // Token is a scanned unit from the source.
 type Token struct {
-	Type    TokenType
-	Value   string
-	Line    int // 1-based
-	Column  int // 1-based (byte offset within the line)
+	Type  TokenType
+	Value string
+	// Raw carries the exact raw source text for the token, when it differs
+	// from Value. Only populated for TokenString: Value is the unescaped
+	// string CONTENT without the surrounding quotes (kept for content
+	// consumers), while Raw is the verbatim source slice including both
+	// quotes and any escape sequences as written — used to build a
+	// byte-for-byte lossless green tree. Empty for token types where Value
+	// already equals the raw source text.
+	Raw    string
+	Line   int // 1-based
+	Column int // 1-based (byte offset within the line)
 }
 
 func (t Token) String() string {
@@ -111,10 +125,11 @@ func (t Token) String() string {
 
 // Lexer scans a string of Craft DSL source.
 type Lexer struct {
-	src    []rune
-	pos    int // current position in src
-	line   int // current 1-based line
-	col    int // current 1-based column
+	src      []rune
+	pos      int  // current position in src
+	line     int  // current 1-based line
+	col      int  // current 1-based column
+	prevRune rune // rune just consumed by advance(); 0 at start of input
 }
 
 // New creates a Lexer for the given source text.
@@ -145,12 +160,21 @@ func (l *Lexer) Next() Token {
 
 	ch := l.src[l.pos]
 
+	// A comment may only begin when the '/' is at the start of the input or
+	// immediately preceded by whitespace. This keeps slashes inside prose
+	// (URLs like http://api, ratios like 50/50) from being mis-lexed as
+	// comments — a non-whitespace-preceded '/' falls through to the default
+	// case below and is scanned as TokenError, which the parser sweeps into
+	// prose text.
+	precededByWS := l.pos == 0 ||
+		l.prevRune == ' ' || l.prevRune == '\t' || l.prevRune == '\n' || l.prevRune == '\r'
+
 	switch {
-	case ch == '/' && l.peek(1) == '/' && l.peek(2) == '/':
+	case precededByWS && ch == '/' && l.peek(1) == '/' && l.peek(2) == '/':
 		return l.scanDocComment()
-	case ch == '/' && l.peek(1) == '/':
+	case precededByWS && ch == '/' && l.peek(1) == '/':
 		return l.scanLineComment()
-	case ch == '/' && l.peek(1) == '*':
+	case precededByWS && ch == '/' && l.peek(1) == '*':
 		return l.scanBlockComment()
 	case ch == '{':
 		return l.consume(TokenLBrace)
@@ -255,7 +279,8 @@ func (l *Lexer) scanBlockComment() Token {
 func (l *Lexer) scanString() Token {
 	startLine := l.line
 	startCol := l.col
-	l.advance() // consume opening "
+	rawStart := l.pos // position of the opening `"`, for the Raw source slice
+	l.advance()       // consume opening "
 	var val []rune
 	closed := false
 	for l.pos < len(l.src) {
@@ -304,7 +329,7 @@ func (l *Lexer) scanString() Token {
 		// Callers that compute a Range must add +1 for the opening `"`.
 		return Token{Type: TokenError, Value: string(val), Line: startLine, Column: startCol}
 	}
-	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol}
+	return Token{Type: TokenString, Value: string(val), Raw: string(l.src[rawStart:l.pos]), Line: startLine, Column: startCol}
 }
 
 func (l *Lexer) scanIdent() Token {
@@ -368,13 +393,15 @@ func (l *Lexer) token(tt TokenType, val string) Token {
 
 func (l *Lexer) advance() {
 	if l.pos < len(l.src) {
-		if l.src[l.pos] == '\n' {
+		ch := l.src[l.pos]
+		if ch == '\n' {
 			l.line++
 			l.col = 1
 		} else {
 			l.col++
 		}
 		l.pos++
+		l.prevRune = ch
 	}
 }
 

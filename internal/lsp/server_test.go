@@ -183,7 +183,6 @@ func isClosedPipe(err error) bool {
 	return strings.Contains(s, "closed") || strings.Contains(s, "EOF") || strings.Contains(s, "broken pipe")
 }
 
-
 func TestSetTrace_LogTrace(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
@@ -522,6 +521,88 @@ func TestInlayHints_ServiceContextResolvesToDomain(t *testing.T) {
 	if err := json.Unmarshal(resp.Result, &hints); err != nil {
 		t.Fatalf("unmarshal inlayHint result: %v", err)
 	}
+	if len(hints) != 2 {
+		t.Fatalf("expected 2 inlay hints (Login→Auth, Register→Auth), got %d: %v", len(hints), hints)
+	}
+	for _, h := range hints {
+		label, _ := h["label"].(string)
+		if label != " ← Auth" {
+			t.Errorf("expected label \" ← Auth\", got %q", label)
+		}
+	}
+
+	cancel()
+}
+
+// TestInlayHints_QuotedServiceContextResolvesToDomain covers the task-8a
+// ripple-audit Critical 2 fix: ServiceDecl.ContextTokens() returns raw
+// tokens that may be SyntaxKindString (quotes included, per the Bug 8a
+// round-trip fix). handleInlayHint must read context names via
+// syntax.StringAwareText, not tok.Text(), or a quoted `contexts: "Login"`
+// entry silently fails to resolve against the (unquoted) resolution map and
+// produces no inlay hint at all.
+func TestInlayHints_QuotedServiceContextResolvesToDomain(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	// "Login" is quoted here; "Register" stays a bare ident, matching the
+	// mixed-form contexts list ContextTokens()/Contexts() must both handle.
+	craftSrc := "domain Auth {\n  Login\n  Register\n}\nservices {\n  UserService {\n    contexts: \"Login\", Register\n    language: golang\n  }\n}\n"
+	writeMsg(testOut, lspMsg{ //nolint:errcheck
+		JSONRPC: "2.0",
+		Method:  "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///test_quoted_ctx.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(craftSrc),
+		)),
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	id = 2
+	writeMsg(testOut, lspMsg{ //nolint:errcheck
+		JSONRPC: "2.0", ID: &id,
+		Method: "textDocument/inlayHint",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///test_quoted_ctx.craft"},"range":{"start":{"line":0,"character":0},"end":{"line":100,"character":0}}}`),
+	})
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading message: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == id {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for inlayHint response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("inlayHint returned error: %s", resp.Error)
+	}
+
+	var hints []map[string]interface{}
+	if err := json.Unmarshal(resp.Result, &hints); err != nil {
+		t.Fatalf("unmarshal inlayHint result: %v", err)
+	}
+	// Both the quoted "Login" and bare Register context must resolve to Auth.
 	if len(hints) != 2 {
 		t.Fatalf("expected 2 inlay hints (Login→Auth, Register→Auth), got %d: %v", len(hints), hints)
 	}
@@ -1197,8 +1278,8 @@ func TestSemanticTokens_ColumnTracking(t *testing.T) {
 	//   Payments  line=6 col=4  len=8  type=3(craft-context-name)     mod=1
 	//   MyService line=8 col=8  len=9  type=4(craft-service-name)     mod=1
 	wantTokens := []struct {
-		name                              string
-		line, col, length, ttype, mods   uint32
+		name                           string
+		line, col, length, ttype, mods uint32
 	}{
 		{"Alice", 1, 9, 5, 0, 1},
 		{"Bob", 2, 11, 3, 0, 1},
@@ -1471,7 +1552,7 @@ func TestSemanticTokens_TargetContext(t *testing.T) {
 
 	id2 := 99
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-	readMsg(br)                                                              //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
@@ -1603,7 +1684,7 @@ func TestSemanticTokens_StringTypes(t *testing.T) {
 
 	id2 := 99
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-	readMsg(br)                                                              //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
@@ -1737,7 +1818,7 @@ func TestSemanticTokens_ExposureAndArch(t *testing.T) {
 
 	id2 := 99
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-	readMsg(br)                                                              //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
@@ -1756,7 +1837,9 @@ func TestSemanticTokens_ServiceBody(t *testing.T) {
 	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := readMsg(br); err != nil { t.Fatal(err) }
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
 	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
@@ -1786,13 +1869,24 @@ func TestSemanticTokens_ServiceBody(t *testing.T) {
 	deadline := time.Now().Add(4 * time.Second)
 	for time.Now().Before(deadline) {
 		msg, err := readMsg(br)
-		if err != nil { t.Fatalf("reading: %v", err) }
-		if msg.ID != nil && *msg.ID == tokID { resp = msg; break }
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
 	}
-	if resp.ID == nil { t.Fatal("timed out") }
+	if resp.ID == nil {
+		t.Fatal("timed out")
+	}
 
-	var result struct{ Data []uint32 `json:"data"` }
-	if err := json.Unmarshal(resp.Result, &result); err != nil { t.Fatal(err) }
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
 
 	type absToken struct{ line, startChar, length, tokenType, modifiers uint32 }
 	byPos := make(map[[2]uint32]absToken)
@@ -1800,7 +1894,11 @@ func TestSemanticTokens_ServiceBody(t *testing.T) {
 	for i := 0; i+4 < len(result.Data); i += 5 {
 		dl, dc, ln, tt, mod := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3], result.Data[i+4]
 		curLine += dl
-		if dl > 0 { curChar = dc } else { curChar += dc }
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
 		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt, mod}
 	}
 
@@ -1882,7 +1980,7 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 			id := 1
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 				Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-			readMsg(br) //nolint:errcheck
+			readMsg(br)                                                                                     //nolint:errcheck
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 			const uri = "file:///def_colaware.craft"
@@ -1944,7 +2042,7 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 
 			id2 := 99
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-			readMsg(br)                                                              //nolint:errcheck
+			readMsg(br)                                                             //nolint:errcheck
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 		})
 	}
@@ -1977,7 +2075,7 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const uri = "file:///bc_own_line.craft"
@@ -2042,7 +2140,7 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 
 	id2 := 99
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-	readMsg(br)                                                              //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
@@ -2122,7 +2220,9 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 		t.Fatal("timed out")
 	}
 
-	var result struct{ Data []uint32 `json:"data"` }
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatal(err)
 	}
@@ -2238,7 +2338,9 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 			t.Fatal("timed out waiting for sync_action token response")
 		}
 
-		var result2 struct{ Data []uint32 `json:"data"` }
+		var result2 struct {
+			Data []uint32 `json:"data"`
+		}
 		if err := json.Unmarshal(resp2.Result, &result2); err != nil {
 			t.Fatal(err)
 		}
@@ -2692,7 +2794,7 @@ func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
 			id := 1
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 				Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-			readMsg(br) //nolint:errcheck
+			readMsg(br)                                                                                     //nolint:errcheck
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 			const uri = "file:///ctx_tokoffset.craft"
@@ -2751,10 +2853,106 @@ func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
 
 			id2 := 99
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-			readMsg(br)                                                              //nolint:errcheck
+			readMsg(br)                                                             //nolint:errcheck
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 		})
 	}
+}
+
+// TestDefinition_ServiceContext_QuotedName is part of the task-8a ripple-audit
+// coverage: ServiceDecl.ContextTokens() returns raw tokens that may be
+// SyntaxKindString. Go-to-definition must use the token's raw span width
+// (quotes included) for the cursor hit-test, since that's what's actually on
+// screen — not the unquoted ctxName's length, which is too short. Before the
+// fix, a cursor over the last character of a quoted `contexts: "Login"` entry
+// (just before the closing quote) fell outside the (too-narrow) hit-test
+// window and go-to-definition silently failed.
+func TestDefinition_ServiceContext_QuotedName(t *testing.T) {
+	// L0: domain Login {
+	// L1:   Login
+	// L2: }
+	// L3: services {
+	// L4:   UserSvc {
+	// L5:     contexts: "Login"
+	// L6:   }
+	// L7: }
+	const craftSrc = "domain Login {\n  Login\n}\nservices {\n  UserSvc {\n    contexts: \"Login\"\n  }\n}"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///ctx_quoted.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Cursor over the 'n' of "Login" on L5 (0-based line 5, char 19) — the
+	// last character of the quoted name, just before the closing quote.
+	id++
+	defID := id
+	defParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 5, "character": 19},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &defID, Method: "textDocument/definition", Params: defParams}) //nolint:errcheck
+
+	var defResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == defID {
+			defResp = msg
+			break
+		}
+	}
+	if defResp.ID == nil {
+		t.Fatal("timed out waiting for definition response")
+	}
+
+	var locs []struct {
+		Range struct {
+			Start struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"start"`
+		} `json:"range"`
+	}
+	if err := json.Unmarshal(defResp.Result, &locs); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(locs) == 0 {
+		t.Fatal("expected a definition location for quoted contexts: \"Login\", got none")
+	}
+	// domain Login is declared at line 0, char 7 (0-based).
+	if locs[0].Range.Start.Line != 0 {
+		t.Errorf("line: got %d want 0", locs[0].Range.Start.Line)
+	}
+	if locs[0].Range.Start.Character != 7 {
+		t.Errorf("char: got %d want 7", locs[0].Range.Start.Character)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
 func TestRename_ActorName(t *testing.T) {
@@ -2776,7 +2974,7 @@ func TestRename_ActorName(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const uri = "file:///rename_actor.craft"
@@ -2856,7 +3054,7 @@ func TestRename_ActorName(t *testing.T) {
 
 	id2 := 99
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-	readMsg(br)                                                              //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
@@ -2897,7 +3095,7 @@ func TestDefinition_ExposureToTarget(t *testing.T) {
 			id := 1
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize",
 				Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)}) //nolint:errcheck
-			readMsg(br)                                                                          //nolint:errcheck
+			readMsg(br)                                                                                     //nolint:errcheck
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 			const uri = "file:///exposure_def.craft"
@@ -2955,10 +3153,106 @@ func TestDefinition_ExposureToTarget(t *testing.T) {
 
 			id2 := 99
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-			readMsg(br)                                                              //nolint:errcheck
+			readMsg(br)                                                             //nolint:errcheck
 			writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 		})
 	}
+}
+
+// TestDefinition_ExposureToTarget_QuotedName is part of the task-8a
+// ripple-audit coverage: ExposureDecl.ToTokens() returns raw tokens that may
+// be SyntaxKindString. Go-to-definition must (a) use the token's raw span
+// width (quotes included) for the cursor hit-test, since that's what's
+// actually on screen, but (b) look the target up in the workspace symbol
+// table via its unquoted content, since actor/service names in that table
+// are never quoted. Before the fix, a quoted `to: "Alice"` never resolved
+// because the raw `"Alice"` (with quotes) was used as the map key.
+func TestDefinition_ExposureToTarget_QuotedName(t *testing.T) {
+	// L0: actor user Alice
+	// L1: service PaySvc {
+	// L2:   language: golang
+	// L3: }
+	// L4: exposure default {
+	// L5:   to: "Alice"
+	// L6:   through: PaySvc
+	// L7: }
+	const craftSrc = "actor user Alice\nservice PaySvc {\n  language: golang\n}\nexposure default {\n  to: \"Alice\"\n  through: PaySvc\n}"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///exposure_def_quoted.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Cursor inside the quoted "Alice" token, line 5 char 8 (0-based) — lands
+	// on the 'l' of Alice, between the opening quote at char 6 and the name.
+	id++
+	defID := id
+	defParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 5, "character": 8},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &defID, Method: "textDocument/definition", Params: defParams}) //nolint:errcheck
+
+	var defResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == defID {
+			defResp = msg
+			break
+		}
+	}
+	if defResp.ID == nil {
+		t.Fatal("timed out")
+	}
+	var locs []struct {
+		Range struct {
+			Start struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"start"`
+		} `json:"range"`
+	}
+	if err := json.Unmarshal(defResp.Result, &locs); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(locs) == 0 {
+		t.Fatal("expected a definition location for quoted to: \"Alice\", got none")
+	}
+	// Actor Alice is declared at line 0, char 11 (0-based) — same position
+	// TestDefinition_ExposureToTarget expects for the unquoted form.
+	if locs[0].Range.Start.Line != 0 {
+		t.Errorf("line: got %d want 0", locs[0].Range.Start.Line)
+	}
+	if locs[0].Range.Start.Character != 11 {
+		t.Errorf("char: got %d want 11", locs[0].Range.Start.Character)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
 func TestIncrementalSync(t *testing.T) {
@@ -2977,7 +3271,7 @@ func TestIncrementalSync(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const uri = "file:///incremental.craft"
@@ -3040,7 +3334,7 @@ func TestIncrementalSync(t *testing.T) {
 
 	id2 := 99
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
-	readMsg(br)                                                              //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
@@ -3278,8 +3572,12 @@ func TestDocumentSymbol_RangeEndPositions(t *testing.T) {
 	var syms []struct {
 		Name  string `json:"name"`
 		Range struct {
-			Start struct{ Line int `json:"line"` } `json:"start"`
-			End   struct{ Line int `json:"line"` } `json:"end"`
+			Start struct {
+				Line int `json:"line"`
+			} `json:"start"`
+			End struct {
+				Line int `json:"line"`
+			} `json:"end"`
 		} `json:"range"`
 	}
 	if err := json.Unmarshal(resp.Result, &syms); err != nil {

@@ -1,9 +1,13 @@
 package syntax_test
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/pkg/craft"
 )
 
 func parseRoot(t *testing.T, src string) syntax.SyntaxNode {
@@ -321,8 +325,11 @@ func TestParseTree_ImportDecl(t *testing.T) {
 	if kwTok == nil || kwTok.Text() != "import" {
 		t.Errorf("missing import keyword token")
 	}
+	// pathTok.Text() is the raw source text and includes both quotes (Bug 8a
+	// fix): the green tree's Text is now byte-for-byte exact source, no
+	// longer the lexer's unescaped, quote-stripped Value.
 	pathTok := imports[0].ChildToken(syntax.SyntaxKindString)
-	if pathTok == nil || pathTok.Text() != "services/payments.craft" {
+	if pathTok == nil || pathTok.Text() != `"services/payments.craft"` {
 		t.Errorf("missing or wrong import path token, got %v", pathTok)
 	}
 }
@@ -384,5 +391,326 @@ func TestRecovery_NestedBraceInServiceField(t *testing.T) {
 	}
 	if len(diags) == 0 {
 		t.Error("want at least one diagnostic for bad_field, got none")
+	}
+}
+
+func TestProse_SpecialCharsUnquoted(t *testing.T) {
+	src := `use_case "x" {
+  when User taps Button
+    Auth asks Billing for 1! & 2! and/maybe *
+}`
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", diags)
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	uc := syntax.AsUseCaseDecl(ucNodes[0])
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	actions := scenarios[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	act := actions[0]
+	// Note: "for" is the sync_action connector word (see ConnectorValue()/
+	// isConnectorWord), which PhraseText() has always excluded — Description()
+	// re-adds it separately (see TestActionDecl_Description_ConnectorPreservation).
+	// So the phrase here is everything after "for": the special characters.
+	if got := act.PhraseText(); got != "1! & 2! and/maybe *" {
+		t.Fatalf("prose = %q, want %q", got, "1! & 2! and/maybe *")
+	}
+	if got := act.ConnectorValue(); got != "for" {
+		t.Fatalf("connector = %q, want %q", got, "for")
+	}
+}
+
+// TestProse_TrailingCommentAfterWhitespaceIsSeparated verifies that a
+// trailing "// TODO" preceded by whitespace is NOT swept into the action's
+// prose phrase (unlike bare TokenError punctuation, e.g. a lone '/' — see
+// TestProse_SpecialCharsUnquoted): collectPhrase stops at the comment token,
+// so the action's Description() reads "Auth checks x" and the comment
+// survives as trivia elsewhere in the tree.
+func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
+	src := `use_case "x" {
+  when User taps Button
+    Auth checks x  // TODO
+}`
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", diags)
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	uc := syntax.AsUseCaseDecl(ucNodes[0])
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	actions := scenarios[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	act := actions[0]
+	if got := act.PhraseText(); got != "x" {
+		t.Fatalf("phrase = %q, want %q (comment must not be swept into prose)", got, "x")
+	}
+	if got := act.Description(); got != "Auth checks x" {
+		t.Fatalf("description = %q, want %q", got, "Auth checks x")
+	}
+	// The "// TODO" comment must still appear as trivia somewhere in the tree.
+	hasComment := false
+	for _, tok := range root.AllTokens() {
+		if tok.Kind() == syntax.SyntaxKindLineComment && strings.Contains(tok.Text(), "TODO") {
+			hasComment = true
+			break
+		}
+	}
+	if !hasComment {
+		t.Error("expected trailing '// TODO' comment to be preserved as trivia in the tree")
+	}
+}
+
+// TestTypedRefs_NotifiesListensAsks is the Task 4 regression lock: it wires
+// parseRef (Task 3) into notifies/listens/asks-target object positions and
+// asserts a kind-prefixed slug (bc:re/billing) round-trips exactly through
+// TargetName() — NOT truncated to the kind word "bc", which is what a naive
+// ChildToken(SyntaxKindIdent)/Name() call on the ref node would yield.
+func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
+	src := `use_case "x" {
+  when Subscriptions listens vas.VasApplied
+    Fulfillment asks bc:re/billing to record outcome
+    Fulfillment notifies vas.VasFulfilled
+}`
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	uc := syntax.AsUseCaseDecl(ucNodes[0])
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	scenario := scenarios[0]
+
+	// listens trigger ref
+	trigger := scenario.Trigger()
+	if got := trigger.Kind(); got != "domain_listen" {
+		t.Fatalf("trigger kind = %q, want domain_listen", got)
+	}
+	if got := trigger.EventValue(); got != "vas.VasApplied" {
+		t.Errorf("listens ref = %q, want %q", got, "vas.VasApplied")
+	}
+
+	actions := scenario.Actions()
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	// asks target ref (kind-prefixed slug — the landmine case)
+	asks := actions[0]
+	if got := asks.Kind(); got != "sync_action" {
+		t.Fatalf("action[0] kind = %q, want sync_action", got)
+	}
+	if got := asks.TargetName(); got != "bc:re/billing" {
+		t.Errorf("asks target ref = %q, want %q (must NOT be truncated to the kind word \"bc\")", got, "bc:re/billing")
+	}
+	if got := asks.PhraseText(); got != "record outcome" {
+		t.Errorf("asks phrase = %q, want %q", got, "record outcome")
+	}
+
+	// notifies ref
+	notifies := actions[1]
+	if got := notifies.Kind(); got != "async_action" {
+		t.Fatalf("action[1] kind = %q, want async_action", got)
+	}
+	if got := notifies.EventValue(); got != "vas.VasFulfilled" {
+		t.Errorf("notifies ref = %q, want %q", got, "vas.VasFulfilled")
+	}
+}
+
+// TestContextMap_Edges is the Task 5 TDD lock for the new `context_map { }`
+// top-level block: edge_stmt := ref EDGE_KW ref, where EDGE_KW is a
+// contextual keyword (realized_by/also_realizes/same_as/contrasts/
+// distinct_from) matched by value, like asks/notifies. Asserts edges surface
+// through the pkg/craft projection layer with Left/Right taken from
+// RefText() — NOT Name(), which would truncate a kind-prefixed slug like
+// "bc:re/subscriptions" down to just "bc".
+func TestContextMap_Edges(t *testing.T) {
+	src := `context_map {
+  bc:re/subscriptions realized_by service:subscriptions-api
+  term:subscriptions/dunning contrasts term:billing/dunning
+}`
+	gn, li, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	// Round-trip: the block must reassemble to the exact source text.
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	root := syntax.Root(gn)
+	doc := syntax.ProjectFromTree(root, li)
+	edges := doc.ContextMap
+	if len(edges) != 2 {
+		t.Fatalf("want 2 edges, got %d: %+v", len(edges), edges)
+	}
+	if edges[0].Left != "bc:re/subscriptions" || edges[0].Verb != "realized_by" || edges[0].Right != "service:subscriptions-api" {
+		t.Fatalf("edge0 = %+v", edges[0])
+	}
+	if edges[1].Left != "term:subscriptions/dunning" || edges[1].Verb != "contrasts" || edges[1].Right != "term:billing/dunning" {
+		t.Fatalf("edge1 = %+v", edges[1])
+	}
+
+	// Also verify the raw syntax-tree shape directly (belt-and-braces on the
+	// AST layer, independent of the projection layer).
+	cmNodes := root.ChildNodes(syntax.SyntaxKindContextMapDecl)
+	if len(cmNodes) != 1 {
+		t.Fatalf("expected 1 context_map node, got %d", len(cmNodes))
+	}
+	file := syntax.AsFile(root)
+	cms := file.ContextMaps()
+	if len(cms) != 1 {
+		t.Fatalf("expected 1 ContextMapDecl view, got %d", len(cms))
+	}
+	astEdges := cms[0].Edges()
+	if len(astEdges) != 2 {
+		t.Fatalf("expected 2 EdgeDecl views, got %d", len(astEdges))
+	}
+	if got := astEdges[0].Left(); got != "bc:re/subscriptions" {
+		t.Errorf("astEdges[0].Left() = %q, want %q", got, "bc:re/subscriptions")
+	}
+	if got := astEdges[0].Verb(); got != "realized_by" {
+		t.Errorf("astEdges[0].Verb() = %q, want %q", got, "realized_by")
+	}
+	if got := astEdges[0].Right(); got != "service:subscriptions-api" {
+		t.Errorf("astEdges[0].Right() = %q, want %q", got, "service:subscriptions-api")
+	}
+}
+
+// parseWithHangGuard runs syntax.Parse on its own goroutine behind a short
+// watchdog timeout, so a parser infinite loop fails this single test fast
+// (a few seconds) instead of hanging the entire `go test` run until the
+// outer test binary timeout kills it.
+func parseWithHangGuard(t *testing.T, src string) (*green.GreenNode, green.LineIndex, []craft.Diagnostic) {
+	t.Helper()
+	type result struct {
+		gn    *green.GreenNode
+		li    green.LineIndex
+		diags []craft.Diagnostic
+	}
+	done := make(chan result, 1)
+	go func() {
+		gn, li, diags := syntax.Parse(src)
+		done <- result{gn, li, diags}
+	}()
+	select {
+	case r := <-done:
+		return r.gn, r.li, r.diags
+	case <-time.After(5 * time.Second):
+		t.Fatalf("syntax.Parse(%q) did not terminate within 5s (parser infinite loop)", src)
+		return nil, green.LineIndex{}, nil
+	}
+}
+
+// TestContextMap_HangRegression_BareKeywordLeftEndpoint locks in the Task 5
+// fix for a parser infinite loop: a bare keyword-as-ident LEFT endpoint with
+// no following ':' (the literal word "service", not "service:x") reaches
+// parseEdgeStmt's endpoint gate (which accepts TokenIdent||isAnyKeywordAsIdent)
+// but, before the fix, made parseRef() consume ZERO tokens — the kind-prefix
+// branch requires an immediately-following ':', and the fallback loop only
+// recognises TokenIdent/TokenNumber, not the keyword-as-ident token type a
+// bare "service" lexes as. parseEdgeStmt then made zero progress, and
+// parseContextMapBlock's `for !p.atEOF() && ...` loop called it again on the
+// exact same position forever (this hung `go test` before the fix). The fix
+// makes parseRef always consume its first token when called on an
+// ident/keyword-as-ident start, guaranteeing forward progress.
+func TestContextMap_HangRegression_BareKeywordLeftEndpoint(t *testing.T) {
+	src := "context_map {\n  service realized_by service:x\n}"
+	gn, _, diags := parseWithHangGuard(t, src)
+
+	if len(diags) == 0 {
+		t.Fatalf("expected at least one diagnostic for malformed edge, got none")
+	}
+	// The parser must still fully consume the block through the closing `}`
+	// rather than aborting partway (which would itself indicate leftover
+	// unconsumed tokens from the malformed endpoint).
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch (parser did not fully consume input)\nwant: %q\ngot:  %q", src, got)
+	}
+}
+
+// TestContextMap_HangRegression_BareKeywordRightEndpoint is the mirror image
+// of TestContextMap_HangRegression_BareKeywordLeftEndpoint for the RIGHT
+// endpoint: `term:x contrasts domain` — a valid left ref, a valid edge verb,
+// then a bare keyword-as-ident right endpoint ("domain") with no colon. The
+// same zero-progress hazard applied to the right endpoint's call to
+// parseRef() before the fix.
+func TestContextMap_HangRegression_BareKeywordRightEndpoint(t *testing.T) {
+	src := "context_map {\n  term:x contrasts domain\n}"
+	gn, _, diags := parseWithHangGuard(t, src)
+
+	if len(diags) == 0 {
+		t.Fatalf("expected at least one diagnostic for malformed edge, got none")
+	}
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch (parser did not fully consume input)\nwant: %q\ngot:  %q", src, got)
+	}
+}
+
+// TestServiceAnchors covers Task 6: the optional `opslevel:` / `repo:`
+// service properties. `repo:` is parsed via parseRef so a slash-bearing
+// slug (e.g. "olxeu/realestate/subscriptions") is captured as one value.
+func TestServiceAnchors(t *testing.T) {
+	src := `services {
+  SubscriptionsApi {
+    contexts: Subscriptions
+    opslevel: subscriptions-api
+    repo: olxeu/realestate/subscriptions
+  }
+}`
+	gn, li, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	// Round-trip: the block must reassemble to the exact source text.
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	root := syntax.Root(gn)
+	doc := syntax.ProjectFromTree(root, li)
+	if len(doc.Services) != 1 {
+		t.Fatalf("want 1 service, got %d: %+v", len(doc.Services), doc.Services)
+	}
+	svc := doc.Services[0]
+	if svc.OpsLevel != "subscriptions-api" || svc.Repo != "olxeu/realestate/subscriptions" {
+		t.Fatalf("anchors = %q / %q", svc.OpsLevel, svc.Repo)
+	}
+
+	// Also verify the AST accessors directly.
+	file := syntax.AsFile(root)
+	astSvc := file.Services()[0]
+	if got := astSvc.OpsLevel(); got != "subscriptions-api" {
+		t.Errorf("ServiceDecl.OpsLevel() = %q, want %q", got, "subscriptions-api")
+	}
+	if got := astSvc.Repo(); got != "olxeu/realestate/subscriptions" {
+		t.Errorf("ServiceDecl.Repo() = %q, want %q", got, "olxeu/realestate/subscriptions")
 	}
 }

@@ -1,0 +1,65 @@
+{
+  "services": [
+    {
+      "name": "SubscriptionsApi",
+      "contexts": [
+        "Subscriptions"
+      ],
+      "deployment": {},
+      "opsLevel": "subscriptions-api",
+      "repo": "olxeu/realestate/subscriptions",
+      "line": 2
+    }
+  ],
+  "useCases": [
+    {
+      "name": "Renewal with typed refs and flexible prose",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "Subscriptions",
+            "event": "vas.VasApplied",
+            "ref": "vas.VasApplied",
+            "description": "when Subscriptions listens \"vas.VasApplied\""
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "sync_action",
+              "context": "Subscriptions",
+              "targetContext": "bc:re/billing",
+              "ref": "bc:re/billing",
+              "connector": "for",
+              "phrase": "a fresh charge attempt (1! \u0026 2!)",
+              "description": "Subscriptions asks bc:re/billing for a fresh charge attempt (1! \u0026 2!)",
+              "line": 16
+            },
+            {
+              "id": "action_3",
+              "type": "async_action",
+              "context": "Subscriptions",
+              "event": "vas.VasFulfilled",
+              "ref": "vas.VasFulfilled",
+              "description": "Subscriptions notifies \"vas.VasFulfilled\"",
+              "line": 17
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "contextMap": [
+    {
+      "left": "bc:re/subscriptions",
+      "verb": "realized_by",
+      "right": "service:subscriptions-api"
+    },
+    {
+      "left": "term:subscriptions/dunning",
+      "verb": "contrasts",
+      "right": "term:billing/dunning"
+    }
+  ]
+}

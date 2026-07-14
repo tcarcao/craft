@@ -1,6 +1,7 @@
 package lexer_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/internal/lexer"
@@ -349,6 +350,103 @@ func TestLexer_ImportKeyword(t *testing.T) {
 			name:      "import not confused with identifier",
 			src:       "import_service",
 			wantTypes: []lexer.TokenType{lexer.TokenIdent, lexer.TokenEOF},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.New(tc.src)
+			toks := l.All()
+			if len(toks) != len(tc.wantTypes) {
+				t.Fatalf("token count: got %d want %d\ntokens: %v", len(toks), len(tc.wantTypes), toks)
+			}
+			for i, tok := range toks {
+				if tok.Type != tc.wantTypes[i] {
+					t.Errorf("token[%d]: got type %v want %v (value=%q)", i, tok.Type, tc.wantTypes[i], tok.Value)
+				}
+			}
+		})
+	}
+}
+
+func TestComment_OnlyWhenWhitespacePreceded(t *testing.T) {
+	toks := lexer.New("Auth calls http://api now // note").All()
+
+	var lineComments int
+	var commentTexts []string
+	for _, tok := range toks {
+		if tok.Type == lexer.TokenLineComment {
+			lineComments++
+			commentTexts = append(commentTexts, tok.Value)
+		}
+	}
+	// no comment token until the whitespace-preceded "//"
+	if lineComments != 1 {
+		t.Fatalf("want exactly one line comment, got %d\ntokens: %v", lineComments, toks)
+	}
+	joined := strings.Join(commentTexts, " ")
+	// the "//" inside http://api must NOT be a comment
+	if strings.Contains(joined, "api now") {
+		t.Fatalf("url slashes were mis-lexed as a comment: %q", joined)
+	}
+	if !strings.Contains(joined, "note") {
+		t.Fatalf("expected trailing whitespace-preceded comment to be lexed, got %q", joined)
+	}
+}
+
+func TestComment_SlashInProseSurvives(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		wantTypes []lexer.TokenType
+	}{
+		{
+			name: "url scheme slashes are not a comment",
+			src:  "http://api",
+			wantTypes: []lexer.TokenType{
+				lexer.TokenIdent, lexer.TokenColon,
+				lexer.TokenError, lexer.TokenError,
+				lexer.TokenIdent, lexer.TokenEOF,
+			},
+		},
+		{
+			name:      "ratio slash is not a comment",
+			src:       "50/50",
+			wantTypes: []lexer.TokenType{lexer.TokenNumber, lexer.TokenError, lexer.TokenNumber, lexer.TokenEOF},
+		},
+		{
+			name:      "identifier slash is not a comment",
+			src:       "a/b",
+			wantTypes: []lexer.TokenType{lexer.TokenIdent, lexer.TokenError, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "whitespace-preceded line comment still works",
+			src:       "a // TODO",
+			wantTypes: []lexer.TokenType{lexer.TokenIdent, lexer.TokenLineComment, lexer.TokenEOF},
+		},
+		{
+			name:      "line comment at start of file still works",
+			src:       "// TODO\na",
+			wantTypes: []lexer.TokenType{lexer.TokenLineComment, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "line comment after newline mid-file still works",
+			src:       "a\n// TODO\nb",
+			wantTypes: []lexer.TokenType{lexer.TokenIdent, lexer.TokenLineComment, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "block comment at start of file still works",
+			src:       "/* c */ a",
+			wantTypes: []lexer.TokenType{lexer.TokenBlockComment, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "block comment after whitespace still works",
+			src:       "a /* c */ b",
+			wantTypes: []lexer.TokenType{lexer.TokenIdent, lexer.TokenBlockComment, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "doc comment at start of file still works",
+			src:       "/// doc\na",
+			wantTypes: []lexer.TokenType{lexer.TokenDocComment, lexer.TokenIdent, lexer.TokenEOF},
 		},
 	}
 	for _, tc := range tests {

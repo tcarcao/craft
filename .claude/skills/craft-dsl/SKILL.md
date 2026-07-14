@@ -25,7 +25,7 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 
 ```bnf
 <dsl>                ::= (<actor_def> | <actors_def> | <domain_def> | <domains_def>
-                         | <service_def> | <services_def> | <arch> | <exposure>
+                         | <service_def> | <services_def> | <context_map> | <arch> | <exposure>
                          | <use_case>)*
 
 // --- Actors: who interacts with the system ---
@@ -46,9 +46,24 @@ This is the complete grammar. All generated `.craft` files must conform to it.
                        | "data-stores" ":" <identifier_list>
                        | "language" ":" <identifier>
                        | "deployment" ":" <deployment_strategy>
+                       | "opslevel" ":" <identifier>
+                       | "repo" ":" <slug_path>
 <deployment_strategy>::= ("canary" | "blue_green" | "rolling")
                          ("(" <deployment_rule> ("," <deployment_rule>)* ")")?
 <deployment_rule>    ::= <percentage> "->" <identifier>
+
+// --- Node slugs: typed, code-anchored references (vNext) ---
+// [kind:][namespace/]name — used as asks targets and context_map endpoints
+<node_slug>          ::= (<slug_kind> ":")? <slug_path>
+<slug_kind>          ::= "domain" | "bc" | "term" | "service"
+<slug_path>          ::= <identifier> ("/" <identifier>)*
+// Event ref: dotted qualified id (FQ Avro record name / OpenAPI operationId)
+<event_ref>          ::= <identifier> ("." <identifier>)+ | <string>   // <string> form is DEPRECATED
+
+// --- Context Map: typed inter-BC/service and inter-term edges (vNext) ---
+<context_map>        ::= "context_map" "{" <edge_stmt>+ "}"
+<edge_stmt>           ::= <node_slug> <edge_verb> <node_slug>
+<edge_verb>           ::= "realized_by" | "also_realizes" | "same_as" | "contrasts" | "distinct_from"
 
 // --- Architecture: component topology ---
 <arch>               ::= "arch" <identifier>? "{" <arch_section>+ "}"
@@ -68,19 +83,22 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 // --- Use Cases: business scenarios with event-driven flows ---
 <use_case>           ::= "use_case" <string> "{" <scenario>+ "}"
 <scenario>           ::= <trigger> <action>+
-<trigger>            ::= "when" <identifier> "listens" <string>
+<trigger>            ::= "when" <identifier> "listens" <event_ref>
                        | "when" <identifier> <verb> <phrase>?
-                       | "when" <string>
+                       | "when" <event_ref>
 <action>             ::= <sync_action> | <async_action> | <internal_action> | <return_action>
-<sync_action>        ::= <identifier> "asks" <identifier> <connector>? <phrase>
-<async_action>       ::= <identifier> "notifies" <string>
-<internal_action>    ::= <identifier> <verb> <connector>? <phrase>
-<return_action>      ::= <identifier> "returns" ("to" <identifier>)? <connector>? <phrase>
+<sync_action>        ::= <identifier> "asks" (<identifier> | <node_slug>) <phrase>
+<async_action>       ::= <identifier> "notifies" <event_ref>
+<internal_action>    ::= <identifier> <verb> <phrase>
+<return_action>      ::= <identifier> "returns" ("to" <identifier>)? <phrase>
 
 // --- Terminals ---
 <connector>          ::= "a" | "an" | "the" | "as" | "to" | "from" | "in" | "on"
                        | "at" | "for" | "with" | "by"
-<phrase>             ::= (<identifier> | <connector> | <string>)+
+// <phrase> is captured as raw rest-of-line prose (vNext), not word-by-word —
+// special characters (! & * / # ? + ...) are legal unquoted; quoted strings
+// still work anywhere a phrase does. See "Flexible Prose" below.
+<phrase>             ::= <raw-text-to-end-of-line>
 <verb>               ::= <identifier>
 <identifier>         ::= [a-zA-Z0-9_][a-zA-Z0-9_.-]*
 <string>             ::= '"' [^"\r\n]* '"'
@@ -91,9 +109,11 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 
 **Key grammar notes:**
 - Newlines are significant — they separate list items, actions, and blocks (not just whitespace)
-- Comments use `//` (single-line)
+- Comments use `//` (single-line), but **only when `//` is preceded by whitespace or starts the line**. `http://api`, `50/50`, and `and/maybe` inside a narrative phrase are NOT comments — the `/` there has no whitespace before it. ` // trailing note` (space before `//`) is a comment. Block comments `/* ... */` follow the same whitespace-preceded rule.
 - Whitespace (spaces, tabs) is ignored; newlines are not
 - **Multi-line lists are supported** — end each intermediate line with a comma and continue on the next line. The last item must not have a trailing comma when followed by another property
+- **Flexible prose**: narrative tails (the `<phrase>` in `asks`, internal actions, `returns`, and external triggers) are captured as raw rest-of-line text. Special characters like `! & * / # ? +` don't need quoting: `Subscriptions asks bc:re/billing for a fresh charge attempt (1! & 2!)` is valid as-is.
+- **Typed refs replace free-text event strings**: `notifies`/`listens` take an `<event_ref>` — a dotted qualified id (e.g. `vas.VasApplied`), not prose. The old quoted-string form (`notifies "Order Created"`) still parses but is **deprecated** — see "Deprecated: Quoted Event Strings" below.
 
 ---
 
@@ -151,6 +171,8 @@ Properties (all optional except `contexts`):
 - `data-stores:` — persistence (note the **hyphen**: `data-stores`, not `datastores`)
 - `language:` — implementation language
 - `deployment:` — strategy: `rolling`, `blue_green`, or `canary(percentage -> target, ...)`
+- `opslevel:` — the service's OpsLevel alias (code anchor; vNext)
+- `repo:` — the service's repo slug (code anchor; vNext, no file paths)
 
 ```
 services {
@@ -165,12 +187,65 @@ services {
         data-stores: postgres
         deployment: canary(20% -> staging, 80% -> production)
     }
+    SubscriptionsApi {
+        contexts: Subscriptions
+        opslevel: subscriptions-api
+        repo: olxeu/realestate/subscriptions
+    }
 }
 ```
 
 Service names with spaces must be quoted: `"Order Service"`.
 
 For a single standalone service outside a `services` block, use `service UserService { ... }` instead of wrapping in `services { }`.
+
+**Service anchors (`opslevel:`/`repo:`):** these bind a service block to real code identity — `opslevel:` is the OpsLevel component alias, `repo:` is a repo slug (not a file path). Each may appear **at most once per service** — a repeated `opslevel:` or `repo:` in the same block is a `craft/sema/duplicate-service-anchor` error. Craft only checks local shape; a hub system resolves the anchor against real infrastructure.
+
+### Node Slugs
+
+A **node slug** is the typed, code-anchored way to reference a domain, bounded context, term, or service: `[kind:][namespace/]name`, where `kind ∈ {domain, bc, term, service}`. Each kind has its own namespace shape:
+
+| Kind | Shape | Example |
+|------|-------|---------|
+| `domain` | `domain:re/<name>` | `domain:re/monetization` |
+| `bc` | `bc:<domain>/<name>` | `bc:re/subscriptions` |
+| `term` | `term:<bc>/<name>` | `term:billing/dunning` |
+| `service` | `service:<alias>` (no namespace) | `service:subscriptions-api` |
+
+A malformed namespace (wrong segment count, empty segment, or an unrecognised `kind:` word) is a `craft/sema/malformed-slug` error.
+
+Node slugs are used in two places:
+- **`asks` targets** — `Subscriptions asks bc:re/billing for a fresh charge attempt` (a bare identifier like `Billing` is still valid too — it's the short form, resolved by context)
+- **`context_map` edge endpoints** (see below)
+
+**Term module-scoping:** a bare term name written inside its own bounded context resolves to that BC's namespace automatically. Any **cross-BC** term reference must use the fully-qualified `term:<bc>/<name>` slug — a bare cross-context term reference can't be locally verified and is a hub-side error.
+
+### Context Map
+
+The `context_map` block declares typed edges between bounded contexts, services, and terms — the DDD context map, as code:
+
+```craft
+context_map {
+    bc:re/subscriptions realized_by service:subscriptions-api
+    bc:re/vas           also_realizes service:vas-application-api
+
+    term:subscriptions/dunning contrasts     term:billing/dunning
+    term:ordering/order        same_as       term:offering/order
+    term:vas/apply             distinct_from term:billing/apply
+}
+```
+
+Five typed edge verbs, each with fixed endpoint kinds:
+
+| Verb | Left endpoint | Right endpoint | Meaning |
+|------|---------------|-----------------|---------|
+| `realized_by` | `bc:` | `service:` | This bounded context is realized by this service |
+| `also_realizes` | `bc:` | `service:` | This bounded context is also (partially) realized by this service |
+| `same_as` | `term:` | `term:` | These two terms mean the same thing |
+| `contrasts` | `term:` | `term:` | These two terms are related but distinct — call out the contrast |
+| `distinct_from` | `term:` | `term:` | These two terms are unrelated despite similar naming |
+
+A `bc:`/`service:` edge with the wrong endpoint kinds (e.g. `service:` on the left) is a `craft/sema/edge-endpoint-kind` error, as is a `term:` edge with a non-`term:` endpoint.
 
 ### Architecture
 
@@ -212,36 +287,42 @@ The core dynamic modeling construct. Each use case contains scenarios triggered 
 | Type | Syntax | Example |
 |------|--------|---------|
 | External (actor) | `when <actor> <verb> <phrase>` | `when Customer places order` (actor can be any name, including `CRON` for scheduler-driven triggers) |
-| Event | `when "<event>"` | `when "Order Placed"` |
-| Bounded context listener | `when <context> listens "<event>"` | `when Payment listens "Order Created"` |
+| Event | `when <event_ref>` | `when order.OrderPlaced` |
+| Bounded context listener | `when <context> listens <event_ref>` | `when Payment listens order.OrderCreated` |
 
 **Action types:**
 
 | Type | Keyword | Syntax | Meaning |
 |------|---------|--------|---------|
-| Synchronous | `asks` | `Order asks Inventory to reserve items` | Bounded context-to-bounded context call |
-| Asynchronous | `notifies` | `Order notifies "Order Created"` | Publish event |
+| Synchronous | `asks` | `Order asks Inventory to reserve items` | Bounded context-to-bounded context call. Target can be a bare name (`Inventory`) or a node slug (`bc:re/billing`) |
+| Asynchronous | `notifies` | `Order notifies order.OrderCreated` | Publish event, referenced by a typed event ref |
 | Internal | any verb | `Order validates items` | Bounded context-internal operation |
 | Return | `returns` | `Database returns to Auth the user record` | Return response |
 
-**Event-driven pattern:** Bounded contexts publish events with `notifies`, and other scenarios react with `when <context> listens "<event>"`. This models async choreography — the heart of good Craft modeling.
+An `<event_ref>` is a dotted qualified id (the FQ Avro record name / OpenAPI `operationId` the event corresponds to in code) — `vas.VasApplied`, `com.olx.re.subscriptions.SubscriptionCreated`. No `kind:` prefix, no `/`.
+
+**Event-driven pattern:** Bounded contexts publish events with `notifies`, and other scenarios react with `when <context> listens <event_ref>`. This models async choreography — the heart of good Craft modeling.
 
 ```
 use_case "Purchase Item" {
     when Customer adds item to cart
         Cart validates item availability
         Cart asks Inventory to reserve items
-        Cart notifies "Item Added to Cart"
+        Cart notifies cart.ItemAdded
 
-    when Checkout listens "Item Added to Cart"
+    when Checkout listens cart.ItemAdded
         Checkout asks Payment to process payment
-        Payment notifies "Payment Processed"
+        Payment notifies payment.PaymentProcessed
 
-    when Fulfilment listens "Payment Processed"
+    when Fulfilment listens payment.PaymentProcessed
         Fulfilment asks Warehouse to ship order
-        Fulfilment notifies "Order Shipped"
+        Fulfilment notifies fulfilment.OrderShipped
 }
 ```
+
+### Deprecated: Quoted Event Strings
+
+The old free-text form — `notifies "Order Created"` / `when X listens "Order Created"` — still **parses**, for backward compatibility with existing files. But it is **deprecated**: `craft validate` emits a `craft/lint/deprecated-string-ref` warning on every quoted event string, pointing at the typed-ref form above. Always generate the typed-ref form in new or extended files; only leave quoted strings in place if the user's existing file already uses them and isn't being migrated.
 
 ---
 
@@ -276,19 +357,19 @@ use_case "Send Notification" {
     when User triggers notification
         TemplateManagement selects template
         TemplateManagement renders content
-        TemplateManagement notifies "Template Rendered"
+        TemplateManagement notifies templates.TemplateRendered
 
-    when EmailDelivery listens "Template Rendered"
+    when EmailDelivery listens templates.TemplateRendered
         EmailDelivery asks EmailProvider to deliver email
-        EmailDelivery notifies "Email Sent"
+        EmailDelivery notifies email.EmailSent
 
-    when SMSDelivery listens "Template Rendered"
+    when SMSDelivery listens templates.TemplateRendered
         SMSDelivery delivers SMS via provider
-        SMSDelivery notifies "SMS Sent"
+        SMSDelivery notifies sms.SMSSent
 
-    when PushDelivery listens "Template Rendered"
+    when PushDelivery listens templates.TemplateRendered
         PushDelivery delivers push notification
-        PushDelivery notifies "Push Sent"
+        PushDelivery notifies push.PushSent
 }
 ```
 
@@ -297,10 +378,11 @@ The good version shows that each delivery channel reacts independently to the sa
 ### Rules of thumb
 
 1. **Every `notifies` should have at least one `listens`** somewhere in the file. An event with no listener is a dead event — either add the listener or remove the event.
-2. **Cross-context actions should be async by default.** If bounded context A and bounded context B belong to different services, prefer `A notifies "Something Happened"` + `when B listens "Something Happened"` over `A asks B to do something`.
+2. **Cross-context actions should be async by default.** If bounded context A and bounded context B belong to different services, prefer `A notifies module.SomethingHappened` + `when B listens module.SomethingHappened` over `A asks B to do something`.
 3. **Keep each scenario focused.** A scenario (one `when` block) should represent one bounded context's reaction to a trigger. When a scenario spans multiple bounded contexts, consider whether an intermediate event should split it.
-4. **Name events in past tense.** Events describe something that already happened: `"Order Created"`, `"Payment Processed"`, `"User Registered"`. Not `"Create Order"` or `"Process Payment"`.
+4. **Name events in past tense.** Events describe something that already happened: `order.OrderCreated`, `payment.PaymentProcessed`, `auth.UserRegistered`. Not `order.CreateOrder` or `payment.ProcessPayment`.
 5. **Use `asks` for external actors.** When a bounded context calls an external system (actor of type `system` or `service`), `asks` is appropriate: `Payment asks PaymentGateway to process payment`.
+6. **Use typed event refs, not quoted strings.** `notifies order.OrderCreated`, not `notifies "Order Created"` — the quoted form is deprecated (see "Deprecated: Quoted Event Strings" above).
 
 ---
 
@@ -313,9 +395,10 @@ The good version shows that each delivery channel reacts independently to the sa
 1. `actors` — who interacts with the system
 2. `domains` — business capability boundaries
 3. `services` — deployable units with tech stack
-4. `arch` — component topology
-5. `exposure` — external access rules
-6. `use_case` — behavioral scenarios
+4. `context_map` — typed edges between bounded contexts, services, and terms
+5. `arch` — component topology
+6. `exposure` — external access rules
+7. `use_case` — behavioral scenarios
 
 This flows from "who and what exists" to "how it's built" to "what happens."
 
@@ -341,15 +424,18 @@ If the user asks how to install craft or needs details on flags and options, rea
 
 These are the most frequent syntax errors. Avoid them:
 
-1. **Unquoted event names** — Events must be double-quoted strings: `notifies "Order Created"`, not `notifies Order Created`
-2. **Wrong property keyword** — It's `data-stores:` with a hyphen, not `datastores:` or `data_stores:`
-3. **Wrong deployment arrow** — Use `->` not `=>`; e.g., `canary(20% -> staging)`
-4. **Missing newlines between items** — Newlines separate actions, list items, and property definitions. Don't put multiple actions on one line
-5. **Quoted service names only when needed** — Only quote service names that contain spaces: `"Order Service"`. Plain identifiers like `OrderService` don't need quotes
-6. **Invalid identifiers** — Identifiers start with `[a-zA-Z0-9_]` and continue with `[a-zA-Z0-9_.-]`. No spaces, no special characters beyond underscore, hyphen, and dot
-7. **Actions outside a when block** — Every action must be inside a scenario (under a `when` trigger). Orphaned actions are invalid
-8. **Connector word confusion** — Connector words (`a`, `an`, `the`, `to`, `from`, etc.) are optional in phrases but they make the DSL read naturally. Use them for readability
-9. **Trailing comma on last item of a multi-line list** — When splitting a list across lines, the final item must not have a trailing comma. `contexts: Foo, Bar,\n    Baz` is valid; `contexts: Foo, Bar,\n    Baz,\ndata-stores: db` is not
+1. **Quoted event strings (deprecated)** — `notifies "Order Created"` / `listens "Order Created"` still parse but trigger a `craft/lint/deprecated-string-ref` warning. Use the typed ref form instead: `notifies order.OrderCreated`
+2. **Malformed node slugs** — each `kind:` has a fixed namespace shape: `domain:re/<name>`, `bc:<domain>/<name>`, `term:<bc>/<name>`, `service:<alias>` (no namespace). Getting the segment count wrong (e.g. `bc:billing` with no name segment, or `service:re/billing` with a namespace) is a `craft/sema/malformed-slug` error
+3. **Wrong property keyword** — It's `data-stores:` with a hyphen, not `datastores:` or `data_stores:`
+4. **Wrong deployment arrow** — Use `->` not `=>`; e.g., `canary(20% -> staging)`
+5. **Missing newlines between items** — Newlines separate actions, list items, and property definitions. Don't put multiple actions on one line
+6. **Quoted service names only when needed** — Only quote service names that contain spaces: `"Order Service"`. Plain identifiers like `OrderService` don't need quotes
+7. **Invalid identifiers** — Identifiers start with `[a-zA-Z0-9_]` and continue with `[a-zA-Z0-9_.-]`. No spaces, no special characters beyond underscore, hyphen, and dot
+8. **Actions outside a when block** — Every action must be inside a scenario (under a `when` trigger). Orphaned actions are invalid
+9. **Connector word confusion** — Connector words (`a`, `an`, `the`, `to`, `from`, etc.) are optional in phrases but they make the DSL read naturally. Use them for readability
+10. **Trailing comma on last item of a multi-line list** — When splitting a list across lines, the final item must not have a trailing comma. `contexts: Foo, Bar,\n    Baz` is valid; `contexts: Foo, Bar,\n    Baz,\ndata-stores: db` is not
+11. **Wrong context_map edge endpoint kinds** — `realized_by`/`also_realizes` require `bc:` on the left and `service:` on the right; `same_as`/`contrasts`/`distinct_from` require `term:` on both sides. Mismatched kinds are a `craft/sema/edge-endpoint-kind` error
+12. **Unspaced `//` inside prose is NOT a comment** — `http://api`, `50/50`, `and/maybe` stay as prose because there's no whitespace before the `//`/`/`. A comment needs a space (or line-start) before it: `Auth checks token  // TODO`
 
 ---
 
@@ -381,8 +467,9 @@ After generating or extending a `.craft` file, review your own output for these 
 2. **Cross-contexts flows use async choreography** — if a scenario has actions spanning domains from different services, it should use `notifies`/`listens` to connect them, not a flat sequence of `asks`.
 3. **Every defined actor appears in at least one use case trigger** — if you defined an actor, use it. If the user didn't specify use cases for an actor, note it.
 4. **Every bounded context in a domain block is referenced** — either in a service's `contexts:` list, in a use case action, or both.
-5. **Events follow past-tense naming** — `"Order Created"` not `"Create Order"`.
-6. **Syntax is clean** — `data-stores:` (hyphenated), `contexts:`, event names double-quoted, valid identifiers, proper newlines between actions.
+5. **Events follow past-tense naming** — `order.OrderCreated` not `order.CreateOrder`.
+6. **Syntax is clean** — `data-stores:` (hyphenated), `contexts:`, events as typed refs (not quoted strings), valid identifiers/slugs, proper newlines between actions.
+7. **No deprecated quoted event strings in new content** — `notifies`/`listens` should use typed refs (`order.OrderCreated`), not `notifies "Order Created"`, unless you're deliberately preserving an existing file's style.
 
 ---
 
@@ -397,7 +484,7 @@ After generating or extending a `.craft` file, review your own output for these 
 
 ## Complete Example
 
-This example demonstrates all constructs working together, including event-driven choreography across domain boundaries and a multi-line `contexts:` list:
+This example demonstrates all constructs working together, including event-driven choreography across domain boundaries, a multi-line `contexts:` list, a `context_map` block, service anchors, a typed `asks` target, and unquoted flexible prose:
 
 ```craft
 // Actors
@@ -425,11 +512,19 @@ services {
         data-stores: user_db
         language: golang
         deployment: rolling
+        opslevel: user-service
+        repo: acme/platform/user-service
     }
     CommsService {
         contexts: Notifier
         data-stores: email_queue
     }
+}
+
+// Context map: typed edges between bounded contexts, services, and terms
+context_map {
+    bc:re/authentication realized_by service:user-service
+    term:auth/account     same_as     term:communications/account
 }
 
 // Architecture
@@ -453,29 +548,29 @@ exposure default {
 use_case "User Registration" {
     when Business_User creates Account
         Authentication validates email format
-        Authentication asks Database to check email uniqueness
+        Authentication asks Database to check email uniqueness (retry x3! & backoff)
         Authentication creates user credentials
-        Authentication notifies "User Registered"
+        Authentication notifies auth.UserRegistered
 
-    when Profile listens "User Registered"
+    when Profile listens auth.UserRegistered
         Profile creates user profile
         Profile asks Database to store profile data
-        Profile notifies "Profile Created"
+        Profile notifies profile.ProfileCreated
 
-    when Notifier listens "User Registered"
+    when Notifier listens auth.UserRegistered
         Notifier sends welcome email
-        Notifier notifies "Welcome Email Sent"
+        Notifier notifies notifier.WelcomeEmailSent
 }
 
 use_case "Scheduled Cleanup" {
     when CronA triggers inactive account cleanup
         Authentication identifies inactive accounts
         Authentication asks Database to flag inactive users
-        Authentication notifies "Inactive Accounts Flagged"
+        Authentication notifies auth.InactiveAccountsFlagged
 
-    when Notifier listens "Inactive Accounts Flagged"
+    when Notifier listens auth.InactiveAccountsFlagged
         Notifier sends reactivation reminders
 }
 ```
 
-Notice how the "User Registration" use case uses event-driven choreography: `Authentication` publishes `"User Registered"`, then both `Profile` and `Notifier` independently react to it in separate scenarios. This models real-world decoupling — the authentication bounded context doesn't need to know about profile creation or email sending.
+Notice how the "User Registration" use case uses event-driven choreography: `Authentication` publishes `auth.UserRegistered`, then both `Profile` and `Notifier` independently react to it in separate scenarios. This models real-world decoupling — the authentication bounded context doesn't need to know about profile creation or email sending. Note also the unquoted prose tail `(retry x3! & backoff)` on the `asks` step — special characters don't need quoting — and the `context_map` block declaring that `Authentication` is realized by `UserService` (matching its `opslevel:` alias) and that the `auth/account` and `communications/account` terms mean the same thing.

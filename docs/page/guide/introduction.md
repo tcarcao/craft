@@ -54,9 +54,11 @@ domain Order {
 use_case "Place Order" {
   when Customer creates order
     OrderManagement validates items
-    OrderManagement notifies "Order Created"
+    OrderManagement notifies order.OrderCreated
 }
 ```
+
+`order.OrderCreated` is a typed event ref (a dotted qualified id). The older quoted-string form (`notifies "Order Created"`) still parses but is deprecated.
 
 ## Why Use Craft?
 
