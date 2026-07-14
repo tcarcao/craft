@@ -715,6 +715,42 @@ git commit -m "feat(vscode): highlight context_map, edges, slugs, anchors"
 
 ---
 
+## Task 11: Update authoring skill + human docs to teach vNext
+
+**Files:**
+- Modify: `.claude/skills/craft-dsl/SKILL.md` (teaches the DSL to agents — currently teaches quoted `notifies "X"`/`listens "X"` and has no typed refs/slugs/context_map/anchors)
+- Modify: `.claude/skills/craft-dsl/references/cli-reference.md`
+- Modify: `docs/page/` VitePress grammar docs that show `notifies`/`context_map`/`opslevel` usage (`guide/quickstart.md`, `guide/introduction.md`, `tooling/skill.md`, `language/*`, `extension/features.md`)
+- Test: none (docs) — verify examples parse via `craft validate`
+
+**Interfaces:** none — documents the grammar Tasks 1–7 shipped.
+
+- [ ] **Step 1: Update SKILL.md syntax tables + examples**
+
+Replace deprecated quoted-ref examples with typed refs and document the new constructs:
+- `notifies vas.VasApplied` / `when X listens vas.VasApplied` (event refs); note quoted `"X"` still parses but is **deprecated** (emits `craft/lint/deprecated-string-ref`).
+- Node slugs `[kind:][ns/]name`: `bc:re/subscriptions`, `term:billing/dunning`, `service:alias`; term module-scoping (bare within BC, prefixed across).
+- `asks bc:re/billing for <prose>` — typed target + flexible unquoted prose (special chars `! & * / #` allowed; whitespace-preceded `//` starts a comment).
+- `context_map { }` block with the five edges (`realized_by`/`also_realizes`/`same_as`/`contrasts`/`distinct_from`).
+- `opslevel:`/`repo:` service anchors.
+
+- [ ] **Step 2: Update cli-reference.md** — document that `craft validate` now emits `malformed-slug`, `edge-endpoint-kind`, `deprecated-string-ref`, `unresolved-ref-local`, `duplicate-service-anchor`.
+
+- [ ] **Step 3: Update VitePress docs** — mirror the same syntax changes in the human-facing guide pages; keep every code sample parseable.
+
+- [ ] **Step 4: Verify examples parse**
+
+Run `craft validate` (or the parse path) over every `.craft` snippet added/changed in the docs — confirm zero errors (deprecation warnings on any intentionally-legacy example are fine and should be called out as such in prose).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .claude/skills/craft-dsl docs/page
+git commit -m "docs(dsl): teach vNext syntax in craft-dsl skill + guide"
+```
+
+> **CLI release (deferred, not a task):** version is tag-driven via goreleaser (`ldflags -X main.version`). After this branch merges to `main`, tagging `v2.4.0` triggers `release.yml` → cross-platform binaries + GitHub release + homebrew tap auto-bump (current release v2.3.3). Backward-compatible ⇒ minor bump. **User tags/publishes; not done in this branch.**
+
 ## Self-Review Notes
 
 - **Spec coverage:** A→Task 1-2; B→Task 3-4; C→Task 5; D→Task 6; E→Task 7; F→Task 9-10; migration/back-compat→Task 8. All six slices + testing section covered.
