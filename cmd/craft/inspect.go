@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/syntax"
 	"github.com/tcarcao/craft/pkg/craft"
 )
 
@@ -37,26 +36,25 @@ func inspectCmd() *cobra.Command {
 				return err
 			}
 
-			merged := &craft.CraftDoc{}
+			contents := make(map[string][]byte, len(files))
 			for _, file := range files {
-				content, err := os.ReadFile(file)
+				b, err := os.ReadFile(file)
 				if err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
-				greenRoot, li, _ := syntax.Parse(string(content))
-				tree := syntax.Root(greenRoot)
-				doc := syntax.ProjectFromTree(tree, li)
-				merged.Actors = append(merged.Actors, doc.Actors...)
-				merged.Domains = append(merged.Domains, doc.Domains...)
-				merged.Services = append(merged.Services, doc.Services...)
-				merged.UseCases = append(merged.UseCases, doc.UseCases...)
+				contents[file] = b
+			}
+
+			merged, _, err := craft.ParseFiles(contents)
+			if err != nil {
+				return err
 			}
 
 			out := buildInspectOutput(files, merged)
 
 			switch format {
 			case "json":
-				enc := json.NewEncoder(os.Stdout)
+				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(out)
 			default:
