@@ -81,15 +81,38 @@ func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
 
 	if len(perFileSyms) > 0 {
 		ws, wsDiags := sema.MergeWorkspaceSymbols(perFileSyms)
-		diags = append(diags, remapURIs(wsDiags)...)
+		diags = append(diags, sortDiags(remapURIs(wsDiags))...)
 
 		_, resDiags := sema.AnalyzeWorkspace(perFileSyms, ws)
-		diags = append(diags, remapURIs(resDiags)...)
+		diags = append(diags, sortDiags(remapURIs(resDiags))...)
 
-		diags = append(diags, remapURIs(sema.LintWorkspace(perFileTrees, ws))...)
+		diags = append(diags, sortDiags(remapURIs(sema.LintWorkspace(perFileTrees, ws)))...)
 	}
 
 	return merged, diags, nil
+}
+
+// sortDiags stable-sorts a batch of diagnostics into a deterministic order (by
+// file, then source position, then code). The workspace passes range over maps
+// internally and therefore return their diagnostics in Go's randomized map
+// order; ParseFiles is the boundary that promises deterministic output (plan
+// D5), so it orders each workspace batch here before appending. The per-file
+// parse/sema diagnostics are already deterministic (the file loop is sorted).
+func sortDiags(diags []Diagnostic) []Diagnostic {
+	sort.SliceStable(diags, func(i, j int) bool {
+		a, b := diags[i], diags[j]
+		if a.SourceURI != b.SourceURI {
+			return a.SourceURI < b.SourceURI
+		}
+		if a.Range.Start.Line != b.Range.Start.Line {
+			return a.Range.Start.Line < b.Range.Start.Line
+		}
+		if a.Range.Start.Character != b.Range.Start.Character {
+			return a.Range.Start.Character < b.Range.Start.Character
+		}
+		return a.Code < b.Code
+	})
+	return diags
 }
 
 // mergeDoc appends every slice field of src onto dst. All CraftDoc slices are

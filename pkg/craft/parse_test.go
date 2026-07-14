@@ -167,16 +167,66 @@ func TestParseFiles_CrossFileUnresolvedRef(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var found *craft.Diagnostic
+	count := 0
 	for i := range diags {
 		if diags[i].Code == "craft/sema/unresolved-reference" {
 			found = &diags[i]
-			break
+			count++
 		}
 	}
 	if found == nil {
 		t.Fatalf("expected craft/sema/unresolved-reference diagnostic, got: %+v", diags)
 	}
+	// Exactly one: Login must resolve via the domain declared in a.craft (proving
+	// cross-file merge happened); only UnknownContext stays unresolved. If merge
+	// were broken, Login would also be unresolved and count would be 2.
+	if count != 1 {
+		t.Fatalf("expected exactly 1 unresolved-reference (Login resolved cross-file), got %d: %+v", count, diags)
+	}
 	if found.SourceURI != "b.craft" {
 		t.Errorf("SourceURI = %q, want %q", found.SourceURI, "b.craft")
+	}
+	if !strings.Contains(found.Message, "UnknownContext") {
+		t.Errorf("unresolved-reference message = %q, want it to name UnknownContext", found.Message)
+	}
+}
+
+func TestParseFiles_WorkspaceDiagnosticOrderDeterministic(t *testing.T) {
+	// Two files that each emit a workspace-level (cross-file resolution)
+	// diagnostic. The sema workspace passes range over maps internally, so
+	// without ParseFiles stabilizing each batch the relative order of these two
+	// diagnostics varies across runs (Go randomizes map iteration). Run many
+	// times and require a stable, filename-sorted order.
+	files := map[string][]byte{
+		"a.craft": []byte("services {\n  SvcA {\n    contexts: UnknownA\n  }\n}\n"),
+		"b.craft": []byte("services {\n  SvcB {\n    contexts: UnknownB\n  }\n}\n"),
+	}
+	var want []string
+	for i := 0; i < 20; i++ {
+		_, diags, _ := craft.ParseFiles(files)
+		var seq []string
+		for _, d := range diags {
+			if d.Code == "craft/sema/unresolved-reference" {
+				seq = append(seq, d.SourceURI)
+			}
+		}
+		if len(seq) < 2 {
+			t.Fatalf("expected >=2 cross-file unresolved-reference diags, got %d: %+v", len(seq), diags)
+		}
+		if i == 0 {
+			want = seq
+			if seq[0] != "a.craft" {
+				t.Errorf("workspace diagnostics not sorted by file: %v", seq)
+			}
+			continue
+		}
+		if len(seq) != len(want) {
+			t.Fatalf("run %d: diag count changed: got %v, want %v", i, seq, want)
+		}
+		for j := range seq {
+			if seq[j] != want[j] {
+				t.Fatalf("run %d: non-deterministic workspace diagnostic order: got %v, want %v", i, seq, want)
+			}
+		}
 	}
 }
