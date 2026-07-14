@@ -499,6 +499,14 @@ func (r RefDecl) RefKind() string {
 	return ""
 }
 
+// Line returns the 1-based source line of this ref's first token using li
+// (Task 7 — position for slug-shape diagnostics).
+func (r RefDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(r.node, li) }
+
+// Col returns the 1-based column of this ref's first token using li
+// (Task 7 — position for slug-shape diagnostics).
+func (r RefDecl) Col(li green.LineIndex) int { return nodeFirstTokenCol(r.node, li) }
+
 // ServiceField is a typed view over a SyntaxKindServiceField node.
 type ServiceField struct{ node SyntaxNode }
 
@@ -541,6 +549,14 @@ func (sf ServiceField) Ref() *RefDecl {
 	}
 	return &RefDecl{node: *n}
 }
+
+// Line returns the 1-based source line of this field's first token using li
+// (Task 7 — position for duplicate-service-anchor diagnostics).
+func (sf ServiceField) Line(li green.LineIndex) int { return nodeFirstTokenLine(sf.node, li) }
+
+// Col returns the 1-based column of this field's first token using li
+// (Task 7 — position for duplicate-service-anchor diagnostics).
+func (sf ServiceField) Col(li green.LineIndex) int { return nodeFirstTokenCol(sf.node, li) }
 
 // DomainsBlock is a typed view over a SyntaxKindDomainsBlock node.
 type DomainsBlock struct{ node SyntaxNode }
@@ -1795,4 +1811,26 @@ func (e EdgeDecl) Verb() string {
 		return ""
 	}
 	return tok.Text()
+}
+
+// LeftRef returns the RefDecl view of the left-hand endpoint (for position
+// info via RefDecl.Line/Col), or nil if malformed. See Left() for the text
+// accessor (Task 7).
+func (e EdgeDecl) LeftRef() *RefDecl {
+	refs := e.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 1 {
+		return nil
+	}
+	return &RefDecl{node: refs[0]}
+}
+
+// RightRef returns the RefDecl view of the right-hand endpoint (for position
+// info via RefDecl.Line/Col), or nil if malformed. See Right() for the text
+// accessor (Task 7).
+func (e EdgeDecl) RightRef() *RefDecl {
+	refs := e.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 2 {
+		return nil
+	}
+	return &RefDecl{node: refs[1]}
 }

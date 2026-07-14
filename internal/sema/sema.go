@@ -142,6 +142,10 @@ type Symbols struct {
 	// BCPositions maps bounded-context name → its declaration position.
 	// Populated by AnalyzeFile so MergeWorkspaceSymbols can propagate it.
 	BCPositions map[string]BCPosition
+	// SlugRefs collects well-formed kind-prefixed node-slug references
+	// (domain:/bc:/service:) so AnalyzeWorkspace can attempt best-effort
+	// cross-file resolution (craft/sema/unresolved-ref-local, Task 7).
+	SlugRefs []SlugRefSite
 }
 
 // WorkspaceSymbols merges per-file symbol tables for cross-file resolution.
@@ -523,6 +527,21 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		})
 	}
 
+	// Task 7 (Slice E): local well-formedness validation — slug shape,
+	// context_map edge endpoint kinds, deprecated quoted notifies/listens
+	// forms, and duplicate service opslevel:/repo: anchors. Well-formed
+	// kind-prefixed slug refs are also collected into syms.SlugRefs for
+	// AnalyzeWorkspace's cross-file unresolved-ref-local check.
+	ucDiags, ucRefs := validateUseCaseRefs(uri, file, lineIdx, hasLI)
+	diags = append(diags, ucDiags...)
+	syms.SlugRefs = append(syms.SlugRefs, ucRefs...)
+
+	cmDiags, cmRefs := validateContextMapEdges(uri, file, lineIdx, hasLI)
+	diags = append(diags, cmDiags...)
+	syms.SlugRefs = append(syms.SlugRefs, cmRefs...)
+
+	diags = append(diags, validateServiceAnchors(uri, file, lineIdx, hasLI)...)
+
 	return syms, diags
 }
 
@@ -737,6 +756,46 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					})
 				}
 				// Unknown name: skip.
+			}
+		}
+	}
+
+	// Task 7: best-effort local resolution for kind-prefixed node-slug refs
+	// (domain:/bc:/service: — term: is skipped; craft tracks no term
+	// declarations, so that resolution is hub-only). Unresolved ⇒ warning
+	// only, never an error — the hub is authoritative for cross-context
+	// resolution. Guarded by wsHasSymbols for the same reason as the
+	// use-case ref check above: a brand-new file-set with no declarations
+	// at all shouldn't flood every ref as "unresolved".
+	if wsHasSymbols {
+		for uri, syms := range perFile {
+			for _, sr := range syms.SlugRefs {
+				var resolved bool
+				switch sr.Kind {
+				case "domain":
+					_, resolved = ws.Domains[sr.Name]
+				case "bc":
+					_, resolved = ws.BoundedContexts[sr.Name]
+				case "service":
+					_, resolved = ws.Services[sr.Name]
+				}
+				if resolved {
+					continue
+				}
+				startChar := colToLSP(sr.Col)
+				diags = append(diags, craft.Diagnostic{
+					Code: "craft/sema/unresolved-ref-local",
+					Message: fmt.Sprintf(
+						"%s slug %q names no %s declared in this file-set; the hub is authoritative for cross-context resolution",
+						sr.Kind, sr.Text, sr.Kind,
+					),
+					Severity:  craft.SeverityWarning,
+					SourceURI: uri,
+					Range: craft.Range{
+						Start: craft.Position{Line: lineToLSP(sr.Line), Character: startChar},
+						End:   craft.Position{Line: lineToLSP(sr.Line), Character: startChar + len(sr.Text)},
+					},
+				})
 			}
 		}
 	}

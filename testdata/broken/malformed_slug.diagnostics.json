@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/malformed-slug",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 17
+      },
+      "end": {
+        "line": 2,
+        "character": 25
+      }
+    }
+  }
+]

@@ -1,0 +1,4 @@
+use_case "Bad Slug" {
+  when Customer requests refund
+    Billing asks foo:re/x for details
+}
