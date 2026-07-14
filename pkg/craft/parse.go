@@ -16,9 +16,11 @@ import (
 // performs no file I/O — the caller supplies src. The returned *CraftDoc is
 // never nil, even for empty or badly broken input.
 //
-// SourceURI on the returned diagnostics is left as produced by the underlying
-// passes (empty for single-file input); the caller already knows filename. Use
-// ParseFiles when you need every diagnostic attributed to its file.
+// Every returned diagnostic's SourceURI is set to filename (the exact string you
+// pass). This gives single-file callers the same uniform attribution ParseFiles
+// provides — no empty and no file://-prefixed values leak through, even though
+// some underlying sema passes label their diagnostics with an internal file://
+// URI.
 func Parse(filename string, src []byte) (*CraftDoc, []Diagnostic, error) {
 	doc, diags := parseOne(filename, string(src))
 	return doc, diags, nil
@@ -27,7 +29,9 @@ func Parse(filename string, src []byte) (*CraftDoc, []Diagnostic, error) {
 // parseOne runs the single-file pipeline exactly as `craft check` does:
 // syntax.Parse -> Root -> ProjectFromTree, then sema.AnalyzeFile for
 // single-file semantic diagnostics. LineIndex is intentionally NOT forwarded to
-// AnalyzeFile, matching the current CLI (see plan D3).
+// AnalyzeFile, matching the current CLI (see plan D3). Every diagnostic's
+// SourceURI is normalized to filename (the sema passes set an internal file://
+// URI on some of them; stampURI overwrites it uniformly).
 func parseOne(filename, src string) (*CraftDoc, []Diagnostic) {
 	uri := "file://" + filename
 	greenRoot, li, parseDiags := syntax.Parse(src)
@@ -39,7 +43,7 @@ func parseOne(filename, src string) (*CraftDoc, []Diagnostic) {
 	diags := make([]Diagnostic, 0, len(parseDiags)+len(semaDiags))
 	diags = append(diags, parseDiags...)
 	diags = append(diags, semaDiags...)
-	return doc, diags
+	return doc, stampURI(diags, filename)
 }
 
 // ParseFiles parses and merges multiple Craft source files into one document

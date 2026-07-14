@@ -87,6 +87,23 @@ func TestParse_MatchesCorpusGolden(t *testing.T) {
 	}
 }
 
+func TestParse_DiagnosticsCarryFilename(t *testing.T) {
+	// Deprecated quoted refs (listens/notifies "X") produce sema diagnostics
+	// that internally carry a file:// URI. Parse must normalize every
+	// diagnostic's SourceURI to the exact filename argument — uniform with
+	// ParseFiles, no file:// leak, never empty.
+	src := []byte("use_case \"U\" {\n  when Billing listens \"SomethingHappened\"\n    Billing notifies \"Done\"\n}\n")
+	_, diags, _ := craft.Parse("my/path/x.craft", src)
+	if len(diags) == 0 {
+		t.Fatal("expected diagnostics (deprecated string refs)")
+	}
+	for _, d := range diags {
+		if d.SourceURI != "my/path/x.craft" {
+			t.Errorf("SourceURI = %q, want %q (no file:// prefix, not empty)", d.SourceURI, "my/path/x.craft")
+		}
+	}
+}
+
 func TestParseFiles_MergeMultiDomain(t *testing.T) {
 	files := map[string][]byte{
 		"a.craft": []byte("domain Billing {\n  Invoicing\n}\n"),
