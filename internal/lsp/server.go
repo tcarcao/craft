@@ -1579,9 +1579,25 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 	oldName := nameTok.Text()
 	rm := s.ws.ResolutionMap()
 
+	// declNewText is the replacement text for the DECLARATION site only.
+	// nameTok.Text() (oldName, used below for the edit range width) is the
+	// raw source text: for a QUOTED declaration name (SyntaxKindString) it
+	// includes both surrounding quotes (Bug 8a — see tokenText in
+	// parser.go), so the declaration-site range already spans the full
+	// quoted token. newName from the client is the plain (unquoted) new
+	// name, so it must be re-quoted and escaped before replacing that
+	// range — using it verbatim would leave the declaration with no
+	// quotes at all (a broken/corrupt edit). Reference sites (use-case
+	// refs, service context lists) are never quoted, so they keep using
+	// plain newName.
+	declNewText := newName
+	if nameTok.Kind() == syntax.SyntaxKindString {
+		declNewText = quoteCraftString(newName)
+	}
+
 	edits := make(map[protocol.DocumentURI][]protocol.TextEdit)
 	seen := make(map[string]struct{})
-	addEdit := func(fileURI string, line, col int) {
+	addEdit := func(fileURI string, line, col int, text string) {
 		if line <= 0 || col <= 0 {
 			return
 		}
@@ -1599,14 +1615,14 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 					Start: protocol.Position{Line: startLine, Character: startChar},
 					End:   protocol.Position{Line: startLine, Character: startChar + uint32(len(oldName))},
 				},
-				NewText: newName,
+				NewText: text,
 			},
 		)
 	}
 
 	// Declaration site.
 	declLine, declCol := f.LineIndex.LineCol(nameTok.Offset())
-	addEdit(uri, declLine, declCol)
+	addEdit(uri, declLine, declCol, declNewText)
 
 	// Reference sites: use-case refs from all files.
 	for _, wf := range s.ws.AllFiles() {
@@ -1637,7 +1653,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 			if targetURI != uri {
 				continue
 			}
-			addEdit(wf.URI, ref.Line, ref.Column)
+			addEdit(wf.URI, ref.Line, ref.Column, newName)
 		}
 
 		// Service context refs that resolve to a domain declared in the cursor's file.
@@ -1661,12 +1677,43 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 					continue
 				}
 				tokLine, tokCol := wf.LineIndex.LineCol(ctxToks[i].Offset())
-				addEdit(wf.URI, tokLine, tokCol)
+				addEdit(wf.URI, tokLine, tokCol, newName)
 			}
 		}
 	}
 
 	return &protocol.WorkspaceEdit{Changes: edits}, nil
+}
+
+// quoteCraftString wraps s in double quotes, escaping its content per the
+// lexer's scanString rules (internal/lexer/lexer.go): a literal `"` or `\`
+// is backslash-escaped, and `\n`/`\t`/`\r` become their two-character escape
+// sequences (Craft strings are single-line — scanString stops scanning at
+// an unescaped newline — so a literal newline in s must never reach the
+// output unescaped). This is the inverse of unquoteStringText in
+// internal/syntax/ast.go. Used by Rename (Fix 2) to produce a syntactically
+// valid replacement when renaming a QUOTED declaration name.
+func quoteCraftString(s string) string {
+	var sb strings.Builder
+	sb.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			sb.WriteString(`\"`)
+		case '\\':
+			sb.WriteString(`\\`)
+		case '\n':
+			sb.WriteString(`\n`)
+		case '\t':
+			sb.WriteString(`\t`)
+		case '\r':
+			sb.WriteString(`\r`)
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	sb.WriteByte('"')
+	return sb.String()
 }
 
 func (s *Server) SignatureHelp(_ context.Context, _ *protocol.SignatureHelpParams) (*protocol.SignatureHelp, error) {

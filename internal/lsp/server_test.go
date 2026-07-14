@@ -3212,6 +3212,224 @@ func TestRename_ActorName(t *testing.T) {
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
 }
 
+// TestPrepareRename_QuotedServiceName is the Fix-2 regression lock:
+// ServiceDecl.Name() now resolves a QUOTED service name (a9efed0) to its
+// SyntaxKindString token, so PrepareRename on `service "Payment Service" {`
+// is reachable. For a String token, tok.Text() is the raw source text
+// INCLUDING both quotes (Bug 8a), so the returned Range must span the FULL
+// quoted token — both quote characters included — not just the inner name.
+//
+// Line 0: service "Payment Service" {
+// col 0-6:  service
+// col 8:    opening quote
+// col 9-23: Payment Service (15 chars)
+// col 24:   closing quote
+// → full quoted token: col 8, length 17 (col 8..25 exclusive).
+func TestPrepareRename_QuotedServiceName(t *testing.T) {
+	const craftSrc = "service \"Payment Service\" {\n  contexts: Payment\n}\n"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///prepare_rename_quoted.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Cursor inside "Payment Service", e.g. col 12 (on the "m" of Payment).
+	id++
+	prepID := id
+	prepParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": 12},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &prepID, Method: "textDocument/prepareRename", Params: prepParams}) //nolint:errcheck
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == prepID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for prepareRename response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("prepareRename error: %s", resp.Error)
+	}
+
+	var rng struct {
+		Start struct {
+			Line      uint32 `json:"line"`
+			Character uint32 `json:"character"`
+		} `json:"start"`
+		End struct {
+			Line      uint32 `json:"line"`
+			Character uint32 `json:"character"`
+		} `json:"end"`
+	}
+	if err := json.Unmarshal(resp.Result, &rng); err != nil {
+		t.Fatalf("unmarshal result: %v (raw: %s)", err, resp.Result)
+	}
+
+	if rng.Start.Line != 0 || rng.Start.Character != 8 {
+		t.Errorf("start: got (%d,%d), want (0,8) — must be the opening quote, not the inner name", rng.Start.Line, rng.Start.Character)
+	}
+	if rng.End.Line != 0 || rng.End.Character != 25 {
+		t.Errorf("end: got (%d,%d), want (0,25) — must include the closing quote", rng.End.Line, rng.End.Character)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
+// TestRename_QuotedServiceName is the Fix-2 regression lock: renaming a
+// QUOTED service declaration name must replace the FULL quoted token
+// (including both quotes) with a correctly re-quoted, escaped NewText —
+// never leave the source with mismatched/missing quotes. Before the fix,
+// Rename used the raw newName verbatim as NewText over a range that (once
+// combined with client placeholder behavior) could desync from the quotes,
+// producing a corrupt (unquoted) declaration. This also exercises escaping:
+// the new name itself contains a literal `"`, which must come back as `\"`
+// so the produced source stays lexically valid.
+func TestRename_QuotedServiceName(t *testing.T) {
+	const craftSrc = "service \"Payment Service\" {\n  contexts: Payment\n}\n"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///rename_quoted_service.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	renameID := id
+	renameParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": 12},
+		"newName":      `Billing "Prime" Service`,
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &renameID, Method: "textDocument/rename", Params: renameParams}) //nolint:errcheck
+
+	var renameResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == renameID {
+			renameResp = msg
+			break
+		}
+	}
+	if renameResp.ID == nil {
+		t.Fatal("timed out waiting for rename response")
+	}
+	if renameResp.Error != nil {
+		t.Fatalf("rename error: %s", renameResp.Error)
+	}
+
+	var rawEdit struct {
+		Changes map[string]json.RawMessage `json:"changes"`
+	}
+	if err := json.Unmarshal(renameResp.Result, &rawEdit); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	fileEdits, ok := rawEdit.Changes[uri]
+	if !ok {
+		t.Fatalf("no edits for %s; got keys: %v", uri, rawEdit.Changes)
+	}
+	type textEdit struct {
+		NewText string `json:"newText"`
+		Range   struct {
+			Start struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"start"`
+			End struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"end"`
+		} `json:"range"`
+	}
+	var edits []textEdit
+	if err := json.Unmarshal(fileEdits, &edits); err != nil {
+		t.Fatalf("unmarshal edits: %v", err)
+	}
+	if len(edits) != 1 {
+		t.Fatalf("want 1 edit (declaration only), got %d: %+v", len(edits), edits)
+	}
+	e := edits[0]
+
+	wantNewText := `"Billing \"Prime\" Service"`
+	if e.NewText != wantNewText {
+		t.Errorf("newText = %q, want %q (must be re-quoted and escaped)", e.NewText, wantNewText)
+	}
+	if e.Range.Start.Line != 0 || e.Range.Start.Character != 8 {
+		t.Errorf("range start = (%d,%d), want (0,8) — full quoted span, opening quote included", e.Range.Start.Line, e.Range.Start.Character)
+	}
+	if e.Range.End.Line != 0 || e.Range.End.Character != 25 {
+		t.Errorf("range end = (%d,%d), want (0,25) — full quoted span, closing quote included", e.Range.End.Line, e.Range.End.Character)
+	}
+
+	// Simulate applying the edit and confirm the result re-parses cleanly
+	// with the new (quoted, escaped) service name — i.e. the edit does not
+	// corrupt the source.
+	lines := strings.Split(craftSrc, "\n")
+	line := lines[e.Range.Start.Line]
+	patched := line[:e.Range.Start.Character] + e.NewText + line[e.Range.End.Character:]
+	lines[e.Range.Start.Line] = patched
+	patchedSrc := strings.Join(lines, "\n")
+	if !strings.Contains(patchedSrc, `service "Billing \"Prime\" Service" {`) {
+		t.Errorf("patched source does not contain the expected re-quoted declaration; got:\n%s", patchedSrc)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
 func TestDefinition_ExposureToTarget(t *testing.T) {
 	// L1: actor user Alice
 	// L2: service PaySvc {
