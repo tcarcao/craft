@@ -353,7 +353,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			if cursorChar < ctxCol || cursorChar >= ctxCol+rawLen {
 				continue
 			}
-			domSym, ok := sema.ResolveServiceContext(rm, uri, nameTok.Text(), ctxName)
+			domSym, ok := sema.ResolveServiceContext(rm, uri, syntax.StringAwareText(*nameTok), ctxName)
 			if !ok {
 				continue
 			}
@@ -697,7 +697,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		endLine := lspLine(svc.EndLine(f.LineIndex))
 		endLine = max(endLine, startLine)
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           nameTok.Text(),
+			Name:           syntax.StringAwareText(*nameTok),
 			Kind:           protocol.SymbolKindModule,
 			Detail:         "service",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
@@ -729,7 +729,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		endLine := lspLine(d.EndLine(f.LineIndex))
 		endLine = max(endLine, startLine)
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:           nameTok.Text(),
+			Name:           syntax.StringAwareText(*nameTok),
 			Kind:           protocol.SymbolKindNamespace,
 			Detail:         "domain",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
@@ -1387,7 +1387,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
-					Value: "domain: " + nameTok.Text(),
+					Value: "domain: " + syntax.StringAwareText(*nameTok),
 				},
 			}, nil
 		}
@@ -1403,7 +1403,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			continue
 		}
 		if nameLine == cursorLine {
-			detail := "service: " + nameTok.Text()
+			detail := "service: " + syntax.StringAwareText(*nameTok)
 			if lang := svc.Language(); lang != "" {
 				detail += " (" + lang + ")"
 			}
@@ -1579,9 +1579,25 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 	oldName := nameTok.Text()
 	rm := s.ws.ResolutionMap()
 
+	// declNewText is the replacement text for the DECLARATION site only.
+	// nameTok.Text() (oldName, used below for the edit range width) is the
+	// raw source text: for a QUOTED declaration name (SyntaxKindString) it
+	// includes both surrounding quotes (Bug 8a — see tokenText in
+	// parser.go), so the declaration-site range already spans the full
+	// quoted token. newName from the client is the plain (unquoted) new
+	// name, so it must be re-quoted and escaped before replacing that
+	// range — using it verbatim would leave the declaration with no
+	// quotes at all (a broken/corrupt edit). Reference sites (use-case
+	// refs, service context lists) are never quoted, so they keep using
+	// plain newName.
+	declNewText := newName
+	if nameTok.Kind() == syntax.SyntaxKindString {
+		declNewText = quoteCraftString(newName)
+	}
+
 	edits := make(map[protocol.DocumentURI][]protocol.TextEdit)
 	seen := make(map[string]struct{})
-	addEdit := func(fileURI string, line, col int) {
+	addEdit := func(fileURI string, line, col int, text string) {
 		if line <= 0 || col <= 0 {
 			return
 		}
@@ -1599,14 +1615,14 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 					Start: protocol.Position{Line: startLine, Character: startChar},
 					End:   protocol.Position{Line: startLine, Character: startChar + uint32(len(oldName))},
 				},
-				NewText: newName,
+				NewText: text,
 			},
 		)
 	}
 
 	// Declaration site.
 	declLine, declCol := f.LineIndex.LineCol(nameTok.Offset())
-	addEdit(uri, declLine, declCol)
+	addEdit(uri, declLine, declCol, declNewText)
 
 	// Reference sites: use-case refs from all files.
 	for _, wf := range s.ws.AllFiles() {
@@ -1637,7 +1653,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 			if targetURI != uri {
 				continue
 			}
-			addEdit(wf.URI, ref.Line, ref.Column)
+			addEdit(wf.URI, ref.Line, ref.Column, newName)
 		}
 
 		// Service context refs that resolve to a domain declared in the cursor's file.
@@ -1653,7 +1669,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 				if ctxName != oldName {
 					continue
 				}
-				domSym, ok := sema.ResolveServiceContext(rm, wf.URI, svcNameTok.Text(), ctxName)
+				domSym, ok := sema.ResolveServiceContext(rm, wf.URI, syntax.StringAwareText(*svcNameTok), ctxName)
 				if !ok || domSym.URI != uri {
 					continue
 				}
@@ -1661,12 +1677,43 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 					continue
 				}
 				tokLine, tokCol := wf.LineIndex.LineCol(ctxToks[i].Offset())
-				addEdit(wf.URI, tokLine, tokCol)
+				addEdit(wf.URI, tokLine, tokCol, newName)
 			}
 		}
 	}
 
 	return &protocol.WorkspaceEdit{Changes: edits}, nil
+}
+
+// quoteCraftString wraps s in double quotes, escaping its content per the
+// lexer's scanString rules (internal/lexer/lexer.go): a literal `"` or `\`
+// is backslash-escaped, and `\n`/`\t`/`\r` become their two-character escape
+// sequences (Craft strings are single-line — scanString stops scanning at
+// an unescaped newline — so a literal newline in s must never reach the
+// output unescaped). This is the inverse of unquoteStringText in
+// internal/syntax/ast.go. Used by Rename (Fix 2) to produce a syntactically
+// valid replacement when renaming a QUOTED declaration name.
+func quoteCraftString(s string) string {
+	var sb strings.Builder
+	sb.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			sb.WriteString(`\"`)
+		case '\\':
+			sb.WriteString(`\\`)
+		case '\n':
+			sb.WriteString(`\n`)
+		case '\t':
+			sb.WriteString(`\t`)
+		case '\r':
+			sb.WriteString(`\r`)
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	sb.WriteByte('"')
+	return sb.String()
 }
 
 func (s *Server) SignatureHelp(_ context.Context, _ *protocol.SignatureHelpParams) (*protocol.SignatureHelp, error) {
@@ -2391,17 +2438,21 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 
 	case "sync_action":
 		// toks: [subject, asks, target, (connector?), phrase...]
-		// subject and target classified by resolution map; skip them.
-		start := 3
-		if start < len(toks) && tokLineNum(toks[start]) == actionLine {
-			if toks[start].Kind() == syntax.SyntaxKindKwTo {
-				// Pass 1 already emits SyntaxKindKwTo as craft-connector-word; just advance.
-				start++
-			} else if isConnectorWord(toks[start].Text()) {
-				emit(toks[start], connIdx)
-				start++
+		// subject and target classified by resolution map; skip them. The
+		// target may be a multi-token Ref (e.g. "bc:re/billing", 5 flat
+		// tokens: bc, :, re, /, billing), so don't assume a fixed target
+		// width here — use ActionDecl.PhraseStartIndex, which mirrors the
+		// AST's own phraseStartIndex (the source of truth also used by
+		// PhraseText), so LSP and the AST agree on exactly where the
+		// target/connector end and the phrase begins.
+		if conn := action.Connector(); conn != nil && tokLineNum(*conn) == actionLine {
+			if conn.Kind() == syntax.SyntaxKindKwTo {
+				// Pass 1 already emits SyntaxKindKwTo as craft-connector-word.
+			} else if isConnectorWord(conn.Text()) {
+				emit(*conn, connIdx)
 			}
 		}
+		start := action.PhraseStartIndex()
 		for _, tok := range toks[start:] {
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue
@@ -2411,12 +2462,22 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 
 	case "return_action":
 		// toks: [subject, returns, (to, target)?, (connector?), phrase...]
+		// NOTE: action.Connector() must NOT be used here — for return_action
+		// it returns the KwTo target-introducer token (`to` in
+		// "returns to <target>"), not the free-text connector word
+		// (with/for/...) that parseReturnsAction allows regardless of
+		// whether a target is present. Pass 1's kind→type table already
+		// classifies SyntaxKindKwTo as craft-connector-word, so re-emitting
+		// it here would double-emit it, and the real connector word would
+		// never be classified. Return-action targets are always a single
+		// token (never a multi-token slug ref), so walk positionally
+		// instead, mirroring phraseStartIndex's return_action branch in
+		// internal/syntax/ast.go.
 		start := 2
 		if start < len(toks) && toks[start].Kind() == syntax.SyntaxKindKwTo {
-			start += 2 // skip "to target"
+			start += 2 // skip `to target`
 		}
-		// connector is always SyntaxKindIdent for return_action (parser guarantee)
-		if start < len(toks) && isConnectorWord(toks[start].Text()) && tokLineNum(toks[start]) == actionLine {
+		if start < len(toks) && tokLineNum(toks[start]) == actionLine && isConnectorWord(toks[start].Text()) {
 			emit(toks[start], connIdx)
 			start++
 		}

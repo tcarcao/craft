@@ -40,6 +40,13 @@ func TestParseRef_Shapes(t *testing.T) {
 		// so adjacentTokens must compare rune lengths. Otherwise a multibyte
 		// character in a segment (e.g. "café") silently truncates the ref.
 		{"bc:café/billing", "bc:café/billing", "bc"},
+		// Regression: a slug segment that lexes as a hard keyword (e.g. a BC
+		// literally named "user"/"service"/"domain") must not truncate the
+		// ref mid-slug. The continuation loop must accept
+		// isAnyKeywordAsIdent tokens the same way the leading kind-word
+		// branch already does.
+		{"term:user/account", "term:user/account", "term"},
+		{"bc:re/service", "bc:re/service", "bc"},
 	}
 	for _, c := range cases {
 		txt, kind := parseRefText(t, c.src) // test helper wrapping a Parser over c.src

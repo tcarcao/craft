@@ -90,7 +90,10 @@ func handleInlayHint(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.R
 	for _, svc := range syntax.AsFile(tree).Services() {
 		svcName := ""
 		if tok := svc.Name(); tok != nil {
-			svcName = tok.Text()
+			// tok may be SyntaxKindString for a quoted service name; the
+			// resolution map is keyed by unquoted names (same reasoning as
+			// ctxName below), so read content via StringAwareText.
+			svcName = syntax.StringAwareText(*tok)
 		}
 		if svcName == "" {
 			continue

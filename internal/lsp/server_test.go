@@ -2383,6 +2383,427 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 	})
 }
 
+// TestSemanticTokens_SlugTarget is a regression test for a bug where
+// classifyActionIdents (sync_action case) hardcoded the target width to a
+// single token (start := 3), so a typed node-slug target (e.g.
+// "bc:re/billing", which flattens to 5 leaf tokens: bc, :, re, /, billing)
+// caused classification to start mid-target, mis-emitting the ref's own
+// tokens (re, billing) as craft-phrase-word and missing the real connector
+// ("for") that follows the ref. Phrase classification must start at the
+// same token as ActionDecl.PhraseText() (see phraseStartIndex in
+// internal/syntax/ast.go).
+func TestSemanticTokens_SlugTarget(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "SlugTarget" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions asks bc:re/billing for a fresh charge attempt
+	// Line 3: }
+	// col math (0-based): "    Subscriptions asks bc:re/billing for a fresh charge attempt"
+	//   col 4:  Subscriptions (len 13) — subject
+	//   col 18: asks          (len 4)  — keyword craft-asks-verb (Pass 1)
+	//   col 23: bc            (len 2)  — ref target (kind word), NOT craft-phrase-word
+	//   col 25: :             (len 1)  — ref punctuation
+	//   col 26: re            (len 2)  — ref target (namespace segment), NOT craft-phrase-word
+	//   col 28: /             (len 1)  — ref punctuation
+	//   col 29: billing       (len 7)  — ref target (name segment), NOT craft-phrase-word
+	//   col 37: for           (len 3)  — connector → craft-connector-word (index 29)
+	//   col 43: fresh         (len 5)  — phrase word → craft-phrase-word (index 33)
+	//   col 49: charge        (len 6)  — phrase word → craft-phrase-word (index 33)
+	//   col 56: attempt       (len 7)  — phrase word → craft-phrase-word (index 33)
+	slugSrc := "use_case \"SlugTarget\" {\n  when SomeActor does SomeThing\n    Subscriptions asks bc:re/billing for a fresh charge attempt\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///slug_target.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(slugSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///slug_target.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for slug target token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftPhraseWord = 33
+	const craftConnectorWord = 29
+
+	// "re" at line 2, col 26 must NOT be craft-phrase-word (it is part of the
+	// ref target, not the free-text phrase).
+	if tok, ok := byPos[[2]uint32{2, 26}]; ok && tok.tokenType == craftPhraseWord {
+		t.Errorf("re: got tokenType %d (craft-phrase-word), want anything else (it is a ref target token)", tok.tokenType)
+	}
+
+	// "billing" at line 2, col 29 must NOT be craft-phrase-word.
+	if tok, ok := byPos[[2]uint32{2, 29}]; ok && tok.tokenType == craftPhraseWord {
+		t.Errorf("billing: got tokenType %d (craft-phrase-word), want anything else (it is a ref target token)", tok.tokenType)
+	}
+
+	// "for" at line 2, col 37, len 3 → connector word, tokenType 29.
+	if tok, ok := byPos[[2]uint32{2, 37}]; !ok {
+		t.Error("for not found at line 2 col 37")
+	} else if tok.tokenType != craftConnectorWord {
+		t.Errorf("for: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "fresh" at line 2, col 43, len 5 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 43}]; !ok {
+		t.Error("fresh not found at line 2 col 43")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("fresh: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+
+	// "charge" at line 2, col 49, len 6 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 49}]; !ok {
+		t.Error("charge not found at line 2 col 49")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("charge: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+
+	// "attempt" at line 2, col 56, len 7 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 56}]; !ok {
+		t.Error("attempt not found at line 2 col 56")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("attempt: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+}
+
+// TestSemanticTokens_ReturnActionConnectorNoTarget is a regression test for a
+// bug where classifyActionIdents' return_action case called
+// ActionDecl.Connector(), which for return_action returns the KwTo
+// target-introducer token (not the free-text connector word). When a
+// return_action has no `to <target>` at all, Connector() returns nil, so the
+// real connector word (e.g. "with") was never classified as
+// craft-connector-word. This asserts "with" IS classified and "success" is
+// craft-phrase-word.
+func TestSemanticTokens_ReturnActionConnectorNoTarget(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "ReturnNoTarget" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions returns with success
+	// Line 3: }
+	// col math (0-based): "    Subscriptions returns with success"
+	//   col 4:  Subscriptions (len 13) — subject
+	//   col 18: returns        (len 7)  — verb keyword (Pass 1)
+	//   col 26: with           (len 4)  — connector → craft-connector-word
+	//   col 31: success        (len 7)  — phrase word → craft-phrase-word
+	src := "use_case \"ReturnNoTarget\" {\n  when SomeActor does SomeThing\n    Subscriptions returns with success\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///return_no_target.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(src),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///return_no_target.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for return-no-target token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftPhraseWord = 33
+	const craftConnectorWord = 29
+
+	// "with" at line 2, col 26, len 4 → connector word, tokenType 29.
+	if tok, ok := byPos[[2]uint32{2, 26}]; !ok {
+		t.Error("with not found at line 2 col 26")
+	} else if tok.tokenType != craftConnectorWord {
+		t.Errorf("with: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "success" at line 2, col 31, len 7 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 31}]; !ok {
+		t.Error("success not found at line 2 col 31")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("success: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+}
+
+// TestSemanticTokens_ReturnActionConnectorWithTarget is a regression test for
+// a bug where classifyActionIdents' return_action case called
+// ActionDecl.Connector(), which for return_action returns the KwTo
+// target-introducer token. When a `to <target>` IS present, this caused the
+// KwTo token to be double-emitted as craft-connector-word (once by Pass 1's
+// kind→type table, once by classifyActionIdents, since the return_action
+// case — unlike sync_action — lacked a "Pass 1 already emits this" guard),
+// while the real connector word (e.g. "with") still went unclassified. This
+// asserts the target-introducer "to" is emitted exactly ONCE, "with" IS
+// classified as craft-connector-word, and "success" is craft-phrase-word.
+func TestSemanticTokens_ReturnActionConnectorWithTarget(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "ReturnWithTarget" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions returns to Target with success
+	// Line 3: }
+	// col math (0-based): "    Subscriptions returns to Target with success"
+	//   col 4:  Subscriptions (len 13) — subject
+	//   col 18: returns        (len 7)  — verb keyword (Pass 1)
+	//   col 26: to             (len 2)  — target-introducer, craft-connector-word (Pass 1), exactly once
+	//   col 29: Target         (len 6)  — target
+	//   col 36: with           (len 4)  — connector → craft-connector-word
+	//   col 41: success        (len 7)  — phrase word → craft-phrase-word
+	src := "use_case \"ReturnWithTarget\" {\n  when SomeActor does SomeThing\n    Subscriptions returns to Target with success\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///return_with_target.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(src),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///return_with_target.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for return-with-target token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	// occurrences (not a map) so duplicate emissions at the same position are
+	// detectable rather than silently overwritten.
+	var occurrences []absToken
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		occurrences = append(occurrences, absToken{curLine, curChar, ln, tt})
+	}
+
+	byPos := make(map[[2]uint32]absToken)
+	for _, tok := range occurrences {
+		byPos[[2]uint32{tok.line, tok.startChar}] = tok
+	}
+
+	const craftPhraseWord = 33
+	const craftConnectorWord = 29
+
+	// "to" at line 2, col 26 must be emitted exactly once.
+	toCount := 0
+	for _, tok := range occurrences {
+		if tok.line == 2 && tok.startChar == 26 {
+			toCount++
+		}
+	}
+	if toCount != 1 {
+		t.Errorf("to: emitted %d times at line 2 col 26, want exactly 1", toCount)
+	}
+	if tok, ok := byPos[[2]uint32{2, 26}]; ok && tok.tokenType != craftConnectorWord {
+		t.Errorf("to: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "with" at line 2, col 36, len 4 → connector word, tokenType 29.
+	if tok, ok := byPos[[2]uint32{2, 36}]; !ok {
+		t.Error("with not found at line 2 col 36")
+	} else if tok.tokenType != craftConnectorWord {
+		t.Errorf("with: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "success" at line 2, col 41, len 7 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 41}]; !ok {
+		t.Error("success not found at line 2 col 41")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("success: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+}
+
 // TestSemanticTokens_DomainListenTriggerColumn is a regression test for a bug
 // where domain_listen trigger subjects (e.g. "VASScheduling" in
 // "when VASScheduling listens ...") were emitted at col 0 instead of their
@@ -3050,6 +3471,224 @@ func TestRename_ActorName(t *testing.T) {
 		if e.NewText != "Carol" {
 			t.Errorf("edit newText = %q, want %q", e.NewText, "Carol")
 		}
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
+// TestPrepareRename_QuotedServiceName is the Fix-2 regression lock:
+// ServiceDecl.Name() now resolves a QUOTED service name (a9efed0) to its
+// SyntaxKindString token, so PrepareRename on `service "Payment Service" {`
+// is reachable. For a String token, tok.Text() is the raw source text
+// INCLUDING both quotes (Bug 8a), so the returned Range must span the FULL
+// quoted token — both quote characters included — not just the inner name.
+//
+// Line 0: service "Payment Service" {
+// col 0-6:  service
+// col 8:    opening quote
+// col 9-23: Payment Service (15 chars)
+// col 24:   closing quote
+// → full quoted token: col 8, length 17 (col 8..25 exclusive).
+func TestPrepareRename_QuotedServiceName(t *testing.T) {
+	const craftSrc = "service \"Payment Service\" {\n  contexts: Payment\n}\n"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///prepare_rename_quoted.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	// Cursor inside "Payment Service", e.g. col 12 (on the "m" of Payment).
+	id++
+	prepID := id
+	prepParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": 12},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &prepID, Method: "textDocument/prepareRename", Params: prepParams}) //nolint:errcheck
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == prepID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for prepareRename response")
+	}
+	if resp.Error != nil {
+		t.Fatalf("prepareRename error: %s", resp.Error)
+	}
+
+	var rng struct {
+		Start struct {
+			Line      uint32 `json:"line"`
+			Character uint32 `json:"character"`
+		} `json:"start"`
+		End struct {
+			Line      uint32 `json:"line"`
+			Character uint32 `json:"character"`
+		} `json:"end"`
+	}
+	if err := json.Unmarshal(resp.Result, &rng); err != nil {
+		t.Fatalf("unmarshal result: %v (raw: %s)", err, resp.Result)
+	}
+
+	if rng.Start.Line != 0 || rng.Start.Character != 8 {
+		t.Errorf("start: got (%d,%d), want (0,8) — must be the opening quote, not the inner name", rng.Start.Line, rng.Start.Character)
+	}
+	if rng.End.Line != 0 || rng.End.Character != 25 {
+		t.Errorf("end: got (%d,%d), want (0,25) — must include the closing quote", rng.End.Line, rng.End.Character)
+	}
+
+	id2 := 99
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id2, Method: "shutdown"}) //nolint:errcheck
+	readMsg(br)                                                             //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "exit"})               //nolint:errcheck
+}
+
+// TestRename_QuotedServiceName is the Fix-2 regression lock: renaming a
+// QUOTED service declaration name must replace the FULL quoted token
+// (including both quotes) with a correctly re-quoted, escaped NewText —
+// never leave the source with mismatched/missing quotes. Before the fix,
+// Rename used the raw newName verbatim as NewText over a range that (once
+// combined with client placeholder behavior) could desync from the quotes,
+// producing a corrupt (unquoted) declaration. This also exercises escaping:
+// the new name itself contains a literal `"`, which must come back as `\"`
+// so the produced source stays lexically valid.
+func TestRename_QuotedServiceName(t *testing.T) {
+	const craftSrc = "service \"Payment Service\" {\n  contexts: Payment\n}\n"
+
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer testOut.Close()
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	br := bufio.NewReader(testIn)
+
+	id := 1
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
+	readMsg(br)                                                                                     //nolint:errcheck
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
+
+	const uri = "file:///rename_quoted_service.craft"
+	openParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{
+			"uri": uri, "languageId": "craft", "version": 1, "text": craftSrc,
+		},
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "textDocument/didOpen", Params: openParams}) //nolint:errcheck
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	renameID := id
+	renameParams, _ := json.Marshal(map[string]interface{}{
+		"textDocument": map[string]interface{}{"uri": uri},
+		"position":     map[string]interface{}{"line": 0, "character": 12},
+		"newName":      `Billing "Prime" Service`,
+	})
+	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &renameID, Method: "textDocument/rename", Params: renameParams}) //nolint:errcheck
+
+	var renameResp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == renameID {
+			renameResp = msg
+			break
+		}
+	}
+	if renameResp.ID == nil {
+		t.Fatal("timed out waiting for rename response")
+	}
+	if renameResp.Error != nil {
+		t.Fatalf("rename error: %s", renameResp.Error)
+	}
+
+	var rawEdit struct {
+		Changes map[string]json.RawMessage `json:"changes"`
+	}
+	if err := json.Unmarshal(renameResp.Result, &rawEdit); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	fileEdits, ok := rawEdit.Changes[uri]
+	if !ok {
+		t.Fatalf("no edits for %s; got keys: %v", uri, rawEdit.Changes)
+	}
+	type textEdit struct {
+		NewText string `json:"newText"`
+		Range   struct {
+			Start struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"start"`
+			End struct {
+				Line      uint32 `json:"line"`
+				Character uint32 `json:"character"`
+			} `json:"end"`
+		} `json:"range"`
+	}
+	var edits []textEdit
+	if err := json.Unmarshal(fileEdits, &edits); err != nil {
+		t.Fatalf("unmarshal edits: %v", err)
+	}
+	if len(edits) != 1 {
+		t.Fatalf("want 1 edit (declaration only), got %d: %+v", len(edits), edits)
+	}
+	e := edits[0]
+
+	wantNewText := `"Billing \"Prime\" Service"`
+	if e.NewText != wantNewText {
+		t.Errorf("newText = %q, want %q (must be re-quoted and escaped)", e.NewText, wantNewText)
+	}
+	if e.Range.Start.Line != 0 || e.Range.Start.Character != 8 {
+		t.Errorf("range start = (%d,%d), want (0,8) — full quoted span, opening quote included", e.Range.Start.Line, e.Range.Start.Character)
+	}
+	if e.Range.End.Line != 0 || e.Range.End.Character != 25 {
+		t.Errorf("range end = (%d,%d), want (0,25) — full quoted span, closing quote included", e.Range.End.Line, e.Range.End.Character)
+	}
+
+	// Simulate applying the edit and confirm the result re-parses cleanly
+	// with the new (quoted, escaped) service name — i.e. the edit does not
+	// corrupt the source.
+	lines := strings.Split(craftSrc, "\n")
+	line := lines[e.Range.Start.Line]
+	patched := line[:e.Range.Start.Character] + e.NewText + line[e.Range.End.Character:]
+	lines[e.Range.Start.Line] = patched
+	patchedSrc := strings.Join(lines, "\n")
+	if !strings.Contains(patchedSrc, `service "Billing \"Prime\" Service" {`) {
+		t.Errorf("patched source does not contain the expected re-quoted declaration; got:\n%s", patchedSrc)
 	}
 
 	id2 := 99

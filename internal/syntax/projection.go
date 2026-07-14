@@ -51,7 +51,7 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 			}
 		}
 		doc.Domains = append(doc.Domains, craft.Domain{
-			Name:            nameTok.Text(),
+			Name:            stringAwareText(*nameTok),
 			BoundedContexts: bcNames,
 		})
 	}
