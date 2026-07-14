@@ -114,8 +114,13 @@ func TestUseCaseDecl_View(t *testing.T) {
 		t.Fatalf("expected 1 use_case, got %d", len(ucs))
 	}
 	uc := ucs[0]
-	if uc.Title() == nil || uc.Title().Text() != "Pay" {
-		t.Errorf("expected title Pay, got %v", uc.Title())
+	// Title().Text() is the raw source text and includes both quotes (Bug 8a
+	// fix); UseCaseDecl.Name() is the unquoted content accessor.
+	if uc.Title() == nil || uc.Title().Text() != `"Pay"` {
+		t.Errorf("expected title \"Pay\", got %v", uc.Title())
+	}
+	if uc.Name() != "Pay" {
+		t.Errorf("expected unquoted name Pay, got %q", uc.Name())
 	}
 	scenarios := uc.Scenarios()
 	if len(scenarios) != 1 {

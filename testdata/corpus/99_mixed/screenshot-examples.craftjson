@@ -481,8 +481,8 @@
             "type": "external",
             "actor": "CronScheduler",
             "verb": "triggers",
-            "phrase": "DailyInventorySync",
-            "description": "when CronScheduler triggers DailyInventorySync"
+            "phrase": "\"DailyInventorySync\"",
+            "description": "when CronScheduler triggers \"DailyInventorySync\""
           },
           "actions": [
             {

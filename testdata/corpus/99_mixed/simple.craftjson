@@ -445,8 +445,8 @@
               "context": "OrderMgmt",
               "verb": "creates",
               "connector": "an",
-              "phrase": "Order with two items to fulfil: VAS and VAS Subscription",
-              "description": "OrderMgmt creates an Order with two items to fulfil: VAS and VAS Subscription",
+              "phrase": "\"Order with two items to fulfil: VAS and VAS Subscription\"",
+              "description": "OrderMgmt creates an \"Order with two items to fulfil: VAS and VAS Subscription\"",
               "line": 67
             },
             {
@@ -710,8 +710,8 @@
               "targetContext": "VASMgmt",
               "ref": "VASMgmt",
               "connector": "to",
-              "phrase": "schedule/apply a new VAS",
-              "description": "Subscription asks VASMgmt to schedule/apply a new VAS",
+              "phrase": "\"schedule/apply a new VAS\"",
+              "description": "Subscription asks VASMgmt to \"schedule/apply a new VAS\"",
               "line": 105
             },
             {

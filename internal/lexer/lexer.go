@@ -105,8 +105,16 @@ var keywords = map[string]TokenType{
 
 // Token is a scanned unit from the source.
 type Token struct {
-	Type   TokenType
-	Value  string
+	Type  TokenType
+	Value string
+	// Raw carries the exact raw source text for the token, when it differs
+	// from Value. Only populated for TokenString: Value is the unescaped
+	// string CONTENT without the surrounding quotes (kept for content
+	// consumers), while Raw is the verbatim source slice including both
+	// quotes and any escape sequences as written — used to build a
+	// byte-for-byte lossless green tree. Empty for token types where Value
+	// already equals the raw source text.
+	Raw    string
 	Line   int // 1-based
 	Column int // 1-based (byte offset within the line)
 }
@@ -271,7 +279,8 @@ func (l *Lexer) scanBlockComment() Token {
 func (l *Lexer) scanString() Token {
 	startLine := l.line
 	startCol := l.col
-	l.advance() // consume opening "
+	rawStart := l.pos // position of the opening `"`, for the Raw source slice
+	l.advance()       // consume opening "
 	var val []rune
 	closed := false
 	for l.pos < len(l.src) {
@@ -320,7 +329,7 @@ func (l *Lexer) scanString() Token {
 		// Callers that compute a Range must add +1 for the opening `"`.
 		return Token{Type: TokenError, Value: string(val), Line: startLine, Column: startCol}
 	}
-	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol}
+	return Token{Type: TokenString, Value: string(val), Raw: string(l.src[rawStart:l.pos]), Line: startLine, Column: startCol}
 }
 
 func (l *Lexer) scanIdent() Token {

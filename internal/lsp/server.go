@@ -734,10 +734,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		startLine := lspLine(uc.Line(f.LineIndex))
 		endLine := lspLine(uc.EndLine(f.LineIndex))
 		endLine = max(endLine, startLine)
-		name := ""
-		if titleTok := uc.Title(); titleTok != nil {
-			name = titleTok.Text()
-		}
+		name := uc.Name() // unquoted title text (Bug 8a fix)
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:   name,
 			Kind:   protocol.SymbolKindEvent, // closest match for use-case-level interactions
@@ -872,7 +869,7 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 			}
 			entryPoint, involved := extractUseCaseContextsFromView(uc)
 			result.UseCases = append(result.UseCases, craftUseCaseEntry{
-				Name:              titleTok.Text(),
+				Name:              uc.Name(), // unquoted title text (Bug 8a fix)
 				URI:               f.URI,
 				StartLine:         ucLine,
 				EndLine:           uc.EndLine(f.LineIndex),
@@ -1440,10 +1437,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		for _, sc := range uc.Scenarios() {
 			// Hover on the use_case name itself (line of use_case keyword).
 			if ucLine == cursorLine {
-				name := ""
-				if titleTok := uc.Title(); titleTok != nil {
-					name = titleTok.Text()
-				}
+				name := uc.Name() // unquoted title text (Bug 8a fix)
 				return &protocol.Hover{
 					Contents: protocol.MarkupContent{
 						Kind:  protocol.PlainText,
@@ -1943,11 +1937,9 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			if idx < 0 {
 				continue
 			}
+			// tok.Text() is the exact raw source text; for strings it already
+			// includes both quotes (Bug 8a fix), so no length adjustment needed.
 			length := uint32(len(tok.Text()))
-			if tok.Kind() == syntax.SyntaxKindString {
-				// Text() stores content without quotes; add 2 to cover "content".
-				length += 2
-			}
 			pos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
 			tokens = append(tokens, semanticToken{
 				line:      pos.Line,

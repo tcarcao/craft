@@ -1425,7 +1425,21 @@ func (p *Parser) updatePrevEnd(tok lexer.Token) {
 		return
 	}
 	start := p.li.Offset(tok.Line, tok.Column)
-	p.prevEnd = start + green.TextSize(len(tok.Value))
+	p.prevEnd = start + green.TextSize(len(tokenText(tok)))
+}
+
+// tokenText returns the exact raw source text for tok, for green-tree Text
+// emission. For most token types this is tok.Value. TokenString is the
+// exception: Value is the unescaped string CONTENT without surrounding
+// quotes (kept as-is for content consumers — see EventValue()/Title()/etc.),
+// while Raw carries the verbatim source slice including both quotes and any
+// escape sequences. Using Value there would silently drop the quotes and
+// corrupt the round-trip (Bug 1); Raw is what makes the green tree lossless.
+func tokenText(tok lexer.Token) string {
+	if tok.Type == lexer.TokenString && tok.Raw != "" {
+		return tok.Raw
+	}
+	return tok.Value
 }
 
 // attachTrivia emits any line/block comment tokens at p.pos into the current
@@ -1465,7 +1479,7 @@ func (p *Parser) consume() lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tok.Value)
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tokenText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -1480,7 +1494,7 @@ func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(kind, tok.Value)
+	p.builder.Token(kind, tokenText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }

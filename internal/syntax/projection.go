@@ -2,7 +2,6 @@ package syntax
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/tcarcao/craft/internal/green"
 	"github.com/tcarcao/craft/pkg/craft"
@@ -60,12 +59,11 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 	// Use cases — maintain global counter for action_N / scenario_N IDs
 	counter := 0
 	for _, uc := range file.UseCases() {
-		titleTok := uc.Title()
-		if titleTok == nil {
+		if uc.Title() == nil {
 			continue
 		}
 		outUC := craft.UseCase{
-			Name:      titleTok.Text(),
+			Name:      uc.Name(), // unquoted title text (Bug 8a fix)
 			Scenarios: []craft.Scenario{},
 		}
 		for _, sc := range uc.Scenarios() {
@@ -185,18 +183,10 @@ func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 		if len(tokens) >= 2 {
 			verb = tokens[1].Text()
 		}
-		phraseStart := 2
-		if len(tokens) > 2 && isConnectorWord(tokens[2].Text()) {
-			// connector is consumed (discarded) from phrase, matching lower.go `_ = connector`
-			phraseStart = 3
-		}
-		if len(tokens) > phraseStart {
-			var parts []string
-			for _, tok := range tokens[phraseStart:] {
-				parts = append(parts, tok.Text())
-			}
-			phrase = strings.Join(parts, " ")
-		}
+		// phrase is the exact raw source substring (Bug 8a fix), not a
+		// space-joined reconstruction that would insert spaces into tight
+		// punctuation — mirrors ActionDecl.PhraseText().
+		phrase = t.PhraseText()
 	}
 	var description string
 	switch kind {
@@ -260,15 +250,11 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 				tok := tokens[i]
 				if tok.Kind() == SyntaxKindKwTo || (tok.Kind() == SyntaxKindIdent && tok.Text() == "for") {
 					connector = tok.Text()
-					i++
 				}
 			}
-			// phrase from remaining tokens
-			var phraseParts []string
-			for _, tok := range tokens[i:] {
-				phraseParts = append(phraseParts, tok.Text())
-			}
-			phrase = strings.Join(phraseParts, " ")
+			// phrase is already set from a.PhraseText() above (Bug 8a fix) — the
+			// exact raw source substring, not a space-joined reconstruction that
+			// would insert spaces into tight punctuation like `(1! & 2!)`.
 			// description matches lower.go: always include connector field (may be empty, adding trailing space)
 			description = subject + " asks " + target + " " + connector
 			if phrase != "" {
@@ -293,14 +279,9 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 			// optional connector_word after target
 			if i < len(tokens) && isConnectorWord(tokens[i].Text()) {
 				connector = tokens[i].Text()
-				i++
 			}
-			// phrase from remaining tokens
-			var phraseParts []string
-			for _, tok := range tokens[i:] {
-				phraseParts = append(phraseParts, tok.Text())
-			}
-			phrase = strings.Join(phraseParts, " ")
+			// phrase is already set from a.PhraseText() above (Bug 8a fix) — see
+			// the sync_action case comment.
 			if target != "" {
 				description = fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
 			} else {
@@ -312,16 +293,11 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 		// Match lower.go: isConnectorWord applies to any connector ident (a/an/the/as/to/etc.),
 		// not just SyntaxKindKwTo. Extract connector directly from tokens.
 		tokens := a.Tokens()
-		phraseStart := 2
 		if len(tokens) > 2 && isConnectorWord(tokens[2].Text()) {
 			connector = tokens[2].Text()
-			phraseStart = 3
 		}
-		var phraseParts []string
-		for _, tok := range tokens[phraseStart:] {
-			phraseParts = append(phraseParts, tok.Text())
-		}
-		phrase = strings.Join(phraseParts, " ")
+		// phrase is already set from a.PhraseText() above (Bug 8a fix) — see
+		// the sync_action case comment.
 		description = subject + " " + verb
 		if connector != "" {
 			description += " " + connector
@@ -386,7 +362,9 @@ func projectServicesFromViews(file File, li green.LineIndex) []craft.Service {
 		if nameTok == nil {
 			continue
 		}
-		name := nameTok.Text()
+		// name may be quoted (`service "Order Service" { ... }`); stringAwareText
+		// unquotes it (Bug 8a fix) — nameTok.Text() is now the raw source text.
+		name := stringAwareText(*nameTok)
 		e, exists := byName[name]
 		if !exists {
 			svcLine, _ := li.LineCol(nameTok.Offset())

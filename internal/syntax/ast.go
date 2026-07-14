@@ -104,9 +104,64 @@ func refAwareText(el SyntaxElement) string {
 		}
 		return ""
 	case SyntaxToken:
-		return v.Text()
+		return stringAwareText(v)
 	}
 	return ""
+}
+
+// stringAwareText returns a leaf token's semantic content: for a
+// SyntaxKindString token, tok.Text() is the exact raw source text
+// including both quotes (Bug 8a fix — see tokenText in parser.go), so this
+// strips the surrounding quotes and resolves escape sequences to recover
+// the same unescaped value lexer.Token.Value held. For any other kind,
+// Text() is already the semantic value (no quotes involved), so it is
+// returned unchanged.
+func stringAwareText(tok SyntaxToken) string {
+	if tok.Kind() != SyntaxKindString {
+		return tok.Text()
+	}
+	return unquoteStringText(tok.Text())
+}
+
+// unquoteStringText strips the surrounding double quotes from raw (a
+// SyntaxKindString token's raw source text) and resolves the lexer's
+// escape sequences (\", \\, \n, \t, \r; an unrecognised escape passes
+// through as backslash + char), mirroring lexer.Lexer.scanString exactly.
+// If raw isn't quote-delimited, it's returned unchanged (defensive).
+func unquoteStringText(raw string) string {
+	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+		return raw
+	}
+	inner := raw[1 : len(raw)-1]
+	if !strings.ContainsRune(inner, '\\') {
+		return inner
+	}
+	var sb strings.Builder
+	sb.Grow(len(inner))
+	for i := 0; i < len(inner); i++ {
+		ch := inner[i]
+		if ch == '\\' && i+1 < len(inner) {
+			i++
+			switch inner[i] {
+			case '"':
+				sb.WriteByte('"')
+			case '\\':
+				sb.WriteByte('\\')
+			case 'n':
+				sb.WriteByte('\n')
+			case 't':
+				sb.WriteByte('\t')
+			case 'r':
+				sb.WriteByte('\r')
+			default:
+				sb.WriteByte('\\')
+				sb.WriteByte(inner[i])
+			}
+			continue
+		}
+		sb.WriteByte(ch)
+	}
+	return sb.String()
 }
 
 // refAwareOffset returns the byte offset of a significant child element,
@@ -198,7 +253,7 @@ func collectAstIdentList(tokens []SyntaxToken, i int) (names []string, lines []i
 			continue
 		}
 		if (tok.Kind() == SyntaxKindIdent || tok.Kind() == SyntaxKindString) && !isAstFieldSentinel(tokens, i) {
-			names = append(names, tok.Text())
+			names = append(names, stringAwareText(tok))
 			lines = append(lines, 0)
 			i++
 		} else {
@@ -950,7 +1005,20 @@ func AsUseCaseDecl(n SyntaxNode) UseCaseDecl { return UseCaseDecl{node: n} }
 type UseCaseDecl struct{ node SyntaxNode }
 
 func (u UseCaseDecl) Keyword() *SyntaxToken { return u.node.ChildToken(SyntaxKindKwUseCase) }
-func (u UseCaseDecl) Title() *SyntaxToken   { return u.node.ChildToken(SyntaxKindString) }
+
+// Title returns the raw quoted-string title token (Text() includes both
+// quotes — Bug 8a fix). Content consumers that want the unquoted use_case
+// name should call Name() instead.
+func (u UseCaseDecl) Title() *SyntaxToken { return u.node.ChildToken(SyntaxKindString) }
+
+// Name returns the unquoted use_case title text.
+func (u UseCaseDecl) Name() string {
+	tok := u.Title()
+	if tok == nil {
+		return ""
+	}
+	return stringAwareText(*tok)
+}
 
 // EndLine returns the 1-based line of the closing `}` using li.
 func (u UseCaseDecl) EndLine(li green.LineIndex) int { return nodeEndLine(u.node, li) }
@@ -1072,7 +1140,7 @@ func (t TriggerDecl) EventValue() string {
 	case "event":
 		tokens := t.node.Tokens()
 		if len(tokens) > 0 {
-			return tokens[0].Text()
+			return stringAwareText(tokens[0])
 		}
 	case "domain_listen":
 		elems := significantElements(t.node)
@@ -1084,18 +1152,50 @@ func (t TriggerDecl) EventValue() string {
 }
 
 // Description returns the human-readable trigger line (without the leading `when`).
-// String tokens are wrapped in double quotes.
+// String tokens' raw Text() already includes both quotes (Bug 8a fix), so no
+// manual quote-wrapping is needed here — that used to double the quotes.
 func (t TriggerDecl) Description() string {
 	tokens := t.node.Tokens()
 	parts := make([]string, 0, len(tokens))
 	for _, tok := range tokens {
-		if tok.Kind() == SyntaxKindString {
-			parts = append(parts, `"`+tok.Text()+`"`)
-		} else {
-			parts = append(parts, tok.Text())
-		}
+		parts = append(parts, tok.Text())
 	}
 	return strings.Join(parts, " ")
+}
+
+// PhraseText returns the free-text phrase for an "external" trigger (e.g.
+// `when Actor verb <phrase>`), as the exact raw source substring spanning
+// the phrase tokens (including any inter-token whitespace) — mirrors
+// ActionDecl.PhraseText (Task 1 / Bug 8a) so prose with tight punctuation
+// keeps its original spacing instead of being space-joined.
+func (t TriggerDecl) PhraseText() string {
+	if t.Kind() != "external" {
+		return ""
+	}
+	tokens := t.node.Tokens()
+	if len(tokens) <= 2 {
+		return ""
+	}
+	phraseStart := 2
+	if isConnectorWord(tokens[2].Text()) {
+		phraseStart = 3
+	}
+	if phraseStart >= len(tokens) {
+		return ""
+	}
+	startOffset := tokens[phraseStart].Offset()
+	var sb strings.Builder
+	writing := false
+	for _, tok := range t.node.AllTokens() {
+		if !writing {
+			if tok.Offset() < startOffset {
+				continue
+			}
+			writing = true
+		}
+		sb.WriteString(tok.Text())
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // EventCol returns the 1-based column of the event token using li.
@@ -1618,7 +1718,7 @@ func collectAstExposureIdentList(tokens []SyntaxToken, i int) ([]string, int) {
 			break
 		}
 		if tok.Kind() == SyntaxKindIdent || tok.Kind() == SyntaxKindString {
-			names = append(names, tok.Text())
+			names = append(names, stringAwareText(tok))
 		}
 		i++
 	}

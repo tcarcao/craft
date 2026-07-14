@@ -416,6 +416,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if titleTok == nil {
 			continue
 		}
+		name := uc.Name() // unquoted title text (Bug 8a fix — titleTok.Text() is now raw, quoted)
 		ucLine := 0
 		if hasLI && kwTok != nil {
 			ucLine, _ = lineIdx.LineCol(kwTok.Offset())
@@ -424,22 +425,22 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if hasLI {
 			ucEndLine = uc.EndLine(lineIdx)
 		}
-		sym := UseCaseSymbol{Name: titleTok.Text(), Line: ucLine, EndLine: ucEndLine, URI: uri}
-		if prev, dup := seenUseCases[titleTok.Text()]; dup {
+		sym := UseCaseSymbol{Name: name, Line: ucLine, EndLine: ucEndLine, URI: uri}
+		if prev, dup := seenUseCases[name]; dup {
 			diags = append(diags, craft.Diagnostic{
 				Code: "craft/sema/duplicate-use-case-name",
 				Message: fmt.Sprintf(
-					"use_case %q already declared (first seen at line %d)", titleTok.Text(), prev.Line,
+					"use_case %q already declared (first seen at line %d)", name, prev.Line,
 				),
 				Severity: craft.SeverityError,
 				Range: craft.Range{
 					Start: craft.Position{Line: lineToLSP(ucLine)},
-					End:   craft.Position{Line: lineToLSP(ucLine), Character: len(titleTok.Text())},
+					End:   craft.Position{Line: lineToLSP(ucLine), Character: len(name)},
 				},
 			})
 			continue
 		}
-		seenUseCases[titleTok.Text()] = sym
+		seenUseCases[name] = sym
 		syms.UseCases = append(syms.UseCases, sym)
 
 		// Collect reference sites from all scenarios for cross-resolution.

@@ -65,3 +65,24 @@ func TestLossless_IndentedBlock(t *testing.T) {
 func TestLossless_TabIndent(t *testing.T) {
 	checkLossless(t, "actors {\n\tuser Alice\n}\n")
 }
+
+// TestLossless_QuotedString is the controller-verified repro for Bug 1: the
+// green tree's reassembled text for a quoted-string token dropped the
+// leading `"`, duplicated the last content character, and kept the closing
+// `"` — e.g. `import "hello"\n` round-tripped as `import helloo"\n`.
+func TestLossless_QuotedString(t *testing.T) {
+	checkLossless(t, "import \"hello\"\n")
+}
+
+func TestLossless_QuotedString_ExactCorruptionRepro(t *testing.T) {
+	src := "import \"hello\"\n"
+	g, _, _ := syntax.Parse(src)
+	got := reassemble2(g)
+	corrupted := "import helloo\"\n"
+	if got == corrupted {
+		t.Fatalf("round-trip still produces the documented corruption %q", corrupted)
+	}
+	if got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+}

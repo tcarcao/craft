@@ -325,8 +325,11 @@ func TestParseTree_ImportDecl(t *testing.T) {
 	if kwTok == nil || kwTok.Text() != "import" {
 		t.Errorf("missing import keyword token")
 	}
+	// pathTok.Text() is the raw source text and includes both quotes (Bug 8a
+	// fix): the green tree's Text is now byte-for-byte exact source, no
+	// longer the lexer's unescaped, quote-stripped Value.
 	pathTok := imports[0].ChildToken(syntax.SyntaxKindString)
-	if pathTok == nil || pathTok.Text() != "services/payments.craft" {
+	if pathTok == nil || pathTok.Text() != `"services/payments.craft"` {
 		t.Errorf("missing or wrong import path token, got %v", pathTok)
 	}
 }

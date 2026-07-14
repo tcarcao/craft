@@ -67,9 +67,10 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 
 	sb.WriteString("use_case")
 	if title := uc.Title(); title != nil {
-		sb.WriteString(` "`)
+		// title.Text() is the raw source text and already includes both
+		// quotes (Bug 8a fix) — do not wrap it again.
+		sb.WriteByte(' ')
 		sb.WriteString(title.Text())
-		sb.WriteByte('"')
 	}
 	sb.WriteString(" {\n")
 
@@ -123,12 +124,12 @@ func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 			sb.WriteByte(',')
 
 		case syntax.SyntaxKindString:
+			// tok.Text() is the exact raw source text, already including both
+			// quotes (Bug 8a fix) — do not wrap it again.
 			sep := tokenSeparator(tokens, i, depth, needsNewline)
 			needsNewline = false
 			sb.WriteString(sep)
-			sb.WriteByte('"')
 			sb.WriteString(tok.Text())
-			sb.WriteByte('"')
 
 		default:
 			sep := tokenSeparator(tokens, i, depth, needsNewline)
