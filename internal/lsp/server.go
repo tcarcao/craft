@@ -2391,17 +2391,21 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 
 	case "sync_action":
 		// toks: [subject, asks, target, (connector?), phrase...]
-		// subject and target classified by resolution map; skip them.
-		start := 3
-		if start < len(toks) && tokLineNum(toks[start]) == actionLine {
-			if toks[start].Kind() == syntax.SyntaxKindKwTo {
-				// Pass 1 already emits SyntaxKindKwTo as craft-connector-word; just advance.
-				start++
-			} else if isConnectorWord(toks[start].Text()) {
-				emit(toks[start], connIdx)
-				start++
+		// subject and target classified by resolution map; skip them. The
+		// target may be a multi-token Ref (e.g. "bc:re/billing", 5 flat
+		// tokens: bc, :, re, /, billing), so don't assume a fixed target
+		// width here — use ActionDecl.PhraseStartIndex, which mirrors the
+		// AST's own phraseStartIndex (the source of truth also used by
+		// PhraseText), so LSP and the AST agree on exactly where the
+		// target/connector end and the phrase begins.
+		if conn := action.Connector(); conn != nil && tokLineNum(*conn) == actionLine {
+			if conn.Kind() == syntax.SyntaxKindKwTo {
+				// Pass 1 already emits SyntaxKindKwTo as craft-connector-word.
+			} else if isConnectorWord(conn.Text()) {
+				emit(*conn, connIdx)
 			}
 		}
+		start := action.PhraseStartIndex()
 		for _, tok := range toks[start:] {
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue
@@ -2411,15 +2415,13 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 
 	case "return_action":
 		// toks: [subject, returns, (to, target)?, (connector?), phrase...]
-		start := 2
-		if start < len(toks) && toks[start].Kind() == syntax.SyntaxKindKwTo {
-			start += 2 // skip "to target"
+		// connector is always SyntaxKindIdent for return_action (parser
+		// guarantee). Uses PhraseStartIndex for the same reason as
+		// sync_action above: stay in lockstep with the AST's phrase start.
+		if conn := action.Connector(); conn != nil && tokLineNum(*conn) == actionLine && isConnectorWord(conn.Text()) {
+			emit(*conn, connIdx)
 		}
-		// connector is always SyntaxKindIdent for return_action (parser guarantee)
-		if start < len(toks) && isConnectorWord(toks[start].Text()) && tokLineNum(toks[start]) == actionLine {
-			emit(toks[start], connIdx)
-			start++
-		}
+		start := action.PhraseStartIndex()
 		for _, tok := range toks[start:] {
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue

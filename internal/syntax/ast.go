@@ -1528,6 +1528,17 @@ func (a ActionDecl) PhraseText() string {
 // Tokens returns the raw token list for the action node.
 func (a ActionDecl) Tokens() []SyntaxToken { return a.node.Tokens() }
 
+// PhraseStartIndex returns the index into a.Tokens() at which the free-text
+// phrase begins, i.e. the same index PhraseText() starts reading from. It
+// accounts for multi-token (Ref) targets (e.g. "bc:re/billing") by skipping
+// their full span rather than assuming a fixed token width. Exported minimally
+// so internal/lsp's classifyActionIdents (semantic-token phrase highlighting)
+// can start at the same token as PhraseText(), instead of duplicating/
+// hardcoding this offset logic and drifting out of sync with it.
+func (a ActionDecl) PhraseStartIndex() int {
+	return phraseStartIndex(a, a.node.Tokens())
+}
+
 // Description returns the human-readable full action line.
 func (a ActionDecl) Description() string {
 	subject := a.SubjectName()

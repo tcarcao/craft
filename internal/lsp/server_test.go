@@ -2383,6 +2383,160 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 	})
 }
 
+// TestSemanticTokens_SlugTarget is a regression test for a bug where
+// classifyActionIdents (sync_action case) hardcoded the target width to a
+// single token (start := 3), so a typed node-slug target (e.g.
+// "bc:re/billing", which flattens to 5 leaf tokens: bc, :, re, /, billing)
+// caused classification to start mid-target, mis-emitting the ref's own
+// tokens (re, billing) as craft-phrase-word and missing the real connector
+// ("for") that follows the ref. Phrase classification must start at the
+// same token as ActionDecl.PhraseText() (see phraseStartIndex in
+// internal/syntax/ast.go).
+func TestSemanticTokens_SlugTarget(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "SlugTarget" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions asks bc:re/billing for a fresh charge attempt
+	// Line 3: }
+	// col math (0-based): "    Subscriptions asks bc:re/billing for a fresh charge attempt"
+	//   col 4:  Subscriptions (len 13) — subject
+	//   col 18: asks          (len 4)  — keyword craft-asks-verb (Pass 1)
+	//   col 23: bc            (len 2)  — ref target (kind word), NOT craft-phrase-word
+	//   col 25: :             (len 1)  — ref punctuation
+	//   col 26: re            (len 2)  — ref target (namespace segment), NOT craft-phrase-word
+	//   col 28: /             (len 1)  — ref punctuation
+	//   col 29: billing       (len 7)  — ref target (name segment), NOT craft-phrase-word
+	//   col 37: for           (len 3)  — connector → craft-connector-word (index 29)
+	//   col 43: fresh         (len 5)  — phrase word → craft-phrase-word (index 33)
+	//   col 49: charge        (len 6)  — phrase word → craft-phrase-word (index 33)
+	//   col 56: attempt       (len 7)  — phrase word → craft-phrase-word (index 33)
+	slugSrc := "use_case \"SlugTarget\" {\n  when SomeActor does SomeThing\n    Subscriptions asks bc:re/billing for a fresh charge attempt\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///slug_target.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(slugSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///slug_target.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for slug target token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftPhraseWord = 33
+	const craftConnectorWord = 29
+
+	// "re" at line 2, col 26 must NOT be craft-phrase-word (it is part of the
+	// ref target, not the free-text phrase).
+	if tok, ok := byPos[[2]uint32{2, 26}]; ok && tok.tokenType == craftPhraseWord {
+		t.Errorf("re: got tokenType %d (craft-phrase-word), want anything else (it is a ref target token)", tok.tokenType)
+	}
+
+	// "billing" at line 2, col 29 must NOT be craft-phrase-word.
+	if tok, ok := byPos[[2]uint32{2, 29}]; ok && tok.tokenType == craftPhraseWord {
+		t.Errorf("billing: got tokenType %d (craft-phrase-word), want anything else (it is a ref target token)", tok.tokenType)
+	}
+
+	// "for" at line 2, col 37, len 3 → connector word, tokenType 29.
+	if tok, ok := byPos[[2]uint32{2, 37}]; !ok {
+		t.Error("for not found at line 2 col 37")
+	} else if tok.tokenType != craftConnectorWord {
+		t.Errorf("for: got tokenType %d, want %d (craft-connector-word)", tok.tokenType, craftConnectorWord)
+	}
+
+	// "fresh" at line 2, col 43, len 5 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 43}]; !ok {
+		t.Error("fresh not found at line 2 col 43")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("fresh: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+
+	// "charge" at line 2, col 49, len 6 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 49}]; !ok {
+		t.Error("charge not found at line 2 col 49")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("charge: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+
+	// "attempt" at line 2, col 56, len 7 → phrase word, tokenType 33.
+	if tok, ok := byPos[[2]uint32{2, 56}]; !ok {
+		t.Error("attempt not found at line 2 col 56")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("attempt: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+}
+
 // TestSemanticTokens_DomainListenTriggerColumn is a regression test for a bug
 // where domain_listen trigger subjects (e.g. "VASScheduling" in
 // "when VASScheduling listens ...") were emitted at col 0 instead of their
