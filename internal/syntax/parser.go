@@ -852,12 +852,12 @@ func (p *Parser) parseTrigger(whenLine int) []craft.Diagnostic {
 
 	if verb == "listens" {
 		p.consumeAs(SyntaxKindKwListens)
-		// domain_listen: when <domain> listens "<event>"
+		// domain_listen: when <domain> listens "<event>" | <ref>
 		eventTok := p.peek()
 		if eventTok.Type == lexer.TokenString {
 			p.consumeAs(SyntaxKindString)
 		} else if eventTok.Type == lexer.TokenIdent {
-			p.consumeAs(SyntaxKindIdent)
+			p.parseRef()
 		}
 		p.builder.FinishNode()
 		return diags
@@ -962,7 +962,9 @@ func (p *Parser) parseAction(counter *int) []craft.Diagnostic {
 // The `asks` keyword token has already been consumed by parseAction.
 func (p *Parser) parseAsksAction(line int) {
 	targetTok := p.peek()
-	if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
+	if targetTok.Type == lexer.TokenIdent {
+		p.parseRef()
+	} else if isAnyKeywordAsIdent(targetTok.Type) {
 		p.consumeAs(SyntaxKindIdent)
 	}
 
@@ -985,7 +987,9 @@ func (p *Parser) parseNotifiesAction() []craft.Diagnostic {
 	eventTok := p.peek()
 	if eventTok.Type == lexer.TokenString {
 		p.consumeAs(SyntaxKindString)
-	} else if eventTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(eventTok.Type) {
+	} else if eventTok.Type == lexer.TokenIdent {
+		p.parseRef()
+	} else if isAnyKeywordAsIdent(eventTok.Type) {
 		p.consumeAs(SyntaxKindIdent)
 	} else if eventTok.Type == lexer.TokenError {
 		diags = append(diags, p.diagUnterminatedString(eventTok))
@@ -1724,28 +1728,55 @@ func (p *Parser) parseRef() string {
 	line := p.peek().Line
 	kind := ""
 	first := p.peek()
+	var prev lexer.Token
+	havePrev := false
 	// leading kind word + ':'. "domain"/"service" lex as hard keywords, not
 	// TokenIdent, so accept the same keyword-as-ident set the rest of the
 	// parser uses (isAnyKeywordAsIdent) in addition to plain idents.
 	if (first.Type == lexer.TokenIdent || isAnyKeywordAsIdent(first.Type)) &&
-		p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == line {
+		p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == line &&
+		adjacentTokens(first, p.peekAt(1)) {
 		if isSlugKind(first.Value) {
 			kind = first.Value
 		}
 		p.consumeAs(SyntaxKindIdent) // kind word
+		colonTok := p.peek()
 		p.consumeAs(SyntaxKindColon) // ':'
+		prev = colonTok
+		havePrev = true
 	}
+	// Bug fix (Task 4): the original Task 3 implementation only checked
+	// p.peek().Line == line here, with no adjacency check between
+	// consecutive tokens. That over-consumes past a ref's true boundary when
+	// it is immediately followed by whitespace-separated prose on the same
+	// line — e.g. `bc:re/billing to record outcome` (an asks target followed
+	// by connector + phrase) would swallow "to", "record", and "outcome" as
+	// if they were more ref segments, since they are also bare TokenIdent
+	// tokens on the same line. A ref must be a CONTIGUOUS run with no gaps.
 	for !p.atEOF() && p.peek().Line == line {
 		t := p.peek()
-		if t.Type == lexer.TokenIdent || t.Type == lexer.TokenNumber ||
-			(t.Type == lexer.TokenError && t.Value == "/") {
-			p.consumeAs(SyntaxKindIdent)
-			continue
+		if t.Type != lexer.TokenIdent && t.Type != lexer.TokenNumber &&
+			!(t.Type == lexer.TokenError && t.Value == "/") {
+			break
 		}
-		break
+		if havePrev && !adjacentTokens(prev, t) {
+			break
+		}
+		p.consumeAs(SyntaxKindIdent)
+		prev = t
+		havePrev = true
 	}
 	p.builder.FinishNode()
 	return kind
+}
+
+// adjacentTokens reports whether b begins immediately where a ends, with no
+// intervening whitespace, on the same source line. parseRef uses this to
+// keep a reference to a single contiguous token run (e.g. "bc:re/billing")
+// instead of swallowing separate whitespace-delimited words that happen to
+// also lex as bare idents (e.g. a trailing "to record outcome" phrase).
+func adjacentTokens(a, b lexer.Token) bool {
+	return a.Line == b.Line && a.Column+len(a.Value) == b.Column
 }
 
 // isSlugKind reports whether s is a recognised node-slug kind word.

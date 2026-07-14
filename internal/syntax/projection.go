@@ -149,13 +149,18 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *craft.CraftDoc {
 
 func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 	kind := t.Kind()
-	var actor, context, event, verb, phrase string
+	var actor, context, event, verb, phrase, ref string
 	switch kind {
 	case "event":
 		event = t.EventValue()
 	case "domain_listen":
 		context = t.ContextName()
 		event = t.EventValue()
+		// ref is populated only when the event was written as a typed ref
+		// (Task 4), not the legacy quoted `listens "X"` form.
+		if elems := significantElements(t.node); len(elems) >= 3 {
+			ref = refIfWrapped(elems[2])
+		}
 	default: // external
 		// Match lower.go lowerTrigger: read by token position, not by kind.
 		// Actor is tokens[0] (may be a keyword like KwUser, not SyntaxKindIdent).
@@ -196,6 +201,7 @@ func projectTriggerFromView(t TriggerDecl) craft.Trigger {
 		Phrase:      phrase,
 		Context:     context,
 		Event:       event,
+		Ref:         ref,
 		Description: description,
 	}
 }
@@ -208,6 +214,16 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 	connector := a.ConnectorValue()
 	phrase := a.PhraseText()
 
+	// ref is populated only when the sync_action target or async_action
+	// event was written as a typed ref (Task 4), not the legacy quoted
+	// `notifies "X"` form or a plain unwrapped name.
+	var ref string
+	if kind == "sync_action" || kind == "async_action" {
+		if elems := significantElements(a.node); len(elems) >= 3 {
+			ref = refIfWrapped(elems[2])
+		}
+	}
+
 	// Build description to match lower.go exactly.
 	var verb, description string
 	switch kind {
@@ -216,7 +232,16 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 		// a.ConnectorValue() only returns KwTo; must check tokens for "for" too.
 		{
 			tokens := a.Tokens()
-			i := 3 // after subject, asks, target
+			// target (tokens index 2) may be a multi-token Ref (Task 4, e.g.
+			// bc:re/billing spans 5 flat tokens); skip its actual span rather
+			// than assuming exactly one flat token, or the connector/phrase
+			// split below would start mid-ref.
+			i := 2 // after subject, asks
+			if elems := significantElements(a.node); len(elems) > 2 {
+				i += elementSpan(elems[2])
+			} else {
+				i++
+			}
 			if i < len(tokens) {
 				tok := tokens[i]
 				if tok.Kind() == SyntaxKindKwTo || (tok.Kind() == SyntaxKindIdent && tok.Text() == "for") {
@@ -303,6 +328,7 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) craft.Ac
 		Verb:          verb,
 		TargetContext: target,
 		Event:         event,
+		Ref:           ref,
 		Connector:     connector,
 		Phrase:        phrase,
 		Description:   description,

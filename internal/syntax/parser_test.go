@@ -472,3 +472,66 @@ func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 		t.Error("expected trailing '// TODO' comment to be preserved as trivia in the tree")
 	}
 }
+
+// TestTypedRefs_NotifiesListensAsks is the Task 4 regression lock: it wires
+// parseRef (Task 3) into notifies/listens/asks-target object positions and
+// asserts a kind-prefixed slug (bc:re/billing) round-trips exactly through
+// TargetName() — NOT truncated to the kind word "bc", which is what a naive
+// ChildToken(SyntaxKindIdent)/Name() call on the ref node would yield.
+func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
+	src := `use_case "x" {
+  when Subscriptions listens vas.VasApplied
+    Fulfillment asks bc:re/billing to record outcome
+    Fulfillment notifies vas.VasFulfilled
+}`
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	uc := syntax.AsUseCaseDecl(ucNodes[0])
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	scenario := scenarios[0]
+
+	// listens trigger ref
+	trigger := scenario.Trigger()
+	if got := trigger.Kind(); got != "domain_listen" {
+		t.Fatalf("trigger kind = %q, want domain_listen", got)
+	}
+	if got := trigger.EventValue(); got != "vas.VasApplied" {
+		t.Errorf("listens ref = %q, want %q", got, "vas.VasApplied")
+	}
+
+	actions := scenario.Actions()
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	// asks target ref (kind-prefixed slug — the landmine case)
+	asks := actions[0]
+	if got := asks.Kind(); got != "sync_action" {
+		t.Fatalf("action[0] kind = %q, want sync_action", got)
+	}
+	if got := asks.TargetName(); got != "bc:re/billing" {
+		t.Errorf("asks target ref = %q, want %q (must NOT be truncated to the kind word \"bc\")", got, "bc:re/billing")
+	}
+	if got := asks.PhraseText(); got != "record outcome" {
+		t.Errorf("asks phrase = %q, want %q", got, "record outcome")
+	}
+
+	// notifies ref
+	notifies := actions[1]
+	if got := notifies.Kind(); got != "async_action" {
+		t.Fatalf("action[1] kind = %q, want async_action", got)
+	}
+	if got := notifies.EventValue(); got != "vas.VasFulfilled" {
+		t.Errorf("notifies ref = %q, want %q", got, "vas.VasFulfilled")
+	}
+}

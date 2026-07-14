@@ -56,6 +56,94 @@ func connectorAt(tokens []SyntaxToken, i int) *SyntaxToken {
 	return nil
 }
 
+// significantElements returns n's direct children, excluding trivia, WITHOUT
+// flattening nested nodes — unlike Tokens()/AllTokens(), a SyntaxKindRef
+// child (wrapped by parseRef, Task 3) stays a single element here instead of
+// expanding into its interior leaf tokens (kind word, ':', segments, '/').
+//
+// Several action/trigger accessors below used to index into the node's flat
+// Tokens() slice on the assumption that every "slot" (target, event) is
+// exactly one token wide. That assumption breaks for a kind-prefixed slug
+// ref like "bc:re/billing", which is FIVE leaf tokens (bc, :, re, /,
+// billing) but must still occupy exactly one logical slot. Accessors that
+// need positional slot access use significantElements instead of Tokens().
+func significantElements(n SyntaxNode) []SyntaxElement {
+	var result []SyntaxElement
+	for el := range n.ChildrenIter() {
+		if isTrivia(el.Kind()) {
+			continue
+		}
+		result = append(result, el)
+	}
+	return result
+}
+
+// elementSpan returns how many flat (leaf, non-trivia) tokens el occupies in
+// the node's Tokens() slice: 1 for a plain token, or the ref node's own
+// token count for a SyntaxKindRef node. Used to translate a significantElements
+// index into the equivalent Tokens() index (e.g. to locate the connector that
+// follows a possibly multi-token ref).
+func elementSpan(el SyntaxElement) int {
+	if node, ok := el.(SyntaxNode); ok {
+		return len(node.Tokens())
+	}
+	return 1
+}
+
+// refAwareText returns the source text of a significant child element: for a
+// SyntaxKindRef node (parseRef, Task 3/4) the full reconstructed ref text via
+// RefDecl.RefText(); for a leaf token, its own text. Do NOT read a ref
+// position with ChildToken(SyntaxKindIdent)/RefDecl.Name() — for a
+// kind-prefixed slug like "bc:re/billing" that returns only the leading kind
+// word "bc".
+func refAwareText(el SyntaxElement) string {
+	switch v := el.(type) {
+	case SyntaxNode:
+		if v.Kind() == SyntaxKindRef {
+			return RefDecl{node: v}.RefText()
+		}
+		return ""
+	case SyntaxToken:
+		return v.Text()
+	}
+	return ""
+}
+
+// refAwareOffset returns the byte offset of a significant child element,
+// whether it is a leaf token or a SyntaxKindRef node.
+//
+// For a node, this must NOT use v.Offset() directly: leading whitespace
+// trivia attaches as a node's own first child throughout this parser (the
+// same convention nodeFirstTokenCol/nodeFirstTokenLine above already exist
+// to work around), so a SyntaxKindRef node's raw offset is the start of the
+// whitespace BEFORE the ref, not the ref's first real character. Use its
+// first non-trivia token's offset instead, matching that existing pattern.
+func refAwareOffset(el SyntaxElement) green.TextSize {
+	switch v := el.(type) {
+	case SyntaxNode:
+		toks := v.Tokens()
+		if len(toks) > 0 {
+			return toks[0].Offset()
+		}
+		return v.Offset()
+	case SyntaxToken:
+		return v.Offset()
+	}
+	return 0
+}
+
+// refIfWrapped returns el's RefText() if it is a SyntaxKindRef node — i.e.
+// the slot was parsed via parseRef (Task 4) rather than the legacy quoted
+// string form — else "". Used by the pkg/craft projection to populate the
+// additive Ref field only for typed-ref object positions, leaving it empty
+// for `notifies "X"` / `listens "X"`.
+func refIfWrapped(el SyntaxElement) string {
+	if node, ok := el.(SyntaxNode); ok && node.Kind() == SyntaxKindRef {
+		return RefDecl{node: node}.RefText()
+	}
+	return ""
+}
+
 // isAstFieldSentinel returns true when tokens[i] is a field keyword or ident followed
 // by a colon — the start of a new field definition.
 func isAstFieldSentinel(tokens []SyntaxToken, i int) bool {
@@ -879,16 +967,21 @@ func (t TriggerDecl) ContextName() string {
 }
 
 // EventValue returns the event name (for event and domain_listen triggers).
+// For domain_listen the event slot may be a quoted string or a parseRef-
+// wrapped ref (Task 4) — use refAwareText so a kind-prefixed slug like
+// "bc:re/billing" round-trips in full rather than truncating to its first
+// leaf token.
 func (t TriggerDecl) EventValue() string {
-	tokens := t.node.Tokens()
 	switch t.Kind() {
 	case "event":
+		tokens := t.node.Tokens()
 		if len(tokens) > 0 {
 			return tokens[0].Text()
 		}
 	case "domain_listen":
-		if len(tokens) >= 3 {
-			return tokens[2].Text()
+		elems := significantElements(t.node)
+		if len(elems) >= 3 {
+			return refAwareText(elems[2])
 		}
 	}
 	return ""
@@ -911,16 +1004,17 @@ func (t TriggerDecl) Description() string {
 
 // EventCol returns the 1-based column of the event token using li.
 func (t TriggerDecl) EventCol(li green.LineIndex) int {
-	tokens := t.node.Tokens()
 	switch t.Kind() {
 	case "event":
+		tokens := t.node.Tokens()
 		if len(tokens) > 0 {
 			_, col := li.LineCol(tokens[0].Offset())
 			return col
 		}
 	case "domain_listen":
-		if len(tokens) >= 3 {
-			_, col := li.LineCol(tokens[2].Offset())
+		elems := significantElements(t.node)
+		if len(elems) >= 3 {
+			_, col := li.LineCol(refAwareOffset(elems[2]))
 			return col
 		}
 	}
@@ -929,12 +1023,13 @@ func (t TriggerDecl) EventCol(li green.LineIndex) int {
 
 // EventIsString returns true when the event token is a quoted string literal.
 func (t TriggerDecl) EventIsString() bool {
-	tokens := t.node.Tokens()
 	switch t.Kind() {
 	case "event":
+		tokens := t.node.Tokens()
 		return len(tokens) > 0 && tokens[0].Kind() == SyntaxKindString
 	case "domain_listen":
-		return len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindString
+		elems := significantElements(t.node)
+		return len(elems) >= 3 && elems[2].Kind() == SyntaxKindString
 	}
 	return false
 }
@@ -961,7 +1056,16 @@ func (a ActionDecl) Connector() *SyntaxToken {
 	tokens := a.node.Tokens()
 	switch a.Kind() {
 	case "sync_action":
-		return connectorAt(tokens, 3)
+		// target (tokens index 2) may be a multi-token Ref (Task 4, e.g.
+		// bc:re/billing); locate the connector after its actual span rather
+		// than assuming the target is exactly one flat token.
+		start := 2
+		if elems := significantElements(a.node); len(elems) > 2 {
+			start += elementSpan(elems[2])
+		} else {
+			start++
+		}
+		return connectorAt(tokens, start)
 	case "internal_action":
 		return connectorAt(tokens, 2)
 	default:
@@ -1018,14 +1122,18 @@ func (a ActionDecl) Line(li green.LineIndex) int {
 }
 
 // TargetName returns the target context for sync_action and return_action.
+// For sync_action the target slot may be a parseRef-wrapped ref (Task 4,
+// e.g. bc:re/billing); refAwareText returns the full ref text rather than
+// truncating to a single leaf token.
 func (a ActionDecl) TargetName() string {
-	tokens := a.node.Tokens()
 	switch a.Kind() {
 	case "sync_action":
-		if len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindIdent {
-			return tokens[2].Text()
+		elems := significantElements(a.node)
+		if len(elems) >= 3 && (elems[2].Kind() == SyntaxKindIdent || elems[2].Kind() == SyntaxKindRef) {
+			return refAwareText(elems[2])
 		}
 	case "return_action":
+		tokens := a.node.Tokens()
 		for i, tok := range tokens {
 			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
 				return tokens[i+1].Text()
@@ -1037,14 +1145,15 @@ func (a ActionDecl) TargetName() string {
 
 // TargetCol returns the 1-based column of the target name token using li.
 func (a ActionDecl) TargetCol(li green.LineIndex) int {
-	tokens := a.node.Tokens()
 	switch a.Kind() {
 	case "sync_action":
-		if len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindIdent {
-			_, col := li.LineCol(tokens[2].Offset())
+		elems := significantElements(a.node)
+		if len(elems) >= 3 && (elems[2].Kind() == SyntaxKindIdent || elems[2].Kind() == SyntaxKindRef) {
+			_, col := li.LineCol(refAwareOffset(elems[2]))
 			return col
 		}
 	case "return_action":
+		tokens := a.node.Tokens()
 		for i, tok := range tokens {
 			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
 				_, col := li.LineCol(tokens[i+1].Offset())
@@ -1055,14 +1164,16 @@ func (a ActionDecl) TargetCol(li green.LineIndex) int {
 	return 0
 }
 
-// EventValue returns the event name for async_action (notifies).
+// EventValue returns the event name for async_action (notifies). The event
+// slot may be a quoted string or a parseRef-wrapped ref (Task 4); refAwareText
+// returns the full ref text for a kind-prefixed slug rather than truncating.
 func (a ActionDecl) EventValue() string {
 	if a.Kind() != "async_action" {
 		return ""
 	}
-	tokens := a.node.Tokens()
-	if len(tokens) >= 3 {
-		return tokens[2].Text()
+	elems := significantElements(a.node)
+	if len(elems) >= 3 {
+		return refAwareText(elems[2])
 	}
 	return ""
 }
@@ -1072,9 +1183,9 @@ func (a ActionDecl) EventCol(li green.LineIndex) int {
 	if a.Kind() != "async_action" {
 		return 0
 	}
-	tokens := a.node.Tokens()
-	if len(tokens) >= 3 {
-		_, col := li.LineCol(tokens[2].Offset())
+	elems := significantElements(a.node)
+	if len(elems) >= 3 {
+		_, col := li.LineCol(refAwareOffset(elems[2]))
 		return col
 	}
 	return 0
@@ -1085,8 +1196,8 @@ func (a ActionDecl) EventIsString() bool {
 	if a.Kind() != "async_action" {
 		return false
 	}
-	tokens := a.node.Tokens()
-	return len(tokens) >= 3 && tokens[2].Kind() == SyntaxKindString
+	elems := significantElements(a.node)
+	return len(elems) >= 3 && elems[2].Kind() == SyntaxKindString
 }
 
 // VerbValue returns the verb text.
@@ -1120,7 +1231,15 @@ func phraseStartIndex(a ActionDecl, tokens []SyntaxToken) int {
 	start := 2
 	switch a.Kind() {
 	case "sync_action":
-		start = 3 // subject, asks, target
+		// subject, asks, target — target may be a multi-token Ref (Task 4,
+		// e.g. bc:re/billing), so skip its actual span rather than assuming
+		// exactly one flat token.
+		start = 2
+		if elems := significantElements(a.node); len(elems) > 2 {
+			start += elementSpan(elems[2])
+		} else {
+			start++
+		}
 		if connectorAt(tokens, start) != nil {
 			start++ // skip connector
 		}
