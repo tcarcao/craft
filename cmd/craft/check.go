@@ -68,7 +68,12 @@ type symbolInfo struct {
 }
 
 // buildSymbolsJSON derives the --lsp-json actor symbol list from the parsed
-// document (Line is 0, matching prior behavior). No syntax tree needed.
+// document's Actors (Line is 0, matching prior behavior; no syntax tree
+// needed). Because it reads the canonical CraftDoc, an actor the projection
+// rejects as malformed — a name with no resolvable type, e.g. `actor Foo` —
+// is consistently excluded here too, rather than emitted with an empty type
+// as the old raw-tree walk did. This keeps the symbol list aligned with the
+// model the rest of the toolchain sees.
 func buildSymbolsJSON(doc *craft.CraftDoc) []symbolInfo {
 	var out []symbolInfo
 	for _, a := range doc.Actors {
