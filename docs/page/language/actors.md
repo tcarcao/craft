@@ -71,7 +71,7 @@ use_case "Order Management" {
     Order updates status
 
   // System actor involvement
-  when Order listens "Order Confirmed"
+  when Order listens order.OrderConfirmed
     Order asks EmailService to send confirmation
 }
 ```

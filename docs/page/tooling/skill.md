@@ -21,9 +21,9 @@ Once installed, Claude Code automatically activates the skill whenever you:
 
 The skill provides Claude with:
 
-- The complete BNF grammar
-- All construct types: actors, domains, services, architecture, exposures, use cases
-- Event-driven choreography patterns (`notifies` / `listens`)
+- The complete BNF grammar, including typed event refs, node slugs (`bc:`/`domain:`/`term:`/`service:`), and the `context_map` block
+- All construct types: actors, domains, services, `context_map`, architecture, exposures, use cases
+- Event-driven choreography patterns (`notifies` / `listens`) using typed event refs — the quoted-string form is recognized but flagged as deprecated
 - Common mistakes and how to avoid them
 - File conventions (kebab-case filenames, canonical ordering, `docs/` placement)
 - Integration with `craft` for validation and diagram generation

@@ -303,9 +303,9 @@ use_case "Order Flow" {
     OrderManagement asks PaymentProcessing to charge customer
 
     // Order → Everyone (asynchronous)
-    OrderManagement notifies "Order Placed"
+    OrderManagement notifies order.OrderPlaced
 
-  when StockManagement listens "Order Placed"
+  when StockManagement listens order.OrderPlaced
     StockManagement updates inventory
 }
 ```

@@ -12,9 +12,10 @@ The extension provides sophisticated semantic syntax highlighting powered by Tre
 - **Keywords** (purple, bold): `service`, `domain`, `arch`, `use_case`, `actors`, `when`
 - **Service names** (blue, bold): Service identifiers like `UserService`, `CommsService`
 - **Domain names** (blue, bold): Domain identifiers like `Authentication`, `Profile`
-- **Properties** (red, bold): `domains`, `language`, `data-stores`, `framework`
+- **Properties** (red, bold): `domains`, `language`, `data-stores`, `framework`, `opslevel`, `repo`
 - **Action verbs** (orange/green, bold): `asks`, `notifies`, `listens`, `returns`, `creates`
-- **Strings** (various colors): Use case names, event strings, regular quoted text
+- **Typed refs** (distinct token color): event refs (dotted qualified ids like `order.OrderCreated`) and node slugs (`bc:`/`domain:`/`term:`/`service:` prefixed references)
+- **Strings** (various colors): Use case names, legacy (deprecated) event strings, regular quoted text
 - **Comments** (green, italic): Line and block comments
 
 The highlighting adapts in real-time as you type, making it easy to spot syntax issues and understand code structure at a glance.
