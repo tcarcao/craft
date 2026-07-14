@@ -1950,7 +1950,8 @@ func (p *Parser) parseRef() string {
 	for !p.atEOF() && p.peek().Line == line {
 		t := p.peek()
 		if t.Type != lexer.TokenIdent && t.Type != lexer.TokenNumber &&
-			!(t.Type == lexer.TokenError && t.Value == "/") {
+			!(t.Type == lexer.TokenError && t.Value == "/") &&
+			!isAnyKeywordAsIdent(t.Type) {
 			break
 		}
 		if havePrev && !adjacentTokens(prev, t) {
