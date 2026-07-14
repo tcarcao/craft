@@ -123,6 +123,17 @@ func stringAwareText(tok SyntaxToken) string {
 	return unquoteStringText(tok.Text())
 }
 
+// StringAwareText is the exported form of stringAwareText, for content-read
+// call sites outside this package (e.g. internal/lsp) that receive a raw
+// token — such as one from ServiceDecl.ContextTokens() — and need its
+// semantic (unquoted) value rather than its raw source text. Keeping the
+// unquoting logic itself unexported and routing all callers, in- and
+// out-of-package, through this single entry point avoids a second
+// reimplementation of the escape handling (see unquoteStringText).
+func StringAwareText(tok SyntaxToken) string {
+	return stringAwareText(tok)
+}
+
 // unquoteStringText strips the surrounding double quotes from raw (a
 // SyntaxKindString token's raw source text) and resolves the lexer's
 // escape sequences (\", \\, \n, \t, \r; an unrecognised escape passes
@@ -887,7 +898,14 @@ func (s ServiceDecl) DeploymentRules() []struct{ Percentage, Target string } {
 	return s.parseServiceBody().DeploymentRules
 }
 
-// DataStoreTokens returns the SyntaxToken for each data-store name in the service body.
+// DataStoreTokens returns the SyntaxToken for each data-store name in the
+// service body. A data-store entry may be SyntaxKindIdent or SyntaxKindString
+// (a quoted name, e.g. `data-stores: "user db"`) — mirrors the Ident-or-String
+// filter used by collectAstIdentList (which DataStores() delegates to) so
+// this raw-token scan doesn't silently truncate the list at a quoted entry.
+// Callers reading token content must unquote via stringAwareText; callers
+// only reading position/length (as today's semantic-highlighting caller
+// does) can use the raw token directly.
 func (s ServiceDecl) DataStoreTokens() []SyntaxToken {
 	tokens := scanBodyTokens(s.node)
 	for i := 0; i < len(tokens); i++ {
@@ -907,7 +925,7 @@ func (s ServiceDecl) DataStoreTokens() []SyntaxToken {
 				if tokens[i].Kind() == SyntaxKindRBrace || isAstFieldSentinel(tokens, i) {
 					break
 				}
-				if tokens[i].Kind() == SyntaxKindIdent {
+				if tokens[i].Kind() == SyntaxKindIdent || tokens[i].Kind() == SyntaxKindString {
 					result = append(result, tokens[i])
 					i++
 				} else {

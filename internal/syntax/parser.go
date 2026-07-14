@@ -1983,12 +1983,21 @@ func isSlugKind(s string) bool {
 }
 
 // parseIdentList parses a comma-separated ident list, emitting tokens into the
-// current builder scope.
+// current builder scope. A TokenString entry (a quoted name, e.g.
+// `contexts: "Some Name"`) is emitted as SyntaxKindString, not
+// SyntaxKindIdent — consumeAs always stores the raw source text regardless
+// of the kind passed in (tokenText returns tok.Raw for TokenString either
+// way, so this does not affect Token.Value/Raw or round-trip output), but
+// content-read call sites (stringAwareText and friends) dispatch on Kind()
+// to decide whether to unquote. Mislabeling a quoted entry as Ident would
+// make them silently skip unquoting and leak raw quotes into content.
 func (p *Parser) parseIdentList() {
 	for {
 		tok := p.peek()
 		switch {
-		case tok.Type == lexer.TokenIdent || tok.Type == lexer.TokenString:
+		case tok.Type == lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case tok.Type == lexer.TokenIdent:
 			p.consumeAs(SyntaxKindIdent)
 		case isKeywordUsedAsIdent(tok.Type):
 			p.consumeAs(SyntaxKindIdent)
@@ -2006,7 +2015,9 @@ func (p *Parser) parseIdentList() {
 // parseRefList parses a comma-separated ident list, wrapping each name in a
 // SyntaxKindRef node so that reference sites are structurally distinct from
 // declaration sites. The flat Tokens() result is unchanged — existing AST
-// scanning code remains correct.
+// scanning code remains correct. As in parseIdentList above, a TokenString
+// entry is emitted as SyntaxKindString (not SyntaxKindIdent) so Kind()-based
+// content dispatch (stringAwareText) can tell it apart from a bare ident.
 func (p *Parser) parseRefList() {
 	for {
 		tok := p.peek()
@@ -2016,7 +2027,11 @@ func (p *Parser) parseRefList() {
 			return
 		}
 		p.builder.StartNode(SyntaxKindRef)
-		p.consumeAs(SyntaxKindIdent)
+		if tok.Type == lexer.TokenString {
+			p.consumeAs(SyntaxKindString)
+		} else {
+			p.consumeAs(SyntaxKindIdent)
+		}
 		p.builder.FinishNode()
 		if p.peek().Type == lexer.TokenComma {
 			p.consumeAs(SyntaxKindComma)

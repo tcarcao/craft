@@ -413,14 +413,19 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	}
 
 	// Walk exposures: to: → actor, through: → service, contexts: → domain/service.
+	// ToTokens()/ThroughTokens()/ContextsTokens() return raw tokens (possibly
+	// SyntaxKindString): the cursor hit-test below must use the token's raw
+	// span width (tok.Text() — matches what's actually on screen, quotes and
+	// all), but the workspace symbol maps are keyed by unquoted names, so the
+	// lookup key must go through syntax.StringAwareText.
 	for _, exp := range file.Exposures() {
 		for _, tok := range exp.ToTokens() {
 			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			tokName := tok.Text()
-			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
+			rawLen := len(tok.Text())
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
-			if sym, ok := wsSym.Actors[tok.Text()]; ok && sym.Line > 0 {
+			if sym, ok := wsSym.Actors[syntax.StringAwareText(tok)]; ok && sym.Line > 0 {
 				startChar := uint32(0)
 				if sym.Column > 0 {
 					startChar = uint32(sym.Column - 1)
@@ -436,11 +441,11 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		}
 		for _, tok := range exp.ThroughTokens() {
 			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			tokName := tok.Text()
-			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
+			rawLen := len(tok.Text())
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
-			if sym, ok := wsSym.Services[tok.Text()]; ok && sym.Line > 0 {
+			if sym, ok := wsSym.Services[syntax.StringAwareText(tok)]; ok && sym.Line > 0 {
 				startChar := uint32(0)
 				if sym.Column > 0 {
 					startChar = uint32(sym.Column - 1)
@@ -456,11 +461,11 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 		}
 		for _, tok := range exp.ContextsTokens() {
 			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			tokName := tok.Text()
-			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+len(tokName) {
+			rawLen := len(tok.Text())
+			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
-			name := tok.Text()
+			name := syntax.StringAwareText(tok)
 			if sym, ok := wsSym.Domains[name]; ok && sym.Line > 0 {
 				startChar := uint32(0)
 				if sym.Column > 0 {

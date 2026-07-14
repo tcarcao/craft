@@ -470,7 +470,10 @@ func projectSimpleArchComponentFromView(c ArchComponent) craft.Component {
 			key = keyTok.Text()
 		}
 		if valTok != nil {
-			val = valTok.Text()
+			// Value() may be an Ident, String, or Number token (see ArchModifier.Value
+			// doc comment); stringAwareText unquotes String tokens so a quoted
+			// modifier value (e.g. Comp[label:"some value"]) projects unquoted.
+			val = stringAwareText(*valTok)
 		}
 		comp.Modifiers = append(comp.Modifiers, craft.ComponentModifier{Key: key, Value: val})
 	}
@@ -518,7 +521,10 @@ func projectFlowArchComponentFromView(c ArchComponent) craft.Component {
 				var val string
 				for j, tok := range toks {
 					if tok.Kind() == SyntaxKindColon && j+1 < len(toks) {
-						val = toks[j+1].Text()
+						// The modifier value token may be Ident, String, or
+						// Number; stringAwareText unquotes a String token so a
+						// quoted flow-component modifier value projects unquoted.
+						val = stringAwareText(toks[j+1])
 						break
 					}
 				}

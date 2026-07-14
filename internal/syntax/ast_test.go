@@ -267,6 +267,77 @@ func TestServiceDecl_BodyAccessors(t *testing.T) {
 	}
 }
 
+// TestServiceDecl_QuotedContextsAndDataStores covers the parser-level root
+// cause behind the task-8a ripple audit: parseIdentList/parseRefList used to
+// emit a quoted (SyntaxKindString) list entry as SyntaxKindIdent, which made
+// every Kind()-dispatching content accessor (stringAwareText and friends)
+// silently skip unquoting for it. Contexts()/DataStores() already routed
+// through stringAwareText, but that call was a no-op while the token's Kind
+// was wrong; this locks in that a quoted entry now unquotes correctly and a
+// quoted entry followed by a bare one doesn't truncate the list.
+func TestServiceDecl_QuotedContextsAndDataStores(t *testing.T) {
+	src := "service PaymentService {\n  contexts: \"Billing Context\", Checkout\n  data-stores: \"payments db\", cache_db\n}"
+	tree := astParse(src)
+	f := syntax.AsFile(tree)
+	svcs := f.Services()
+	if len(svcs) != 1 {
+		t.Fatalf("want 1 service, got %d", len(svcs))
+	}
+	svc := svcs[0]
+	if got := svc.Contexts(); !reflect.DeepEqual(got, []string{"Billing Context", "Checkout"}) {
+		t.Errorf("Contexts: got %#v, want unquoted [\"Billing Context\" \"Checkout\"]", got)
+	}
+	if got := svc.DataStores(); !reflect.DeepEqual(got, []string{"payments db", "cache_db"}) {
+		t.Errorf("DataStores: got %#v, want unquoted [\"payments db\" \"cache_db\"]", got)
+	}
+
+	// DataStoreTokens() must not stop at the quoted entry — both tokens are
+	// returned (as raw tokens; content readers unquote via stringAwareText).
+	dsToks := svc.DataStoreTokens()
+	if len(dsToks) != 2 {
+		t.Fatalf("DataStoreTokens: want 2 tokens, got %d: %v", len(dsToks), dsToks)
+	}
+	if dsToks[0].Kind() != syntax.SyntaxKindString {
+		t.Errorf("DataStoreTokens[0].Kind() = %v, want SyntaxKindString", dsToks[0].Kind())
+	}
+	if dsToks[0].Text() != `"payments db"` {
+		t.Errorf("DataStoreTokens[0].Text() = %q, want raw quoted `\"payments db\"`", dsToks[0].Text())
+	}
+
+	// ContextTokens() must likewise report the correct Kind for the quoted
+	// entry, so out-of-package content readers (e.g. internal/lsp via
+	// syntax.StringAwareText) can tell it apart from a bare ident.
+	ctxToks := svc.ContextTokens()
+	if len(ctxToks) != 2 {
+		t.Fatalf("ContextTokens: want 2 tokens, got %d", len(ctxToks))
+	}
+	if ctxToks[0].Kind() != syntax.SyntaxKindString {
+		t.Errorf("ContextTokens[0].Kind() = %v, want SyntaxKindString", ctxToks[0].Kind())
+	}
+}
+
+// TestExposureDecl_QuotedFieldValues is the exposure-block counterpart of
+// TestServiceDecl_QuotedContextsAndDataStores: to:/through:/contexts: also go
+// through parseIdentList, and To()/Contexts()/Through() already routed
+// through stringAwareText before this fix — but silently returned raw quoted
+// text because the entry's Kind was mislabeled Ident upstream.
+func TestExposureDecl_QuotedFieldValues(t *testing.T) {
+	src := "actor user Alice\nexposure default {\n  to: \"Alice\"\n  contexts: \"Some Context\"\n}"
+	tree := astParse(src)
+	f := syntax.AsFile(tree)
+	exps := f.Exposures()
+	if len(exps) != 1 {
+		t.Fatalf("want 1 exposure, got %d", len(exps))
+	}
+	exp := exps[0]
+	if got := exp.To(); !reflect.DeepEqual(got, []string{"Alice"}) {
+		t.Errorf("To: got %#v, want unquoted [\"Alice\"]", got)
+	}
+	if got := exp.Contexts(); !reflect.DeepEqual(got, []string{"Some Context"}) {
+		t.Errorf("Contexts: got %#v, want unquoted [\"Some Context\"]", got)
+	}
+}
+
 func TestServiceDecl_StandaloneIsGrouped(t *testing.T) {
 	src := `service UserService {
   contexts: Auth

@@ -96,7 +96,10 @@ func handleInlayHint(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.R
 			continue
 		}
 		for _, ctxTok := range svc.ContextTokens() {
-			ctxName := ctxTok.Text()
+			// ContextTokens() returns raw tokens (possibly SyntaxKindString);
+			// the resolution map is keyed by unquoted names, so read content
+			// via StringAwareText rather than the raw Text().
+			ctxName := syntax.StringAwareText(ctxTok)
 			domSym, ok := sema.ResolveServiceContext(rm, uri, svcName, ctxName)
 			// Skip when unresolved, or when the context name IS the domain name
 			// (direct-domain reference — the hint would just repeat the visible text).
