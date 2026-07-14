@@ -36,6 +36,10 @@ func TestParseRef_Shapes(t *testing.T) {
 		{"bc:re/subscriptions", "bc:re/subscriptions", "bc"},
 		{"term:billing/dunning", "term:billing/dunning", "term"},
 		{"service:subscriptions-api", "service:subscriptions-api", "service"},
+		// Regression: Column is rune-based but len(a.Value) is a byte count,
+		// so adjacentTokens must compare rune lengths. Otherwise a multibyte
+		// character in a segment (e.g. "café") silently truncates the ref.
+		{"bc:café/billing", "bc:café/billing", "bc"},
 	}
 	for _, c := range cases {
 		txt, kind := parseRefText(t, c.src) // test helper wrapping a Parser over c.src

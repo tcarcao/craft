@@ -1776,7 +1776,7 @@ func (p *Parser) parseRef() string {
 // instead of swallowing separate whitespace-delimited words that happen to
 // also lex as bare idents (e.g. a trailing "to record outcome" phrase).
 func adjacentTokens(a, b lexer.Token) bool {
-	return a.Line == b.Line && a.Column+len(a.Value) == b.Column
+	return a.Line == b.Line && a.Column+len([]rune(a.Value)) == b.Column
 }
 
 // isSlugKind reports whether s is a recognised node-slug kind word.
