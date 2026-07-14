@@ -1015,6 +1015,14 @@ func (p *Parser) parseReturnsAction(line int) {
 }
 
 // collectPhrase emits phrase tokens on actionLine into the current builder scope.
+//
+// The prose tail is display-only free text (see ActionDecl.PhraseText), so every
+// same-line token is swept in verbatim — including TokenError punctuation such as
+// `!`, `&`, `*`, `/` — until a line change, `}`, EOF, or a comment token ends it.
+// (peek() already skips comment tokens transparently when scanning for the next
+// token, so a trailing `//...` comment naturally falls on a later line or is
+// filtered before the line check below; the explicit comment case exists for
+// clarity/defensiveness even though peek() means it is not normally reachable.)
 func (p *Parser) collectPhrase(actionLine int) {
 	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 		return
@@ -1022,36 +1030,25 @@ func (p *Parser) collectPhrase(actionLine int) {
 	if p.peek().Line != actionLine {
 		return
 	}
-	startLine := actionLine
 	for {
 		tok := p.peek()
-		switch tok.Type {
-		case lexer.TokenRBrace, lexer.TokenEOF:
+		if tok.Type == lexer.TokenRBrace || tok.Type == lexer.TokenEOF {
 			return
-		case lexer.TokenIdent:
-			if tok.Line != startLine {
-				return
-			}
-			p.consumeAs(SyntaxKindIdent)
+		}
+		if tok.Line != actionLine {
+			return
+		}
+		switch tok.Type {
+		case lexer.TokenLineComment, lexer.TokenDocComment, lexer.TokenBlockComment:
+			return // trailing comment ends prose; trivia attaches normally
 		case lexer.TokenString:
-			if tok.Line != startLine {
-				return
-			}
 			p.consumeAs(SyntaxKindString)
 		case lexer.TokenNumber:
-			if tok.Line != startLine {
-				return
-			}
 			p.consumeAs(SyntaxKindNumber)
 		default:
-			if isAnyKeywordAsIdent(tok.Type) {
-				if tok.Line != startLine {
-					return
-				}
-				p.consumeAs(SyntaxKindIdent)
-				continue
-			}
-			return
+			// Idents, keywords-as-idents, and TokenError punctuation (! & * / # …)
+			// are all swept into prose as raw tokens.
+			p.consumeAs(SyntaxKindIdent)
 		}
 	}
 }

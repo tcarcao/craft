@@ -1090,12 +1090,11 @@ func (a ActionDecl) ConnectorValue() string {
 	return tok.Text()
 }
 
-// PhraseText returns the description phrase for the action.
-func (a ActionDecl) PhraseText() string {
-	tokens := a.node.Tokens()
-	if len(tokens) == 0 {
-		return ""
-	}
+// phraseStartIndex returns the index into tokens (a.node.Tokens(), i.e.
+// non-trivia tokens) at which the free-text phrase begins for this action's
+// kind, skipping subject/verb/target/connector tokens. Returns len(tokens)
+// for action kinds that have no phrase (async_action).
+func phraseStartIndex(a ActionDecl, tokens []SyntaxToken) int {
 	start := 2
 	switch a.Kind() {
 	case "sync_action":
@@ -1117,13 +1116,43 @@ func (a ActionDecl) PhraseText() string {
 			start++
 		}
 	case "async_action":
-		return "" // no phrase for notifies
+		return len(tokens) // no phrase for notifies
 	}
-	var parts []string
-	for _, tok := range tokens[start:] {
-		parts = append(parts, tok.Text())
+	return start
+}
+
+// PhraseText returns the description phrase for the action, as the exact raw
+// source substring spanning the phrase tokens (including any inter-token
+// whitespace), so special characters like `1! & 2! and/maybe *` keep their
+// original spacing instead of being space-joined.
+//
+// The green tree is lossless but does not retain a pointer to the original
+// source string on SyntaxNode/ActionDecl, so this reconstructs the exact
+// slice from the node's own tokens (including whitespace/trivia tokens,
+// which the parser emits for every gap — see parser.go emitWhitespaceBefore)
+// rather than from a raw offset-based source slice.
+func (a ActionDecl) PhraseText() string {
+	tokens := a.node.Tokens()
+	if len(tokens) == 0 {
+		return ""
 	}
-	return strings.Join(parts, " ")
+	start := phraseStartIndex(a, tokens)
+	if start >= len(tokens) {
+		return ""
+	}
+	startOffset := tokens[start].Offset()
+	var sb strings.Builder
+	writing := false
+	for _, tok := range a.node.AllTokens() {
+		if !writing {
+			if tok.Offset() < startOffset {
+				continue
+			}
+			writing = true
+		}
+		sb.WriteString(tok.Text())
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // Tokens returns the raw token list for the action node.

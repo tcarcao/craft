@@ -386,3 +386,39 @@ func TestRecovery_NestedBraceInServiceField(t *testing.T) {
 		t.Error("want at least one diagnostic for bad_field, got none")
 	}
 }
+
+func TestProse_SpecialCharsUnquoted(t *testing.T) {
+	src := `use_case "x" {
+  when User taps Button
+    Auth asks Billing for 1! & 2! and/maybe *
+}`
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", diags)
+	}
+	root := syntax.Root(gn)
+	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
+	if len(ucNodes) != 1 {
+		t.Fatalf("expected 1 use_case node, got %d", len(ucNodes))
+	}
+	uc := syntax.AsUseCaseDecl(ucNodes[0])
+	scenarios := uc.Scenarios()
+	if len(scenarios) != 1 {
+		t.Fatalf("expected 1 scenario, got %d", len(scenarios))
+	}
+	actions := scenarios[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	act := actions[0]
+	// Note: "for" is the sync_action connector word (see ConnectorValue()/
+	// isConnectorWord), which PhraseText() has always excluded — Description()
+	// re-adds it separately (see TestActionDecl_Description_ConnectorPreservation).
+	// So the phrase here is everything after "for": the special characters.
+	if got := act.PhraseText(); got != "1! & 2! and/maybe *" {
+		t.Fatalf("prose = %q, want %q", got, "1! & 2! and/maybe *")
+	}
+	if got := act.ConnectorValue(); got != "for" {
+		t.Fatalf("connector = %q, want %q", got, "for")
+	}
+}
