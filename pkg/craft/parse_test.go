@@ -268,6 +268,27 @@ func TestParse_UseCaseTags(t *testing.T) {
 	}
 }
 
+// TestParse_UseCaseTags_LastWriteWins is Task 4's cheap future-proofing for
+// a Task-3 minor: a repeated tag key projects last-write-wins (the second
+// occurrence's value survives), matching sema's craft/sema/duplicate-tag
+// WARNING (not error) for the same input — duplication is flagged, not
+// rejected.
+func TestParse_UseCaseTags_LastWriteWins(t *testing.T) {
+	src := []byte("use_case \"Renewal\" {\n  tags {\n    journey: a\n    journey: b\n  }\n\n  when Customer creates Account\n}\n")
+	doc, diags, _ := craft.Parse("x.craft", src)
+	for _, d := range diags {
+		if d.Severity == craft.SeverityError {
+			t.Fatalf("unexpected error diag: %s %s", d.Code, d.Message)
+		}
+	}
+	if len(doc.UseCases) != 1 {
+		t.Fatalf("want 1 use case, got %d", len(doc.UseCases))
+	}
+	if got := doc.UseCases[0].Tags["journey"]; got != "b" {
+		t.Errorf("tags[journey] = %q, want %q (last-write-wins)", got, "b")
+	}
+}
+
 // TestParse_NoTagsBlockLeavesTagsNil verifies that a use_case with no tags {
 // } block leaves UseCase.Tags nil (not an empty map), so it's omitted from
 // JSON output via the `omitempty` tag.

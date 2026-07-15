@@ -1087,8 +1087,24 @@ func (u UseCaseDecl) TagsBlock() *TagsBlock {
 	return &TagsBlock{node: *n}
 }
 
+// TagsBlocks returns all tags { } block children of this use case, in
+// document order. The grammar allows at most one; a second block is a
+// craft/sema/duplicate-tag condition (Task 4, Slice B). TagsBlock() above
+// returns just the first (the common case); this enumerates all of them so
+// sema can flag a second one.
+func (u UseCaseDecl) TagsBlocks() []TagsBlock {
+	var result []TagsBlock
+	for _, n := range u.node.ChildNodes(SyntaxKindTagsBlock) {
+		result = append(result, TagsBlock{node: n})
+	}
+	return result
+}
+
 // TagsBlock is a typed view over a SyntaxKindTagsBlock node: `tags { tag_stmt* }`.
 type TagsBlock struct{ node SyntaxNode }
+
+// Keyword returns the `tags` keyword token introducing this block.
+func (b TagsBlock) Keyword() *SyntaxToken { return b.node.ChildToken(SyntaxKindKwTags) }
 
 // Tags returns all TagStmt views within this tags block, in document order.
 func (b TagsBlock) Tags() []TagStmt {

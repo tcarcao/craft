@@ -559,6 +559,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	syms.SlugRefs = append(syms.SlugRefs, cmRefs...)
 
 	diags = append(diags, validateServiceAnchors(uri, file, lineIdx, hasLI)...)
+	diags = append(diags, validateUseCaseTags(uri, file, lineIdx, hasLI)...)
 
 	return syms, diags
 }

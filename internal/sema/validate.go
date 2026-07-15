@@ -362,3 +362,71 @@ func duplicateAnchorDiag(uri, field, svcName string, f syntax.ServiceField, li g
 		},
 	}
 }
+
+// validateUseCaseTags flags a repeated tag key within one `tags { }` block,
+// or a second `tags { }` block in one use case (duplicate-tag, Task 4,
+// Slice B). Every occurrence after the first is reported. Severity is
+// WARNING, not error: Task 3's projection is last-write-wins for a repeated
+// key, so this is legal input — the rule just flags the likely mistake.
+func validateUseCaseTags(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uc := range file.UseCases() {
+		ucName := uc.Name()
+		seenKeys := map[string]bool{}
+		for i, tb := range uc.TagsBlocks() {
+			if i > 0 {
+				diags = append(diags, duplicateTagBlockDiag(uri, ucName, tb, li, hasLI))
+			}
+			for _, tag := range tb.Tags() {
+				keyTok := tag.Key()
+				if keyTok == nil {
+					continue
+				}
+				key := keyTok.Text()
+				if seenKeys[key] {
+					diags = append(diags, duplicateTagKeyDiag(uri, ucName, key, keyTok, li, hasLI))
+				}
+				seenKeys[key] = true
+			}
+		}
+	}
+	return diags
+}
+
+func duplicateTagKeyDiag(uri, ucName, key string, keyTok *syntax.SyntaxToken, li green.LineIndex, hasLI bool) model.Diagnostic {
+	line, col := 0, 0
+	if hasLI {
+		line, col = li.LineCol(keyTok.Offset())
+	}
+	startChar := colToLSP(col)
+	return model.Diagnostic{
+		Code:      "craft/sema/duplicate-tag",
+		Message:   fmt.Sprintf("use case %q: tag %q is already set; last value wins", ucName, key),
+		Severity:  model.SeverityWarning,
+		SourceURI: uri,
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(key)},
+		},
+	}
+}
+
+func duplicateTagBlockDiag(uri, ucName string, tb syntax.TagsBlock, li green.LineIndex, hasLI bool) model.Diagnostic {
+	line, col := 0, 0
+	if hasLI {
+		if kw := tb.Keyword(); kw != nil {
+			line, col = li.LineCol(kw.Offset())
+		}
+	}
+	startChar := colToLSP(col)
+	return model.Diagnostic{
+		Code:      "craft/sema/duplicate-tag",
+		Message:   fmt.Sprintf("use case %q: a second `tags` block is already declared; only one is allowed per use case", ucName),
+		Severity:  model.SeverityWarning,
+		SourceURI: uri,
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len("tags")},
+		},
+	}
+}

@@ -1,0 +1,8 @@
+use_case "Renewal" {
+  tags {
+    journey: { }
+  }
+
+  when Customer creates Account
+    Billing validates account
+}

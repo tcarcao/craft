@@ -1,0 +1,44 @@
+[
+  {
+    "code": "craft/syntax/unexpected-token",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 13
+      },
+      "end": {
+        "line": 2,
+        "character": 14
+      }
+    }
+  },
+  {
+    "code": "craft/syntax/unexpected-token",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 13
+      },
+      "end": {
+        "line": 2,
+        "character": 14
+      }
+    }
+  },
+  {
+    "code": "craft/syntax/not-yet-implemented",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 5,
+        "character": 2
+      },
+      "end": {
+        "line": 5,
+        "character": 6
+      }
+    }
+  }
+]
