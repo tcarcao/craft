@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // Domain emits a Mermaid flowchart LR for a Craft domain diagram.

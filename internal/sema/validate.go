@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/model"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/model"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // edgeRealizationVerbs require a `bc:` left endpoint and a `service:` right endpoint.

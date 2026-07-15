@@ -11,9 +11,9 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/internal/visualizer"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/visualizer"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 //go:embed templates
@@ -171,9 +171,9 @@ type C4PreviewRequest struct {
 }
 
 type FocusInfo struct {
-	FocusedServiceNames   []string `json:"focusedServiceNames"`
+	FocusedServiceNames []string `json:"focusedServiceNames"`
 	FocusedContextNames []string `json:"focusedContextNames"`
-	HasFocusedServices    bool     `json:"hasFocusedServices"`
+	HasFocusedServices  bool     `json:"hasFocusedServices"`
 	HasFocusedContexts  bool     `json:"hasFocusedContexts"`
 }
 

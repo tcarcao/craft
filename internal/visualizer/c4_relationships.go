@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // Relationship creation methods for generator
@@ -263,14 +263,14 @@ func (g *C4DiagramGenerator) handleReturnAction(action craft.Action) {
 			g.relations = append(g.relations, relation)
 		}
 	}
-	// Note: If no target domain, it's a return to external trigger - 
+	// Note: If no target domain, it's a return to external trigger -
 	// this doesn't need a service relationship in C4 diagrams
 }
 
 // createDatabaseRelationships creates relationships from services to databases
 func (g *C4DiagramGenerator) createDatabaseRelationships() {
 	if g.mode == C4ModeBoundaries {
-		// In boundaries mode, we rely on specific database relationships created 
+		// In boundaries mode, we rely on specific database relationships created
 		// during service relationship analysis (createDatabaseRelationship calls)
 		// These provide meaningful descriptions rather than generic "Database Protocol"
 		// So we skip creating additional generic relationships here
@@ -303,7 +303,6 @@ func (g *C4DiagramGenerator) createServiceLevelDatabaseRelationships() {
 		}
 	}
 }
-
 
 // createDatabaseRelationship creates a specific database relationship
 func (g *C4DiagramGenerator) createDatabaseRelationship(domain, phrase string) {
@@ -805,9 +804,9 @@ func (g *C4DiagramGenerator) buildSystemBoundary(sb *strings.Builder, systemName
 	// Use different boundary types for external vs internal systems
 	var boundaryType string
 	if isExternal {
-		boundaryType = "Enterprise_Boundary"  // External systems get enterprise boundary
+		boundaryType = "Enterprise_Boundary" // External systems get enterprise boundary
 	} else {
-		boundaryType = "System_Boundary"      // Internal systems get system boundary
+		boundaryType = "System_Boundary" // Internal systems get system boundary
 	}
 
 	sb.WriteString(fmt.Sprintf("%s(%s_boundary, \"%s\") {\n",
@@ -860,13 +859,13 @@ func (g *C4DiagramGenerator) buildDomainBoundaries(sb *strings.Builder, serviceN
 		for _, containerName := range containers {
 			container := g.containers[containerName]
 			icon := g.getContainerIcon(containerName, serviceName)
-			
+
 			// Use external container type if system is external
 			containerType := "Container"
 			if isExternal {
 				containerType = "Container_Ext"
 			}
-			
+
 			sb.WriteString(fmt.Sprintf("        %s(%s, \"%s\", \"%s\", \"%s\"%s)\n",
 				containerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description, icon))
@@ -881,13 +880,13 @@ func (g *C4DiagramGenerator) buildDomainBoundaries(sb *strings.Builder, serviceN
 		for _, containerName := range dbContainers {
 			container := g.containers[containerName]
 			icon := g.getDatabaseIcon(container.Technology)
-			
+
 			// Use external database container type if system is external
 			dbContainerType := "ContainerDb"
 			if isExternal {
 				dbContainerType = "ContainerDb_Ext"
 			}
-			
+
 			sb.WriteString(fmt.Sprintf("    %s(%s, \"%s\", \"%s\", \"%s\"%s)\n",
 				dbContainerType, g.sanitizeIdentifier(containerName), containerName,
 				container.Technology, container.Description, icon))

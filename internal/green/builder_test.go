@@ -3,7 +3,7 @@ package green_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/v2/internal/green"
 )
 
 func TestBuilder_SimpleNode(t *testing.T) {

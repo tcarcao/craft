@@ -1,5 +1,5 @@
 // go.mod
-module github.com/tcarcao/craft
+module github.com/tcarcao/craft/v2
 
 go 1.25.0
 

@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/lexer"
+	"github.com/tcarcao/craft/v2/internal/lexer"
 )
 
 func TestLexer_Actors(t *testing.T) {
 	tests := []struct {
-		name     string
-		src      string
+		name      string
+		src       string
 		wantTypes []lexer.TokenType
 	}{
 		{
@@ -176,11 +176,11 @@ func TestLexer_StringEscapes(t *testing.T) {
 		src  string
 		want string
 	}{
-		{name: "escaped quote",           src: `"He said \"hi\""`, want: `He said "hi"`},
-		{name: "escaped backslash",       src: `"path\\file"`,      want: `path\file`},
-		{name: "escaped newline",         src: `"line1\nline2"`,    want: "line1\nline2"},
-		{name: "escaped tab",             src: `"col1\tcol2"`,      want: "col1\tcol2"},
-		{name: "escaped carriage return", src: `"cr\r"`,            want: "cr\r"},
+		{name: "escaped quote", src: `"He said \"hi\""`, want: `He said "hi"`},
+		{name: "escaped backslash", src: `"path\\file"`, want: `path\file`},
+		{name: "escaped newline", src: `"line1\nline2"`, want: "line1\nline2"},
+		{name: "escaped tab", src: `"col1\tcol2"`, want: "col1\tcol2"},
+		{name: "escaped carriage return", src: `"cr\r"`, want: "cr\r"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -202,9 +202,9 @@ func TestLexer_NumberTokens(t *testing.T) {
 		wantType  lexer.TokenType
 		wantValue string
 	}{
-		{"42",    lexer.TokenNumber,     "42"},
-		{"1.5",   lexer.TokenNumber,     "1.5"},
-		{"90%",   lexer.TokenPercentage, "90%"},
+		{"42", lexer.TokenNumber, "42"},
+		{"1.5", lexer.TokenNumber, "1.5"},
+		{"90%", lexer.TokenPercentage, "90%"},
 		{"25.5%", lexer.TokenPercentage, "25.5%"},
 	}
 	for _, tc := range tests {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/v2/internal/green"
 )
 
 // nodeFirstTokenLine returns the 1-based line of the first token in node (via li),

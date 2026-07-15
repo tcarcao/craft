@@ -13,7 +13,7 @@ type GreenToken struct {
 	Text string
 }
 
-func (t *GreenToken) Width() TextSize  { return TextSize(len(t.Text)) }
+func (t *GreenToken) Width() TextSize { return TextSize(len(t.Text)) }
 func (t *GreenToken) isGreenElement() {}
 
 // GreenNode is a position-independent internal node.
@@ -24,7 +24,7 @@ type GreenNode struct {
 	width    TextSize
 }
 
-func (n *GreenNode) Width() TextSize  { return n.width }
+func (n *GreenNode) Width() TextSize { return n.width }
 func (n *GreenNode) isGreenElement() {}
 
 // NewGreenNode creates a GreenNode and caches the total width.

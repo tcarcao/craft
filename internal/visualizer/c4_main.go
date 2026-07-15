@@ -1,7 +1,7 @@
 package visualizer
 
 import (
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 func (v *Visualizer) GenerateC4(arch *craft.CraftDoc, boundariesMode C4GenerationMode, showDatabases bool) ([]byte, error) {

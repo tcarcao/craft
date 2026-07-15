@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/lsp"
+	"github.com/tcarcao/craft/v2/internal/lsp"
 )
 
 func lspCmd() *cobra.Command {

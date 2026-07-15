@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // astParse is a small helper that parses src and returns the wrapped red root.
@@ -760,9 +760,9 @@ func TestActorDecl_Line_SecondLine(t *testing.T) {
 // connector for both KwTo and plain ident connectors (a, an, for, etc.).
 func TestActionDecl_ConnectorValue(t *testing.T) {
 	cases := []struct {
-		src       string
-		wantKind  string
-		wantConn  string
+		src      string
+		wantKind string
+		wantConn string
 	}{
 		// sync_action with 'to' keyword
 		{`use_case "X" { when U does x

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // PlantUMLSequenceGenerator generates PlantUML sequence diagrams from DSL models

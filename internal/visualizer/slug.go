@@ -3,7 +3,7 @@ package visualizer
 import (
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // Slugify converts a human-readable name into a deterministic kebab-case slug.

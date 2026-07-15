@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // minimalDoc returns the smallest CraftDoc that produces all three diagram
@@ -487,4 +487,3 @@ func TestMermaidFormatConstants(t *testing.T) {
 		t.Errorf("FormatMermaidMD = %q, want %q", FormatMermaidMD, "mermaid-md")
 	}
 }
-

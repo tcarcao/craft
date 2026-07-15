@@ -3,7 +3,7 @@ package syntax_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // TestProject_ArchModifier_QuotedValueUnquoted covers Critical 1 from the

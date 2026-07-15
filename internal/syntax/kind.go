@@ -1,6 +1,6 @@
 package syntax
 
-import "github.com/tcarcao/craft/internal/green"
+import "github.com/tcarcao/craft/v2/internal/green"
 
 // SyntaxKind identifies the type of a syntax node or token.
 // Token kinds are in (0, 1000). Node kinds are >= 1000.

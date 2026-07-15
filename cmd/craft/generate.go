@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/internal/visualizer"
-	craft "github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/visualizer"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 type c4Options struct {

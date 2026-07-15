@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.10.1] — 2026-07-15
+
+### Fixed
+- **Module path now declares its major version, so `pkg/craft` is actually importable.** Go's semantic import versioning requires a v2+ module to end its path in `/v2`; without it, `go get github.com/tcarcao/craft/pkg/craft@v2.10.0` failed. The module is now `github.com/tcarcao/craft/v2`, so the public API is imported as:
+
+  ```go
+  import "github.com/tcarcao/craft/v2/pkg/craft"
+  ```
+
+  `go get github.com/tcarcao/craft/v2/pkg/craft@v2.10.1`. Only the import path changes — the API, types, JSON output, and CLI are identical to v2.10.0. (The v2.10.0 CLI binaries, Homebrew tap, and Docker image were unaffected; only the Go-library import was broken.)
+
 ## [2.10.0] — 2026-07-14
 
 ### Added

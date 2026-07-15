@@ -18,6 +18,31 @@ Verify:
 craft --help
 ```
 
+## Use as a Go library
+
+Parse Craft source in-process, without shelling out to the CLI:
+
+```bash
+go get github.com/tcarcao/craft/v2/pkg/craft
+```
+
+```go
+import "github.com/tcarcao/craft/v2/pkg/craft"
+
+// Single file.
+doc, diags, err := craft.Parse("example.craft", src)
+
+// Multiple files, merged with cross-file resolution.
+doc, diags, err := craft.ParseFiles(map[string][]byte{
+    "billing.craft": billingSrc,
+    "catalog.craft": catalogSrc,
+})
+```
+
+Diagnostics are returned as data (`diags`); `err` is reserved for programmer
+errors. Requires Go 1.25+. The module path carries its major version (`/v2`),
+per Go's semantic import versioning.
+
 ---
 
 ## Quick example

@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 type validateResult struct {

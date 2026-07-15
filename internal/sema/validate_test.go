@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/model"
-	"github.com/tcarcao/craft/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/model"
+	"github.com/tcarcao/craft/v2/internal/sema"
 )
 
 // diagRuleName returns the short rule name of a diagnostic code (the part

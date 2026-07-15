@@ -3,7 +3,7 @@ package syntax_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // treeFromSrc parses src and returns the wrapped red root.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // corpusFiles returns all .craft files under testdata/corpus, walking from

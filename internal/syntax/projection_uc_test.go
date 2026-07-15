@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 func TestProject_UseCase_ExternalTrigger(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 
 	"go.lsp.dev/jsonrpc2"
 
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/internal/workspace"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/workspace"
 )
 
 // inlayHintParams mirrors the LSP 3.17 InlayHintParams. Defined locally because

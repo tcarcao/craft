@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tcarcao/craft/internal/lsp"
-	"github.com/tcarcao/craft/internal/workspace"
+	"github.com/tcarcao/craft/v2/internal/lsp"
+	"github.com/tcarcao/craft/v2/internal/workspace"
 	"go.lsp.dev/protocol"
 )
 
@@ -86,7 +86,7 @@ func TestCompletion_ServiceFields(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const src = "service Foo {\n  \n}"
@@ -118,7 +118,7 @@ func TestCompletion_LanguageValues(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const src = "service Foo {\n  language: \n}"
@@ -151,7 +151,7 @@ func TestCompletion_ContextsField_BCSymbols(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	// Open two files: domain defines Commerce with Orders+Payments; service uses contexts:
@@ -190,7 +190,7 @@ func TestCompletion_TopLevelKeywords(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const uri = "file:///top.craft"
@@ -229,7 +229,7 @@ func TestCompletion_UseCase_WhenKeyword(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	// use_case body with blank line — cursor inside
@@ -260,7 +260,7 @@ func TestCompletion_UseCase_ActionSymbols(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	// Workspace: actor, domain (+ BC), service — all in one file
@@ -294,7 +294,7 @@ func TestCompletion_Expose(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	// Main file: actor Alice, service OrderSvc, domain Commerce with BC Orders
@@ -356,7 +356,7 @@ func TestCompletion_ActorsBlock(t *testing.T) {
 	id := 1
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", ID: &id, Method: "initialize", //nolint:errcheck
 		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`)})
-	readMsg(br) //nolint:errcheck
+	readMsg(br)                                                                                     //nolint:errcheck
 	writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}) //nolint:errcheck
 
 	const src = "actors {\n  \n}"

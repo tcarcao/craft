@@ -10,9 +10,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/model"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/model"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // LintWorkspace runs style and consistency checks across all workspace files.

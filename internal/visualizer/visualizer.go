@@ -54,7 +54,7 @@ func generatePlantUMLBinary(content string, format string) ([]byte, string, erro
 	if err != nil {
 		return nil, "", fmt.Errorf("plantuml error: %v, stderr: %s", err, stderr.String())
 	}
-	
+
 	var contentType string
 	switch format {
 	case "png":
@@ -66,7 +66,7 @@ func generatePlantUMLBinary(content string, format string) ([]byte, string, erro
 	default:
 		contentType = "application/octet-stream"
 	}
-	
+
 	return out, contentType, nil
 }
 
@@ -118,7 +118,7 @@ func generateGraphvizBinary(content string, format string) ([]byte, string, erro
 	if err != nil {
 		return nil, "", fmt.Errorf("graphviz error: %v, stderr: %s", err, stderr.String())
 	}
-	
+
 	var contentType string
 	switch format {
 	case "png":
@@ -130,6 +130,6 @@ func generateGraphvizBinary(content string, format string) ([]byte, string, erro
 	default:
 		contentType = "application/octet-stream"
 	}
-	
+
 	return out, contentType, nil
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // Sequence emits a Mermaid sequenceDiagram from doc. Each use case becomes a

@@ -3,7 +3,7 @@ package syntax_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 func TestSyntaxKind_IsToken(t *testing.T) {
@@ -44,4 +44,3 @@ func TestSyntaxKind_Invalid_IsNeitherTokenNorNode(t *testing.T) {
 		t.Error("SyntaxKindInvalid should not be a node")
 	}
 }
-

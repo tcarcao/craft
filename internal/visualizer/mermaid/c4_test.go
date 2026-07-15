@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 func c4Fixture() *craft.CraftDoc {

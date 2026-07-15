@@ -57,13 +57,13 @@ test-integration: ## Run integration tests that spin up real renderers via testc
 
 vet:
 	go vet \
-		github.com/tcarcao/craft/internal/ast \
-		github.com/tcarcao/craft/internal/lexer \
-		github.com/tcarcao/craft/internal/syntax \
-		github.com/tcarcao/craft/internal/sema \
-		github.com/tcarcao/craft/internal/workspace \
-		github.com/tcarcao/craft/internal/lsp \
-		github.com/tcarcao/craft/pkg/craft
+		github.com/tcarcao/craft/v2/internal/ast \
+		github.com/tcarcao/craft/v2/internal/lexer \
+		github.com/tcarcao/craft/v2/internal/syntax \
+		github.com/tcarcao/craft/v2/internal/sema \
+		github.com/tcarcao/craft/v2/internal/workspace \
+		github.com/tcarcao/craft/v2/internal/lsp \
+		github.com/tcarcao/craft/v2/pkg/craft
 
 test-release: ## Download and smoke-test the latest GitHub release binary for the current platform
 	./scripts/test-release.sh

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // C4GenerationMode determines how domains are represented
@@ -29,7 +29,7 @@ type C4DiagramGenerator struct {
 	presentationSystem *C4System
 	gatewaySystem      *C4System
 	focusedServices    map[string]bool // Services to show as internal
-	focusedContexts  map[string]bool // Contexts to show as internal
+	focusedContexts    map[string]bool // Contexts to show as internal
 	hasFocus           bool            // Whether focus mode is enabled
 	showDatabases      bool            // Whether to show database containers
 }
@@ -45,7 +45,7 @@ func NewC4DiagramGenerator(mode C4GenerationMode, showDatabases bool) *C4Diagram
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
 		focusedServices:    make(map[string]bool),
-		focusedContexts:  make(map[string]bool),
+		focusedContexts:    make(map[string]bool),
 		hasFocus:           false,
 		showDatabases:      showDatabases,
 	}
@@ -67,7 +67,7 @@ func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames [
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
 		focusedServices:    focusedServices,
-		focusedContexts:  make(map[string]bool),
+		focusedContexts:    make(map[string]bool),
 		hasFocus:           len(focusedServiceNames) > 0,
 		showDatabases:      showDatabases,
 	}
@@ -94,7 +94,7 @@ func NewC4DiagramGeneratorWithFocusAndContexts(mode C4GenerationMode, focusedSer
 		systemRelations:    make([]C4Relation, 0),
 		userInteractionMap: make(map[string][]string),
 		focusedServices:    focusedServices,
-		focusedContexts:  focusedContexts,
+		focusedContexts:    focusedContexts,
 		hasFocus:           len(focusedServiceNames) > 0 || len(focusedContextNames) > 0,
 		showDatabases:      showDatabases,
 	}
@@ -465,7 +465,7 @@ func (g *C4DiagramGenerator) createRelationships() {
 func (g *C4DiagramGenerator) deduplicateRelationships() {
 	// Deduplicate system-level relationships
 	g.systemRelations = g.deduplicateRelationshipSlice(g.systemRelations)
-	
+
 	// Deduplicate container-level relationships
 	g.relations = g.deduplicateRelationshipSlice(g.relations)
 }

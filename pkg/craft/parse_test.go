@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // repoFile resolves a path relative to the repo root (pkg/craft is two levels down).

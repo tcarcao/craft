@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // diagGolden is the subset of craft.Diagnostic that goldens assert on.

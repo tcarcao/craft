@@ -2,13 +2,19 @@
 // S3: workspace + diagnostics + documentSymbol + hover handlers.
 // S4: semanticTokens (actor vs domain distinct colouring).
 // S5: definition (go-to-definition for service contexts→domain); service
-//     symbols in documentSymbol/hover/semanticTokens; workspace/executeCommand
-//     for EXTRACT_DOMAINS_FROM_CURRENT and EXTRACT_DOMAINS_FROM_WORKSPACE (Q16).
+//
+//	symbols in documentSymbol/hover/semanticTokens; workspace/executeCommand
+//	for EXTRACT_DOMAINS_FROM_CURRENT and EXTRACT_DOMAINS_FROM_WORKSPACE (Q16).
+//
 // S6: hover/definition/semanticTokens extended to cover actor/domain/service
-//     references inside use-case trigger subjects and action parties.
-//     use_case blocks added to documentSymbol outline.
+//
+//	references inside use-case trigger subjects and action parties.
+//	use_case blocks added to documentSymbol outline.
+//
 // S7: arch blocks added to documentSymbol outline; FoldingRanges handler
-//     returns one fold per arch block plus one per labelled segment inside arch.
+//
+//	returns one fold per arch block plus one per labelled segment inside arch.
+//
 // S8: exposure blocks added to documentSymbol outline and hover.
 // ServerCapabilities is extended per Q20 (only declare what's implemented).
 package lsp
@@ -30,11 +36,11 @@ import (
 	"go.lsp.dev/protocol"
 	"go.uber.org/zap"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/internal/workspace"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/workspace"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // Server is the Craft LSP server. It satisfies protocol.Server.
@@ -198,12 +204,12 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// S4: semanticTokens (full) with actor/domain/service token types.
 			// S5: definition (go-to-definition), executeCommand (custom LSP commands).
 			// S7: foldingRange (arch blocks + labelled segments).
-			TextDocumentSync:       protocol.TextDocumentSyncKindIncremental,
-			DocumentSymbolProvider: true,
-			HoverProvider:          true,
-			DefinitionProvider:     true,
-			RenameProvider:         true,
-			FoldingRangeProvider:        true,
+			TextDocumentSync:           protocol.TextDocumentSyncKindIncremental,
+			DocumentSymbolProvider:     true,
+			HoverProvider:              true,
+			DefinitionProvider:         true,
+			RenameProvider:             true,
+			FoldingRangeProvider:       true,
 			DocumentFormattingProvider: true,
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
@@ -321,7 +327,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	}
 	file := syntax.AsFile(syntax.Root(f.Green))
 
-	cursorLine := int(params.Position.Line) + 1     // convert to 1-based
+	cursorLine := int(params.Position.Line) + 1      // convert to 1-based
 	cursorChar := int(params.Position.Character) + 1 // convert to 1-based
 	rm := s.ws.ResolutionMap()
 	wsSym := s.ws.WorkspaceSymbols()
@@ -746,9 +752,9 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		endLine = max(endLine, startLine)
 		name := uc.Name() // unquoted title text (Bug 8a fix)
 		syms = append(syms, protocol.DocumentSymbol{
-			Name:   name,
-			Kind:   protocol.SymbolKindEvent, // closest match for use-case-level interactions
-			Detail: "use_case",
+			Name:           name,
+			Kind:           protocol.SymbolKindEvent, // closest match for use-case-level interactions
+			Detail:         "use_case",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
 			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
 		})
@@ -1314,7 +1320,6 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 	return ranges, nil
 }
 
-
 func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
 	if params == nil {
 		return nil, nil
@@ -1789,10 +1794,10 @@ func (s *Server) OutgoingCalls(_ context.Context, _ *protocol.CallHierarchyOutgo
 // craft-service-name: service declaration and service refs in use_case.
 const (
 	semanticTokenTypeActorDecl   protocol.SemanticTokenTypes = "craft-actor-definition" // index 0
-	semanticTokenTypeActorRef    protocol.SemanticTokenTypes = "craft-actor-name"        // index 1
-	semanticTokenTypeDomainName  protocol.SemanticTokenTypes = "craft-domain-name"       // index 2
-	semanticTokenTypeContextName protocol.SemanticTokenTypes = "craft-context-name"      // index 3
-	semanticTokenTypeServiceName protocol.SemanticTokenTypes = "craft-service-name"      // index 4
+	semanticTokenTypeActorRef    protocol.SemanticTokenTypes = "craft-actor-name"       // index 1
+	semanticTokenTypeDomainName  protocol.SemanticTokenTypes = "craft-domain-name"      // index 2
+	semanticTokenTypeContextName protocol.SemanticTokenTypes = "craft-context-name"     // index 3
+	semanticTokenTypeServiceName protocol.SemanticTokenTypes = "craft-service-name"     // index 4
 )
 
 // semanticTokenLegend is the ordered list of all craft-* token types.
@@ -1800,51 +1805,51 @@ const (
 // Entries 0-4 are the entity-name types used by Pass 2 (AST ident classification).
 // Entries 5+ are the keyword/punctuation types used by Pass 1 (syntax tree walk).
 var semanticTokenLegend = []string{
-	"craft-actor-definition",    // 0
-	"craft-actor-name",          // 1
-	"craft-domain-name",         // 2
-	"craft-context-name",        // 3
-	"craft-service-name",        // 4
-	"craft-component-name",      // 5
-	"craft-exposure-name",       // 6
-	"craft-data-store-name",     // 7
-	"craft-flow-keyword",        // 8
-	"craft-services-keyword",    // 9
-	"craft-arch-keyword",        // 10
-	"craft-exposure-keyword",    // 11
-	"craft-domain-keyword",      // 12
-	"craft-actor-keyword",       // 13
-	"craft-actors-keyword",      // 14
-	"craft-contexts-property",   // 15
-	"craft-language-property",   // 16
+	"craft-actor-definition",     // 0
+	"craft-actor-name",           // 1
+	"craft-domain-name",          // 2
+	"craft-context-name",         // 3
+	"craft-service-name",         // 4
+	"craft-component-name",       // 5
+	"craft-exposure-name",        // 6
+	"craft-data-store-name",      // 7
+	"craft-flow-keyword",         // 8
+	"craft-services-keyword",     // 9
+	"craft-arch-keyword",         // 10
+	"craft-exposure-keyword",     // 11
+	"craft-domain-keyword",       // 12
+	"craft-actor-keyword",        // 13
+	"craft-actors-keyword",       // 14
+	"craft-contexts-property",    // 15
+	"craft-language-property",    // 16
 	"craft-data-stores-property", // 17
-	"craft-deployment-property", // 18
-	"craft-to-property",         // 19
-	"craft-through-property",    // 20
+	"craft-deployment-property",  // 18
+	"craft-to-property",          // 19
+	"craft-through-property",     // 20
 	"craft-presentation-section", // 21
-	"craft-gateway-section",     // 22
-	"craft-asks-verb",           // 23
-	"craft-notifies-verb",       // 24
-	"craft-listens-verb",        // 25
-	"craft-returns-verb",        // 26
-	"craft-regular-verb",        // 27
-	"craft-actor-type",          // 28
-	"craft-connector-word",      // 29
-	"craft-usecase-string",      // 30
-	"craft-event-string",        // 31
-	"craft-regular-string",      // 32
-	"craft-phrase-word",         // 33
-	"craft-comment",             // 34
-	"craft-boolean",             // 35
-	"craft-comma",               // 36
-	"craft-percentage",          // 37
-	"craft-parenthesis",         // 38
-	"craft-deployment-arrow",    // 39
-	"craft-braces",              // 40
-	"craft-deployment-type",     // 41
-	"craft-deployment-target",   // 42
-	"craft-domain-list",         // 43
-	"craft-language-value",      // 44
+	"craft-gateway-section",      // 22
+	"craft-asks-verb",            // 23
+	"craft-notifies-verb",        // 24
+	"craft-listens-verb",         // 25
+	"craft-returns-verb",         // 26
+	"craft-regular-verb",         // 27
+	"craft-actor-type",           // 28
+	"craft-connector-word",       // 29
+	"craft-usecase-string",       // 30
+	"craft-event-string",         // 31
+	"craft-regular-string",       // 32
+	"craft-phrase-word",          // 33
+	"craft-comment",              // 34
+	"craft-boolean",              // 35
+	"craft-comma",                // 36
+	"craft-percentage",           // 37
+	"craft-parenthesis",          // 38
+	"craft-deployment-arrow",     // 39
+	"craft-braces",               // 40
+	"craft-deployment-type",      // 41
+	"craft-deployment-target",    // 42
+	"craft-domain-list",          // 43
+	"craft-language-value",       // 44
 }
 
 // semanticLegendIndex maps token type name → legend index for O(1) lookup.
