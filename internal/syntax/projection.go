@@ -73,6 +73,21 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex, sourceURI ...string) *
 			Line:      ucLine,
 			SourceURI: src,
 		}
+		// tags { } block (Task 3, Slice B) — last-write-wins on duplicate keys.
+		// Duplicate-tag sema warnings are a separate later task; not validated here.
+		if tb := uc.TagsBlock(); tb != nil {
+			tags := map[string]string{}
+			for _, ts := range tb.Tags() {
+				keyTok := ts.Key()
+				if keyTok == nil {
+					continue
+				}
+				tags[keyTok.Text()] = ts.ValueText()
+			}
+			if len(tags) > 0 {
+				outUC.Tags = tags
+			}
+		}
 		for _, sc := range uc.Scenarios() {
 			counter++
 			scenID := fmt.Sprintf("scenario_%d", counter)

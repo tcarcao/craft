@@ -1,0 +1,10 @@
+use_case "Renewal" {
+  tags {
+    journey: re/renewal-flow
+    owner: "team billing"
+    tier: gold
+  }
+
+  when Customer creates Account
+    Billing notifies "Account Created"
+}

@@ -80,6 +80,11 @@ const (
 	// Matched by value from TokenIdent, like asks/notifies elsewhere.
 	SyntaxKindEdgeKw
 
+	// SyntaxKindKwTags is the contextual keyword `tags` introducing a use_case's
+	// tags { } sub-block (Task 3, Slice B). Matched by value from TokenIdent,
+	// like when/asks/notifies elsewhere — not a reserved word.
+	SyntaxKindKwTags
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -113,4 +118,7 @@ const (
 
 	SyntaxKindContextMapDecl // context_map { edge_stmt* }
 	SyntaxKindEdgeStmt       // ref EDGE_KW ref, inside a context_map block
+
+	SyntaxKindTagsBlock // tags { tag_stmt* } inside a use_case
+	SyntaxKindTagStmt   // IDENT ':' (IDENT | STRING | ref), inside a tags block
 )
