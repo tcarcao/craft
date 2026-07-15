@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.11.0] — 2026-07-15
+
+### Added
+- **`UseCase` now carries `Line` and `SourceURI`** (`json:"line,omitempty"` / `"sourceUri,omitempty"`), parity with `Service`/`Actor`/`Action`. `Parse` stamps the filename you pass; `ParseFiles` stamps each use case's originating map key — so a consumer can attribute a use case to its file without re-scanning text.
+- **Generic `tags {}` sub-block inside `use_case`** → `UseCase.Tags map[string]string`. An opaque, consumer-defined key/value slot (`tags { journey: re/renewal-flow  owner: "team billing" }`); craft neither validates keys nor interprets values. Values may be bare slugs or quoted strings. `tags` is a contextual keyword (still usable as an ordinary identifier). `Tags` is absent from JSON when no block is present.
+- `syntax.EdgeKeywords()` accessor exposing the `context_map` edge verbs.
+
+### Fixed / Hardened
+- `internal/sema` edge-verb validation gained a defensive `default:` case (`craft/sema/unrecognised-edge-verb`) plus a build-time test keeping the parser's edge-keyword set and sema's verb maps in sync.
+- A duplicate tag key or a second `tags {}` block emits `craft/sema/duplicate-tag` (warning; last value wins).
+
+### Notes
+- Additive/minor: existing keyed struct literals and JSON consumers are unaffected. Corpus goldens gained `use_case` `line` fields (regenerated).
+
 ## [2.10.1] — 2026-07-15
 
 ### Fixed

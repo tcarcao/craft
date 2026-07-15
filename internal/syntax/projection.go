@@ -9,7 +9,11 @@ import (
 
 // ProjectFromTree projects a lossless red SyntaxNode tree into a *model.CraftDoc
 // using typed views directly — no lower.go dependency.
-func ProjectFromTree(root SyntaxNode, li green.LineIndex) *model.CraftDoc {
+func ProjectFromTree(root SyntaxNode, li green.LineIndex, sourceURI ...string) *model.CraftDoc {
+	src := ""
+	if len(sourceURI) > 0 {
+		src = sourceURI[0]
+	}
 	if root == (SyntaxNode{}) {
 		return &model.CraftDoc{UseCases: []model.UseCase{}}
 	}
@@ -62,9 +66,27 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *model.CraftDoc {
 		if uc.Title() == nil {
 			continue
 		}
+		ucLine, _ := li.LineCol(uc.Title().Offset())
 		outUC := model.UseCase{
 			Name:      uc.Name(), // unquoted title text (Bug 8a fix)
 			Scenarios: []model.Scenario{},
+			Line:      ucLine,
+			SourceURI: src,
+		}
+		// tags { } block (Task 3, Slice B) — last-write-wins on duplicate keys.
+		// Duplicate-tag sema warnings are a separate later task; not validated here.
+		if tb := uc.TagsBlock(); tb != nil {
+			tags := map[string]string{}
+			for _, ts := range tb.Tags() {
+				keyTok := ts.Key()
+				if keyTok == nil {
+					continue
+				}
+				tags[keyTok.Text()] = ts.ValueText()
+			}
+			if len(tags) > 0 {
+				outUC.Tags = tags
+			}
 		}
 		for _, sc := range uc.Scenarios() {
 			counter++

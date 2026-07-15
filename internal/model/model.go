@@ -92,6 +92,15 @@ type DeploymentRule struct {
 type UseCase struct {
 	Name      string     `json:"name"`
 	Scenarios []Scenario `json:"scenarios"`
+	// Line is the 1-based source line of the use_case's title token, 0 if unknown.
+	Line int `json:"line,omitempty"`
+	// SourceURI is the originating file (ParseFiles map key / Parse filename).
+	// Empty when the caller supplied none.
+	SourceURI string `json:"sourceUri,omitempty"`
+	// Tags holds the key/value pairs from an optional tags { } sub-block
+	// (Slice B). nil when the use_case has no tags block; last-write-wins on
+	// duplicate keys within the block (sema validation is a separate task).
+	Tags map[string]string `json:"tags,omitempty"`
 }
 
 // Scenario is a specific path through a use case.

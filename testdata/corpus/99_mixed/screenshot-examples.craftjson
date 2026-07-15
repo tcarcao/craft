@@ -234,7 +234,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 98
     },
     {
       "name": "Product Purchase Flow",
@@ -470,7 +471,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 117
     },
     {
       "name": "Inventory Sync",
@@ -585,7 +587,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 153
     },
     {
       "name": "Customer Support Inquiry",
@@ -708,7 +711,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 174
     },
     {
       "name": "Password Reset",
@@ -832,7 +836,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 197
     },
     {
       "name": "User Login",
@@ -865,7 +870,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 219
     }
   ],
   "domains": [

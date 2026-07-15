@@ -1,0 +1,35 @@
+{
+  "useCases": [
+    {
+      "name": "Renewal",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Customer",
+            "verb": "creates",
+            "phrase": "Account",
+            "description": "when Customer creates Account"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "async_action",
+              "context": "Billing",
+              "event": "Account Created",
+              "description": "Billing notifies \"Account Created\"",
+              "line": 9
+            }
+          ]
+        }
+      ],
+      "line": 1,
+      "tags": {
+        "journey": "re/renewal-flow",
+        "owner": "team billing",
+        "tier": "gold"
+      }
+    }
+  ]
+}

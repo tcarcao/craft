@@ -1075,6 +1075,78 @@ func (u UseCaseDecl) Scenarios() []ScenarioDecl {
 	return result
 }
 
+// TagsBlock returns the single tags { } block child of this use case, or nil
+// if it has none (Task 3, Slice B). The grammar allows at most one tags
+// block per use_case; if more than one were somehow present, this returns
+// the first (document order).
+func (u UseCaseDecl) TagsBlock() *TagsBlock {
+	n := u.node.ChildNode(SyntaxKindTagsBlock)
+	if n == nil {
+		return nil
+	}
+	return &TagsBlock{node: *n}
+}
+
+// TagsBlocks returns all tags { } block children of this use case, in
+// document order. The grammar allows at most one; a second block is a
+// craft/sema/duplicate-tag condition (Task 4, Slice B). TagsBlock() above
+// returns just the first (the common case); this enumerates all of them so
+// sema can flag a second one.
+func (u UseCaseDecl) TagsBlocks() []TagsBlock {
+	var result []TagsBlock
+	for _, n := range u.node.ChildNodes(SyntaxKindTagsBlock) {
+		result = append(result, TagsBlock{node: n})
+	}
+	return result
+}
+
+// TagsBlock is a typed view over a SyntaxKindTagsBlock node: `tags { tag_stmt* }`.
+type TagsBlock struct{ node SyntaxNode }
+
+// Keyword returns the `tags` keyword token introducing this block.
+func (b TagsBlock) Keyword() *SyntaxToken { return b.node.ChildToken(SyntaxKindKwTags) }
+
+// Tags returns all TagStmt views within this tags block, in document order.
+func (b TagsBlock) Tags() []TagStmt {
+	var result []TagStmt
+	for _, n := range b.node.ChildNodes(SyntaxKindTagStmt) {
+		result = append(result, TagStmt{node: n})
+	}
+	return result
+}
+
+// TagStmt is a typed view over a SyntaxKindTagStmt node:
+// `IDENT ':' (IDENT | STRING | ref-shaped-slug)`.
+type TagStmt struct{ node SyntaxNode }
+
+// Key returns the tag key identifier token.
+func (t TagStmt) Key() *SyntaxToken { return t.node.ChildToken(SyntaxKindIdent) }
+
+// Value returns the tag's value token when the value is a single leaf token
+// — i.e. a quoted string (SyntaxKindString). Returns nil when the value is a
+// bare ref-shaped value (wrapped in a SyntaxKindRef child by parseTagStmt,
+// since a bare value like "re/renewal-flow" may span multiple leaf tokens —
+// see parseTagStmt's doc comment). Use ValueText for the general case that
+// handles both shapes uniformly.
+func (t TagStmt) Value() *SyntaxToken {
+	return t.node.ChildToken(SyntaxKindString)
+}
+
+// ValueText returns the tag's semantic (unquoted) value text, handling both
+// a quoted string (unquoted via stringAwareText, the same path used for
+// other string values) and a bare ref-shaped value (reconstructed via
+// RefDecl.RefText(), the same path used elsewhere in this file for
+// multi-token ref-shaped values — see refAwareText).
+func (t TagStmt) ValueText() string {
+	if n := t.node.ChildNode(SyntaxKindRef); n != nil {
+		return RefDecl{node: *n}.RefText()
+	}
+	if tok := t.Value(); tok != nil {
+		return stringAwareText(*tok)
+	}
+	return ""
+}
+
 // ScenarioDecl is a typed view over a SyntaxKindScenario node.
 type ScenarioDecl struct{ node SyntaxNode }
 

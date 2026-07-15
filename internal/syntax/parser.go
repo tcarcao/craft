@@ -751,9 +751,11 @@ func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
 		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
 			d := p.parseScenario(counter)
 			diags = append(diags, d...)
+		} else if tok.Type == lexer.TokenIdent && tok.Value == "tags" {
+			diags = append(diags, p.parseUseCaseTagsBlock()...)
 		} else {
 			// Skip unknown tokens inside the use_case body.
-			diags = append(diags, p.diagUnexpected(tok, "`when` or `}`"))
+			diags = append(diags, p.diagUnexpected(tok, "`when`, `tags`, or `}`"))
 			p.consumeAs(SyntaxKindError)
 		}
 	}
@@ -769,6 +771,108 @@ func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
 		return diags
 	}
 	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseUseCaseTagsBlock parses: tags { tag_stmt* }
+// `tags` is a contextual keyword (matched by value from TokenIdent, like
+// `when` elsewhere) — not a reserved word. Mirrors parseContextMapBlock
+// exactly: StartNode, consume keyword, consume `{`, loop parseTagStmt with a
+// forward-progress guard, unclosed-block diagnostic, consume `}`, FinishNode.
+func (p *Parser) parseUseCaseTagsBlock() []model.Diagnostic {
+	p.builder.StartNode(SyntaxKindTagsBlock)
+	var diags []model.Diagnostic
+
+	// Attach leading trivia before `tags`.
+	p.attachTrivia()
+	kwTok := p.peek()
+	p.consumeAs(SyntaxKindKwTags)
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindLBrace)
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Attach trivia inside block (also swallows insignificant whitespace/newlines).
+		p.attachTrivia()
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+		posBefore := p.pos
+		diags = append(diags, p.parseTagStmt()...)
+		// Belt-and-suspenders forward-progress guard, mirroring
+		// parseContextMapBlock's loop.
+		if p.pos == posBefore {
+			diags = append(diags, p.diagUnexpected(p.peek(), "a tag key or `}`"))
+			p.consumeAs(SyntaxKindError)
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed tags block (missing `}`)",
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseTagStmt parses one `IDENT ':' (IDENT | STRING | ref-shaped-slug)` tag
+// line inside a tags { } block, emitting it as a SyntaxKindTagStmt node.
+//
+// The value is either a quoted string (consumed as a single SyntaxKindString
+// token) or a bare value, which reuses parseRef's exact token-consuming
+// logic — the same "ref-shaped" scanner node slugs use elsewhere in this
+// parser — so a bare slug like "re/renewal-flow" (three lexer tokens: ident
+// "re", the lexer's TokenError "/", ident "renewal-flow") is captured whole
+// inside a SyntaxKindRef child node rather than truncated to its first
+// token. This mirrors the same multi-token-value problem already solved for
+// context_map edge endpoints, notifies/listens events, etc. (see
+// refAwareText in ast.go) and keeps the green tree exactly lossless.
+func (p *Parser) parseTagStmt() []model.Diagnostic {
+	p.builder.StartNode(SyntaxKindTagStmt)
+	var diags []model.Diagnostic
+
+	keyTok := p.peek()
+	if keyTok.Type != lexer.TokenIdent {
+		diags = append(diags, p.diagUnexpected(keyTok, "a tag key"))
+		p.consumeAs(SyntaxKindError)
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindIdent)
+
+	if p.peek().Type != lexer.TokenColon {
+		diags = append(diags, p.diagUnexpected(p.peek(), "`:`"))
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindColon)
+
+	valTok := p.peek()
+	switch {
+	case valTok.Type == lexer.TokenString:
+		p.consumeAs(SyntaxKindString)
+	case valTok.Type == lexer.TokenIdent:
+		// Bare value — reuse parseRef's scanner so a slash/hyphen-bearing
+		// slug like "re/renewal-flow" is captured whole.
+		p.parseRef()
+	default:
+		diags = append(diags, p.diagUnexpected(valTok, "a tag value (identifier, string, or ref)"))
+		p.builder.FinishNode()
+		return diags
+	}
+
 	p.builder.FinishNode()
 	return diags
 }
@@ -1895,13 +1999,24 @@ func (p *Parser) parseEdgeEndpoint() []model.Diagnostic {
 	return diags
 }
 
+// edgeKeywords is the single source of truth for context_map edge verbs.
+var edgeKeywords = []string{"realized_by", "also_realizes", "same_as", "contrasts", "distinct_from"}
+
 // isEdgeKeyword reports whether s is a recognised context_map edge verb.
 func isEdgeKeyword(s string) bool {
-	switch s {
-	case "realized_by", "also_realizes", "same_as", "contrasts", "distinct_from":
-		return true
+	for _, k := range edgeKeywords {
+		if k == s {
+			return true
+		}
 	}
 	return false
+}
+
+// EdgeKeywords returns the context_map edge verbs the parser accepts. Exported so
+// sema (and future docs/tooling) can verify its own verb classification stays in
+// sync instead of hand-copying the list.
+func EdgeKeywords() []string {
+	return append([]string(nil), edgeKeywords...)
 }
 
 // parseRef consumes ONE reference at the current position and emits it as a

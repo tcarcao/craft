@@ -79,7 +79,9 @@ func TestParse_MatchesCorpusGolden(t *testing.T) {
 	// Parse's doc must equal the existing projection golden byte-for-byte,
 	// proving Parse is a faithful wrapper of ProjectFromTree.
 	src := repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craft")
-	doc, _, _ := craft.Parse("dsl-vnext.craft", src)
+	// DD2: no sourceURI here, matching TestHarnessA_V2vsGoldens' no-URI
+	// ProjectFromTree call, so the 99_mixed golden carries no sourceUri.
+	doc, _, _ := craft.Parse("", src)
 	got := mustMarshalIndent(t, doc)
 	want := strings.TrimRight(string(repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craftjson")), "\n")
 	if strings.TrimRight(got, "\n") != want {
@@ -101,6 +103,40 @@ func TestParse_DiagnosticsCarryFilename(t *testing.T) {
 		if d.SourceURI != "my/path/x.craft" {
 			t.Errorf("SourceURI = %q, want %q (no file:// prefix, not empty)", d.SourceURI, "my/path/x.craft")
 		}
+	}
+}
+
+func TestParse_UseCaseLineAndSourceURI(t *testing.T) {
+	src := []byte("use_case \"First\" {\n  when A creates x\n}\n\nuse_case \"Second\" {\n  when A creates y\n}\n")
+	doc, _, _ := craft.Parse("journeys/renewal.craft", src)
+	if len(doc.UseCases) != 2 {
+		t.Fatalf("want 2 use cases, got %d", len(doc.UseCases))
+	}
+	if doc.UseCases[0].Line != 1 {
+		t.Errorf("UseCases[0].Line = %d, want 1", doc.UseCases[0].Line)
+	}
+	if doc.UseCases[1].Line != 5 {
+		t.Errorf("UseCases[1].Line = %d, want 5", doc.UseCases[1].Line)
+	}
+	for _, uc := range doc.UseCases {
+		if uc.SourceURI != "journeys/renewal.craft" {
+			t.Errorf("UseCase %q SourceURI = %q, want journeys/renewal.craft", uc.Name, uc.SourceURI)
+		}
+	}
+}
+
+func TestParseFiles_UseCaseSourceURIIsMapKey(t *testing.T) {
+	files := map[string][]byte{
+		"a.craft": []byte("use_case \"UA\" {\n  when A creates x\n}\n"),
+		"b.craft": []byte("use_case \"UB\" {\n  when A creates y\n}\n"),
+	}
+	doc, _, _ := craft.ParseFiles(files)
+	got := map[string]string{}
+	for _, uc := range doc.UseCases {
+		got[uc.Name] = uc.SourceURI
+	}
+	if got["UA"] != "a.craft" || got["UB"] != "b.craft" {
+		t.Errorf("SourceURI attribution wrong: %+v", got)
 	}
 }
 
@@ -205,6 +241,61 @@ func TestParseFiles_CrossFileUnresolvedRef(t *testing.T) {
 	}
 	if !strings.Contains(found.Message, "UnknownContext") {
 		t.Errorf("unresolved-reference message = %q, want it to name UnknownContext", found.Message)
+	}
+}
+
+// TestParse_UseCaseTags verifies that a use_case's tags { } sub-block
+// (Slice B) projects into UseCase.Tags, with a bare ref-shaped value
+// ("re/renewal-flow", spanning multiple lexer tokens) captured whole and a
+// quoted value ("team billing") unquoted.
+func TestParse_UseCaseTags(t *testing.T) {
+	src := []byte("use_case \"Renewal\" {\n  tags {\n    journey: re/renewal-flow\n    owner: \"team billing\"\n  }\n\n  when Customer creates Account\n}\n")
+	doc, diags, _ := craft.Parse("x.craft", src)
+	for _, d := range diags {
+		if d.Severity == craft.SeverityError {
+			t.Fatalf("unexpected error diag: %s %s", d.Code, d.Message)
+		}
+	}
+	if len(doc.UseCases) != 1 {
+		t.Fatalf("want 1 use case, got %d", len(doc.UseCases))
+	}
+	tags := doc.UseCases[0].Tags
+	if tags["journey"] != "re/renewal-flow" {
+		t.Errorf("tags[journey] = %q, want re/renewal-flow", tags["journey"])
+	}
+	if tags["owner"] != "team billing" {
+		t.Errorf("tags[owner] = %q, want \"team billing\" (unquoted)", tags["owner"])
+	}
+}
+
+// TestParse_UseCaseTags_LastWriteWins is Task 4's cheap future-proofing for
+// a Task-3 minor: a repeated tag key projects last-write-wins (the second
+// occurrence's value survives), matching sema's craft/sema/duplicate-tag
+// WARNING (not error) for the same input — duplication is flagged, not
+// rejected.
+func TestParse_UseCaseTags_LastWriteWins(t *testing.T) {
+	src := []byte("use_case \"Renewal\" {\n  tags {\n    journey: a\n    journey: b\n  }\n\n  when Customer creates Account\n}\n")
+	doc, diags, _ := craft.Parse("x.craft", src)
+	for _, d := range diags {
+		if d.Severity == craft.SeverityError {
+			t.Fatalf("unexpected error diag: %s %s", d.Code, d.Message)
+		}
+	}
+	if len(doc.UseCases) != 1 {
+		t.Fatalf("want 1 use case, got %d", len(doc.UseCases))
+	}
+	if got := doc.UseCases[0].Tags["journey"]; got != "b" {
+		t.Errorf("tags[journey] = %q, want %q (last-write-wins)", got, "b")
+	}
+}
+
+// TestParse_NoTagsBlockLeavesTagsNil verifies that a use_case with no tags {
+// } block leaves UseCase.Tags nil (not an empty map), so it's omitted from
+// JSON output via the `omitempty` tag.
+func TestParse_NoTagsBlockLeavesTagsNil(t *testing.T) {
+	doc, _, _ := craft.Parse("x.craft", []byte("use_case \"U\" {\n  when A creates B\n}\n"))
+	if doc.UseCases[0].Tags != nil {
+		t.Errorf("Tags should be nil when no tags block, got %v", doc.UseCases[0].Tags)
 	}
 }
 

@@ -215,6 +215,36 @@ func TestValidate_ServiceAnchors_NoDuplicate(t *testing.T) {
 	assertNoDiag(t, diags, "duplicate-service-anchor")
 }
 
+// TestValidate_DuplicateTag_Warning is Task 4's RED-phase test (spec Slice
+// B): a repeated tag key within one tags { } block is legal (Task 3's
+// projection is last-write-wins), but it's flagged with a WARNING —
+// craft/sema/duplicate-tag — at the second (and any later) occurrence.
+func TestValidate_DuplicateTag_Warning(t *testing.T) {
+	src := "use_case \"U\" {\n  tags {\n    journey: a\n    journey: b\n  }\n  when A does x\n}\n"
+	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	assertDiagCount(t, diags, "duplicate-tag", 1)
+	assertSeverity(t, diags, "duplicate-tag", model.SeverityWarning)
+}
+
+// TestValidate_DuplicateTag_SecondBlock covers the other half of
+// craft/sema/duplicate-tag: a second `tags { }` block within one use case
+// (grammar allows it syntactically; sema flags it as a warning at the
+// second block's `tags` keyword).
+func TestValidate_DuplicateTag_SecondBlock(t *testing.T) {
+	src := "use_case \"U\" {\n  tags {\n    journey: a\n  }\n  tags {\n    owner: x\n  }\n  when A does x\n}\n"
+	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	assertDiagCount(t, diags, "duplicate-tag", 1)
+	assertSeverity(t, diags, "duplicate-tag", model.SeverityWarning)
+}
+
+// TestValidate_Tags_NoDuplicate is the negative case: distinct keys in a
+// single tags block emit no duplicate-tag diagnostic.
+func TestValidate_Tags_NoDuplicate(t *testing.T) {
+	src := "use_case \"U\" {\n  tags {\n    journey: a\n    owner: b\n  }\n  when A does x\n}\n"
+	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	assertNoDiag(t, diags, "duplicate-tag")
+}
+
 func TestValidate_UnresolvedRefLocal_Warning(t *testing.T) {
 	// wsHasSymbols requires at least one declared actor/domain/service in the
 	// file-set (matching the existing unresolved-reference guard) — declare

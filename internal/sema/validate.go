@@ -267,19 +267,39 @@ func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, h
 			checkSlugRef(uri, right, rightLine, rightCol, &diags, &refs)
 
 			leftKind, rightKind := refKindWord(left), refKindWord(right)
-			switch {
-			case edgeRealizationVerbs[verb]:
-				if leftKind != "bc" || rightKind != "service" {
-					diags = append(diags, edgeEndpointKindDiag(uri, verb, "a `bc:` left endpoint and a `service:` right endpoint", left, right, leftLine, leftCol))
-				}
-			case edgeTermVerbs[verb]:
-				if leftKind != "term" || rightKind != "term" {
-					diags = append(diags, edgeEndpointKindDiag(uri, verb, "`term:` endpoints on both sides", left, right, leftLine, leftCol))
-				}
-			}
+			diags = append(diags, classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right, leftLine, leftCol)...)
 		}
 	}
 	return diags, refs
+}
+
+// classifyEdgeVerb returns endpoint-kind diagnostics for one edge. Extracted from
+// the tree walk so the default branch (unreachable via .craft source because the
+// parser's isEdgeKeyword gates it) is unit-testable.
+func classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right string, leftLine, leftCol int) []model.Diagnostic {
+	switch {
+	case edgeRealizationVerbs[verb]:
+		if leftKind != "bc" || rightKind != "service" {
+			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "a `bc:` left endpoint and a `service:` right endpoint", left, right, leftLine, leftCol)}
+		}
+	case edgeTermVerbs[verb]:
+		if leftKind != "term" || rightKind != "term" {
+			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "`term:` endpoints on both sides", left, right, leftLine, leftCol)}
+		}
+	default:
+		startChar := colToLSP(leftCol)
+		return []model.Diagnostic{{
+			Code:      "craft/sema/unrecognised-edge-verb",
+			Message:   fmt.Sprintf("edge verb %q has no endpoint-kind rule (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
+			},
+		}}
+	}
+	return nil
 }
 
 func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) model.Diagnostic {
@@ -339,6 +359,74 @@ func duplicateAnchorDiag(uri, field, svcName string, f syntax.ServiceField, li g
 		Range: model.Range{
 			Start: model.Position{Line: lineToLSP(line), Character: startChar},
 			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(field)},
+		},
+	}
+}
+
+// validateUseCaseTags flags a repeated tag key within one `tags { }` block,
+// or a second `tags { }` block in one use case (duplicate-tag, Task 4,
+// Slice B). Every occurrence after the first is reported. Severity is
+// WARNING, not error: Task 3's projection is last-write-wins for a repeated
+// key, so this is legal input — the rule just flags the likely mistake.
+func validateUseCaseTags(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uc := range file.UseCases() {
+		ucName := uc.Name()
+		seenKeys := map[string]bool{}
+		for i, tb := range uc.TagsBlocks() {
+			if i > 0 {
+				diags = append(diags, duplicateTagBlockDiag(uri, ucName, tb, li, hasLI))
+			}
+			for _, tag := range tb.Tags() {
+				keyTok := tag.Key()
+				if keyTok == nil {
+					continue
+				}
+				key := keyTok.Text()
+				if seenKeys[key] {
+					diags = append(diags, duplicateTagKeyDiag(uri, ucName, key, keyTok, li, hasLI))
+				}
+				seenKeys[key] = true
+			}
+		}
+	}
+	return diags
+}
+
+func duplicateTagKeyDiag(uri, ucName, key string, keyTok *syntax.SyntaxToken, li green.LineIndex, hasLI bool) model.Diagnostic {
+	line, col := 0, 0
+	if hasLI {
+		line, col = li.LineCol(keyTok.Offset())
+	}
+	startChar := colToLSP(col)
+	return model.Diagnostic{
+		Code:      "craft/sema/duplicate-tag",
+		Message:   fmt.Sprintf("use case %q: tag %q is already set; last value wins", ucName, key),
+		Severity:  model.SeverityWarning,
+		SourceURI: uri,
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(key)},
+		},
+	}
+}
+
+func duplicateTagBlockDiag(uri, ucName string, tb syntax.TagsBlock, li green.LineIndex, hasLI bool) model.Diagnostic {
+	line, col := 0, 0
+	if hasLI {
+		if kw := tb.Keyword(); kw != nil {
+			line, col = li.LineCol(kw.Offset())
+		}
+	}
+	startChar := colToLSP(col)
+	return model.Diagnostic{
+		Code:      "craft/sema/duplicate-tag",
+		Message:   fmt.Sprintf("use case %q: a second `tags` block is already declared; only one is allowed per use case", ucName),
+		Severity:  model.SeverityWarning,
+		SourceURI: uri,
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + len("tags")},
 		},
 	}
 }
