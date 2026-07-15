@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // TestRoundTrip verifies that the green tree reassembles to the exact source text

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 func TestCraftDocRoundTrip(t *testing.T) {
@@ -48,7 +48,7 @@ func TestCraftDocRoundTrip(t *testing.T) {
 							{
 								ID:          "validate-cart",
 								Type:        craft.ActionTypeSync,
-								Context: "ordering",
+								Context:     "ordering",
 								Verb:        "validates",
 								Description: "Validate cart contents",
 								Line:        20,
@@ -56,7 +56,7 @@ func TestCraftDocRoundTrip(t *testing.T) {
 							{
 								ID:          "emit-order-placed",
 								Type:        craft.ActionTypeAsync,
-								Context: "ordering",
+								Context:     "ordering",
 								Event:       "OrderPlaced",
 								Description: "Emit OrderPlaced event",
 								Line:        21,
@@ -113,4 +113,3 @@ func TestCraftDocRoundTrip(t *testing.T) {
 		t.Errorf("round-trip mismatch:\n  original:     %+v\n  round-tripped: %+v", original, roundTripped)
 	}
 }
-

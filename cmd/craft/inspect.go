@@ -6,14 +6,14 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 type inspectOutput struct {
-	Files    []string        `json:"files"`
-	Actors   []craft.Actor   `json:"actors,omitempty"`
-	Domains  []craft.Domain  `json:"domains,omitempty"`
-	Services []craft.Service `json:"services,omitempty"`
+	Files    []string         `json:"files"`
+	Actors   []craft.Actor    `json:"actors,omitempty"`
+	Domains  []craft.Domain   `json:"domains,omitempty"`
+	Services []craft.Service  `json:"services,omitempty"`
 	UseCases []useCaseSummary `json:"use_cases,omitempty"`
 }
 

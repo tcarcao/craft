@@ -3,7 +3,7 @@ package syntax
 import (
 	"iter"
 
-	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/v2/internal/green"
 )
 
 // SyntaxElement is either SyntaxNode or SyntaxToken.
@@ -21,7 +21,7 @@ type SyntaxNode struct {
 	parent *SyntaxNode // nil for root
 }
 
-func (n SyntaxNode) Kind() SyntaxKind { return n.green.Kind }
+func (n SyntaxNode) Kind() SyntaxKind       { return n.green.Kind }
 func (n SyntaxNode) Offset() green.TextSize { return n.offset }
 func (n SyntaxNode) TextRange() green.TextRange {
 	return green.TextRange{Start: n.offset, End: n.offset + n.green.Width()}
@@ -45,7 +45,7 @@ type SyntaxToken struct {
 }
 
 func (t SyntaxToken) Kind() SyntaxKind { return t.green.Kind }
-func (t SyntaxToken) Text() string { return t.green.Text }
+func (t SyntaxToken) Text() string     { return t.green.Text }
 
 // Offset returns the byte offset of the token start from the beginning of the
 // source file. Computed lazily by ChildrenIter() accumulating child widths from root.
@@ -188,9 +188,9 @@ type Single struct{ Token SyntaxToken }
 // Between means the cursor is on the exact boundary between two tokens.
 type Between struct{ Left, Right SyntaxToken }
 
-func (NoToken) isTokenAtOffset()  {}
-func (Single) isTokenAtOffset()   {}
-func (Between) isTokenAtOffset()  {}
+func (NoToken) isTokenAtOffset() {}
+func (Single) isTokenAtOffset()  {}
+func (Between) isTokenAtOffset() {}
 
 // TokenAtOffset returns the leaf token(s) at the given byte offset.
 func (n SyntaxNode) TokenAtOffset(offset green.TextSize) TokenAtOffset {

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/internal/workspace"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/workspace"
 )
 
 func TestWorkspace_OpenAndGet(t *testing.T) {

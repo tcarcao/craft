@@ -6,7 +6,7 @@
 // preview, mermaid-cli, and the Mermaid Live Editor without further processing.
 package mermaid
 
-import craft "github.com/tcarcao/craft/pkg/craft"
+import craft "github.com/tcarcao/craft/v2/pkg/craft"
 
 // referencedActors returns the set of actor names that appear as the
 // triggering actor of any TriggerTypeExternal scenario in doc. Generators

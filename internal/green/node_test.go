@@ -3,7 +3,7 @@ package green_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/v2/internal/green"
 )
 
 // SyntaxKind constants for testing — mirrors syntax package values.
@@ -30,8 +30,8 @@ func TestGreenToken_Width_UTF8(t *testing.T) {
 }
 
 func TestNewGreenNode_Width(t *testing.T) {
-	tok1 := &green.GreenToken{Kind: kindKwActor, Text: "actor"}  // 5 bytes
-	tok2 := &green.GreenToken{Kind: kindIdent, Text: " Foo"}     // 4 bytes
+	tok1 := &green.GreenToken{Kind: kindKwActor, Text: "actor"} // 5 bytes
+	tok2 := &green.GreenToken{Kind: kindIdent, Text: " Foo"}    // 4 bytes
 	node := green.NewGreenNode(kindActorDecl, []green.GreenElement{tok1, tok2})
 	if got := node.Width(); got != 9 {
 		t.Errorf("Width() = %d, want 9", got)

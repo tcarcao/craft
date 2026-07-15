@@ -5,15 +5,15 @@ import (
 
 	"go.lsp.dev/protocol"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/internal/workspace"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/workspace"
 )
 
 type completionContext int
 
 const (
-	ctxTopLevel        completionContext = iota
+	ctxTopLevel completionContext = iota
 	ctxServiceField
 	ctxServiceLang
 	ctxServiceContexts
@@ -337,6 +337,7 @@ func bcSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
+
 // domainAndServiceSymbolCompletions returns bounded contexts and services.
 // Used after action verbs (asks, returns) where the target is a domain context
 // or service, not an actor.

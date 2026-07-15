@@ -3,7 +3,7 @@ package lsp
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 func TestDetectContext(t *testing.T) {

@@ -3,8 +3,8 @@ package syntax
 import (
 	"fmt"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/model"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/model"
 )
 
 // ProjectFromTree projects a lossless red SyntaxNode tree into a *model.CraftDoc

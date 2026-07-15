@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // parseTreeFor is a test helper that parses a craft source string and returns

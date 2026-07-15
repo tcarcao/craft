@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // sequenceFixture builds a minimal model exercising actor + listen trigger +

@@ -1,8 +1,8 @@
 package visualizer
 
 import (
-	"github.com/tcarcao/craft/internal/visualizer/mermaid"
-	craft "github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/visualizer/mermaid"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // GenerateDomainDiagramMermaid renders a Craft domain diagram as Mermaid source.

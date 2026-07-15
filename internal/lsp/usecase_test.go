@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tcarcao/craft/internal/lsp"
+	"github.com/tcarcao/craft/v2/internal/lsp"
 )
 
 // craftFileWithActorsAndUseCases is a test fixture that has:

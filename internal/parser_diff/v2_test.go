@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // skippedSubdirs lists corpus subdirectories that are not yet implemented by

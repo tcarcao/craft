@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // Parse parses a single Craft source file and returns its document model plus

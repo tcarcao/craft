@@ -3,8 +3,8 @@ package syntax
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/lexer"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lexer"
 )
 
 // parseRefText builds a Parser over src, calls parseRef() once at the start

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // C4 emits a Mermaid C4Container (experimental syntax) diagram from doc.

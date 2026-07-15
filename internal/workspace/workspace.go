@@ -8,7 +8,8 @@
 // by S3 handlers, but the index exists so S5+ can add cross-file resolution
 // without retrofitting.
 // S5: ResolutionMap computed after every workspace change; sema.AnalyzeWorkspace
-//     runs eagerly on the full workspace after each debounced parse.
+//
+//	runs eagerly on the full workspace after each debounced parse.
 package workspace
 
 import (
@@ -22,19 +23,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
-	"github.com/tcarcao/craft/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // File holds the cached parse result for a single .craft document.
 type File struct {
 	URI         string
-	Content     string         // kept: hash check and UTF16Col source
+	Content     string // kept: hash check and UTF16Col source
 	ContentHash [32]byte
-	Green       *green.GreenNode  // replaces SyntaxTree
-	LineIndex   green.LineIndex   // built once per open/change
+	Green       *green.GreenNode // replaces SyntaxTree
+	LineIndex   green.LineIndex  // built once per open/change
 	Diagnostics []craft.Diagnostic
 	// Symbols is the per-file symbol table, computed after parsing.
 	Symbols sema.Symbols
@@ -49,8 +50,8 @@ type Workspace struct {
 	// resolution holds the latest workspace-level symbol table, resolution
 	// map, and cross-file diagnostics, recomputed after every change.
 	resolution struct {
-		ws   sema.WorkspaceSymbols
-		rm   sema.ResolutionMap
+		ws    sema.WorkspaceSymbols
+		rm    sema.ResolutionMap
 		diags map[string][]craft.Diagnostic // keyed by source-file URI
 	}
 

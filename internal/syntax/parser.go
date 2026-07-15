@@ -5,7 +5,9 @@
 // S3: actors. S4: domains. S5: services + services block.
 // S6: use_case "..." { when ... } blocks.
 // S7: arch { presentation: ... gateway: ... } blocks with flow (>) and
-//     component modifiers ([key, key:value]).
+//
+//	component modifiers ([key, key:value]).
+//
 // S8: exposure <name> { to: ... contexts: ... through: ... } blocks.
 // Unsupported top-level keywords emit a recoverable "not-yet-implemented"
 // diagnostic so --parser=v2 is usable on partial files.
@@ -14,9 +16,9 @@ package syntax
 import (
 	"fmt"
 
-	"github.com/tcarcao/craft/internal/green"
-	"github.com/tcarcao/craft/internal/lexer"
-	"github.com/tcarcao/craft/internal/model"
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lexer"
+	"github.com/tcarcao/craft/v2/internal/model"
 )
 
 // Parser is a recursive-descent parser for Craft DSL.

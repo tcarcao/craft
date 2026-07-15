@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	craft "github.com/tcarcao/craft/pkg/craft"
+	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // DomainMode represents different visualization modes for domain diagrams

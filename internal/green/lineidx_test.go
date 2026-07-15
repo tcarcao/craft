@@ -3,7 +3,7 @@ package green_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/green"
+	"github.com/tcarcao/craft/v2/internal/green"
 )
 
 func TestLineIndex_LineCol(t *testing.T) {
@@ -11,17 +11,17 @@ func TestLineIndex_LineCol(t *testing.T) {
 	li := green.NewLineIndex(src)
 
 	tests := []struct {
-		offset     green.TextSize
-		wantLine   int
-		wantCol    int
+		offset   green.TextSize
+		wantLine int
+		wantCol  int
 	}{
-		{0, 1, 1},   // 'h'
-		{4, 1, 5},   // 'o'
-		{5, 1, 6},   // '\n' — still on line 1
-		{6, 2, 1},   // 'w'
-		{11, 2, 6},  // '\n'
-		{12, 3, 1},  // 'f'
-		{14, 3, 3},  // 'o' (last char)
+		{0, 1, 1},  // 'h'
+		{4, 1, 5},  // 'o'
+		{5, 1, 6},  // '\n' — still on line 1
+		{6, 2, 1},  // 'w'
+		{11, 2, 6}, // '\n'
+		{12, 3, 1}, // 'f'
+		{14, 3, 3}, // 'o' (last char)
 	}
 	for _, tt := range tests {
 		line, col := li.LineCol(tt.offset)
@@ -81,8 +81,16 @@ func TestLineIndex_UTF16Col_ASCII(t *testing.T) {
 
 func TestTextRange_Contains(t *testing.T) {
 	r := green.TextRange{Start: 5, End: 10}
-	if !r.Contains(5) { t.Error("should contain start") }
-	if !r.Contains(9) { t.Error("should contain end-1") }
-	if r.Contains(10) { t.Error("should not contain end (half-open)") }
-	if r.Contains(4)  { t.Error("should not contain before start") }
+	if !r.Contains(5) {
+		t.Error("should contain start")
+	}
+	if !r.Contains(9) {
+		t.Error("should contain end-1")
+	}
+	if r.Contains(10) {
+		t.Error("should not contain end (half-open)")
+	}
+	if r.Contains(4) {
+		t.Error("should not contain before start")
+	}
 }

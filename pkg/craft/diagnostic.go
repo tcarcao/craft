@@ -1,6 +1,6 @@
 package craft
 
-import "github.com/tcarcao/craft/internal/model"
+import "github.com/tcarcao/craft/v2/internal/model"
 
 type (
 	Diagnostic = model.Diagnostic

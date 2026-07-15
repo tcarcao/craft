@@ -3,8 +3,8 @@ package sema_test
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/internal/sema"
-	"github.com/tcarcao/craft/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // helper: build a minimal WorkspaceSymbols with actors.
