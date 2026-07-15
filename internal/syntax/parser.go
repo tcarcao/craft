@@ -1895,13 +1895,24 @@ func (p *Parser) parseEdgeEndpoint() []model.Diagnostic {
 	return diags
 }
 
+// edgeKeywords is the single source of truth for context_map edge verbs.
+var edgeKeywords = []string{"realized_by", "also_realizes", "same_as", "contrasts", "distinct_from"}
+
 // isEdgeKeyword reports whether s is a recognised context_map edge verb.
 func isEdgeKeyword(s string) bool {
-	switch s {
-	case "realized_by", "also_realizes", "same_as", "contrasts", "distinct_from":
-		return true
+	for _, k := range edgeKeywords {
+		if k == s {
+			return true
+		}
 	}
 	return false
+}
+
+// EdgeKeywords returns the context_map edge verbs the parser accepts. Exported so
+// sema (and future docs/tooling) can verify its own verb classification stays in
+// sync instead of hand-copying the list.
+func EdgeKeywords() []string {
+	return append([]string(nil), edgeKeywords...)
 }
 
 // parseRef consumes ONE reference at the current position and emits it as a

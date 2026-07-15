@@ -267,19 +267,39 @@ func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, h
 			checkSlugRef(uri, right, rightLine, rightCol, &diags, &refs)
 
 			leftKind, rightKind := refKindWord(left), refKindWord(right)
-			switch {
-			case edgeRealizationVerbs[verb]:
-				if leftKind != "bc" || rightKind != "service" {
-					diags = append(diags, edgeEndpointKindDiag(uri, verb, "a `bc:` left endpoint and a `service:` right endpoint", left, right, leftLine, leftCol))
-				}
-			case edgeTermVerbs[verb]:
-				if leftKind != "term" || rightKind != "term" {
-					diags = append(diags, edgeEndpointKindDiag(uri, verb, "`term:` endpoints on both sides", left, right, leftLine, leftCol))
-				}
-			}
+			diags = append(diags, classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right, leftLine, leftCol)...)
 		}
 	}
 	return diags, refs
+}
+
+// classifyEdgeVerb returns endpoint-kind diagnostics for one edge. Extracted from
+// the tree walk so the default branch (unreachable via .craft source because the
+// parser's isEdgeKeyword gates it) is unit-testable.
+func classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right string, leftLine, leftCol int) []model.Diagnostic {
+	switch {
+	case edgeRealizationVerbs[verb]:
+		if leftKind != "bc" || rightKind != "service" {
+			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "a `bc:` left endpoint and a `service:` right endpoint", left, right, leftLine, leftCol)}
+		}
+	case edgeTermVerbs[verb]:
+		if leftKind != "term" || rightKind != "term" {
+			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "`term:` endpoints on both sides", left, right, leftLine, leftCol)}
+		}
+	default:
+		startChar := colToLSP(leftCol)
+		return []model.Diagnostic{{
+			Code:      "craft/sema/unrecognised-edge-verb",
+			Message:   fmt.Sprintf("edge verb %q has no endpoint-kind rule (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
+			},
+		}}
+	}
+	return nil
 }
 
 func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) model.Diagnostic {
