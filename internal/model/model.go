@@ -92,6 +92,11 @@ type DeploymentRule struct {
 type UseCase struct {
 	Name      string     `json:"name"`
 	Scenarios []Scenario `json:"scenarios"`
+	// Line is the 1-based source line of the use_case's title token, 0 if unknown.
+	Line int `json:"line,omitempty"`
+	// SourceURI is the originating file (ParseFiles map key / Parse filename).
+	// Empty when the caller supplied none.
+	SourceURI string `json:"sourceUri,omitempty"`
 }
 
 // Scenario is a specific path through a use case.

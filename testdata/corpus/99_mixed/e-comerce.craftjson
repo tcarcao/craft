@@ -194,7 +194,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 26
     },
     {
       "name": "VAS scheduled and no VAS in Wallet",
@@ -369,7 +370,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 47
     },
     {
       "name": "VAS scheduled and VAS in Wallet",
@@ -425,7 +427,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 70
     },
     {
       "name": "VAS unscheduled",
@@ -480,7 +483,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 78
     },
     {
       "name": "VAS expires",
@@ -514,7 +518,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 86
     }
   ],
   "domains": [

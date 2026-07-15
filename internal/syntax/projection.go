@@ -9,7 +9,11 @@ import (
 
 // ProjectFromTree projects a lossless red SyntaxNode tree into a *model.CraftDoc
 // using typed views directly — no lower.go dependency.
-func ProjectFromTree(root SyntaxNode, li green.LineIndex) *model.CraftDoc {
+func ProjectFromTree(root SyntaxNode, li green.LineIndex, sourceURI ...string) *model.CraftDoc {
+	src := ""
+	if len(sourceURI) > 0 {
+		src = sourceURI[0]
+	}
 	if root == (SyntaxNode{}) {
 		return &model.CraftDoc{UseCases: []model.UseCase{}}
 	}
@@ -62,9 +66,12 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex) *model.CraftDoc {
 		if uc.Title() == nil {
 			continue
 		}
+		ucLine, _ := li.LineCol(uc.Title().Offset())
 		outUC := model.UseCase{
 			Name:      uc.Name(), // unquoted title text (Bug 8a fix)
 			Scenarios: []model.Scenario{},
+			Line:      ucLine,
+			SourceURI: src,
 		}
 		for _, sc := range uc.Scenarios() {
 			counter++

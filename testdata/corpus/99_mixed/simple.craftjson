@@ -104,7 +104,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 1
     },
     {
       "name": "VAS scheduled and no VAS in Wallet",
@@ -279,7 +280,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 18
     },
     {
       "name": "VAS scheduled and VAS in Wallet",
@@ -335,7 +337,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 41
     },
     {
       "name": "VAS unscheduled",
@@ -390,7 +393,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 49
     },
     {
       "name": "VAS expires",
@@ -424,7 +428,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 57
     },
     {
       "name": "Purchase VAS schedule and its renewal (ideal scenario)",
@@ -559,7 +564,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 65
     },
     {
       "name": "Purchase VAS schedule and its renewal (current possible scenario)",
@@ -615,7 +621,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 83
     },
     {
       "name": "Scheduled VAS Applied",
@@ -650,7 +657,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 92
     },
     {
       "name": "VAS Renewal Flow",
@@ -734,7 +742,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 98
     },
     {
       "name": "Stop Auto-Renewal",
@@ -761,7 +770,8 @@
             }
           ]
         }
-      ]
+      ],
+      "line": 110
     }
   ]
 }

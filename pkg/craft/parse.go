@@ -36,7 +36,7 @@ func parseOne(filename, src string) (*CraftDoc, []Diagnostic) {
 	uri := "file://" + filename
 	greenRoot, li, parseDiags := syntax.Parse(src)
 	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := syntax.ProjectFromTree(tree, li, filename)
 
 	_, semaDiags := sema.AnalyzeFile(uri, tree)
 
@@ -73,7 +73,7 @@ func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
 		tree := syntax.Root(greenRoot)
 		perFileTrees[uri] = tree
 
-		doc := syntax.ProjectFromTree(tree, li)
+		doc := syntax.ProjectFromTree(tree, li, key)
 		mergeDoc(merged, doc)
 
 		diags = append(diags, stampURI(parseDiags, key)...)

@@ -79,7 +79,9 @@ func TestParse_MatchesCorpusGolden(t *testing.T) {
 	// Parse's doc must equal the existing projection golden byte-for-byte,
 	// proving Parse is a faithful wrapper of ProjectFromTree.
 	src := repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craft")
-	doc, _, _ := craft.Parse("dsl-vnext.craft", src)
+	// DD2: no sourceURI here, matching TestHarnessA_V2vsGoldens' no-URI
+	// ProjectFromTree call, so the 99_mixed golden carries no sourceUri.
+	doc, _, _ := craft.Parse("", src)
 	got := mustMarshalIndent(t, doc)
 	want := strings.TrimRight(string(repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craftjson")), "\n")
 	if strings.TrimRight(got, "\n") != want {
@@ -101,6 +103,40 @@ func TestParse_DiagnosticsCarryFilename(t *testing.T) {
 		if d.SourceURI != "my/path/x.craft" {
 			t.Errorf("SourceURI = %q, want %q (no file:// prefix, not empty)", d.SourceURI, "my/path/x.craft")
 		}
+	}
+}
+
+func TestParse_UseCaseLineAndSourceURI(t *testing.T) {
+	src := []byte("use_case \"First\" {\n  when A creates x\n}\n\nuse_case \"Second\" {\n  when A creates y\n}\n")
+	doc, _, _ := craft.Parse("journeys/renewal.craft", src)
+	if len(doc.UseCases) != 2 {
+		t.Fatalf("want 2 use cases, got %d", len(doc.UseCases))
+	}
+	if doc.UseCases[0].Line != 1 {
+		t.Errorf("UseCases[0].Line = %d, want 1", doc.UseCases[0].Line)
+	}
+	if doc.UseCases[1].Line != 5 {
+		t.Errorf("UseCases[1].Line = %d, want 5", doc.UseCases[1].Line)
+	}
+	for _, uc := range doc.UseCases {
+		if uc.SourceURI != "journeys/renewal.craft" {
+			t.Errorf("UseCase %q SourceURI = %q, want journeys/renewal.craft", uc.Name, uc.SourceURI)
+		}
+	}
+}
+
+func TestParseFiles_UseCaseSourceURIIsMapKey(t *testing.T) {
+	files := map[string][]byte{
+		"a.craft": []byte("use_case \"UA\" {\n  when A creates x\n}\n"),
+		"b.craft": []byte("use_case \"UB\" {\n  when A creates y\n}\n"),
+	}
+	doc, _, _ := craft.ParseFiles(files)
+	got := map[string]string{}
+	for _, uc := range doc.UseCases {
+		got[uc.Name] = uc.SourceURI
+	}
+	if got["UA"] != "a.craft" || got["UB"] != "b.craft" {
+		t.Errorf("SourceURI attribution wrong: %+v", got)
 	}
 }
 
