@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.0] — 2026-07-16
+
+### Added
+- **`pkg/craft.ParseDir(fsys fs.FS, root string) (*CraftDoc, []Diagnostic, error)`** — recursively collects every `*.craft` file under `root` in `fsys` and parses them together through `ParseFiles`, giving directory-wide parsing (cross-file resolution + `LintWorkspace` diagnostics) without the caller hand-assembling a file map. Takes an `fs.FS`, so `os.DirFS(dir)`, `embed.FS`, `fstest.MapFS`, and `fs.Sub` subtrees all work; the walk is fully recursive (arbitrary directory depth) and `*.craft`-only. Diagnostics remain data; the `error` return is reserved for I/O failures during the walk. No grammar or CLI surface change (the CLI already parses trees via recursive globs, e.g. `craft validate 'dir/**/*.craft'`).
+
+### Fixed
+- **`ParseFiles`/`ParseDir` now merge `glossary { }` relations across files.** `mergeDoc` omitted `CraftDoc.Glossary`, so any multi-file parse silently dropped glossary relations when the `glossary` block lived in a different file from other declarations — no diagnostic emitted, just missing data. All `CraftDoc` slices are now merged, matching the merge contract's stated "all CraftDoc slices are merged." Regression introduced with the `glossary` block in v2.13.0.
+
 ## [2.13.0] — 2026-07-16
 
 ### Added
