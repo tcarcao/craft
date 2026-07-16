@@ -1,6 +1,8 @@
 package craft
 
 import (
+	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 
@@ -96,6 +98,41 @@ func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
 	return merged, diags, nil
 }
 
+// ParseDir recursively collects every *.craft file under root in fsys, parses
+// and merges them via ParseFiles, and returns the same merged CraftDoc +
+// diagnostics contract ParseFiles provides (deterministic ordering, cross-file
+// resolution, LintWorkspace) — without the caller hand-assembling a file map.
+//
+// fsys is any fs.FS: an embed.FS, an fstest.MapFS, an fs.Sub-scoped subtree, or
+// os.DirFS(dir) for a real directory. File keys in the returned diagnostics are
+// the walked paths (root-relative to fsys, as fs.WalkDir yields them).
+//
+// Diagnostics are data, never surfaced via error; err is reserved for I/O
+// failures during the directory walk (an unreadable directory, or a file that
+// vanishes between WalkDir and ReadFile). Since ParseFiles currently always
+// returns a nil error, ParseDir's error is only reachable via the walk.
+func ParseDir(fsys fs.FS, root string) (*CraftDoc, []Diagnostic, error) {
+	files := make(map[string][]byte)
+	err := fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(p, ".craft") {
+			return nil
+		}
+		data, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return err
+		}
+		files[p] = data
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("craft: walk %s: %w", root, err)
+	}
+	return ParseFiles(files)
+}
+
 // sortDiags stable-sorts a batch of diagnostics into a deterministic order (by
 // file, then source position, then code). The workspace passes range over maps
 // internally and therefore return their diagnostics in Go's randomized map
@@ -130,6 +167,7 @@ func mergeDoc(dst, src *CraftDoc) {
 	dst.Domains = append(dst.Domains, src.Domains...)
 	dst.Actors = append(dst.Actors, src.Actors...)
 	dst.ContextMap = append(dst.ContextMap, src.ContextMap...)
+	dst.Glossary = append(dst.Glossary, src.Glossary...)
 }
 
 // stampURI sets SourceURI = key on a copy-safe slice (the passes return fresh
