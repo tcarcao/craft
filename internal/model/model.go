@@ -8,13 +8,14 @@ package model
 // It is re-exported from pkg/craft as the stable public API type; see that
 // package's stability contract.
 type CraftDoc struct {
-	Architectures []ArchBlock `json:"architectures,omitempty"`
-	Exposures     []Exposure  `json:"exposures,omitempty"`
-	Services      []Service   `json:"services,omitempty"`
-	UseCases      []UseCase   `json:"useCases"`
-	Domains       []Domain    `json:"domains,omitempty"`
-	Actors        []Actor     `json:"actors,omitempty"`
-	ContextMap    []Edge      `json:"contextMap,omitempty"`
+	Architectures []ArchBlock    `json:"architectures,omitempty"`
+	Exposures     []Exposure     `json:"exposures,omitempty"`
+	Services      []Service      `json:"services,omitempty"`
+	UseCases      []UseCase      `json:"useCases"`
+	Domains       []Domain       `json:"domains,omitempty"`
+	Actors        []Actor        `json:"actors,omitempty"`
+	ContextMap    []Edge         `json:"contextMap,omitempty"`
+	Glossary      []TermRelation `json:"glossary,omitempty"`
 }
 
 // Edge is one authored relationship edge from a context_map block, connecting
@@ -23,6 +24,17 @@ type CraftDoc struct {
 // "customer_supplier"). Endpoint resolution/validation is a sema concern, not
 // captured here — this is a shape-only projection of the parsed edges.
 type Edge struct {
+	Left  string `json:"left"`
+	Verb  string `json:"verb"`
+	Right string `json:"right"`
+}
+
+// TermRelation is one authored cross-context term relation from a glossary
+// block, connecting two term nodes (bare or domain-qualified, e.g.
+// "billing/Invoice") with a symmetric relation verb (same_as/contrasts/
+// distinct_from). Resolution/validation is a sema concern; this is a
+// shape-only projection.
+type TermRelation struct {
 	Left  string `json:"left"`
 	Verb  string `json:"verb"`
 	Right string `json:"right"`

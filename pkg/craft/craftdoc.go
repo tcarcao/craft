@@ -31,6 +31,7 @@ type (
 	Domain             = model.Domain
 	Actor              = model.Actor
 	ActorType          = model.ActorType
+	TermRelation       = model.TermRelation
 )
 
 const (

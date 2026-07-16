@@ -1,0 +1,8 @@
+glossary re {
+  billing/Invoice same_as subscriptions/Invoice
+  billing/dunning contrasts subscriptions/dunning
+}
+
+glossary {
+  re/billing/Invoice distinct_from legacy/reporting/Invoice
+}

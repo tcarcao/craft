@@ -1,0 +1,11 @@
+domain re {
+    billing
+}
+
+domain payments {
+    charging
+}
+
+glossary re {
+    billing/Invoice same_as payments/Invoice
+}

@@ -61,6 +61,7 @@ examples/       Example .craft files
 | `domain`      | A top-level domain grouping bounded contexts |
 | `expose`      | API exposure definition |
 | `context_map` | Strategic view classifying BC-to-BC relationships with DDD patterns (`customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language`, `partnership`, `shared_kernel`, `separate_ways`) |
+| `glossary`    | Ubiquitous-language view relating terms across bounded contexts with three symmetric verbs (`same_as`, `contrasts`, `distinct_from`) |
 
 ### Key DSL Example
 
@@ -94,7 +95,18 @@ context_map Monetization {
 }
 ```
 
-Endpoints are bare bounded-context names (no `bc:` prefix); `LEFT` is always the upstream side. See `docs/page/language/context-map.md` for the full pattern catalog and validation rules.
+Endpoints are bare bounded-context names (no `bc:` prefix); `LEFT` is always the upstream side. See `docs/page/language/context-map.md` for the full pattern catalog, validation rules, and the cross-validation lint against the inferred communication view.
+
+### `glossary` Example
+
+```craft
+glossary Monetization {
+  Wallet/balance same_as WalletItemPurchase/balance
+  Wallet/balance distinct_from OrderManagement/balance
+}
+```
+
+Term nodes are `<bc>/<term>` or `<domain>/<bc>/<term>` — the last `/`-segment is the term, the rest is the bounded-context reference. All three verbs are symmetric (no upstream/downstream). See `docs/page/language/glossary.md` for term-node identity and the full diagnostics table.
 
 ---
 

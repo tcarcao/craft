@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/lint/glossary-conflicting-relation",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 7,
+        "character": 4
+      },
+      "end": {
+        "line": 7,
+        "character": 19
+      }
+    }
+  }
+]

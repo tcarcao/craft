@@ -94,6 +94,34 @@ For the three **symmetric** patterns, endpoint order is meaningless: `a partners
 
 Run `craft validate` to see these diagnostics surface for your file.
 
+## Cross-validation with the communication view
+
+Craft holds two views of bounded-context relationships: the **communication view**, *inferred* from use-case `asks`/`notifies` (who calls whom, at runtime), and the **strategic view**, *declared* in `context_map` (the DDD pattern). The strategic classification isn't inferable from calls alone, and that's exactly its payoff — it can be **cross-checked** against the communication view. When a declared pattern contradicts observed communication, one of the two is wrong, and that's worth a diagnostic.
+
+### The dependency edge
+
+Both use-case interaction primitives reduce to the same directed dependency edge, `D → U`, read "downstream depends on upstream":
+
+- `X asks Y to …` → `X` depends on `Y` (the asker depends on the asked)
+- `Y notifies E` paired with `when X listens E` → `X` depends on `Y` (the listener depends on the publisher)
+
+With `LEFT = upstream`, every directional pattern expects the edge `RIGHT → LEFT` — a `customer_supplier`'s customer calls its supplier, a `published_language`'s consumer listens to its publisher, and so on for all five directional patterns. Symmetric patterns (`partnership`, `shared_kernel`, `separate_ways`) have no expected direction.
+
+### The four signals
+
+| Code | Severity | Fires when |
+|---|---|---|
+| `craft/lint/separate-ways-violation` | warning | a `separate_ways A B` edge exists, yet any dependency edge (either direction, sync or async) is observed between A and B |
+| `craft/lint/relationship-direction-inverted` | warning | a directional pattern edge whose only observed dependency runs the wrong way (`LEFT → RIGHT`), with no correct-direction edge present |
+| `craft/lint/relationship-bidirectional` | hint | a directional pattern edge with observed dependency in both directions |
+| `craft/lint/unclassified-communication` | hint | a bounded-context pair that clearly communicates has no `context_map` edge at all, in any block |
+
+### Absence of communication never warns
+
+The communication view is always **partial** — not every declared relationship is exercised by a modeled use case. The governing principle: **absence of communication never warns**. The lint never treats "these two bounded contexts don't call each other" as evidence against a declared pattern; it only fires on observed communication that *contradicts* a declaration, or is entirely unclassified. Declare `billing customer_supplier vas` even if no use case in your model happens to call between them, and the lint stays silent.
+
+`relationship-direction-inverted` is also deliberately conservative: it only fires when *every* observed dependency between the two endpoints runs the wrong way. A single correct-direction edge suppresses it entirely, and traffic observed in both directions degrades to the softer `relationship-bidirectional` hint rather than escalating to a warning.
+
 ## Complete Example
 
 ```craft
@@ -123,4 +151,5 @@ context_map {
 
 - Learn about [domains](/language/domains) to declare the bounded contexts a context map references
 - Model interactions with [use cases](/language/use-cases) — the communication view that `context_map` complements
+- See [Glossary](/language/glossary) for the ubiquitous-language term view — cross-context *term* relations, as opposed to this page's BC-to-BC strategic relations
 - See the [language overview](/language/overview) for the full construct list

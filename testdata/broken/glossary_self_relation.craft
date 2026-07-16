@@ -1,0 +1,7 @@
+domain re {
+    billing
+}
+
+glossary re {
+    billing/Invoice same_as billing/Invoice
+}

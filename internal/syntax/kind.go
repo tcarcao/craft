@@ -47,6 +47,7 @@ const (
 	SyntaxKindKwArch
 	SyntaxKindKwExposure
 	SyntaxKindKwContextMap // hard keyword `context_map`
+	SyntaxKindKwGlossary   // hard keyword `glossary`
 
 	// --- Contextual keywords (parser-resolved from TokenIdent) ---
 	SyntaxKindKwWhen
@@ -75,11 +76,16 @@ const (
 	SyntaxKindKwEvery  // contextual keyword `every` (in when clause)
 	SyntaxKindKwImport // hard keyword `import`
 
-	// SyntaxKindEdgeKw is the contextual keyword for a context_map edge verb:
-	// one of the 8 DDD strategic context-mapping patterns (customer_supplier/
-	// conformist/anticorruption_layer/open_host_service/published_language/
-	// partnership/shared_kernel/separate_ways). Matched by value from
-	// TokenIdent, like asks/notifies elsewhere.
+	// SyntaxKindEdgeKw is the contextual keyword for a relationship verb
+	// inside a context_map or glossary block: either one of the 8 DDD
+	// strategic context-mapping patterns (customer_supplier/conformist/
+	// anticorruption_layer/open_host_service/published_language/partnership/
+	// shared_kernel/separate_ways) or one of the 3 glossary term-relation
+	// verbs (same_as/contrasts/distinct_from). Matched by value from
+	// TokenIdent, like asks/notifies elsewhere. Shared between the two block
+	// kinds since both wrap a single "ref VERB ref" relation statement and
+	// disambiguation is unnecessary — a lookup always scopes to the
+	// enclosing EdgeStmt/GlossaryRelation node's own children.
 	SyntaxKindEdgeKw
 
 	// SyntaxKindContextMapDomain is the optional domain-scope identifier
@@ -88,6 +94,12 @@ const (
 	// TokenIdent — not matched by value, unlike the contextual keywords
 	// above.
 	SyntaxKindContextMapDomain
+
+	// SyntaxKindGlossaryDomain is the optional domain-scope identifier
+	// directly after the `glossary` keyword and before its `{`, e.g. the `re`
+	// in `glossary re { ... }`. Consumed positionally from TokenIdent — not
+	// matched by value — mirroring SyntaxKindContextMapDomain.
+	SyntaxKindGlossaryDomain
 
 	// SyntaxKindKwTags is the contextual keyword `tags` introducing a use_case's
 	// tags { } sub-block (Task 3, Slice B). Matched by value from TokenIdent,
@@ -127,6 +139,9 @@ const (
 
 	SyntaxKindContextMapDecl // context_map { edge_stmt* }
 	SyntaxKindEdgeStmt       // ref EDGE_KW ref, inside a context_map block
+
+	SyntaxKindGlossaryDecl     // glossary { relation_stmt* }
+	SyntaxKindGlossaryRelation // ref GLOSSARY_VERB ref, inside a glossary block
 
 	SyntaxKindTagsBlock // tags { tag_stmt* } inside a use_case
 	SyntaxKindTagStmt   // IDENT ':' (IDENT | STRING | ref), inside a tags block

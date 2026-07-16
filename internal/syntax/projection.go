@@ -178,6 +178,21 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex, sourceURI ...string) *
 		}
 	}
 
+	// Glossary relations
+	for _, g := range file.Glossaries() {
+		for _, r := range g.Relations() {
+			left, verb, right := r.Left(), r.Verb(), r.Right()
+			if left == "" || verb == "" || right == "" {
+				continue // malformed — skip
+			}
+			doc.Glossary = append(doc.Glossary, model.TermRelation{
+				Left:  left,
+				Verb:  verb,
+				Right: right,
+			})
+		}
+	}
+
 	return doc
 }
 

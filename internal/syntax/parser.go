@@ -77,6 +77,8 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 			diags = append(diags, p.parseExposureBlock()...)
 		case lexer.TokenKwContextMap:
 			diags = append(diags, p.parseContextMapBlock()...)
+		case lexer.TokenKwGlossary:
+			diags = append(diags, p.parseGlossaryBlock()...)
 		default:
 			// Unrecognised top-level token: emit a diagnostic and resync to
 			// the next top-level keyword (island parsing).
@@ -1492,7 +1494,7 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 		lexer.TokenKwDomain, lexer.TokenKwDomains,
 		lexer.TokenKwService, lexer.TokenKwServices,
 		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure,
-		lexer.TokenKwContextMap:
+		lexer.TokenKwContextMap, lexer.TokenKwGlossary:
 		return true
 	}
 	return false
@@ -1652,6 +1654,7 @@ var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
 	lexer.TokenKwArch:       SyntaxKindKwArch,
 	lexer.TokenKwExposure:   SyntaxKindKwExposure,
 	lexer.TokenKwContextMap: SyntaxKindKwContextMap,
+	lexer.TokenKwGlossary:   SyntaxKindKwGlossary,
 	lexer.TokenIdent:        SyntaxKindIdent,
 	lexer.TokenString:       SyntaxKindString,
 	lexer.TokenNumber:       SyntaxKindNumber,
@@ -2036,6 +2039,110 @@ func isEdgeKeyword(s string) bool {
 // sync instead of hand-copying the list.
 func EdgeKeywords() []string {
 	return append([]string(nil), edgeKeywords...)
+}
+
+// parseGlossaryBlock parses: glossary [domain] { relation_stmt* }
+// Mirrors parseContextMapBlock exactly: the domain scope is an optional bare
+// identifier between the `glossary` keyword and `{` (e.g. `glossary re {
+// ... }`), stored as SyntaxKindGlossaryDomain and surfaced via
+// GlossaryDecl.Domain(). Blocks are repeatable — a file may contain several
+// glossary blocks, scoped or not.
+// relation_stmt := ref GLOSSARY_VERB ref, where GLOSSARY_VERB is a
+// contextual keyword — one of the 3 symmetric term-relation verbs
+// (same_as/contrasts/distinct_from) — matched by value, like context_map's
+// edge verbs. Endpoint resolution/kind validation is sema's job, not the
+// parser's.
+func (p *Parser) parseGlossaryBlock() []model.Diagnostic {
+	p.builder.StartNode(SyntaxKindGlossaryDecl)
+	var diags []model.Diagnostic
+
+	// Attach leading trivia before `glossary`.
+	p.attachTrivia()
+	kwTok := p.peek()
+	p.consumeAs(SyntaxKindKwGlossary)
+
+	// Optional domain scope: `glossary <domain> { ... }`.
+	if p.peek().Type == lexer.TokenIdent {
+		p.consumeAs(SyntaxKindGlossaryDomain)
+	}
+
+	if p.peek().Type != lexer.TokenLBrace {
+		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
+		p.resyncToTopLevel()
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindLBrace)
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+		// Attach trivia inside block (also swallows insignificant whitespace/newlines).
+		p.attachTrivia()
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+			break
+		}
+		posBefore := p.pos
+		diags = append(diags, p.parseGlossaryRelation()...)
+		// Belt-and-suspenders forward-progress guard, mirroring
+		// parseContextMapBlock's loop.
+		if p.pos == posBefore {
+			diags = append(diags, p.diagUnexpected(p.peek(), "a term reference, glossary verb, or `}`"))
+			p.consumeAs(SyntaxKindError)
+		}
+	}
+
+	if p.atEOF() {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed glossary block (missing `}`)",
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseGlossaryRelation parses a single `ref GLOSSARY_VERB ref` term relation
+// inside a glossary block, emitting it as a SyntaxKindGlossaryRelation node
+// wrapping two SyntaxKindRef children (left/right endpoints) and one
+// SyntaxKindEdgeKw token (the verb). Mirrors parseEdgeStmt; endpoints reuse
+// parseEdgeEndpoint (they already accept bare/slash-path slugs such as
+// billing/Invoice or re/billing/Invoice).
+func (p *Parser) parseGlossaryRelation() []model.Diagnostic {
+	p.builder.StartNode(SyntaxKindGlossaryRelation)
+	var diags []model.Diagnostic
+
+	left := p.peek()
+	if left.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(left.Type) {
+		diags = append(diags, p.diagUnexpected(left, "a term reference (e.g. billing/Invoice)"))
+		p.consumeAs(SyntaxKindError)
+		p.builder.FinishNode()
+		return diags
+	}
+	diags = append(diags, p.parseEdgeEndpoint()...) // left endpoint
+
+	verb := p.peek()
+	if verb.Type == lexer.TokenIdent && isGlossaryVerb(verb.Value) {
+		p.consumeAs(SyntaxKindEdgeKw)
+	} else {
+		diags = append(diags, p.diagUnexpected(verb, "a glossary relation verb: same_as, contrasts, or distinct_from"))
+		p.builder.FinishNode()
+		return diags
+	}
+
+	right := p.peek()
+	if right.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(right.Type) {
+		diags = append(diags, p.diagUnexpected(right, "a term reference (e.g. billing/Invoice)"))
+		p.builder.FinishNode()
+		return diags
+	}
+	diags = append(diags, p.parseEdgeEndpoint()...) // right endpoint
+
+	p.builder.FinishNode()
+	return diags
 }
 
 // parseRef consumes ONE reference at the current position and emits it as a

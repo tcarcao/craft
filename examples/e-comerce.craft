@@ -33,6 +33,13 @@ context_map Monetization {
   WalletItemPurchase partnership VASScheduling
 }
 
+glossary Monetization {
+  Wallet/VAS same_as WalletItemAddition/VAS
+  Wallet/VAS same_as VASScheduling/VAS
+  OrderManagement/order same_as OrderFulfilment/order
+  Wallet/balance distinct_from OrderManagement/balance
+}
+
 use_case "Purchase VAS to Wallet" {
   when Business_User purchases VAS to wallet
     WalletItemPurchase asks Wallet to initiate a VAS addition

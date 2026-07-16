@@ -1,0 +1,20 @@
+{
+  "useCases": [],
+  "glossary": [
+    {
+      "left": "billing/Invoice",
+      "verb": "same_as",
+      "right": "subscriptions/Invoice"
+    },
+    {
+      "left": "billing/dunning",
+      "verb": "contrasts",
+      "right": "subscriptions/dunning"
+    },
+    {
+      "left": "re/billing/Invoice",
+      "verb": "distinct_from",
+      "right": "legacy/reporting/Invoice"
+    }
+  ]
+}

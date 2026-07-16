@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.13.0] — 2026-07-16
+
+### Added
+- **`glossary { }` block for cross-context term relations.** A dedicated view for ubiquitous-language terms, restoring the term-relation capability removed from `context_map` in v2.12.0. Statements are `<term_node> <verb> <term_node>`, where a term node is `<bc>/<term>` or `<domain>/<bc>/<term>` — the last `/`-segment is the term name, the segment(s) before it are the bounded-context identity (resolved exactly like a `context_map` endpoint). Three verbs, all **symmetric**: `same_as`, `contrasts`, `distinct_from`. Blocks are repeatable and optionally domain-scoped (`glossary re { … }`); all merge into `CraftDoc.Glossary []TermRelation` (`model.TermRelation{Left,Verb,Right}`, `omitempty`). `glossary` is a contextual keyword. Term *definitions* are deliberately out of scope — nodes are referenced, never declared.
+  - Resolution diagnostics: `craft/sema/glossary-endpoint-not-bc` (error), `craft/sema/glossary-unresolved-bc` (warning), `craft/sema/glossary-ambiguous-bc` (error), `craft/sema/glossary-self-relation` (error), plus `craft/lint/glossary-redundant` (warning — same unordered pair + verb repeated) and `craft/lint/glossary-conflicting-relation` (warning — a pair asserted `same_as` and also `distinct_from`/`contrasts`).
+  - Exports `pkg/craft.TermRelation` (alias of `model.TermRelation`) and `GlossaryVerbs() []string`, single-sourced from `internal/syntax` and kept in sync by a build-time test. Language reference at `docs/page/language/glossary.md`.
+- **`context_map` cross-validation lint.** Warns when a declared strategic relationship contradicts the communication view craft infers from use-case `asks`/`notifies`. Both primitives reduce to one directed **dependency edge `D → U`** ("downstream depends on upstream"): sync `X asks Y` yields `X → Y`; async `Y notifies E` paired with `when X listens E` yields `X → Y`. With LEFT = upstream, every directional pattern expects `RIGHT → LEFT`. Four signals: `craft/lint/separate-ways-violation` (warning — `separate_ways` pair that nonetheless communicates), `craft/lint/relationship-direction-inverted` (warning — the only observed dependency runs the wrong way), `craft/lint/relationship-bidirectional` (hint — an asymmetric pattern with traffic both ways, "consider `partnership`?"), and `craft/lint/unclassified-communication` (hint — a communicating pair with no `context_map` edge). Runs in `LintWorkspace`, so it surfaces in both the LSP and `pkg/craft` with no new public API. Absence of communication never warns (partial-view principle). Documented in `docs/page/language/context-map.md`.
+
+### Notes
+- Additive/minor: both features are new syntax and new diagnostics; no existing export, JSON field, or diagnostic changes. `model.Edge` is unchanged. The `tree-sitter-craft` grammar gains an additive `glossary_block` rule; its corpus-compat pin (`CORPUS_VERSION`) bumps to `v2.13.0` at release time.
+
 ## [2.12.0] — 2026-07-16
 
 ### Changed (breaking, within `context_map`)

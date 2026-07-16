@@ -445,6 +445,234 @@ func relationshipEdgeDiags(ws WorkspaceSymbols, site ContextMapEdgeSite) []model
 	return diags
 }
 
+// GlossaryRelationSite records one glossary term relation for cross-file
+// endpoint resolution in AnalyzeWorkspace (Task A3). Mirrors
+// ContextMapEdgeSite: collected per-file in AnalyzeFile (which has no
+// WorkspaceSymbols) and resolved in the workspace pass, so a BC declared in
+// another file is not false-flagged.
+type GlossaryRelationSite struct {
+	// ScopeDomain is the owning block's domain scope (GlossaryDecl.Domain(),
+	// "" if the block is unscoped).
+	ScopeDomain string
+	// Left, Right are the raw term-node texts (e.g. "billing/Invoice").
+	Left, Right         string
+	Verb                string
+	URI                 string
+	LeftLine, LeftCol   int
+	RightLine, RightCol int
+}
+
+// collectGlossaryRelationSites gathers one GlossaryRelationSite per relation,
+// using the same position-extraction idiom as collectContextMapEdgeSites.
+// Resolution is deferred to AnalyzeWorkspace (endpoints are cross-domain /
+// cross-file).
+func collectGlossaryRelationSites(uri string, file syntax.File, li green.LineIndex, hasLI bool) []GlossaryRelationSite {
+	var sites []GlossaryRelationSite
+	for _, gd := range file.Glossaries() {
+		scope := gd.Domain()
+		for _, rel := range gd.Relations() {
+			leftLine, leftCol := 0, 0
+			if hasLI {
+				if lr := rel.LeftRef(); lr != nil {
+					leftLine, leftCol = lr.Line(li), lr.Col(li)
+				}
+			}
+			rightLine, rightCol := 0, 0
+			if hasLI {
+				if rr := rel.RightRef(); rr != nil {
+					rightLine, rightCol = rr.Line(li), rr.Col(li)
+				}
+			}
+			sites = append(sites, GlossaryRelationSite{
+				ScopeDomain: scope,
+				Left:        rel.Left(),
+				Right:       rel.Right(),
+				Verb:        rel.Verb(),
+				URI:         uri,
+				LeftLine:    leftLine,
+				LeftCol:     leftCol,
+				RightLine:   rightLine,
+				RightCol:    rightCol,
+			})
+		}
+	}
+	return sites
+}
+
+// resolveTermNode resolves a glossary term node (e.g. "billing/Invoice",
+// "re/billing/Invoice", or a bare "Invoice") against the workspace symbol
+// table. The LAST slash-separated segment is the term name — a free string,
+// never validated. The remaining segments (if any) are reconstructed into a
+// BC reference and resolved via resolveBCRef: zero remaining segments (a bare
+// one-segment node) yields an empty BC ref, one remaining segment yields a
+// bare `bc` ref, two or more remaining segments are joined back with "/"
+// (the common case being `domain/bc`). Returns the canonical identity
+// (resolvedBC + "/" + term, used for self-relation comparison), the BC kind
+// ("bc"/"domain"/"service"/"actor"/"" for fully unresolved), ambiguity, and
+// the extracted term name.
+func resolveTermNode(ws WorkspaceSymbols, scopeDomain, node string) (canonical, bcKind string, ambiguous bool, term string) {
+	segments := strings.Split(node, "/")
+	term = segments[len(segments)-1]
+	bcRef := strings.Join(segments[:len(segments)-1], "/")
+
+	resolvedBC, kind, ambig := resolveBCRef(ws, scopeDomain, bcRef)
+	return resolvedBC + "/" + term, kind, ambig, term
+}
+
+// glossaryEndpointDiag emits at most one diagnostic for a single resolved
+// glossary term-node endpoint: glossary-ambiguous-bc (error),
+// glossary-endpoint-not-bc (error), or glossary-unresolved-bc (warning).
+// Mirrors endpointDiag.
+func glossaryEndpointDiag(uri, ref, kind string, ambiguous bool, line, col int) []model.Diagnostic {
+	startChar := colToLSP(col)
+	rng := model.Range{
+		Start: model.Position{Line: lineToLSP(line), Character: startChar},
+		End:   model.Position{Line: lineToLSP(line), Character: startChar + len(ref)},
+	}
+	switch {
+	case ambiguous:
+		return []model.Diagnostic{{
+			Code:      "craft/sema/glossary-ambiguous-bc",
+			Message:   fmt.Sprintf("bounded context in term node %q is declared in multiple domains; qualify it as <domain>/%s", ref, ref),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	case kind != "" && kind != "bc":
+		return []model.Diagnostic{{
+			Code:      "craft/sema/glossary-endpoint-not-bc",
+			Message:   fmt.Sprintf("glossary term node %q resolves to a %s, not a bounded context", ref, kind),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	case kind == "":
+		return []model.Diagnostic{{
+			Code:      "craft/sema/glossary-unresolved-bc",
+			Message:   fmt.Sprintf("glossary term node %q does not resolve to any bounded context", ref),
+			Severity:  model.SeverityWarning,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	}
+	return nil
+}
+
+// glossaryRelationDiags resolves both term-node endpoints of a collected
+// glossary relation and emits the endpoint-kind and self-relation
+// diagnostics (Task A3). Mirrors relationshipEdgeDiags.
+func glossaryRelationDiags(ws WorkspaceSymbols, site GlossaryRelationSite) []model.Diagnostic {
+	var diags []model.Diagnostic
+
+	leftCanonical, leftKind, leftAmbig, _ := resolveTermNode(ws, site.ScopeDomain, site.Left)
+	rightCanonical, rightKind, rightAmbig, _ := resolveTermNode(ws, site.ScopeDomain, site.Right)
+
+	diags = append(diags, glossaryEndpointDiag(site.URI, site.Left, leftKind, leftAmbig, site.LeftLine, site.LeftCol)...)
+	diags = append(diags, glossaryEndpointDiag(site.URI, site.Right, rightKind, rightAmbig, site.RightLine, site.RightCol)...)
+
+	// A glossary relation must not connect a term node to itself. Only fires
+	// when BOTH endpoints resolved unambiguously to the SAME bc and the same
+	// canonical term identity.
+	if leftKind == "bc" && !leftAmbig && rightKind == "bc" && !rightAmbig &&
+		leftCanonical != "" && leftCanonical == rightCanonical {
+		startChar := colToLSP(site.LeftCol)
+		diags = append(diags, model.Diagnostic{
+			Code:      "craft/sema/glossary-self-relation",
+			Message:   fmt.Sprintf("glossary relation connects term node %q to itself", leftCanonical),
+			Severity:  model.SeverityError,
+			SourceURI: site.URI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+			},
+		})
+	}
+	return diags
+}
+
+// glossaryLintDiags flags two glossary lints (Task A4) for a relation whose
+// both term-node endpoints resolved unambiguously to a bc — mirroring
+// redundantRelationshipDiag's gating and dedup strategy:
+//
+//   - craft/lint/glossary-redundant: the same unordered canonical term-node
+//     pair declared with the same verb more than once anywhere in the
+//     workspace.
+//   - craft/lint/glossary-conflicting-relation: the same unordered pair
+//     carries both same_as and (distinct_from or contrasts) — asserting
+//     identity and difference at once. Fires once per pair, on whichever
+//     relation completes the conflicting verb set.
+//
+// seenVerb, verbsForPair, and conflictReported are shared across the whole
+// workspace resolution loop (like redundantRelationshipDiag's seen) so
+// duplicates/conflicts split across files still dedupe/fire correctly.
+func glossaryLintDiags(
+	ws WorkspaceSymbols,
+	site GlossaryRelationSite,
+	seenVerb map[string]bool,
+	verbsForPair map[string]map[string]bool,
+	conflictReported map[string]bool,
+) []model.Diagnostic {
+	leftCanonical, leftKind, leftAmbig, _ := resolveTermNode(ws, site.ScopeDomain, site.Left)
+	rightCanonical, rightKind, rightAmbig, _ := resolveTermNode(ws, site.ScopeDomain, site.Right)
+
+	if leftKind != "bc" || leftAmbig || leftCanonical == "" ||
+		rightKind != "bc" || rightAmbig || rightCanonical == "" {
+		return nil
+	}
+
+	pair := [2]string{leftCanonical, rightCanonical}
+	if pair[0] > pair[1] {
+		pair[0], pair[1] = pair[1], pair[0]
+	}
+	pairKey := pair[0] + "\x00" + pair[1]
+	verbKey := pairKey + "\x00" + site.Verb
+
+	startChar := colToLSP(site.LeftCol)
+	rng := model.Range{
+		Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+		End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+	}
+
+	var diags []model.Diagnostic
+
+	if seenVerb[verbKey] {
+		diags = append(diags, model.Diagnostic{
+			Code: "craft/lint/glossary-redundant",
+			Message: fmt.Sprintf(
+				"%s relation between %q and %q is already declared elsewhere in the workspace",
+				site.Verb, leftCanonical, rightCanonical,
+			),
+			Severity:  model.SeverityWarning,
+			SourceURI: site.URI,
+			Range:     rng,
+		})
+	}
+	seenVerb[verbKey] = true
+
+	verbs := verbsForPair[pairKey]
+	if verbs == nil {
+		verbs = map[string]bool{}
+		verbsForPair[pairKey] = verbs
+	}
+	verbs[site.Verb] = true
+
+	if verbs["same_as"] && (verbs["distinct_from"] || verbs["contrasts"]) && !conflictReported[pairKey] {
+		diags = append(diags, model.Diagnostic{
+			Code: "craft/lint/glossary-conflicting-relation",
+			Message: fmt.Sprintf(
+				"%q and %q are declared same_as and also distinct/contrasting elsewhere in the workspace",
+				leftCanonical, rightCanonical,
+			),
+			Severity:  model.SeverityWarning,
+			SourceURI: site.URI,
+			Range:     rng,
+		})
+		conflictReported[pairKey] = true
+	}
+
+	return diags
+}
+
 // redundantRelationshipDiag flags a symmetric context_map edge (partnership,
 // shared_kernel, separate_ways) whose resolved BC pair + verb was already
 // seen elsewhere in the workspace (Task 5). Symmetric verbs express an

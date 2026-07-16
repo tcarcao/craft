@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/glossary-endpoint-not-bc",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 9,
+        "character": 28
+      },
+      "end": {
+        "line": 9,
+        "character": 44
+      }
+    }
+  }
+]

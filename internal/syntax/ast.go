@@ -414,6 +414,18 @@ func (f File) ContextMaps() []ContextMapDecl {
 	return result
 }
 
+// Glossaries returns all GlossaryDecl views.
+func (f File) Glossaries() []GlossaryDecl {
+	if f.isZero() {
+		return nil
+	}
+	var result []GlossaryDecl
+	for _, n := range f.node.ChildNodes(SyntaxKindGlossaryDecl) {
+		result = append(result, GlossaryDecl{node: n})
+	}
+	return result
+}
+
 // ActorBlocks returns all top-level actors{} block views in document order.
 func (f File) ActorBlocks() []ActorsBlock {
 	if f.isZero() {
@@ -2055,6 +2067,97 @@ func (e EdgeDecl) LeftRef() *RefDecl {
 // accessor (Task 7).
 func (e EdgeDecl) RightRef() *RefDecl {
 	refs := e.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 2 {
+		return nil
+	}
+	return &RefDecl{node: refs[1]}
+}
+
+// GlossaryDecl is a typed view over a SyntaxKindGlossaryDecl node — the
+// glossary { } block of cross-context term relations. Mirrors ContextMapDecl.
+type GlossaryDecl struct{ node SyntaxNode }
+
+// Keyword returns the 'glossary' keyword token.
+func (g GlossaryDecl) Keyword() *SyntaxToken {
+	return g.node.ChildToken(SyntaxKindKwGlossary)
+}
+
+// Domain returns the optional domain-scope identifier (e.g. "re" in
+// `glossary re { ... }`), or "" if the block is unscoped.
+func (g GlossaryDecl) Domain() string {
+	tok := g.node.ChildToken(SyntaxKindGlossaryDomain)
+	if tok == nil {
+		return ""
+	}
+	return tok.Text()
+}
+
+// Line returns the 1-based source line of the `glossary` keyword using li.
+func (g GlossaryDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(g.node, li) }
+
+// EndLine returns the 1-based line of the closing `}` using li.
+func (g GlossaryDecl) EndLine(li green.LineIndex) int { return nodeEndLine(g.node, li) }
+
+// Relations returns all GlossaryRelationDecl views within this glossary block.
+func (g GlossaryDecl) Relations() []GlossaryRelationDecl {
+	var result []GlossaryRelationDecl
+	for _, n := range g.node.ChildNodes(SyntaxKindGlossaryRelation) {
+		result = append(result, GlossaryRelationDecl{node: n})
+	}
+	return result
+}
+
+// GlossaryRelationDecl is a typed view over a SyntaxKindGlossaryRelation
+// node — a single term relation `ref GLOSSARY_VERB ref` inside a glossary
+// block. Mirrors EdgeDecl.
+type GlossaryRelationDecl struct{ node SyntaxNode }
+
+// Left returns the raw source text of the left-hand term reference (via
+// RefText — NEVER Name(), which would truncate a multi-segment slug like
+// "billing/Invoice" down to just "billing"). Empty if malformed.
+func (g GlossaryRelationDecl) Left() string {
+	refs := g.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 1 {
+		return ""
+	}
+	return RefDecl{node: refs[0]}.RefText()
+}
+
+// Right returns the raw source text of the right-hand term reference (via
+// RefText — see Left). Empty if malformed.
+func (g GlossaryRelationDecl) Right() string {
+	refs := g.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 2 {
+		return ""
+	}
+	return RefDecl{node: refs[1]}.RefText()
+}
+
+// Verb returns the relation keyword token text (e.g. "same_as"), or "" if malformed.
+func (g GlossaryRelationDecl) Verb() string {
+	tok := g.node.ChildToken(SyntaxKindEdgeKw)
+	if tok == nil {
+		return ""
+	}
+	return tok.Text()
+}
+
+// LeftRef returns the RefDecl view of the left-hand term reference (for
+// position info via RefDecl.Line/Col), or nil if malformed. See Left() for
+// the text accessor.
+func (g GlossaryRelationDecl) LeftRef() *RefDecl {
+	refs := g.node.ChildNodes(SyntaxKindRef)
+	if len(refs) < 1 {
+		return nil
+	}
+	return &RefDecl{node: refs[0]}
+}
+
+// RightRef returns the RefDecl view of the right-hand term reference (for
+// position info via RefDecl.Line/Col), or nil if malformed. See Right() for
+// the text accessor.
+func (g GlossaryRelationDecl) RightRef() *RefDecl {
+	refs := g.node.ChildNodes(SyntaxKindRef)
 	if len(refs) < 2 {
 		return nil
 	}
