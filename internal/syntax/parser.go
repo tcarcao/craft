@@ -1921,7 +1921,7 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 	if verb.Type == lexer.TokenIdent && isEdgeKeyword(verb.Value) {
 		p.consumeAs(SyntaxKindEdgeKw)
 	} else {
-		diags = append(diags, p.diagUnexpected(verb, "an edge keyword (realized_by/also_realizes/same_as/contrasts/distinct_from)"))
+		diags = append(diags, p.diagUnexpected(verb, "a relationship pattern: directional (customer_supplier/conformist/anticorruption_layer/open_host_service/published_language) or symmetric (partnership/shared_kernel/separate_ways)"))
 		p.builder.FinishNode()
 		return diags
 	}
@@ -1999,8 +1999,15 @@ func (p *Parser) parseEdgeEndpoint() []model.Diagnostic {
 	return diags
 }
 
-// edgeKeywords is the single source of truth for context_map edge verbs.
-var edgeKeywords = []string{"realized_by", "also_realizes", "same_as", "contrasts", "distinct_from"}
+// edgeKeywords is the single source of truth for context_map relationship verbs
+// (DDD strategic context-mapping patterns). LEFT = upstream for directional verbs.
+var edgeKeywords = []string{
+	// directional
+	"customer_supplier", "conformist", "anticorruption_layer",
+	"open_host_service", "published_language",
+	// symmetric
+	"partnership", "shared_kernel", "separate_ways",
+}
 
 // isEdgeKeyword reports whether s is a recognised context_map edge verb.
 func isEdgeKeyword(s string) bool {
