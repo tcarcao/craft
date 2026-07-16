@@ -238,11 +238,12 @@ type pairKey struct {
 }
 
 // depInfo records the directions of dependency observed for a pairKey, plus
-// the first communicating-action's position (kept for Task B3's range needs;
-// unused by R1).
+// the deterministic-minimum communicating-action's position (used by R3 to
+// anchor the unclassified-communication diagnostic; unused by R1).
 type depInfo struct {
 	fwd, rev            bool
 	firstLine, firstCol int
+	firstLen            int
 	firstURI            string
 }
 
@@ -257,9 +258,13 @@ func newPairKey(from, to string) (key pairKey, fwd bool) {
 }
 
 // recordDependency adds one observed directed dependency (from depends on to)
-// to deps. Self-pairs and empty identities are ignored. The first observed
-// site (uri/line/col) is retained for later tasks.
-func recordDependency(deps map[pairKey]depInfo, from, to, uri string, line, col int) {
+// to deps. Self-pairs and empty identities are ignored. The recorded site
+// (uri/line/col) is kept as the DETERMINISTIC MINIMUM (by URI, then line,
+// then col) across all observed sites for the pair — buildDependencyEdges
+// iterates perFileTrees, a Go map, so encounter order is nondeterministic;
+// keeping the minimum instead of the "first observed" one makes the site
+// (and therefore R3's anchored diagnostic range) stable across runs.
+func recordDependency(deps map[pairKey]depInfo, from, to, uri string, line, col, nameLen int) {
 	if from == "" || to == "" || from == to {
 		return
 	}
@@ -270,10 +275,22 @@ func recordDependency(deps map[pairKey]depInfo, from, to, uri string, line, col 
 	} else {
 		info.rev = true
 	}
-	if info.firstURI == "" {
-		info.firstLine, info.firstCol, info.firstURI = line, col, uri
+	if info.firstURI == "" || siteLess(uri, line, col, info.firstURI, info.firstLine, info.firstCol) {
+		info.firstLine, info.firstCol, info.firstLen, info.firstURI = line, col, nameLen, uri
 	}
 	deps[key] = info
+}
+
+// siteLess reports whether site (uri1, line1, col1) sorts before site (uri2,
+// line2, col2), comparing URI first, then line, then column.
+func siteLess(uri1 string, line1, col1 int, uri2 string, line2, col2 int) bool {
+	if uri1 != uri2 {
+		return uri1 < uri2
+	}
+	if line1 != line2 {
+		return line1 < line2
+	}
+	return col1 < col2
 }
 
 // asyncSite records one resolved async publisher or listener site, keyed
@@ -281,6 +298,7 @@ func recordDependency(deps map[pairKey]depInfo, from, to, uri string, line, col 
 type asyncSite struct {
 	bc, uri   string
 	line, col int
+	nameLen   int
 }
 
 // buildDependencyEdges walks every use-case scenario in perFileTrees and
@@ -310,7 +328,7 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 									line, _ = li.LineCol(whenTok.Offset())
 								}
 								listenersByEvent[ev] = append(listenersByEvent[ev], asyncSite{
-									bc: resolved, uri: uri, line: line, col: trigger.ActorCol(li),
+									bc: resolved, uri: uri, line: line, col: trigger.ActorCol(li), nameLen: len(ctx),
 								})
 							}
 						}
@@ -323,14 +341,14 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 						subject, subjectKind, subjectAmbig := resolveBCRef(ws, "", action.SubjectName())
 						target, targetKind, targetAmbig := resolveBCRef(ws, "", action.TargetName())
 						if subjectKind == "bc" && !subjectAmbig && targetKind == "bc" && !targetAmbig {
-							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li))
+							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li), len(action.SubjectName()))
 						}
 					case "async_action":
 						if ev := action.EventValue(); ev != "" {
 							resolved, kind, ambiguous := resolveBCRef(ws, "", action.SubjectName())
 							if kind == "bc" && !ambiguous && resolved != "" {
 								publishersByEvent[ev] = append(publishersByEvent[ev], asyncSite{
-									bc: resolved, uri: uri, line: action.Line(li), col: action.SubjectCol(li),
+									bc: resolved, uri: uri, line: action.Line(li), col: action.SubjectCol(li), nameLen: len(action.SubjectName()),
 								})
 							}
 						}
@@ -345,7 +363,7 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 	for event, listeners := range listenersByEvent {
 		for _, publisher := range publishersByEvent[event] {
 			for _, listener := range listeners {
-				recordDependency(deps, listener.bc, publisher.bc, listener.uri, listener.line, listener.col)
+				recordDependency(deps, listener.bc, publisher.bc, listener.uri, listener.line, listener.col, listener.nameLen)
 			}
 		}
 	}
@@ -448,5 +466,57 @@ func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 			}
 		}
 	}
+
+	// R3: unclassified-communication — a communicating BC pair (present in
+	// the dependency adjacency) that has NO context_map edge of any verb
+	// between its two endpoints anywhere in the workspace. Build the set of
+	// "classified" pairs first (any edge, any verb, resolved via
+	// resolveBCRef), then flag every communicating pair not in that set.
+	// The adjacency already holds one entry per unordered pair, so iterating
+	// it fires each pair at most once.
+	classified := map[pairKey]bool{}
+	for _, tree := range perFileTrees {
+		file := syntax.AsFile(tree)
+		for _, cm := range file.ContextMaps() {
+			scope := cm.Domain()
+			for _, edge := range cm.Edges() {
+				leftResolved, leftKind, leftAmbig := resolveBCRef(ws, scope, edge.Left())
+				rightResolved, rightKind, rightAmbig := resolveBCRef(ws, scope, edge.Right())
+				if leftKind != "bc" || leftAmbig || rightKind != "bc" || rightAmbig {
+					continue
+				}
+				if leftResolved == "" || rightResolved == "" || leftResolved == rightResolved {
+					continue
+				}
+				key, _ := newPairKey(leftResolved, rightResolved)
+				classified[key] = true
+			}
+		}
+	}
+
+	for key, info := range deps {
+		if !(info.fwd || info.rev) {
+			continue
+		}
+		if classified[key] {
+			continue
+		}
+		startChar := colToLSP(info.firstCol)
+		length := info.firstLen
+		if length <= 0 {
+			length = 1
+		}
+		diags = append(diags, model.Diagnostic{
+			Code:      "craft/lint/unclassified-communication",
+			Message:   fmt.Sprintf("%q and %q communicate in a use case but have no context_map relationship", key.a, key.b),
+			Severity:  model.SeverityHint,
+			SourceURI: info.firstURI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(info.firstLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(info.firstLine), Character: startChar + length},
+			},
+		})
+	}
+
 	return diags
 }

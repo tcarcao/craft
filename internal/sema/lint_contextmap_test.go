@@ -241,3 +241,65 @@ use_case "Consume" {
 		t.Fatalf("expected 0 craft/lint/relationship-bidirectional, got %d: %+v", n, diags)
 	}
 }
+
+// ── R3: unclassified-communication ──
+
+// TestContextMapConsistency_UnclassifiedCommunication: billing and ledger
+// communicate (billing asks ledger) but have NO context_map edge between them
+// at all (no context_map block references this pair) -> exactly one
+// unclassified-communication hint, anchored on the communicating action.
+func TestContextMapConsistency_UnclassifiedCommunication(t *testing.T) {
+	src := `domain re { billing ledger }
+use_case "Test" {
+  when Customer creates Order
+    billing asks ledger to record entry
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/unclassified-communication"); n != 1 {
+		t.Fatalf("expected 1 craft/lint/unclassified-communication, got %d: %+v", n, diags)
+	}
+	for _, d := range diags {
+		if d.Code == "craft/lint/unclassified-communication" && d.Severity != model.SeverityHint {
+			t.Errorf("expected hint severity, got %q", d.Severity)
+		}
+	}
+}
+
+// TestContextMapConsistency_ClassifiedCommunication_NoUnclassifiedHint: the
+// same communicating pair, but now classified by a context_map edge (any
+// verb, e.g. customer_supplier) -> zero unclassified-communication hints.
+func TestContextMapConsistency_ClassifiedCommunication_NoUnclassifiedHint(t *testing.T) {
+	src := `domain re { billing ledger }
+context_map re { billing customer_supplier ledger }
+use_case "Test" {
+  when Customer creates Order
+    billing asks ledger to record entry
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/unclassified-communication"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/unclassified-communication, got %d: %+v", n, diags)
+	}
+}
+
+// TestContextMapConsistency_NonCommunicatingClassifiedPair_NoUnclassifiedHint:
+// a classified pair (context_map edge present) that does NOT communicate in
+// any use case must not produce an unclassified-communication hint (nor any
+// other diagnostic) — absence of communication never warns.
+func TestContextMapConsistency_NonCommunicatingClassifiedPair_NoUnclassifiedHint(t *testing.T) {
+	src := `domain re { billing ledger }
+context_map re { billing customer_supplier ledger }
+use_case "Test" {
+  when Customer creates Order
+    billing validates something
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/unclassified-communication"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/unclassified-communication, got %d: %+v", n, diags)
+	}
+}
