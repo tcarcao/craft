@@ -1,620 +1,417 @@
-# context_map DDD Strategic Relationship Patterns — Implementation Plan
+# `context_map` Strategic Relationship View — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Add the eight DDD strategic context-mapping relationship patterns as first-class `context_map` edge verbs connecting two `bc:` endpoints, validated by shape (not semantic truth), exported for consumers, and mirrored in the tree-sitter grammar.
+**Goal:** Redesign `context_map` into craft's strategic BC-relationship view: eight DDD-canonical relationship patterns between bounded contexts, bare/domain-qualified endpoints (no `bc:`), `LEFT = upstream`, repeatable + optionally domain-scoped blocks, with realization/term edges removed from the block.
 
-**Architecture:** No new grammar shape — relationship edges are ordinary `edge_stmt`s (`<ref> <verb> <ref>`). Extend the single source-of-truth verb list (`internal/syntax.edgeKeywords`), add a third endpoint-kind category (`bc:`→`bc:`) to sema's `classifyEdgeVerb`, add a canonical verb-metadata table in `internal/syntax` (category + symmetry + endpoint kinds) that both `internal/sema` and `pkg/craft` derive from, expose a stable `pkg/craft` API, and add the verb literals to the tree-sitter grammar.
+**Architecture:** Reuse the existing `context_map '{' edge_stmt* '}'` shape. Replace the verb vocabulary; drop the `bc:` kind requirement on endpoints; add an optional domain-scope identifier after the keyword. Verb *semantics* (class, direction roles, symmetry) live in one metadata table in `internal/syntax`, consumed by `internal/sema` and re-exported by `pkg/craft`. Endpoint validation moves from kind-prefix checks to **resolution** against the workspace BC index.
 
-**Tech Stack:** Go 1.23 (`github.com/tcarcao/craft/v2`), tree-sitter (`tree-sitter-craft`, JS grammar + generated C), goreleaser on `v*` tags.
+**Tech Stack:** Go 1.23 (`github.com/tcarcao/craft/v2`), tree-sitter (`tree-sitter-craft`), goreleaser on `v*` tags.
 
-**Spec:** `docs/superpowers/specs/2026-07-16-context-map-ddd-relationship-patterns.md` (approved 2026-07-16; direction convention settled: **LEFT = upstream**).
+**Spec:** `docs/superpowers/specs/2026-07-16-context-map-ddd-relationship-patterns.md` (approved 2026-07-16).
 
 ## Global Constraints
 
-- **Direction convention: LEFT = upstream, RIGHT = downstream** for all five directional verbs. Every directional edge reads `bc:<upstream> <verb> bc:<downstream>`. Encoded once in the metadata table; consumers read direction from craft, never re-derive.
-- **The eight verbs (exact spelling):** directional — `customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language`; symmetric — `partnership`, `shared_kernel`, `separate_ways`.
-- **`big_ball_of_mud` is NOT added** (it is a zone marker, not a pairwise edge — spec §11).
-- **Relationship edges require `bc:` on BOTH endpoints.** `bc:<domain>/<name>` slug shape, per the existing ref rule.
-- **craft validates shape/kinds, NOT semantic truth.** No check that a direction is "correct", no conflicting-pattern check, no completeness check. (Spec §1.1, §6.)
-- **One pattern per edge statement.** No bracket-list grammar (spec §11).
-- **`internal/syntax.edgeKeywords` stays the single source of truth** gating the parser; sema maps and the `pkg/craft` API must agree with it, enforced by sync tests (mirrors the existing `EdgeKeywords()` sync-test discipline).
-- **No import cycles:** types live in `internal/model`; the verb-metadata table lives in `internal/syntax` (importable by both `internal/sema` and `pkg/craft`); `pkg/craft` re-exports via wrappers. `sema` must NOT import `pkg/craft`.
-- **Module path is `/v2`** — all internal imports use `github.com/tcarcao/craft/v2/...`.
-- **Lossless green tree / byte-for-byte round-trip** is preserved (no parser structural change; verbs are ordinary `SyntaxKindEdgeKw` tokens).
-- **New minor release: v2.12.0.**
+- **The eight patterns (exact spelling):** directional — `customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language`; symmetric — `partnership`, `shared_kernel`, `separate_ways`. `big_ball_of_mud` is NOT added.
+- **Direction: LEFT = upstream, RIGHT = downstream** for directional patterns; symmetric patterns are order-free. Direction is verb metadata, not stored per edge.
+- **Endpoints are bounded contexts named bare (`billing`) or domain-qualified (`re/billing`).** No `bc:` prefix. `/` = node-identity separator; `.` is reserved for events and must never denote a BC.
+- **Realization (`realized_by`/`also_realizes`) and term (`same_as`/`contrasts`/`distinct_from`) verbs are REMOVED from `context_map`.** Term relations' future home is a `glossary { }` block (separate spec) — not built here.
+- **`context_map` is repeatable** (per file and workspace; all blocks merge into `CraftDoc.ContextMap []Edge`) and takes an **optional domain scope**: `context_map <domain> { … }`.
+- **Endpoint resolution:** bare name → the BC of that name (scoped block: within its domain; unscoped: globally unique or error-ambiguous); `domain/name` → explicit. Endpoint that resolves to a non-BC ⇒ error; unresolved ⇒ warning.
+- **`internal/syntax.edgeKeywords` stays the parser gate / single source of truth;** the metadata table and sema maps must agree with it (sync test).
+- **No import cycles:** metadata table in `internal/syntax`; `pkg/craft` wraps it; `internal/sema` must NOT import `pkg/craft`.
+- **Clean slate:** no `.craft` files or external consumers exist — remove old verbs outright, no deprecation. `model.Edge{Left,Verb,Right}` shape unchanged (values now hold bare/qualified BC names + pattern verbs).
+- **Module path `/v2`; lossless round-trip preserved** (verbs are ordinary `SyntaxKindEdgeKw` tokens; endpoints ordinary refs).
+
+## Interfaces that already exist (verified — use these, don't reinvent)
+
+- `internal/syntax/parser.go`: `parseContextMapBlock()` (consumes `SyntaxKindKwContextMap`, then `{`); `parseEdgeStmt()` → `parseEdgeEndpoint()` → `parseRef()` (parseRef already accepts bare slugs like `re/billing` and single idents like `billing`); `var edgeKeywords []string` (~2003); `isEdgeKeyword`; `EdgeKeywords()`.
+- `internal/syntax/ast.go`: `File.ContextMaps() []ContextMapDecl`; `ContextMapDecl.Edges() []EdgeDecl`, `.Keyword()`, `.Line(li)`; `EdgeDecl.Left()/.Right()/.Verb() string`, `.LeftRef()/.RightRef() *RefDecl`.
+- `internal/sema/validate.go`: `validateContextMapEdges(uri, file, li, hasLI)` (loop `for cm := range file.ContextMaps() { for edge := range cm.Edges() { left,right,verb := edge.Left(),edge.Right(),edge.Verb() … } }`); `classifyEdgeVerb(...)`; `edgeEndpointKindDiag(...)`; `refKindWord(text)`; `colToLSP`/`lineToLSP`.
+- `internal/sema/sema.go`: `WorkspaceSymbols{ Domains map[string]DomainSymbol; BoundedContexts map[string]DomainSymbol }` (`BoundedContexts` maps **BC name → owning DomainSymbol** — the resolution index); `DomainSymbol{ Name string; BoundedContexts []string }`.
+- `pkg/craft/craftdoc.go`: type aliases (`Edge = model.Edge`).
+- `tree-sitter-craft/grammar.js`: `context_map_block`, `edge_stmt: seq($.ref,$.edge_verb,$.ref)`, `edge_verb: choice(...)`, `ref`, `ref_kind`. `queries/highlights.scm`: `(edge_verb) @craft.edge-verb` (captures whole node).
 
 ---
 
-## File Structure
-
-- `internal/syntax/parser.go` — extend `edgeKeywords` (+8); categorize the "expected an edge keyword" diagnostic.
-- `internal/syntax/edge_meta.go` *(new)* — canonical verb-metadata table (category, symmetric, endpoint kinds) + exported accessors. Single source of truth for verb *semantics*; `edgeKeywords` remains the parser gate and is asserted equal to this table's keys.
-- `internal/sema/validate.go` — `edgeRelationshipVerbs` membership map; `bc:`→`bc:` branch in `classifyEdgeVerb`; `self-relationship` error; `redundant-relationship` symmetric lint in `validateContextMapEdges`.
-- `internal/sema/edge_verb_sync_test.go` — extend the vocabulary-sync test to include `edgeRelationshipVerbs` and to assert agreement with the `internal/syntax` metadata table.
-- `internal/sema/validate_relationship_test.go` *(new, whitebox)* — `classifyEdgeVerb` relationship cases + self-relationship + redundant lint.
-- `pkg/craft/edges.go` *(new)* — `EdgeCategory`, `EdgeVerbInfo`, `EdgeVerbs()`, `LookupEdgeVerb()` wrapping the `internal/syntax` table.
-- `pkg/craft/edges_test.go` *(new)* — sync/coverage test.
-- `testdata/corpus/05_context_map/relationships.craft` + `.craftjson` *(new)* — golden.
-- `testdata/broken/relationship_bad_endpoint.{craft,diagnostics.json}`, `testdata/broken/relationship_self.{craft,diagnostics.json}`, `testdata/broken/relationship_redundant.{craft,diagnostics.json}` *(new)*.
-- `CHANGELOG.md` — v2.12.0 entry.
-- `tree-sitter-craft/grammar.js` — `edge_verb` += 8 literals; regenerate `src/`; corpus test.
-
----
-
-## Task 1: Recognize relationship verbs + `bc:`→`bc:` endpoint-kind validation
+## Task 1: Swap verb vocabulary + drop `bc:` on endpoints
 
 **Files:**
-- Modify: `internal/syntax/parser.go` (`edgeKeywords` ~line 2003; the "an edge keyword (…)" diagnostic ~line 1924)
-- Modify: `internal/sema/validate.go` (`edgeTermVerbs` ~line 25; `classifyEdgeVerb` ~line 279)
-- Modify: `internal/sema/edge_verb_sync_test.go` (`TestEdgeVerbVocabulariesInSync`)
-- Create: `internal/sema/validate_relationship_test.go`
+- Modify: `internal/syntax/parser.go` (`edgeKeywords` ~2003; the edge-keyword diagnostic ~1924; `parseEdgeEndpoint` if it *requires* a kind)
+- Modify: any corpus fixture using the OLD `context_map` syntax — at least `testdata/corpus/99_mixed/dsl-vnext.craft` (has `bc:… realized_by service:…` and `term:… contrasts term:…`)
+- Test: `internal/syntax/parser_test.go` (or the package's edge test)
 
 **Interfaces:**
-- Consumes: existing `classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right string, leftLine, leftCol int) []model.Diagnostic`; `edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) model.Diagnostic`; `syntax.EdgeKeywords() []string`.
-- Produces: `edgeRelationshipVerbs` (unexported `map[string]bool` in `internal/sema`); the 8 verbs present in `syntax.edgeKeywords`.
+- Produces: `edgeKeywords` = the 8 patterns; parser accepts `billing customer_supplier vas` and `re/billing partnership payments/ledger`, producing `model.Edge{Left,Verb,Right}` with bare/qualified names in Left/Right.
 
-- [ ] **Step 1: Write the failing test** — `internal/sema/validate_relationship_test.go` (whitebox `package sema`):
+- [ ] **Step 1: Write the failing test** — parse a minimal new-form block and assert the Edge:
 
 ```go
-// Whitebox: classifyEdgeVerb and edgeRelationshipVerbs are unexported.
-package sema
-
-import (
-	"testing"
-
-	"github.com/tcarcao/craft/v2/internal/model"
-)
-
-func TestClassifyEdgeVerb_Relationship_BcToBc_OK(t *testing.T) {
-	for _, verb := range []string{
-		"customer_supplier", "conformist", "anticorruption_layer",
-		"open_host_service", "published_language",
-		"partnership", "shared_kernel", "separate_ways",
-	} {
-		diags := classifyEdgeVerb("f.craft", verb, "bc", "bc", "bc:re/a", "bc:re/b", 1, 0)
-		if len(diags) != 0 {
-			t.Errorf("%s bc->bc: want 0 diagnostics, got %d: %+v", verb, len(diags), diags)
-		}
+func TestParse_ContextMap_RelationshipEdge(t *testing.T) {
+	doc, _ := craft.Parse("f.craft", "context_map {\n  billing customer_supplier vas\n  re/billing partnership payments/ledger\n}\n")
+	if len(doc.ContextMap) != 2 {
+		t.Fatalf("want 2 edges, got %d: %+v", len(doc.ContextMap), doc.ContextMap)
 	}
-}
-
-func TestClassifyEdgeVerb_Relationship_WrongKind(t *testing.T) {
-	diags := classifyEdgeVerb("f.craft", "customer_supplier", "bc", "service", "bc:re/a", "service:x", 1, 0)
-	if len(diags) != 1 || diags[0].Code != "craft/sema/edge-endpoint-kind" {
-		t.Fatalf("want 1 edge-endpoint-kind diag, got %+v", diags)
+	e := doc.ContextMap[0]
+	if e.Left != "billing" || e.Verb != "customer_supplier" || e.Right != "vas" {
+		t.Errorf("edge0 = %+v, want {billing customer_supplier vas}", e)
 	}
-	if diags[0].Severity != model.SeverityError {
-		t.Errorf("severity = %q, want error", diags[0].Severity)
+	if doc.ContextMap[1].Left != "re/billing" || doc.ContextMap[1].Right != "payments/ledger" {
+		t.Errorf("edge1 = %+v, want qualified endpoints", doc.ContextMap[1])
 	}
 }
 ```
+(Use whatever the package's existing parse-helper is; mirror a sibling test's construction.)
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd /Users/tiago.carcao/projects/poc/craft-project/craft && go test ./internal/sema/ -run TestClassifyEdgeVerb_Relationship`
-Expected: FAIL — the verbs fall to the `default:` branch and return a `craft/sema/unrecognised-edge-verb` diagnostic (so `BcToBc_OK` gets 1 diag not 0, and `WrongKind` gets the wrong code).
+Run: `cd /Users/tiago.carcao/projects/poc/craft-project/craft && go test ./pkg/craft/ -run TestParse_ContextMap_RelationshipEdge`
+Expected: FAIL — `customer_supplier` is not in `edgeKeywords`, so `parseEdgeStmt` rejects it.
 
-- [ ] **Step 3: Extend `edgeKeywords`** in `internal/syntax/parser.go`:
+- [ ] **Step 3: Replace `edgeKeywords`** in `internal/syntax/parser.go`:
 
 ```go
-// edgeKeywords is the single source of truth for context_map edge verbs.
+// edgeKeywords is the single source of truth for context_map relationship verbs
+// (DDD strategic context-mapping patterns). LEFT = upstream for directional verbs.
 var edgeKeywords = []string{
-	"realized_by", "also_realizes", // realization: bc: -> service:
-	"same_as", "contrasts", "distinct_from", // term relation: term: -> term:
-	// relationship patterns: bc: -> bc: (LEFT = upstream)
+	// directional
 	"customer_supplier", "conformist", "anticorruption_layer",
 	"open_host_service", "published_language",
+	// symmetric
 	"partnership", "shared_kernel", "separate_ways",
 }
 ```
 
-- [ ] **Step 4: Categorize the edge-keyword diagnostic** in `internal/syntax/parser.go` (~line 1924). Replace the single-line message:
+- [ ] **Step 4: Ensure endpoints parse WITHOUT a `bc:` kind.** Inspect `parseEdgeEndpoint`: if it *requires* a `kind:` prefix or special-cases keyword-as-ident kinds, relax it so a bare ident (`billing`) or a bare slug (`re/billing`) parses via `parseRef` as an ordinary ref. Bare refs are already supported by `parseRef`; the change is to stop *expecting* a kind. Keep `EdgeDecl.Left()/.Right()` returning the raw ref text (`"billing"`, `"re/billing"`).
+
+- [ ] **Step 5: Update the edge-keyword diagnostic** (~1924) to the new vocabulary:
 
 ```go
-	diags = append(diags, p.diagUnexpected(verb, "an edge keyword: a realization (realized_by/also_realizes), a term relation (same_as/contrasts/distinct_from), or a relationship pattern (customer_supplier/conformist/anticorruption_layer/open_host_service/published_language/partnership/shared_kernel/separate_ways)"))
+diags = append(diags, p.diagUnexpected(verb, "a relationship pattern: directional (customer_supplier/conformist/anticorruption_layer/open_host_service/published_language) or symmetric (partnership/shared_kernel/separate_ways)"))
 ```
 
-- [ ] **Step 5: Add the sema membership map + relationship branch** in `internal/sema/validate.go`. After `edgeTermVerbs` (~line 25):
+- [ ] **Step 6: Migrate corpus fixtures** to the new syntax. In `testdata/corpus/99_mixed/dsl-vnext.craft`, replace the `context_map { … }` body's `bc:… realized_by service:…` and `term:… contrasts term:…` lines with relationship edges, e.g. `bc:re/billing customer_supplier bc:re/vas` → `re/billing customer_supplier re/vas`. Grep the corpus for any other `context_map` blocks and migrate them too. (Goldens regenerate in Task 7; here just make the `.craft` parse.)
 
-```go
-// edgeRelationshipVerbs require a bc: left endpoint and a bc: right endpoint.
-var edgeRelationshipVerbs = map[string]bool{
-	"customer_supplier": true, "conformist": true, "anticorruption_layer": true,
-	"open_host_service": true, "published_language": true,
-	"partnership": true, "shared_kernel": true, "separate_ways": true,
-}
-```
+- [ ] **Step 7: Run tests**
 
-In `classifyEdgeVerb`, add a case before `default:`:
-
-```go
-	case edgeRelationshipVerbs[verb]:
-		if leftKind != "bc" || rightKind != "bc" {
-			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "`bc:` endpoints on both sides", left, right, leftLine, leftCol)}
-		}
-```
-
-- [ ] **Step 6: Keep the vocabulary sync test honest** — in `internal/sema/edge_verb_sync_test.go`, `TestEdgeVerbVocabulariesInSync`, add the relationship map to the `sema` set:
-
-```go
-	for k := range edgeRelationshipVerbs {
-		sema[k] = true
-	}
-```
-
-- [ ] **Step 7: Run tests to verify they pass**
-
-Run: `go test ./internal/sema/ ./internal/syntax/`
-Expected: PASS — relationship verbs classify bc→bc with 0 diags, wrong-kind emits `edge-endpoint-kind`, and `TestEdgeVerbVocabulariesInSync` passes (parser's 13 keywords == union of the three sema maps).
+Run: `go test ./pkg/craft/ ./internal/syntax/`
+Expected: PASS — new form parses; migrated fixtures parse.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add internal/syntax/parser.go internal/sema/validate.go internal/sema/edge_verb_sync_test.go internal/sema/validate_relationship_test.go
-git commit -m "feat(sema): context_map relationship verbs (bc:->bc:) + endpoint-kind validation"
+git add internal/syntax/parser.go internal/syntax/parser_test.go testdata/corpus
+git commit -m "feat(syntax): context_map relationship verbs + bare/qualified BC endpoints (drop bc:)"
 ```
 
 ---
 
-## Task 2: `self-relationship` error
+## Task 2: Verb metadata table (single source of truth)
 
 **Files:**
-- Modify: `internal/sema/validate.go` (`classifyEdgeVerb` relationship branch)
-- Modify: `internal/sema/validate_relationship_test.go`
-- Create: `testdata/broken/relationship_self.craft`, `testdata/broken/relationship_self.diagnostics.json`
+- Create: `internal/syntax/edge_meta.go`
+- Test: `internal/syntax/edge_meta_test.go`
 
 **Interfaces:**
-- Consumes: `edgeRelationshipVerbs`, `colToLSP`, `lineToLSP` (existing helpers used by `classifyEdgeVerb`).
-- Produces: diagnostic code `craft/sema/self-relationship` (severity error), emitted when `left == right` for a relationship verb with both `bc:` endpoints.
+- Produces:
+```go
+type EdgeClass string
+const ( EdgeDirectional EdgeClass = "directional"; EdgeSymmetric EdgeClass = "symmetric" )
+type EdgeVerbMeta struct {
+	Verb           string
+	Class          EdgeClass
+	UpstreamRole   string // left role for directional (e.g. "supplier"); "" for symmetric
+	DownstreamRole string // right role for directional (e.g. "customer"); "" for symmetric
+}
+func EdgeVerbMetas() []EdgeVerbMeta            // stable order, one per edgeKeywords entry
+func LookupEdgeVerbMeta(verb string) (EdgeVerbMeta, bool)
+func EdgeVerbSymmetric(verb string) bool
+```
 
-- [ ] **Step 1: Write the failing test** — add to `internal/sema/validate_relationship_test.go`:
+- [ ] **Step 1: Write the failing test** — `internal/syntax/edge_meta_test.go`:
 
 ```go
-func TestClassifyEdgeVerb_SelfRelationship(t *testing.T) {
-	diags := classifyEdgeVerb("f.craft", "partnership", "bc", "bc", "bc:re/a", "bc:re/a", 1, 0)
-	if len(diags) != 1 || diags[0].Code != "craft/sema/self-relationship" {
-		t.Fatalf("want 1 self-relationship diag, got %+v", diags)
+package syntax
+
+import "testing"
+
+func TestEdgeVerbMetas_MatchKeywordsAndDirection(t *testing.T) {
+	if len(EdgeVerbMetas()) != len(edgeKeywords) {
+		t.Fatalf("metas=%d keywords=%d", len(EdgeVerbMetas()), len(edgeKeywords))
 	}
-	if diags[0].Severity != model.SeverityError {
-		t.Errorf("severity = %q, want error", diags[0].Severity)
+	cs, ok := LookupEdgeVerbMeta("customer_supplier")
+	if !ok || cs.Class != EdgeDirectional || cs.UpstreamRole != "supplier" || cs.DownstreamRole != "customer" {
+		t.Fatalf("customer_supplier meta = %+v ok=%v", cs, ok)
+	}
+	if !EdgeVerbSymmetric("partnership") || EdgeVerbSymmetric("conformist") {
+		t.Errorf("symmetry flags wrong")
+	}
+	for _, k := range edgeKeywords {
+		if _, ok := LookupEdgeVerbMeta(k); !ok {
+			t.Errorf("keyword %q missing from metas", k)
+		}
 	}
 }
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `go test ./internal/sema/ -run TestClassifyEdgeVerb_SelfRelationship`
-Expected: FAIL — currently `bc:re/a partnership bc:re/a` classifies as valid bc→bc (0 diags).
+Run: `go test ./internal/syntax/ -run TestEdgeVerbMetas`
+Expected: FAIL (undefined symbols).
 
-- [ ] **Step 3: Add the self-check** in `classifyEdgeVerb`, relationship branch (after the kind check, both endpoints known `bc:`):
+- [ ] **Step 3: Write `internal/syntax/edge_meta.go`** with all 8 entries. Directional roles: customer_supplier(supplier,customer), conformist(upstream,conformist), anticorruption_layer(upstream,downstream), open_host_service(host,consumer), published_language(publisher,consumer). Symmetric (partnership/shared_kernel/separate_ways): Class=EdgeSymmetric, roles "". `EdgeVerbMetas()` returns them in `edgeKeywords` order; `EdgeVerbSymmetric` returns `Class==EdgeSymmetric`.
 
-```go
-	case edgeRelationshipVerbs[verb]:
-		if leftKind != "bc" || rightKind != "bc" {
-			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "`bc:` endpoints on both sides", left, right, leftLine, leftCol)}
-		}
-		if left == right {
-			startChar := colToLSP(leftCol)
-			return []model.Diagnostic{{
-				Code:      "craft/sema/self-relationship",
-				Message:   fmt.Sprintf("edge %q %s %q relates a bounded context to itself", left, verb, right),
-				Severity:  model.SeverityError,
-				SourceURI: uri,
-				Range: model.Range{
-					Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-					End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
-				},
-			}}
-		}
-```
+- [ ] **Step 4: Run to verify it passes**
 
-- [ ] **Step 4: Add the broken fixture** — `testdata/broken/relationship_self.craft`:
+Run: `go test ./internal/syntax/ -run TestEdgeVerbMetas`
+Expected: PASS.
 
-```craft
-context_map {
-  bc:re/billing partnership bc:re/billing
-}
-```
-
-Generate `testdata/broken/relationship_self.diagnostics.json` by running the broken-corpus harness in update/print mode (same mechanism the existing `testdata/broken/*.diagnostics.json` use — inspect a sibling like `testdata/broken/edge_endpoint_kind.diagnostics.json` for the exact JSON shape and the field ordering, then write the file to match the actual emitted diagnostic: one `craft/sema/self-relationship` error at the left endpoint's range). Verify by running the broken-fixture test (below) and copying the produced diagnostics if the harness supports an update flag; otherwise hand-write to match the sibling's schema exactly.
-
-- [ ] **Step 5: Run the broken-fixture + unit tests**
-
-Run: `go test ./internal/sema/ && go test ./... -run Broken`
-Expected: PASS — `relationship_self` produces exactly the recorded `self-relationship` diagnostic; unit test passes.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add internal/sema/validate.go internal/sema/validate_relationship_test.go testdata/broken/relationship_self.craft testdata/broken/relationship_self.diagnostics.json
-git commit -m "feat(sema): self-relationship error for bc:X <verb> bc:X"
+git add internal/syntax/edge_meta.go internal/syntax/edge_meta_test.go
+git commit -m "feat(syntax): edge-verb metadata table (class + upstream/downstream roles)"
 ```
 
 ---
 
-## Task 3: Corpus golden + broken-endpoint fixture (round-trip)
+## Task 3: Optional domain scope on the block
 
 **Files:**
-- Create: `testdata/corpus/05_context_map/relationships.craft` + `testdata/corpus/05_context_map/relationships.craftjson`
-- Create: `testdata/broken/relationship_bad_endpoint.craft` + `.diagnostics.json`
+- Modify: `internal/syntax/parser.go` (`parseContextMapBlock`), `internal/syntax/kind.go` (new `SyntaxKindContextMapDomain`), `internal/syntax/ast.go` (`ContextMapDecl.Domain()`)
+- Test: `internal/syntax/parser_test.go`
 
 **Interfaces:**
-- Consumes: `craft.Parse`, the corpus round-trip harness, the corpus golden regeneration method (the same one used for the tags feature — parse the `.craft` and serialize the resulting `CraftDoc` to the `.craftjson` schema).
-- Produces: a valid corpus fixture exercising a directional and a symmetric relationship edge; goldens containing `Edge{Left, Verb, Right}` entries.
+- Produces: `ContextMapDecl.Domain() string` returning the scope identifier, or `""` if unscoped. Parser accepts `context_map re { … }`.
 
-> **First:** confirm the corpus directory layout — `ls testdata/corpus/`. If a context_map-specific directory already exists, use it; otherwise create `05_context_map/`. Match the numeric-prefix convention of the siblings.
+- [ ] **Step 1: Write the failing test**
 
-- [ ] **Step 1: Write the corpus fixture** — `testdata/corpus/05_context_map/relationships.craft`:
-
-```craft
-context_map {
-  bc:re/billing customer_supplier bc:re/vas
-  bc:re/billing anticorruption_layer bc:re/subscriptions
-  bc:re/subscriptions partnership bc:re/billing
+```go
+func TestParse_ContextMap_DomainScope(t *testing.T) {
+	doc, _ := craft.Parse("f.craft", "context_map re {\n  billing customer_supplier vas\n}\ncontext_map {\n  re/billing partnership payments/ledger\n}\n")
+	if len(doc.ContextMap) != 2 { // repeatable + merged
+		t.Fatalf("want 2 merged edges, got %d", len(doc.ContextMap))
+	}
 }
 ```
+Plus a whitebox `internal/syntax` test asserting `File.ContextMaps()[0].Domain() == "re"` and `[1].Domain() == ""`.
 
-- [ ] **Step 2: Generate the golden** — regenerate `testdata/corpus/05_context_map/relationships.craftjson` using the corpus golden tool/method (verify the diff contains three `Edge` entries with `left`/`verb`/`right` exactly as authored, and that the file matches the schema of an existing `*.craftjson` that has a `contextMap` array — grep the corpus for one).
+- [ ] **Step 2: Run to verify it fails**
 
-- [ ] **Step 3: Run the corpus round-trip + acceptance tests**
+Run: `go test ./pkg/craft/ ./internal/syntax/ -run 'DomainScope'`
+Expected: FAIL — the identifier before `{` is unexpected today.
 
-Run: `go test ./... -run 'Corpus|RoundTrip'`
-Expected: PASS — the fixture parses, the golden matches, and byte-for-byte round-trip holds (verb tokens are ordinary `SyntaxKindEdgeKw`, no trivia lost).
+- [ ] **Step 3: Parse the optional scope.** In `parseContextMapBlock`, after `p.consumeAs(SyntaxKindKwContextMap)` and before the `{` check, if `p.peek().Type == lexer.TokenIdent`, `p.consumeAs(SyntaxKindContextMapDomain)`. Add `SyntaxKindContextMapDomain` to `kind.go`. Add `ContextMapDecl.Domain()` in `ast.go` reading the first `SyntaxKindContextMapDomain` child token text (or `""`).
 
-- [ ] **Step 4: Add the broken-endpoint fixture** — `testdata/broken/relationship_bad_endpoint.craft`:
+- [ ] **Step 4: Confirm repeatable/merge already works.** `File.ContextMaps()` already returns all blocks and `validateContextMapEdges` iterates all; the projection appends all edges to `CraftDoc.ContextMap`. Verify the pkg/craft test above sees 2 merged edges (no projection change expected — confirm, and only touch projection if the count is wrong).
 
-```craft
-context_map {
-  bc:re/billing customer_supplier term:billing/Invoice
-}
-```
+- [ ] **Step 5: Run tests**
 
-Generate `testdata/broken/relationship_bad_endpoint.diagnostics.json` (matching the sibling schema; expected: one `craft/sema/edge-endpoint-kind` error — right endpoint is `term:`, not `bc:`).
-
-- [ ] **Step 5: Run broken-fixture tests**
-
-Run: `go test ./... -run Broken`
+Run: `go test ./pkg/craft/ ./internal/syntax/`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add testdata/corpus/05_context_map/ testdata/broken/relationship_bad_endpoint.craft testdata/broken/relationship_bad_endpoint.diagnostics.json
-git commit -m "test: corpus golden + broken-endpoint fixtures for relationship edges"
+git add internal/syntax/parser.go internal/syntax/kind.go internal/syntax/ast.go internal/syntax/parser_test.go
+git commit -m "feat(syntax): optional domain scope on context_map; blocks repeatable + merged"
 ```
 
 ---
 
-## Task 4: Canonical verb-metadata table + `pkg/craft` public API
+## Task 4: Sema — endpoint-is-BC resolution + self-relationship
 
 **Files:**
-- Create: `internal/syntax/edge_meta.go`
-- Modify: `internal/sema/edge_verb_sync_test.go` (assert sema maps agree with the metadata table)
-- Create: `pkg/craft/edges.go`
-- Create: `pkg/craft/edges_test.go`
+- Modify: `internal/sema/validate.go` (`validateContextMapEdges`, `classifyEdgeVerb` → replace kind logic; remove `edgeRealizationVerbs`/`edgeTermVerbs`; add `edgeRelationshipVerbs`), `internal/sema/edge_verb_sync_test.go`
+- Create: `internal/sema/validate_relationship_test.go`, `testdata/broken/relationship_endpoint_not_bc.{craft,diagnostics.json}`, `testdata/broken/relationship_self.{craft,diagnostics.json}`
 
 **Interfaces:**
-- Produces (internal/syntax):
-  ```go
-  type EdgeCategory string
-  const (
-      EdgeRealization  EdgeCategory = "realization"
-      EdgeTermRelation EdgeCategory = "term_relation"
-      EdgeRelationship EdgeCategory = "relationship"
-  )
-  type EdgeVerbMeta struct {
-      Verb      string
-      Category  EdgeCategory
-      Symmetric bool
-      LeftKind  string // "bc" | "service" | "term"
-      RightKind string // "bc" | "service" | "term"
-  }
-  func EdgeVerbMetas() []EdgeVerbMeta            // all verbs, all categories (ordered)
-  func LookupEdgeVerbMeta(verb string) (EdgeVerbMeta, bool)
-  func EdgeVerbSymmetric(verb string) bool       // convenience for sema's lint
-  ```
-- Produces (pkg/craft): thin wrappers `EdgeCategory`/`EdgeVerbInfo`/`EdgeVerbs()`/`LookupEdgeVerb()` over the internal table (spec §4 public surface). `EdgeVerbInfo` mirrors `EdgeVerbMeta` field-for-field.
-- Consumes: `edgeKeywords` (assert `EdgeVerbMetas()` keys == `edgeKeywords`).
+- Consumes: `WorkspaceSymbols.BoundedContexts` (BC name → owning domain) and `.Domains`; `ContextMapDecl.Domain()`; `syntax.EdgeVerbMetas()`.
+- Produces: resolution helper `resolveBCRef(ws, scopeDomain, ref string) (resolved string, kind string /*"bc"|"domain"|"service"|"actor"|""*/, ambiguous bool)`; diagnostics `craft/sema/edge-endpoint-not-bc` (error), `craft/sema/self-relationship` (error), `craft/sema/unresolved-bc` (warning), `craft/sema/ambiguous-bc` (error).
 
-- [ ] **Step 1: Write the failing test** — `pkg/craft/edges_test.go`:
-
-```go
-package craft_test
-
-import (
-	"testing"
-
-	craft "github.com/tcarcao/craft/v2/pkg/craft"
-)
-
-func TestEdgeVerbs_CoverAllVerbsWithDirection(t *testing.T) {
-	got := map[string]craft.EdgeVerbInfo{}
-	for _, v := range craft.EdgeVerbs() {
-		got[v.Verb] = v
-	}
-	// Directional relationship verb: left=upstream, right=downstream, not symmetric.
-	cs, ok := craft.LookupEdgeVerb("customer_supplier")
-	if !ok || cs.Category != craft.EdgeRelationship || cs.Symmetric || cs.LeftKind != "bc" || cs.RightKind != "bc" {
-		t.Fatalf("customer_supplier = %+v (ok=%v), want relationship/bc->bc/asymmetric", cs, ok)
-	}
-	// Symmetric relationship verb.
-	p, _ := craft.LookupEdgeVerb("partnership")
-	if !p.Symmetric {
-		t.Errorf("partnership.Symmetric = false, want true")
-	}
-	// Existing categories still present.
-	if r, _ := craft.LookupEdgeVerb("realized_by"); r.Category != craft.EdgeRealization || r.RightKind != "service" {
-		t.Errorf("realized_by = %+v, want realization/->service", r)
-	}
-	if len(got) == 0 {
-		t.Fatal("EdgeVerbs() returned nothing")
-	}
-}
-```
+- [ ] **Step 1: Write the failing tests** (`validate_relationship_test.go`, whitebox `package sema`): a valid `context_map re { billing customer_supplier vas }` with domains declaring `billing`,`vas` in `re` → 0 diagnostics; an endpoint resolving to a domain/service → one `edge-endpoint-not-bc` error; `billing partnership billing` → one `self-relationship` error. Build the `syntax.File` + `WorkspaceSymbols` with the helper pattern used in the existing `internal/sema/validate_test.go` (grep it).
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `go test ./pkg/craft/ -run TestEdgeVerbs`
-Expected: FAIL — `pkg/craft` has no `EdgeVerbs`/`EdgeVerbInfo`/`EdgeCategory` yet (compile error).
+Run: `go test ./internal/sema/ -run Relationship`
+Expected: FAIL (compile / wrong behavior — kind-based classify still in place).
 
-- [ ] **Step 3: Write the metadata table** — `internal/syntax/edge_meta.go`. Include ALL 13 verbs across the three categories. Directional relationship verbs: `Symmetric:false`; `partnership`/`shared_kernel`/`separate_ways`: `Symmetric:true`; all relationship verbs `LeftKind:"bc", RightKind:"bc"`. Realization: `bc`→`service`. Term relation: `term`→`term`, symmetric where it applies (`same_as` symmetric; `contrasts`/`distinct_from` — set `Symmetric:false` unless the term category already documents symmetry; default false, note in a comment). Provide `EdgeVerbMetas()` returning them in a stable order, `LookupEdgeVerbMeta`, and `EdgeVerbSymmetric`.
+- [ ] **Step 3: Rework `classifyEdgeVerb` → resolution-based.** Replace `edgeRealizationVerbs`/`edgeTermVerbs` with `edgeRelationshipVerbs` (the 8). Write `resolveBCRef(ws, scopeDomain, ref)`:
+  - if `ref` is `domain/name`: look up `ws.Domains[domain]`; if it lists `name` → ("<domain>/<name>","bc",false) else fall through to unresolved.
+  - else bare `name`: if `scopeDomain != ""` and `ws.Domains[scopeDomain]` lists `name` → resolved in scope; else consult `ws.BoundedContexts[name]` — resolved to that domain's BC; detect ambiguity by counting domains that declare `name` (needs a small count; if the workspace can't distinguish, treat a name present in ≥2 domains as ambiguous). If it resolves to a domain/service/actor symbol instead of a BC → kind accordingly.
+  For each edge: resolve both endpoints; if either kind is non-`bc` and non-empty → `edge-endpoint-not-bc` error; if unresolved (kind=="") → `unresolved-bc` warning; if ambiguous → `ambiguous-bc` error ("qualify as `<domain>/<name>`"). If both resolve to the SAME bc → `self-relationship` error. Thread `scopeDomain` from `edge`'s owning `ContextMapDecl.Domain()`.
+  Update the `validateContextMapEdges` loop to pass the block's domain scope and to use resolution instead of `refKindWord`.
 
-- [ ] **Step 4: Write the public wrapper** — `pkg/craft/edges.go`:
+- [ ] **Step 4: Update the sync test.** In `edge_verb_sync_test.go`, replace the realization/term unions with `edgeRelationshipVerbs`; assert `syntax.EdgeKeywords()` == keys(`edgeRelationshipVerbs`) == verbs in `syntax.EdgeVerbMetas()`.
 
-```go
-package craft
-
-import "github.com/tcarcao/craft/v2/internal/syntax"
-
-type EdgeCategory string
-
-const (
-	EdgeRealization  EdgeCategory = EdgeCategory(syntax.EdgeRealization)
-	EdgeTermRelation EdgeCategory = EdgeCategory(syntax.EdgeTermRelation)
-	EdgeRelationship EdgeCategory = EdgeCategory(syntax.EdgeRelationship)
-)
-
-// EdgeVerbInfo describes one context_map edge verb. LEFT = upstream for
-// directional relationship verbs (see the spec's direction convention).
-type EdgeVerbInfo struct {
-	Verb      string
-	Category  EdgeCategory
-	Symmetric bool
-	LeftKind  string
-	RightKind string
-}
-
-func EdgeVerbs() []EdgeVerbInfo {
-	metas := syntax.EdgeVerbMetas()
-	out := make([]EdgeVerbInfo, 0, len(metas))
-	for _, m := range metas {
-		out = append(out, fromMeta(m))
-	}
-	return out
-}
-
-func LookupEdgeVerb(verb string) (EdgeVerbInfo, bool) {
-	m, ok := syntax.LookupEdgeVerbMeta(verb)
-	if !ok {
-		return EdgeVerbInfo{}, false
-	}
-	return fromMeta(m), true
-}
-
-func fromMeta(m syntax.EdgeVerbMeta) EdgeVerbInfo {
-	return EdgeVerbInfo{Verb: m.Verb, Category: EdgeCategory(m.Category), Symmetric: m.Symmetric, LeftKind: m.LeftKind, RightKind: m.RightKind}
-}
-```
-
-- [ ] **Step 5: Add the source-of-truth sync assertions** — in `internal/sema/edge_verb_sync_test.go`, add a test that the metadata table's keys equal `syntax.EdgeKeywords()`, and that every relationship-category verb in the table is in `edgeRelationshipVerbs` (and vice versa), every realization verb in `edgeRealizationVerbs`, every term verb in `edgeTermVerbs`:
-
-```go
-func TestEdgeMetaMatchesSemaMaps(t *testing.T) {
-	byVerb := map[string]syntax.EdgeVerbMeta{}
-	for _, m := range syntax.EdgeVerbMetas() {
-		byVerb[m.Verb] = m
-	}
-	// keys == edgeKeywords
-	if len(byVerb) != len(syntax.EdgeKeywords()) {
-		t.Fatalf("EdgeVerbMetas has %d verbs, EdgeKeywords has %d", len(byVerb), len(syntax.EdgeKeywords()))
-	}
-	for _, k := range syntax.EdgeKeywords() {
-		m, ok := byVerb[k]
-		if !ok {
-			t.Fatalf("edgeKeywords verb %q missing from EdgeVerbMetas", k)
-		}
-		switch m.Category {
-		case syntax.EdgeRelationship:
-			if !edgeRelationshipVerbs[k] {
-				t.Errorf("%q is relationship in meta but not in edgeRelationshipVerbs", k)
-			}
-		case syntax.EdgeRealization:
-			if !edgeRealizationVerbs[k] {
-				t.Errorf("%q is realization in meta but not in edgeRealizationVerbs", k)
-			}
-		case syntax.EdgeTermRelation:
-			if !edgeTermVerbs[k] {
-				t.Errorf("%q is term in meta but not in edgeTermVerbs", k)
-			}
-		}
-	}
-}
-```
+- [ ] **Step 5: Add broken fixtures** `relationship_endpoint_not_bc.*` (an endpoint that is a declared domain, not a BC → error) and `relationship_self.*` (`billing partnership billing`). Generate `.diagnostics.json` matching a sibling's schema.
 
 - [ ] **Step 6: Run tests**
 
-Run: `go test ./internal/syntax/ ./internal/sema/ ./pkg/craft/`
-Expected: PASS — public API resolves direction/symmetry from the single table; all sync assertions hold.
+Run: `go test ./internal/sema/ && go test ./... -run Broken`
+Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add internal/syntax/edge_meta.go internal/sema/edge_verb_sync_test.go pkg/craft/edges.go pkg/craft/edges_test.go
-git commit -m "feat(craft): exported edge-verb metadata API (category/symmetry/kinds), single source in internal/syntax"
+git add internal/sema/validate.go internal/sema/edge_verb_sync_test.go internal/sema/validate_relationship_test.go testdata/broken/relationship_endpoint_not_bc.* testdata/broken/relationship_self.*
+git commit -m "feat(sema): resolve context_map endpoints to BCs; endpoint-not-bc + self-relationship"
 ```
 
 ---
 
-## Task 5: `redundant-relationship` symmetric-duplicate lint
+## Task 5: Sema — `redundant-relationship` symmetric lint
 
 **Files:**
-- Modify: `internal/sema/validate.go` (`validateContextMapEdges` loop, ~line 249)
-- Modify: `internal/sema/validate_relationship_test.go`
-- Create: `testdata/broken/relationship_redundant.craft` + `.diagnostics.json`
+- Modify: `internal/sema/validate.go` (`validateContextMapEdges`), `internal/sema/validate_relationship_test.go`
+- Create: `testdata/broken/relationship_redundant.{craft,diagnostics.json}`
 
 **Interfaces:**
-- Consumes: `syntax.EdgeVerbSymmetric(verb) bool` (from Task 4); the loop's existing `left, right, verb` strings and `leftLine, leftCol`.
-- Produces: diagnostic code `craft/lint/redundant-relationship` (severity **warning**), emitted on the SECOND occurrence of the same unordered pair with the same symmetric verb. Directional duplicates in opposite order are NOT flagged.
+- Consumes: `syntax.EdgeVerbSymmetric(verb)`, the loop's resolved endpoints.
+- Produces: `craft/lint/redundant-relationship` (warning) on the 2nd occurrence of the same unordered *resolved* pair + same symmetric verb.
 
-- [ ] **Step 1: Write the failing test** — add to `internal/sema/validate_relationship_test.go` a blackbox-style check via the file validator, OR a focused unit test if `validateContextMapEdges` is callable. Prefer a broken-fixture-driven test (Step 4). For a unit-level guard, add:
-
-```go
-func TestRedundantSymmetric_FlaggedOnce(t *testing.T) {
-	// Same unordered pair + same symmetric verb, twice -> one warning.
-	// A partnership B then B partnership A.
-	// (Exercise through validateContextMapEdges via a parsed file; see helper
-	// pattern in validate_test.go for constructing a syntax.File from source.)
-}
-```
-Fill this in using the same file-construction helper the existing `internal/sema/validate_test.go` uses (find it: `grep -n "func Test" internal/sema/validate_test.go` and reuse its parse-to-`syntax.File` setup). Assert exactly one `craft/lint/redundant-relationship` warning for the duplicated symmetric pair, and ZERO for a directional pair authored in both orders.
+- [ ] **Step 1: Write the failing test** — two symmetric duplicates (`a partnership b` / `b partnership a`) → one warning; a directional pair in both orders → zero. (Drive through `validateContextMapEdges` with the file+workspace helper.)
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `go test ./internal/sema/ -run Redundant`
-Expected: FAIL — no such lint yet.
+Expected: FAIL.
 
-- [ ] **Step 3: Implement the lint** in `validateContextMapEdges`. Before the `cm` loop, declare `seen := map[string]bool{}`. Inside the edge loop, after `classifyEdgeVerb`:
+- [ ] **Step 3: Implement.** In the edge loop, keep `seen := map[string]bool{}`. When `edgeRelationshipVerbs[verb] && syntax.EdgeVerbSymmetric(verb)`, key on sorted *resolved* endpoints + verb; 2nd hit → append `craft/lint/redundant-relationship` (SeverityWarning, range at left endpoint). Use resolved names so `a`/`re/a` for the same BC dedupe correctly.
 
-```go
-			if edgeRelationshipVerbs[verb] && syntax.EdgeVerbSymmetric(verb) {
-				a, b := left, right
-				if a > b {
-					a, b = b, a
-				}
-				key := a + "\x00" + b + "\x00" + verb
-				if seen[key] {
-					startChar := colToLSP(leftCol)
-					diags = append(diags, model.Diagnostic{
-						Code:      "craft/lint/redundant-relationship",
-						Message:   fmt.Sprintf("redundant %s relationship: %q and %q already declared this symmetric pair", verb, left, right),
-						Severity:  model.SeverityWarning,
-						SourceURI: uri,
-						Range: model.Range{
-							Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-							End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
-						},
-					})
-				}
-				seen[key] = true
-			}
-```
-
-(Confirm `syntax` is already imported in `validate.go`; it is — the file uses `syntax.File`.)
-
-- [ ] **Step 4: Add the broken/lint fixture** — `testdata/broken/relationship_redundant.craft`:
-
-```craft
-context_map {
-  bc:re/a partnership bc:re/b
-  bc:re/b partnership bc:re/a
-}
-```
-
-Generate `.diagnostics.json`: exactly one `craft/lint/redundant-relationship` warning on the second line's left endpoint. (If the broken harness only accepts errors, place this as a corpus-with-diagnostics fixture matching whatever mechanism records warning-level diagnostics — check how `craft/sema/duplicate-tag` warnings are captured in `testdata/broken/` from the tags feature and mirror it.)
+- [ ] **Step 4: Add fixture** `relationship_redundant.*` (mirror how the tags feature recorded warning-level diagnostics).
 
 - [ ] **Step 5: Run tests**
 
 Run: `go test ./internal/sema/ && go test ./... -run Broken`
-Expected: PASS — one warning for the symmetric duplicate; the directional-both-orders case yields none.
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add internal/sema/validate.go internal/sema/validate_relationship_test.go testdata/broken/relationship_redundant.craft testdata/broken/relationship_redundant.diagnostics.json
+git add internal/sema/validate.go internal/sema/validate_relationship_test.go testdata/broken/relationship_redundant.*
 git commit -m "feat(sema): redundant-relationship lint for duplicated symmetric pairs"
 ```
 
 ---
 
-## Task 6: tree-sitter grammar sync
-
-**Repo:** `tree-sitter-craft` (SEPARATE repo at `/Users/tiago.carcao/projects/poc/craft-project/tree-sitter-craft`). Branch off current `main`. tree-sitter CLI at `node_modules/.bin/tree-sitter` (0.25.10). Two commits (source, then regenerated `src/`). Do NOT push. `git config commit.gpgsign false` in this repo if signing fails.
+## Task 6: `pkg/craft` exported edge-verb API
 
 **Files:**
-- Modify: `grammar.js` (`edge_verb` rule ~line 48)
-- Modify: `test/corpus/*` (add relationship edge cases)
-- Regenerate: `src/grammar.json`, `src/node-types.json`, `src/parser.c`
+- Create: `pkg/craft/edges.go`, `pkg/craft/edges_test.go`
 
 **Interfaces:**
-- Consumes: existing `edge_verb: $ => choice('realized_by', ...)` and `edge_stmt: $ => seq($.ref, $.edge_verb, $.ref)`.
-- Produces: `edge_verb` accepting all 13 verbs. NO highlight change needed — `queries/highlights.scm` captures the whole `(edge_verb)` node (verified: `(edge_verb) @craft.edge-verb`).
+- Produces: `EdgeClass` consts (`EdgeDirectional`/`EdgeSymmetric`), `EdgeVerbInfo{Verb, Class, UpstreamRole, DownstreamRole string; Symmetric bool}`, `EdgeVerbs() []EdgeVerbInfo`, `LookupEdgeVerb(verb) (EdgeVerbInfo, bool)` — all wrapping `internal/syntax` metadata.
 
-- [ ] **Step 1: Add the 8 literals** to `edge_verb` in `grammar.js`:
+- [ ] **Step 1: Write the failing test** — `pkg/craft/edges_test.go`: `LookupEdgeVerb("customer_supplier")` is directional, `UpstreamRole=="supplier"`, `!Symmetric`; `LookupEdgeVerb("partnership").Symmetric`; `len(EdgeVerbs())==8`.
 
-```js
-edge_verb: $ => choice(
-  'realized_by', 'also_realizes',
-  'same_as', 'contrasts', 'distinct_from',
-  'customer_supplier', 'conformist', 'anticorruption_layer',
-  'open_host_service', 'published_language',
-  'partnership', 'shared_kernel', 'separate_ways',
-),
-```
+- [ ] **Step 2: Run to verify it fails**
 
-- [ ] **Step 2: Regenerate and run existing corpus**
+Run: `go test ./pkg/craft/ -run TestEdgeVerbs`
+Expected: FAIL (undefined).
 
-Run: `cd /Users/tiago.carcao/projects/poc/craft-project/tree-sitter-craft && node_modules/.bin/tree-sitter generate && npm test`
-Expected: PASS — existing corpus tests still green (no ambiguity: verbs are distinct literals in the `edge_verb` slot).
+- [ ] **Step 3: Write `pkg/craft/edges.go`** wrapping `syntax.EdgeVerbMetas()`/`LookupEdgeVerbMeta` into the public shapes (`Symmetric = Class==EdgeSymmetric`).
 
-- [ ] **Step 3: Add a corpus test** — in `test/corpus/real_examples.txt` (or a context_map corpus file), add a case with a directional and a symmetric relationship edge inside `context_map`. Generate the expected tree with `node_modules/.bin/tree-sitter parse` (do not hand-write blind) and paste it as the expected S-expression.
+- [ ] **Step 4: Run to verify it passes**
 
-- [ ] **Step 4: Run corpus + full craft corpus compat locally**
+Run: `go test ./pkg/craft/`
+Expected: PASS.
 
-Run: `npm test` — new case passes.
-Run (full corpus gate parity): `echo` the current `CORPUS_VERSION`; the hard-fail compat gate fetches the craft corpus at that pin. Since the new craft relationship corpus fixture ships in the NEXT craft tag, this grammar change does not need a `CORPUS_VERSION` bump now; the existing 57-file corpus must still parse: `bash scripts/fetch-corpus.sh && F=0;T=0; while IFS= read -r -d '' f; do T=$((T+1)); node_modules/.bin/tree-sitter parse "$f" >/dev/null 2>&1 || { F=$((F+1)); echo "FAIL $f"; }; done < <(find test/corpus-from-craft -name '*.craft' -print0); echo "$T files, $F failed"`
-Expected: `57 files, 0 failed`.
-
-- [ ] **Step 5: Check the VS Code extension** — determine whether `craft-vscode-extension` highlights edge verbs via a separate TextMate grammar list (as it does for block keywords). If it enumerates edge verbs, add the 8 there (uncommitted note for the human, per prior precedent — separate repo, no commit protocol). If edge verbs are not separately listed, nothing to do; state which.
-
-- [ ] **Step 6: Commit (two commits, no push)**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add grammar.js queries test/corpus
-git -c commit.gpgsign=false commit -m "feat(tree-sitter): DDD relationship edge verbs in context_map"
-git add src
-git -c commit.gpgsign=false commit -m "chore(tree-sitter): regenerate parser for relationship edge verbs"
+git add pkg/craft/edges.go pkg/craft/edges_test.go
+git commit -m "feat(craft): exported edge-verb metadata API (class/roles/symmetry)"
 ```
-
-Report the two commit SHAs and branch; do NOT push.
 
 ---
 
-## Task 7: CHANGELOG + release v2.12.0 (GATED on user confirmation)
+## Task 7: Corpus goldens + round-trip
 
 **Files:**
-- Modify: `CHANGELOG.md`
+- Create: `testdata/corpus/05_context_map/relationships.craft` + `.craftjson`
+- Regenerate: any `.craftjson` whose `.craft` changed in Task 1 (e.g. `99_mixed/dsl-vnext.craftjson`)
 
-- [ ] **Step 1: Add the CHANGELOG entry** — a new `## [2.12.0]` section: "context_map DDD strategic relationship patterns (customer_supplier, conformist, anticorruption_layer, open_host_service, published_language, partnership, shared_kernel, separate_ways) as bc:→bc: edge verbs; exported `pkg/craft` edge-verb metadata API (`EdgeVerbs`/`LookupEdgeVerb`); `self-relationship` error and `redundant-relationship` lint." Match the format of the existing `## [2.11.0]` entry.
+**Interfaces:** consumes `craft.Parse`, the corpus round-trip + golden harness.
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 1: Add the fixture** `testdata/corpus/05_context_map/relationships.craft` (confirm/`ls` the corpus dir naming first):
 
-```bash
-git add CHANGELOG.md
-git commit -m "docs: changelog for 2.12.0 (context_map DDD relationship patterns)"
+```craft
+context_map re {
+  billing customer_supplier vas
+  billing anticorruption_layer subscriptions
+  billing partnership vas
+}
+
+context_map {
+  re/billing separate_ways legacy/reporting
+}
 ```
 
-- [ ] **Step 3: Whole-branch verification**
+- [ ] **Step 2: Regenerate goldens** for this fixture and for every `.craft` changed in Task 1, using the corpus golden method. Confirm each golden's `contextMap` array holds the authored `Edge{Left,Verb,Right}` (bare/qualified names, pattern verbs), and that byte-for-byte round-trip holds.
 
-Run: `go build ./... && go test ./...`
-Expected: all green.
+- [ ] **Step 3: Run corpus + round-trip tests**
 
-- [ ] **Step 4: Release (only after explicit user confirmation).** Merge `feat/context-map-ddd-relationships` → `main` (`--no-ff`), re-run `go test ./...` on the merged result, tag `v2.12.0`, push `main` + tag (triggers goreleaser + Docker publish). Push the tree-sitter `main` changes from Task 6. Consumer migration (the RE knowledge-hub dropping `bc-relationships.craft`) is **informational only** (spec §10) — a separate repo/PR, not part of this branch.
+Run: `go test ./... -run 'Corpus|RoundTrip'`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add testdata/corpus
+git commit -m "test: corpus goldens for context_map relationship edges (scoped + shared)"
+```
+
+---
+
+## Task 8: tree-sitter grammar sync
+
+**Repo:** `tree-sitter-craft` (separate; branch off current `main`; CLI at `node_modules/.bin/tree-sitter`; two commits — source then regenerated `src/`; `git config commit.gpgsign false` if signing fails; do NOT push).
+
+**Files:** `grammar.js`, `test/corpus/*`, regenerated `src/*`; check `queries/highlights.scm`.
+
+- [ ] **Step 1: Update `grammar.js`.** `context_map_block`: add an optional domain-scope identifier after `'context_map'` before `'{'`. `edge_stmt` endpoints: accept bare/`domain/name` refs (the existing `ref`/`slug` rules already cover these). `edge_verb`: replace the five old verbs with the eight patterns.
+
+- [ ] **Step 2: Regenerate + run corpus**
+
+Run: `cd /Users/tiago.carcao/projects/poc/craft-project/tree-sitter-craft && node_modules/.bin/tree-sitter generate && npm test`
+Expected: PASS (existing corpus green after updating any context_map cases to new syntax).
+
+- [ ] **Step 3: Add corpus cases** — a domain-scoped block with a directional + a symmetric edge, and a shared block with a cross-domain qualified endpoint. Generate expected trees with `tree-sitter parse`.
+
+- [ ] **Step 4: Verify highlights.** `(edge_verb) @craft.edge-verb` captures the whole node, so new verbs highlight automatically — confirm with `tree-sitter query`. Check `craft-vscode-extension` only if it enumerates edge verbs separately.
+
+- [ ] **Step 5: Full-corpus compat** — migrate the fetched craft corpus expectations if pinned; ensure `bash scripts/fetch-corpus.sh` + parse loop stays `0 failed`.
+
+- [ ] **Step 6: Commit (two commits, no push).** Report branch + SHAs.
+
+---
+
+## Task 9: Cross-validation lint (optional later slice — may defer)
+
+**Files:** Modify `internal/sema/` (new lint pass reading use-case interactions + context_map).
+
+- [ ] **Step 1:** Build the BC interaction set from use-case actions (`Action.Context`→`Action.TargetContext` for `asks`; note `notifies` is async — attribute only where a target BC is resolvable). Reuse/borrow the derivation the visualizer already performs if practical.
+- [ ] **Step 2:** For each classified edge: `separate_ways` between interacting BCs → `craft/lint/contradicts-interaction` (warning); directional integration pattern between non-interacting BCs → `craft/lint/unbacked-relationship` (warning); interacting pair with no classification → `craft/lint/unclassified-relationship` (info).
+- [ ] **Step 3:** Tests + fixtures; warnings only.
+- [ ] **Step 4:** Commit.
+
+> This slice is independently shippable and may be deferred to a follow-up cycle — the core (Tasks 1–8) delivers authoring + shape validation without it. Confirm with the human whether to build it now or defer.
+
+---
+
+## Task 10: CHANGELOG + release (GATED on user confirmation)
+
+- [ ] **Step 1:** Add a `## [next-minor]` CHANGELOG entry: "context_map redesigned as the DDD strategic relationship view — eight relationship patterns (customer_supplier … separate_ways), bare/domain-qualified BC endpoints, repeatable + domain-scoped blocks; realization/term edges removed; exported edge-verb metadata API." Match the existing entry format.
+- [ ] **Step 2:** Commit.
+- [ ] **Step 3:** `go build ./... && go test ./...` — all green.
+- [ ] **Step 4:** (After explicit user confirmation) merge to `main` `--no-ff`, retest, tag the next minor, push `main` + tag; push the tree-sitter branch. `glossary { }` and use-case ref unification are sibling specs, not part of this release.
 
 ---
 
 ## Notes carried from the spec (do not re-litigate during implementation)
 
-- **Explicitly NOT validated:** direction "correctness", conflicting patterns on a pair, completeness. Craft checks shape, not truth (spec §6).
-- **Out of scope:** `big_ball_of_mud`; multiple patterns per edge statement; role sub-annotations (naming the ACL / published language). Spec §11.
-- **Consumer migration** is documented in spec §10 for the hub team; it is not a craft-repo change and is not in this plan's scope beyond shipping the API that unblocks it.
+- Realization and term verbs are REMOVED from `context_map`; term relations' `glossary { }` home is a separate spec, not built here.
+- `context_map` endpoints are BCs named bare/`domain/name`; `bc:` is gone; `.` stays events-only.
+- Direction = LEFT upstream (metadata); one pattern per statement; `big_ball_of_mud` excluded.
+- craft validates shape/resolution, not semantic truth (the closest thing is the optional cross-validation lint, Task 9).
