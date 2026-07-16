@@ -123,4 +123,5 @@ context_map {
 
 - Learn about [domains](/language/domains) to declare the bounded contexts a context map references
 - Model interactions with [use cases](/language/use-cases) — the communication view that `context_map` complements
+- See [Glossary](/language/glossary) for the ubiquitous-language term view — cross-context *term* relations, as opposed to this page's BC-to-BC strategic relations
 - See the [language overview](/language/overview) for the full construct list

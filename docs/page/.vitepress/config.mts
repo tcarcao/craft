@@ -49,7 +49,8 @@ export default defineConfig({
           { text: 'Use Cases', link: '/language/use-cases' },
           { text: 'Architecture', link: '/language/architecture' },
           { text: 'Exposures', link: '/language/exposures' },
-          { text: 'Context Map', link: '/language/context-map' }
+          { text: 'Context Map', link: '/language/context-map' },
+          { text: 'Glossary', link: '/language/glossary' }
         ]
       },
       {
