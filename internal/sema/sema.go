@@ -154,6 +154,10 @@ type Symbols struct {
 	// ContextMapEdges collects context_map edges so AnalyzeWorkspace can
 	// resolve each endpoint to a bounded context cross-file (Task 4).
 	ContextMapEdges []ContextMapEdgeSite
+	// GlossaryRelations collects glossary term relations so AnalyzeWorkspace
+	// can resolve each term node's BC part to a bounded context cross-file
+	// (Task A3).
+	GlossaryRelations []GlossaryRelationSite
 }
 
 // WorkspaceSymbols merges per-file symbol tables for cross-file resolution.
@@ -565,6 +569,10 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	// AnalyzeWorkspace (per-file has no WorkspaceSymbols; see SlugRefs pattern).
 	syms.ContextMapEdges = append(syms.ContextMapEdges, collectContextMapEdgeSites(uri, file, lineIdx, hasLI)...)
 
+	// Task A3: collect glossary term relations for cross-file BC resolution
+	// in AnalyzeWorkspace, mirroring ContextMapEdges above.
+	syms.GlossaryRelations = append(syms.GlossaryRelations, collectGlossaryRelationSites(uri, file, lineIdx, hasLI)...)
+
 	diags = append(diags, validateServiceAnchors(uri, file, lineIdx, hasLI)...)
 	diags = append(diags, validateUseCaseTags(uri, file, lineIdx, hasLI)...)
 
@@ -835,6 +843,14 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 		for _, site := range syms.ContextMapEdges {
 			diags = append(diags, relationshipEdgeDiags(ws, site)...)
 			diags = append(diags, redundantRelationshipDiag(ws, site, seen)...)
+		}
+	}
+
+	// Task A3: resolve glossary term-node endpoints to bounded contexts,
+	// mirroring the context_map edge loop above.
+	for _, syms := range perFile {
+		for _, site := range syms.GlossaryRelations {
+			diags = append(diags, glossaryRelationDiags(ws, site)...)
 		}
 	}
 
