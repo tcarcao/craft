@@ -1963,8 +1963,8 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 // on a BARE keyword-as-ident endpoint with no following ':' made it consume
 // zero tokens; parseEdgeStmt then also made zero progress, and
 // parseContextMapBlock's loop called it again on the same position forever
-// — the Task 5 hang (`context_map { service realized_by service:x }`,
-// `context_map { term:x contrasts domain }`).
+// — the Task 5 hang (`context_map { service customer_supplier billing }`,
+// `context_map { billing separate_ways domain }`).
 //
 // The fix mirrors the established idiom at the other parseRef call sites
 // (parseAsksAction, parseNotifiesAction, parseTrigger's listens branch):
