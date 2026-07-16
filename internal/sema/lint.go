@@ -369,9 +369,7 @@ func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 		for _, cm := range file.ContextMaps() {
 			scope := cm.Domain()
 			for _, edge := range cm.Edges() {
-				if edge.Verb() != "separate_ways" {
-					continue
-				}
+				verb := edge.Verb()
 				leftResolved, leftKind, leftAmbig := resolveBCRef(ws, scope, edge.Left())
 				rightResolved, rightKind, rightAmbig := resolveBCRef(ws, scope, edge.Right())
 				if leftKind != "bc" || leftAmbig || rightKind != "bc" || rightAmbig {
@@ -380,27 +378,73 @@ func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 				if leftResolved == "" || rightResolved == "" || leftResolved == rightResolved {
 					continue
 				}
-				key, _ := newPairKey(leftResolved, rightResolved)
-				info, hasDep := deps[key]
-				if !hasDep || !(info.fwd || info.rev) {
-					continue
-				}
 
 				leftLine, leftCol := 0, 0
 				if lr := edge.LeftRef(); lr != nil {
 					leftLine, leftCol = lr.Line(li), lr.Col(li)
 				}
 				startChar := colToLSP(leftCol)
-				diags = append(diags, model.Diagnostic{
-					Code:      "craft/lint/separate-ways-violation",
-					Message:   fmt.Sprintf("%q and %q are declared separate_ways but communicate in a use case", leftResolved, rightResolved),
-					Severity:  model.SeverityWarning,
-					SourceURI: uri,
-					Range: model.Range{
-						Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-						End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(edge.Left())},
-					},
-				})
+				edgeRange := model.Range{
+					Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
+					End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(edge.Left())},
+				}
+
+				if verb == "separate_ways" {
+					key, _ := newPairKey(leftResolved, rightResolved)
+					info, hasDep := deps[key]
+					if !hasDep || !(info.fwd || info.rev) {
+						continue
+					}
+					diags = append(diags, model.Diagnostic{
+						Code:      "craft/lint/separate-ways-violation",
+						Message:   fmt.Sprintf("%q and %q are declared separate_ways but communicate in a use case", leftResolved, rightResolved),
+						Severity:  model.SeverityWarning,
+						SourceURI: uri,
+						Range:     edgeRange,
+					})
+					continue
+				}
+
+				// R2a/R2b: direction-inverted / bidirectional, directional
+				// verbs only (symmetric verbs like separate_ways/partnership/
+				// shared_kernel have no upstream/downstream distinction).
+				if _, ok := syntax.LookupEdgeVerbMeta(verb); !ok || syntax.EdgeVerbSymmetric(verb) {
+					continue
+				}
+
+				key, _ := newPairKey(leftResolved, rightResolved)
+				info := deps[key]
+				// hasDep(from, to): was a dependency edge from->to observed
+				// for this pair? Given the sorted key [a,b] (a<b): fwd means
+				// a->b, rev means b->a.
+				hasDep := func(from, to string) bool {
+					if from < to {
+						return info.fwd
+					}
+					return info.rev
+				}
+
+				correctPresent := hasDep(rightResolved, leftResolved)  // downstream depends on upstream
+				invertedPresent := hasDep(leftResolved, rightResolved) // upstream depends on downstream
+
+				switch {
+				case invertedPresent && !correctPresent:
+					diags = append(diags, model.Diagnostic{
+						Code:      "craft/lint/relationship-direction-inverted",
+						Message:   fmt.Sprintf("%q depends on %q, but %s is upstream: dependency direction is inverted for this %s relationship", leftResolved, rightResolved, leftResolved, verb),
+						Severity:  model.SeverityWarning,
+						SourceURI: uri,
+						Range:     edgeRange,
+					})
+				case correctPresent && invertedPresent:
+					diags = append(diags, model.Diagnostic{
+						Code:      "craft/lint/relationship-bidirectional",
+						Message:   fmt.Sprintf("%q and %q show bidirectional traffic under an asymmetric %s pattern, consider partnership?", leftResolved, rightResolved, verb),
+						Severity:  model.SeverityHint,
+						SourceURI: uri,
+						Range:     edgeRange,
+					})
+				}
 			}
 		}
 	}

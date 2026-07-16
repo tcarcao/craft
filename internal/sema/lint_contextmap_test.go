@@ -129,3 +129,115 @@ use_case "Consume" {
 		t.Fatalf("expected 0 craft/lint/separate-ways-violation, got %d: %+v", n, diags)
 	}
 }
+
+// ── R2a/R2b: relationship-direction-inverted / relationship-bidirectional ──
+//
+// billing customer_supplier vas: billing=LEFT=upstream=supplier,
+// vas=RIGHT=downstream=customer. Expected dependency direction is
+// vas -> billing (downstream depends on upstream, i.e. RIGHT -> LEFT).
+
+// TestContextMapConsistency_DirectionInverted: only `billing asks vas`
+// (upstream depends on downstream = billing -> vas = inverted) with no
+// correct-direction traffic must fire exactly one relationship-direction-inverted
+// warning, and zero relationship-bidirectional.
+func TestContextMapConsistency_DirectionInverted(t *testing.T) {
+	src := `domain re { billing vas }
+context_map re { billing customer_supplier vas }
+use_case "Test" {
+  when Customer creates Order
+    billing asks vas to check eligibility
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 1 {
+		t.Fatalf("expected 1 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
+	}
+	if n := countCode(diags, "craft/lint/relationship-bidirectional"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/relationship-bidirectional, got %d: %+v", n, diags)
+	}
+	for _, d := range diags {
+		if d.Code == "craft/lint/relationship-direction-inverted" && d.Severity != model.SeverityWarning {
+			t.Errorf("expected warning severity, got %q", d.Severity)
+		}
+	}
+}
+
+// TestContextMapConsistency_DirectionCorrect: replacing the inverted use case
+// with `vas asks billing` (correct direction: downstream depends on
+// upstream) must fire zero direction-inverted and zero bidirectional
+// diagnostics — a correct-only relationship is silent.
+func TestContextMapConsistency_DirectionCorrect(t *testing.T) {
+	src := `domain re { billing vas }
+context_map re { billing customer_supplier vas }
+use_case "Test" {
+  when Customer creates Order
+    vas asks billing to check eligibility
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
+	}
+	if n := countCode(diags, "craft/lint/relationship-bidirectional"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/relationship-bidirectional, got %d: %+v", n, diags)
+	}
+}
+
+// TestContextMapConsistency_Bidirectional: both `billing asks vas` AND
+// `vas asks billing` present must fire exactly one relationship-bidirectional
+// hint, and zero relationship-direction-inverted.
+func TestContextMapConsistency_Bidirectional(t *testing.T) {
+	src := `domain re { billing vas }
+context_map re { billing customer_supplier vas }
+use_case "Forward" {
+  when Customer creates Order
+    vas asks billing to check eligibility
+}
+use_case "Backward" {
+  when Customer cancels Order
+    billing asks vas to refund
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/relationship-bidirectional"); n != 1 {
+		t.Fatalf("expected 1 craft/lint/relationship-bidirectional, got %d: %+v", n, diags)
+	}
+	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
+	}
+	for _, d := range diags {
+		if d.Code == "craft/lint/relationship-bidirectional" && d.Severity != model.SeverityHint {
+			t.Errorf("expected hint severity, got %q", d.Severity)
+		}
+	}
+}
+
+// TestContextMapConsistency_PublishedLanguageAsync_Correct: a
+// published_language edge (LEFT=publisher/upstream, RIGHT=consumer/
+// downstream) exercised via notifies/listens with RIGHT listening to LEFT's
+// event (downstream depends on upstream = correct direction) must fire zero
+// diagnostics. Proves async dependency direction composes with the rule.
+func TestContextMapConsistency_PublishedLanguageAsync_Correct(t *testing.T) {
+	src := `domain re { billing vas }
+context_map re { billing published_language vas }
+use_case "Publish" {
+  when Customer creates Order
+    billing notifies "OrderBilled"
+}
+use_case "Consume" {
+  when vas listens "OrderBilled"
+    vas validates payload
+}
+`
+	perFileTrees, ws, lis := buildLintWorkspace(t, src)
+	diags := LintWorkspace(perFileTrees, ws, lis)
+	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
+	}
+	if n := countCode(diags, "craft/lint/relationship-bidirectional"); n != 0 {
+		t.Fatalf("expected 0 craft/lint/relationship-bidirectional, got %d: %+v", n, diags)
+	}
+}
