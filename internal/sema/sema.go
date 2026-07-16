@@ -848,9 +848,17 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 
 	// Task A3: resolve glossary term-node endpoints to bounded contexts,
 	// mirroring the context_map edge loop above.
+	// Task A4: glossary-redundant and glossary-conflicting-relation lints,
+	// keyed on the sorted canonical term-node pair; maps span the whole
+	// workspace (mirroring redundantRelationshipDiag's seen placement above)
+	// so duplicates/conflicts split across files still dedupe/fire correctly.
+	glossarySeenVerb := map[string]bool{}
+	glossaryVerbsForPair := map[string]map[string]bool{}
+	glossaryConflictReported := map[string]bool{}
 	for _, syms := range perFile {
 		for _, site := range syms.GlossaryRelations {
 			diags = append(diags, glossaryRelationDiags(ws, site)...)
+			diags = append(diags, glossaryLintDiags(ws, site, glossarySeenVerb, glossaryVerbsForPair, glossaryConflictReported)...)
 		}
 	}
 

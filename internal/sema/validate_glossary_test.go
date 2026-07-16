@@ -7,10 +7,12 @@ import (
 )
 
 const (
-	codeGlossaryEndpointNotBC = "craft/sema/glossary-endpoint-not-bc"
-	codeGlossaryUnresolvedBC  = "craft/sema/glossary-unresolved-bc"
-	codeGlossaryAmbiguousBC   = "craft/sema/glossary-ambiguous-bc"
-	codeGlossarySelfRelation  = "craft/sema/glossary-self-relation"
+	codeGlossaryEndpointNotBC       = "craft/sema/glossary-endpoint-not-bc"
+	codeGlossaryUnresolvedBC        = "craft/sema/glossary-unresolved-bc"
+	codeGlossaryAmbiguousBC         = "craft/sema/glossary-ambiguous-bc"
+	codeGlossarySelfRelation        = "craft/sema/glossary-self-relation"
+	codeGlossaryRedundant           = "craft/lint/glossary-redundant"
+	codeGlossaryConflictingRelation = "craft/lint/glossary-conflicting-relation"
 )
 
 // TestGlossary_ValidEndpoints: both term-node endpoints resolve to distinct
@@ -119,5 +121,66 @@ func TestResolveTermNode(t *testing.T) {
 					tt.wantCanon, tt.wantKind, tt.wantAmbig, tt.wantTerm)
 			}
 		})
+	}
+}
+
+// TestGlossaryRedundant_SameVerbTwice: the same unordered canonical pair
+// declared same_as twice (in reverse order) collapses to exactly one
+// glossary-redundant warning, and no other glossary diagnostics fire.
+func TestGlossaryRedundant_SameVerbTwice(t *testing.T) {
+	src := "domain re { billing subscriptions }\n" +
+		"glossary re {\n" +
+		"  billing/Invoice same_as subscriptions/Invoice\n" +
+		"  subscriptions/Invoice same_as billing/Invoice\n" +
+		"}\n"
+	diags := analyzeRelationshipSrc(t, src)
+	if n := relDiagCount(diags, codeGlossaryRedundant); n != 1 {
+		t.Fatalf("expected 1 %s, got %d: %+v", codeGlossaryRedundant, n, diags)
+	}
+	if n := relDiagCount(diags, codeGlossaryConflictingRelation); n != 0 {
+		t.Errorf("expected 0 %s, got %d: %+v", codeGlossaryConflictingRelation, n, diags)
+	}
+	for _, d := range diags {
+		if d.Code == codeGlossaryRedundant && d.Severity != model.SeverityWarning {
+			t.Errorf("expected warning severity, got %q", d.Severity)
+		}
+	}
+}
+
+// TestGlossaryConflictingRelation_SameAsAndDistinctFrom: the same pair
+// declared same_as AND distinct_from asserts identity and difference at
+// once => exactly one glossary-conflicting-relation warning.
+func TestGlossaryConflictingRelation_SameAsAndDistinctFrom(t *testing.T) {
+	src := "domain re { billing subscriptions }\n" +
+		"glossary re {\n" +
+		"  billing/Invoice same_as subscriptions/Invoice\n" +
+		"  billing/Invoice distinct_from subscriptions/Invoice\n" +
+		"}\n"
+	diags := analyzeRelationshipSrc(t, src)
+	if n := relDiagCount(diags, codeGlossaryConflictingRelation); n != 1 {
+		t.Fatalf("expected 1 %s, got %d: %+v", codeGlossaryConflictingRelation, n, diags)
+	}
+	for _, d := range diags {
+		if d.Code == codeGlossaryConflictingRelation && d.Severity != model.SeverityWarning {
+			t.Errorf("expected warning severity, got %q", d.Severity)
+		}
+	}
+}
+
+// TestGlossaryLints_NoFalsePositives: a single relation, and a pair with two
+// different non-conflicting verbs (distinct_from + contrasts, neither
+// paired with same_as), must never trigger either glossary lint.
+func TestGlossaryLints_NoFalsePositives(t *testing.T) {
+	src := "domain re { billing subscriptions vas }\n" +
+		"glossary re {\n" +
+		"  billing/Invoice same_as subscriptions/Invoice\n" +
+		"  billing/Invoice distinct_from vas/Invoice\n" +
+		"  vas/Invoice contrasts billing/Invoice\n" +
+		"}\n"
+	diags := analyzeRelationshipSrc(t, src)
+	for _, code := range []string{codeGlossaryRedundant, codeGlossaryConflictingRelation} {
+		if n := relDiagCount(diags, code); n != 0 {
+			t.Errorf("expected 0 %s, got %d: %+v", code, n, diags)
+		}
 	}
 }

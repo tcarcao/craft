@@ -590,6 +590,89 @@ func glossaryRelationDiags(ws WorkspaceSymbols, site GlossaryRelationSite) []mod
 	return diags
 }
 
+// glossaryLintDiags flags two glossary lints (Task A4) for a relation whose
+// both term-node endpoints resolved unambiguously to a bc — mirroring
+// redundantRelationshipDiag's gating and dedup strategy:
+//
+//   - craft/lint/glossary-redundant: the same unordered canonical term-node
+//     pair declared with the same verb more than once anywhere in the
+//     workspace.
+//   - craft/lint/glossary-conflicting-relation: the same unordered pair
+//     carries both same_as and (distinct_from or contrasts) — asserting
+//     identity and difference at once. Fires once per pair, on whichever
+//     relation completes the conflicting verb set.
+//
+// seenVerb, verbsForPair, and conflictReported are shared across the whole
+// workspace resolution loop (like redundantRelationshipDiag's seen) so
+// duplicates/conflicts split across files still dedupe/fire correctly.
+func glossaryLintDiags(
+	ws WorkspaceSymbols,
+	site GlossaryRelationSite,
+	seenVerb map[string]bool,
+	verbsForPair map[string]map[string]bool,
+	conflictReported map[string]bool,
+) []model.Diagnostic {
+	leftCanonical, leftKind, leftAmbig, _ := resolveTermNode(ws, site.ScopeDomain, site.Left)
+	rightCanonical, rightKind, rightAmbig, _ := resolveTermNode(ws, site.ScopeDomain, site.Right)
+
+	if leftKind != "bc" || leftAmbig || leftCanonical == "" ||
+		rightKind != "bc" || rightAmbig || rightCanonical == "" {
+		return nil
+	}
+
+	pair := [2]string{leftCanonical, rightCanonical}
+	if pair[0] > pair[1] {
+		pair[0], pair[1] = pair[1], pair[0]
+	}
+	pairKey := pair[0] + "\x00" + pair[1]
+	verbKey := pairKey + "\x00" + site.Verb
+
+	startChar := colToLSP(site.LeftCol)
+	rng := model.Range{
+		Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+		End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+	}
+
+	var diags []model.Diagnostic
+
+	if seenVerb[verbKey] {
+		diags = append(diags, model.Diagnostic{
+			Code: "craft/lint/glossary-redundant",
+			Message: fmt.Sprintf(
+				"%s relation between %q and %q is already declared elsewhere in the workspace",
+				site.Verb, leftCanonical, rightCanonical,
+			),
+			Severity:  model.SeverityWarning,
+			SourceURI: site.URI,
+			Range:     rng,
+		})
+	}
+	seenVerb[verbKey] = true
+
+	verbs := verbsForPair[pairKey]
+	if verbs == nil {
+		verbs = map[string]bool{}
+		verbsForPair[pairKey] = verbs
+	}
+	verbs[site.Verb] = true
+
+	if verbs["same_as"] && (verbs["distinct_from"] || verbs["contrasts"]) && !conflictReported[pairKey] {
+		diags = append(diags, model.Diagnostic{
+			Code: "craft/lint/glossary-conflicting-relation",
+			Message: fmt.Sprintf(
+				"%q and %q are declared same_as and also distinct/contrasting elsewhere in the workspace",
+				leftCanonical, rightCanonical,
+			),
+			Severity:  model.SeverityWarning,
+			SourceURI: site.URI,
+			Range:     rng,
+		})
+		conflictReported[pairKey] = true
+	}
+
+	return diags
+}
+
 // redundantRelationshipDiag flags a symmetric context_map edge (partnership,
 // shared_kernel, separate_ways) whose resolved BC pair + verb was already
 // seen elsewhere in the workspace (Task 5). Symmetric verbs express an
