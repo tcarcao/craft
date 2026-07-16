@@ -670,6 +670,23 @@ func TestParse_Glossary_ScopedAndShared(t *testing.T) {
 	_ = li
 }
 
+// TestProject_Glossary is the Task A2 TDD lock for projecting glossary blocks
+// into model.CraftDoc.Glossary ([]TermRelation). Asserts that relations surface
+// through the projection layer with Left/Right/Verb matching the parsed
+// GlossaryRelationDecl values.
+func TestProject_Glossary(t *testing.T) {
+	src := "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n}\n"
+	greenRoot, li, _ := syntax.Parse(src)
+	doc := syntax.ProjectFromTree(syntax.Root(greenRoot), li)
+	if len(doc.Glossary) != 1 {
+		t.Fatalf("want 1 term relation, got %d", len(doc.Glossary))
+	}
+	got := doc.Glossary[0]
+	if got.Left != "billing/Invoice" || got.Verb != "same_as" || got.Right != "subscriptions/Invoice" {
+		t.Fatalf("unexpected: %+v", got)
+	}
+}
+
 // parseWithHangGuard runs syntax.Parse on its own goroutine behind a short
 // watchdog timeout, so a parser infinite loop fails this single test fast
 // (a few seconds) instead of hanging the entire `go test` run until the
