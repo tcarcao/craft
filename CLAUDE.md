@@ -95,7 +95,7 @@ context_map Monetization {
 }
 ```
 
-Endpoints are bare bounded-context names (no `bc:` prefix); `LEFT` is always the upstream side. See `docs/page/language/context-map.md` for the full pattern catalog and validation rules.
+Endpoints are bare bounded-context names (no `bc:` prefix); `LEFT` is always the upstream side. See `docs/page/language/context-map.md` for the full pattern catalog, validation rules, and the cross-validation lint against the inferred communication view.
 
 ### `glossary` Example
 
