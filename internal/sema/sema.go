@@ -828,9 +828,13 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 
 	// Task 4: resolve context_map edge endpoints to bounded contexts. Each site
 	// carries its own SourceURI; the broken-fixture harness filters by URI.
+	// Task 5: seen spans the whole workspace (all files), so a symmetric pair
+	// declared once per file, or split across files, still dedupes correctly.
+	seen := map[string]bool{}
 	for _, syms := range perFile {
 		for _, site := range syms.ContextMapEdges {
 			diags = append(diags, relationshipEdgeDiags(ws, site)...)
+			diags = append(diags, redundantRelationshipDiag(ws, site, seen)...)
 		}
 	}
 

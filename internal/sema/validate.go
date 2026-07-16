@@ -445,6 +445,55 @@ func relationshipEdgeDiags(ws WorkspaceSymbols, site ContextMapEdgeSite) []model
 	return diags
 }
 
+// redundantRelationshipDiag flags a symmetric context_map edge (partnership,
+// shared_kernel, separate_ways) whose resolved BC pair + verb was already
+// seen elsewhere in the workspace (Task 5). Symmetric verbs express an
+// undirected fact, so "a partnership b" and "b partnership a" are the same
+// declaration; the second (and any later) occurrence is redundant. Only
+// fires when both endpoints resolved unambiguously to a bc — unresolved or
+// ambiguous endpoints already get their own diagnostics from
+// relationshipEdgeDiags and must not also trigger this lint. seen is shared
+// across the whole workspace resolution loop so duplicates split across
+// files still dedupe.
+func redundantRelationshipDiag(ws WorkspaceSymbols, site ContextMapEdgeSite, seen map[string]bool) []model.Diagnostic {
+	if !syntax.EdgeVerbSymmetric(site.Verb) {
+		return nil
+	}
+
+	leftResolved, leftKind, leftAmbig := resolveBCRef(ws, site.ScopeDomain, site.Left)
+	rightResolved, rightKind, rightAmbig := resolveBCRef(ws, site.ScopeDomain, site.Right)
+
+	if leftKind != "bc" || leftAmbig || leftResolved == "" ||
+		rightKind != "bc" || rightAmbig || rightResolved == "" {
+		return nil
+	}
+
+	pair := [2]string{leftResolved, rightResolved}
+	if pair[0] > pair[1] {
+		pair[0], pair[1] = pair[1], pair[0]
+	}
+	key := pair[0] + "|" + pair[1] + "|" + site.Verb
+
+	if seen[key] {
+		startChar := colToLSP(site.LeftCol)
+		return []model.Diagnostic{{
+			Code: "craft/lint/redundant-relationship",
+			Message: fmt.Sprintf(
+				"%s relationship between %q and %q is already declared elsewhere in the workspace",
+				site.Verb, leftResolved, rightResolved,
+			),
+			Severity:  model.SeverityWarning,
+			SourceURI: site.URI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+			},
+		}}
+	}
+	seen[key] = true
+	return nil
+}
+
 // endpointDiag emits at most one diagnostic for a single resolved endpoint:
 // ambiguous-bc (error), edge-endpoint-not-bc (error), or unresolved-bc (warning).
 func endpointDiag(uri, ref, kind string, ambiguous bool, line, col int) []model.Diagnostic {

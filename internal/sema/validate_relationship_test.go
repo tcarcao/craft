@@ -35,10 +35,11 @@ func relDiagCount(diags []model.Diagnostic, code string) int {
 }
 
 const (
-	codeEndpointNotBC    = "craft/sema/edge-endpoint-not-bc"
-	codeSelfRelationship = "craft/sema/self-relationship"
-	codeUnresolvedBC     = "craft/sema/unresolved-bc"
-	codeAmbiguousBC      = "craft/sema/ambiguous-bc"
+	codeEndpointNotBC         = "craft/sema/edge-endpoint-not-bc"
+	codeSelfRelationship      = "craft/sema/self-relationship"
+	codeUnresolvedBC          = "craft/sema/unresolved-bc"
+	codeAmbiguousBC           = "craft/sema/ambiguous-bc"
+	codeRedundantRelationship = "craft/lint/redundant-relationship"
 )
 
 // TestRelationship_ValidEndpoints: both endpoints are BCs of the scoping
@@ -144,5 +145,47 @@ func TestResolveBCRef(t *testing.T) {
 	}}
 	if r, k, amb := resolveBCRef(ambWS, "", "billing"); !amb || k != "bc" || r != "" {
 		t.Errorf("ambiguous case = (%q,%q,%v), want (\"\",\"bc\",true)", r, k, amb)
+	}
+}
+
+// TestRedundantRelationship_SymmetricDuplicate: the same symmetric pair
+// declared twice in reverse order collapses to exactly one
+// redundant-relationship warning, and no other relationship diagnostics fire.
+func TestRedundantRelationship_SymmetricDuplicate(t *testing.T) {
+	src := "domain re { a b }\ncontext_map re {\n  a partnership b\n  b partnership a\n}\n"
+	diags := analyzeRelationshipSrc(t, src)
+	if n := relDiagCount(diags, codeRedundantRelationship); n != 1 {
+		t.Fatalf("expected 1 %s, got %d: %+v", codeRedundantRelationship, n, diags)
+	}
+	for _, code := range []string{codeEndpointNotBC, codeSelfRelationship, codeUnresolvedBC, codeAmbiguousBC} {
+		if n := relDiagCount(diags, code); n != 0 {
+			t.Errorf("expected 0 %s, got %d: %+v", code, n, diags)
+		}
+	}
+	for _, d := range diags {
+		if d.Code == codeRedundantRelationship && d.Severity != model.SeverityWarning {
+			t.Errorf("expected warning severity, got %q", d.Severity)
+		}
+	}
+}
+
+// TestRedundantRelationship_DirectionalNeverFires: a directional verb
+// declared in both orders is not the same undirected fact, so it must never
+// trigger redundant-relationship.
+func TestRedundantRelationship_DirectionalNeverFires(t *testing.T) {
+	src := "domain re { a b }\ncontext_map re {\n  a customer_supplier b\n  b customer_supplier a\n}\n"
+	diags := analyzeRelationshipSrc(t, src)
+	if n := relDiagCount(diags, codeRedundantRelationship); n != 0 {
+		t.Fatalf("expected 0 %s, got %d: %+v", codeRedundantRelationship, n, diags)
+	}
+}
+
+// TestRedundantRelationship_FirstOccurrenceNeverWarns: a single symmetric
+// edge (no duplicate) never fires the redundancy warning.
+func TestRedundantRelationship_FirstOccurrenceNeverWarns(t *testing.T) {
+	src := "domain re { a b }\ncontext_map re { a partnership b }"
+	diags := analyzeRelationshipSrc(t, src)
+	if n := relDiagCount(diags, codeRedundantRelationship); n != 0 {
+		t.Fatalf("expected 0 %s, got %d: %+v", codeRedundantRelationship, n, diags)
 	}
 }
