@@ -1,0 +1,9 @@
+context_map re {
+  billing customer_supplier vas
+  billing anticorruption_layer subscriptions
+  billing partnership vas
+}
+
+context_map {
+  re/billing separate_ways legacy/reporting
+}

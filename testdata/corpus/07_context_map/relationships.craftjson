@@ -1,0 +1,25 @@
+{
+  "useCases": [],
+  "contextMap": [
+    {
+      "left": "billing",
+      "verb": "customer_supplier",
+      "right": "vas"
+    },
+    {
+      "left": "billing",
+      "verb": "anticorruption_layer",
+      "right": "subscriptions"
+    },
+    {
+      "left": "billing",
+      "verb": "partnership",
+      "right": "vas"
+    },
+    {
+      "left": "re/billing",
+      "verb": "separate_ways",
+      "right": "legacy/reporting"
+    }
+  ]
+}
