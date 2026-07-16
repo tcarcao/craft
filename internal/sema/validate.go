@@ -245,10 +245,10 @@ func deprecatedStringRefDiag(uri, verb, event string, line, col int) model.Diagn
 	}
 }
 
-// validateContextMapEdges checks each context_map edge's endpoint kinds
-// against its verb (edge-endpoint-kind) and each endpoint's slug shape
-// (malformed-slug). Also returns well-formed slug refs collected for
-// cross-file resolution.
+// validateContextMapEdges checks each context_map edge for slug-shape
+// validity (malformed-slug) and verb recognition. Endpoint-kind validation
+// and cross-file resolution are DEFERRED to a later task. Also returns
+// well-formed slug refs collected for resolution.
 func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, hasLI bool) ([]model.Diagnostic, []SlugRefSite) {
 	var diags []model.Diagnostic
 	var refs []SlugRefSite

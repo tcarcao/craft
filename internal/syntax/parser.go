@@ -1912,7 +1912,7 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 
 	left := p.peek()
 	if left.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(left.Type) {
-		diags = append(diags, p.diagUnexpected(left, "a node reference (e.g. bc:re/subscriptions)"))
+		diags = append(diags, p.diagUnexpected(left, "a node reference (e.g. billing or re/billing)"))
 		p.consumeAs(SyntaxKindError)
 		p.builder.FinishNode()
 		return diags
@@ -1930,7 +1930,7 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 
 	right := p.peek()
 	if right.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(right.Type) {
-		diags = append(diags, p.diagUnexpected(right, "a node reference (e.g. service:subscriptions-api)"))
+		diags = append(diags, p.diagUnexpected(right, "a node reference (e.g. billing or re/billing)"))
 		p.builder.FinishNode()
 		return diags
 	}
