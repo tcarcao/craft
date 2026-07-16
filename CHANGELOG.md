@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.12.0] — 2026-07-16
+
+### Changed (breaking, within `context_map`)
+- **`context_map` is redesigned as the DDD strategic relationship view.** Its edge verbs are now the eight canonical DDD context-mapping patterns — directional `customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language` (convention: LEFT endpoint is upstream) and symmetric `partnership`, `shared_kernel`, `separate_ways` — one pattern per statement. The previous realization/term edge verbs (`realized_by`, `also_realizes`, `same_as`, `contrasts`, `distinct_from`) are **removed**; realization is derivable from a service's `contexts:`, and term relations are deferred to a future `glossary {}` block (separate spec).
+- **Endpoints are bounded contexts named bare (`billing`) or domain-qualified (`re/billing`).** The `bc:`/`service:`/`term:` kind prefix is gone inside `context_map`; `/` denotes node identity and `.` remains reserved for events.
+- **Blocks are repeatable and optionally domain-scoped** (`context_map re { … }`); all blocks merge into `CraftDoc.ContextMap`. `model.Edge{Left,Verb,Right}` is unchanged.
+
+### Added
+- **Exported edge-verb metadata API** in `pkg/craft`: `EdgeVerbInfo{Verb, Class, UpstreamRole, DownstreamRole, Symmetric}`, `EdgeVerbs()`, `LookupEdgeVerb(verb)`, and `EdgeClass`/`EdgeDirectional`/`EdgeSymmetric`. Single-sourced from `internal/syntax` and kept in sync with the parser vocabulary by a build-time test.
+- **Endpoint-resolution diagnostics** (resolved against the merged workspace symbols): `craft/sema/edge-endpoint-not-bc` (error — endpoint is a domain/service/actor, not a BC), `craft/sema/self-relationship` (error), `craft/sema/ambiguous-bc` (error — bare name is a BC in ≥2 domains; qualify it), `craft/sema/unresolved-bc` (warning), and the `craft/lint/redundant-relationship` warning for a duplicated symmetric pair.
+
+### Notes
+- The old `craft/sema/edge-endpoint-kind` diagnostic (bc→service / term→term kind checks) is removed along with the old verbs. The `context_map` language reference is documented at `docs/page/language/context-map.md`. The `tree-sitter-craft` grammar is updated to match; its corpus-compat pin (`CORPUS_VERSION`) bumps to `v2.12.0` at release time.
+
 ## [2.11.0] — 2026-07-15
 
 ### Added
