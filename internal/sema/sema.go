@@ -151,6 +151,9 @@ type Symbols struct {
 	// (domain:/bc:/service:) so AnalyzeWorkspace can attempt best-effort
 	// cross-file resolution (craft/sema/unresolved-ref-local, Task 7).
 	SlugRefs []SlugRefSite
+	// ContextMapEdges collects context_map edges so AnalyzeWorkspace can
+	// resolve each endpoint to a bounded context cross-file (Task 4).
+	ContextMapEdges []ContextMapEdgeSite
 }
 
 // WorkspaceSymbols merges per-file symbol tables for cross-file resolution.
@@ -558,6 +561,10 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	diags = append(diags, cmDiags...)
 	syms.SlugRefs = append(syms.SlugRefs, cmRefs...)
 
+	// Task 4: collect context_map edges for cross-file endpoint resolution in
+	// AnalyzeWorkspace (per-file has no WorkspaceSymbols; see SlugRefs pattern).
+	syms.ContextMapEdges = append(syms.ContextMapEdges, collectContextMapEdgeSites(uri, file, lineIdx, hasLI)...)
+
 	diags = append(diags, validateServiceAnchors(uri, file, lineIdx, hasLI)...)
 	diags = append(diags, validateUseCaseTags(uri, file, lineIdx, hasLI)...)
 
@@ -816,6 +823,14 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					},
 				})
 			}
+		}
+	}
+
+	// Task 4: resolve context_map edge endpoints to bounded contexts. Each site
+	// carries its own SourceURI; the broken-fixture harness filters by URI.
+	for _, syms := range perFile {
+		for _, site := range syms.ContextMapEdges {
+			diags = append(diags, relationshipEdgeDiags(ws, site)...)
 		}
 	}
 

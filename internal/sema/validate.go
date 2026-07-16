@@ -303,6 +303,185 @@ func classifyEdgeVerb(uri, verb, left string, leftLine, leftCol int) []model.Dia
 	}}
 }
 
+// ContextMapEdgeSite records one context_map edge for cross-file endpoint
+// resolution in AnalyzeWorkspace (Task 4). Mirrors SlugRefSite: collected
+// per-file in AnalyzeFile (which has no WorkspaceSymbols) and resolved in the
+// workspace pass, so a BC declared in another file is not false-flagged.
+type ContextMapEdgeSite struct {
+	// ScopeDomain is the owning block's domain scope (ContextMapDecl.Domain(),
+	// "" if the block is unscoped).
+	ScopeDomain string
+	// Left, Right are the raw endpoint texts (bare `name` or qualified `domain/name`).
+	Left, Right         string
+	Verb                string
+	URI                 string
+	LeftLine, LeftCol   int
+	RightLine, RightCol int
+}
+
+// collectContextMapEdgeSites gathers one ContextMapEdgeSite per edge, using the
+// same position-extraction idiom as validateContextMapEdges. Resolution is
+// deferred to AnalyzeWorkspace (endpoints are cross-domain / cross-file).
+func collectContextMapEdgeSites(uri string, file syntax.File, li green.LineIndex, hasLI bool) []ContextMapEdgeSite {
+	var sites []ContextMapEdgeSite
+	for _, cm := range file.ContextMaps() {
+		scope := cm.Domain()
+		for _, edge := range cm.Edges() {
+			leftLine, leftCol := 0, 0
+			if hasLI {
+				if lr := edge.LeftRef(); lr != nil {
+					leftLine, leftCol = lr.Line(li), lr.Col(li)
+				}
+			}
+			rightLine, rightCol := 0, 0
+			if hasLI {
+				if rr := edge.RightRef(); rr != nil {
+					rightLine, rightCol = rr.Line(li), rr.Col(li)
+				}
+			}
+			sites = append(sites, ContextMapEdgeSite{
+				ScopeDomain: scope,
+				Left:        edge.Left(),
+				Right:       edge.Right(),
+				Verb:        edge.Verb(),
+				URI:         uri,
+				LeftLine:    leftLine,
+				LeftCol:     leftCol,
+				RightLine:   rightLine,
+				RightCol:    rightCol,
+			})
+		}
+	}
+	return sites
+}
+
+// resolveBCRef resolves a context_map endpoint against the workspace symbol table.
+// scopeDomain is the owning block's domain scope ("" if unscoped).
+// Returns (canonical "domain/name" when a BC, kind, ambiguous).
+// kind ∈ {"bc","domain","service","actor",""}; "" means fully unresolved.
+func resolveBCRef(ws WorkspaceSymbols, scopeDomain, ref string) (resolved, kind string, ambiguous bool) {
+	// 1. Qualified `domain/name`: names a specific BC. If that domain doesn't
+	// declare it, it's fully unresolved (not endpoint-not-bc).
+	if idx := strings.IndexByte(ref, '/'); idx >= 0 {
+		domain, name := ref[:idx], ref[idx+1:]
+		if dom, ok := ws.Domains[domain]; ok && domainHasBC(dom, name) {
+			return domain + "/" + name, "bc", false
+		}
+		return "", "", false
+	}
+
+	// 2. Bare `name`, scope-first: a BC of the owning block's domain wins.
+	if scopeDomain != "" {
+		if dom, ok := ws.Domains[scopeDomain]; ok && domainHasBC(dom, ref) {
+			return scopeDomain + "/" + ref, "bc", false
+		}
+	}
+
+	// 3. Bare `name`, ambiguity count across all domains. (ws.BoundedContexts
+	// maps to a single owner and hides ambiguity, so it is not used here.)
+	owner, count := "", 0
+	for domName, dom := range ws.Domains {
+		if domainHasBC(dom, ref) {
+			owner = domName
+			count++
+		}
+	}
+	if count == 1 {
+		return owner + "/" + ref, "bc", false
+	}
+	if count >= 2 {
+		return "", "bc", true
+	}
+
+	// 4. Bare `name`, not a BC: fall through to domain / service / actor.
+	if _, ok := ws.Domains[ref]; ok {
+		return ref, "domain", false
+	}
+	if _, ok := ws.Services[ref]; ok {
+		return ref, "service", false
+	}
+	if _, ok := ws.Actors[ref]; ok {
+		return ref, "actor", false
+	}
+	return "", "", false
+}
+
+func domainHasBC(dom DomainSymbol, name string) bool {
+	for _, bc := range dom.BoundedContexts {
+		if bc == name {
+			return true
+		}
+	}
+	return false
+}
+
+// relationshipEdgeDiags resolves both endpoints of a collected context_map edge
+// and emits the endpoint-kind and self-relationship diagnostics (Task 4).
+func relationshipEdgeDiags(ws WorkspaceSymbols, site ContextMapEdgeSite) []model.Diagnostic {
+	var diags []model.Diagnostic
+
+	leftResolved, leftKind, leftAmbig := resolveBCRef(ws, site.ScopeDomain, site.Left)
+	rightResolved, rightKind, rightAmbig := resolveBCRef(ws, site.ScopeDomain, site.Right)
+
+	diags = append(diags, endpointDiag(site.URI, site.Left, leftKind, leftAmbig, site.LeftLine, site.LeftCol)...)
+	diags = append(diags, endpointDiag(site.URI, site.Right, rightKind, rightAmbig, site.RightLine, site.RightCol)...)
+
+	// A relationship must not connect a bounded context to itself. Only fires
+	// when BOTH endpoints resolved unambiguously to the SAME bc.
+	if leftKind == "bc" && !leftAmbig && rightKind == "bc" && !rightAmbig &&
+		leftResolved != "" && leftResolved == rightResolved {
+		startChar := colToLSP(site.LeftCol)
+		diags = append(diags, model.Diagnostic{
+			Code:      "craft/sema/self-relationship",
+			Message:   fmt.Sprintf("relationship connects bounded context %q to itself", leftResolved),
+			Severity:  model.SeverityError,
+			SourceURI: site.URI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+			},
+		})
+	}
+	return diags
+}
+
+// endpointDiag emits at most one diagnostic for a single resolved endpoint:
+// ambiguous-bc (error), edge-endpoint-not-bc (error), or unresolved-bc (warning).
+func endpointDiag(uri, ref, kind string, ambiguous bool, line, col int) []model.Diagnostic {
+	startChar := colToLSP(col)
+	rng := model.Range{
+		Start: model.Position{Line: lineToLSP(line), Character: startChar},
+		End:   model.Position{Line: lineToLSP(line), Character: startChar + len(ref)},
+	}
+	switch {
+	case ambiguous:
+		return []model.Diagnostic{{
+			Code:      "craft/sema/ambiguous-bc",
+			Message:   fmt.Sprintf("bounded context %q is declared in multiple domains; qualify it as <domain>/%s", ref, ref),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	case kind != "" && kind != "bc":
+		return []model.Diagnostic{{
+			Code:      "craft/sema/edge-endpoint-not-bc",
+			Message:   fmt.Sprintf("context_map endpoint %q resolves to a %s, not a bounded context", ref, kind),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	case kind == "":
+		return []model.Diagnostic{{
+			Code:      "craft/sema/unresolved-bc",
+			Message:   fmt.Sprintf("context_map endpoint %q does not resolve to any bounded context", ref),
+			Severity:  model.SeverityWarning,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	}
+	return nil
+}
+
 // validateServiceAnchors flags a repeated opslevel: or repo: field within a
 // single service block (duplicate-service-anchor). Every occurrence after
 // the first is reported.
