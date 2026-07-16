@@ -89,6 +89,7 @@ For the three **symmetric** patterns, endpoint order is meaningless: `a partners
 | `craft/sema/edge-endpoint-not-bc` | error | an endpoint resolves to a domain, service, or actor — not a bounded context |
 | `craft/sema/self-relationship` | error | both endpoints resolve to the same bounded context (`X <pattern> X`) |
 | `craft/sema/unresolved-bc` | warning | an endpoint doesn't resolve to any declared bounded context |
+| `craft/sema/ambiguous-bc` | error | a bare endpoint name is a bounded context in two or more domains — qualify it as `<domain>/<name>` |
 | `craft/lint/redundant-relationship` | warning | the same unordered pair is declared with the same **symmetric** pattern more than once (directional duplicates in opposite order are *not* redundant — `a customer_supplier b` and `b customer_supplier a` are different claims) |
 
 Run `craft validate` to see these diagnostics surface for your file.
@@ -108,8 +109,8 @@ domain legacy {
 
 context_map re {
   billing customer_supplier vas
-  billing open_host_service  subscriptions
-  subscriptions conformist   billing
+  billing open_host_service subscriptions
+  subscriptions conformist billing
   billing anticorruption_layer subscriptions
 }
 
