@@ -1,265 +1,236 @@
-# Craft DSL — DDD strategic relationship patterns in `context_map`
+# Craft DSL — `context_map` as the strategic relationship view (DDD context mapping)
 
 **Date:** 2026-07-16
 **Repo:** craft (`github.com/tcarcao/craft/v2`, `/Users/tiago.carcao/projects/poc/craft-project/craft`)
-**Status:** spec — approved 2026-07-16; direction convention settled (LEFT = upstream). Ready to implement.
-**Depends on:** the v2.11.0 `context_map` edge machinery (`edgeKeywords`, `classifyEdgeVerb`, default-case hardening)
+**Status:** approved 2026-07-16 (settled via design interview). Supersedes the earlier "add 8 verbs to context_map" draft of the same date.
+**Clean slate:** no `.craft` files exist in the wild yet and there is no external consumer of the v2.11.0 `context_map` shape, so this redesign carries **no deprecation burden** — we change the block outright.
+
+---
 
 ## 1. Thesis
 
-Add the **DDD strategic context-mapping patterns** (customer/supplier, conformist,
-anticorruption layer, open-host service, published language, partnership, shared kernel,
-separate ways) as first-class `context_map` **edge verbs** connecting two `bc:` endpoints.
+`context_map` becomes craft's **strategic view** of bounded-context relationships: a set of statements that classify each BC↔BC relationship with a recognized **DDD strategic context-mapping pattern** (customer/supplier, conformist, anticorruption layer, open-host service, published language, partnership, shared kernel, separate ways).
 
-They fit craft's existing model with zero new grammar shapes: `context_map` already parses
-`<ref> <verb> <ref>` into `model.Edge{Left, Verb, Right}` and validates endpoint kinds per
-verb category (`realized_by`/`also_realizes` ⇒ `bc:`→`service:`; `same_as`/`contrasts`/
-`distinct_from` ⇒ `term:`→`term:`). This spec adds a **third category** — relationship
-verbs ⇒ `bc:`→`bc:` — reusing `parseEdgeStmt`, the `edgeKeywords` list, and `classifyEdgeVerb`.
+Each statement is a plain triple — `<upstream> <pattern> <downstream>` — with bare bounded-context names (no `bc:` prefix), e.g.:
 
-### 1.1 This reverses a prior "out of scope" decision — deliberately
+```craft
+context_map re {
+  billing customer_supplier vas
+  billing open_host_service  subscriptions
+  subscriptions conformist   billing
+  subscriptions anticorruption_layer billing
+  billing partnership        payments/ledger    // cross-domain: qualify the outsider
+}
+```
 
-`docs/superpowers/plans/2026-07-15-usecase-identity-tags-edge-hardening.md` listed
-"DDD relationship-pattern verbs in `context_map` (`customer_supplier`, etc.)" as **out of
-scope**, with the rationale that these patterns are descriptive/organizational and should
-stay a **consumer-side extension** (the RE knowledge-hub currently parses them from a
-`bc-relationships.craft` file via its own regex). We are reversing that: the sole consumer
-(the hub) is the DSL's author, and keeping a parallel regex grammar in the consumer is
-strictly worse than a governed keyword set in craft — one grammar, one validator, one
-tree-sitter highlight path, reusable by any future consumer. The counter-argument from §4
-of the vNext spec (craft validates "typed, mechanically-checkable edges" only) still holds
-and shapes the scope here: **craft validates endpoint *kinds* and shape, not the semantic
-*correctness* of a modeled relationship** (it cannot know whether Billing really is
-upstream of VAS). That boundary is preserved below.
+### 1.1 Two views, and why this one earns its place
+
+craft already derives a **communication view** — *who calls whom* — from use-case interactions (`Action.Context → Action.TargetContext` for `asks`, `Context → Event` for `notifies`), and materializes it as C4 / domain-flow / sequence diagrams (`internal/visualizer/c4_relationships.go`, `domain.go`). That graph shows that two contexts talk.
+
+It does **not** and **cannot** show *how they relate strategically*: "billing asks vas" says nothing about whether vas conforms to billing's model, wraps it behind an ACL, or they're partners. That characterization is a human modeling judgment — the one thing craft can't infer. **`context_map` supplies exactly that non-inferable layer.** It is not a call graph; it is the strategic overlay that makes the communication graph a *context map* in the DDD sense.
+
+### 1.2 The payoff: cross-validation (later slice)
+
+Because craft owns both views, it can cross-check them:
+- classify `billing customer_supplier vas` and they do interact in a use case → consistent;
+- declare `separate_ways` between two contexts that interact in UC-N → **contradiction, warn**;
+- two contexts interact all over the use cases but carry no classification → **info/lint: "unclassified relationship."**
+
+This is scoped to a later slice (§10), but it is the reason the block is worth its keep and it shapes the decisions below (endpoints must share the identity that use cases use for contexts).
+
+### 1.3 What changed from the prior draft (and why)
+
+| Prior draft | Now | Why |
+|---|---|---|
+| Add 8 verbs beside `realized_by`/term edges | `context_map` holds **only** BC↔BC relationships | realization is derivable; terms are a different concern — see below |
+| `realized_by` / `also_realizes` (bc→service) kept | **Removed** | Redundant: a service already declares `contexts:` + `opslevel:`, so bc→service is derivable; the original vNext design itself said realization is "usually hub-derived, authored only for the multi-repo case" |
+| term edges (`same_as`/`contrasts`/`distinct_from`) in `context_map` | **Moved out** to a future `glossary { }` block (§9) | Term relations are a vocabulary/translation concern, not context mapping; keeping them made the block heterogeneous and un-droppable-prefix |
+| `bc:re/billing` typed slugs | bare `billing` / qualified `re/billing` | inside `context_map` every endpoint is a BC, so `bc:` is pure noise; `/` = node identity, `.` = events (unchanged) |
+| single block | **repeatable + optionally domain-scoped** blocks | per-domain and shared maps; ergonomic bare names within a domain |
+
+---
 
 ## 2. Grammar
 
-No new grammar rule. Relationship edges are ordinary `edge_stmt`s inside `context_map`:
+### 2.1 Block
 
-```craft
-context_map {
-    // existing categories, unchanged:
-    bc:re/billing realized_by service:billing-api
-    term:billing/Invoice contrasts term:subscriptions/Invoice
-
-    // NEW — strategic relationship patterns (bc: -> bc:):
-    bc:re/billing customer_supplier    bc:re/vas
-    bc:re/vas     anticorruption_layer bc:re/billing
-    bc:re/subscriptions partnership    bc:re/billing
-}
+```
+context_map_block := 'context_map' domain_scope? '{' NEWLINE* (edge_stmt NEWLINE*)* '}'
+domain_scope      := IDENT            // optional domain name, e.g. `context_map re { … }`
+edge_stmt         := bc_ref PATTERN bc_ref
 ```
 
-Both endpoints must be `bc:` slugs (`bc:<domain>/<name>`, per the existing slug-shape rule).
+- **Repeatable.** Any number of `context_map` blocks per file, and across the workspace; all edges merge into one context map (`CraftDoc.ContextMap []Edge`, blocks append — no model change needed for merging).
+- **Optional domain scope.** `context_map re { … }` scopes bare endpoint names to domain `re`. `context_map { … }` (unscoped) is the shared/global map.
 
-## 3. The verb catalog & directionality
+### 2.2 Endpoints (`bc_ref`)
 
-Eight verbs, in two classes. **Directionality is the one load-bearing convention** (see §3.1).
+```
+bc_ref := IDENT              // bare name, e.g. `billing`
+        | IDENT '/' IDENT    // domain-qualified, e.g. `re/billing`
+```
 
-| Verb | Class | Left role | Right role |
+- No `bc:` kind prefix — the block implies it.
+- **`/` (slash) is the node-identity separator** (domain/bc), consistent with craft's existing slug system (`term:<bc>/<name>`, `service:` etc.). **`.` (dot) stays reserved for event refs** (`vas.VasApplied`); it must never denote a BC.
+- Resolution (§6): bare names resolve within the block's domain scope (or globally for an unscoped block); qualify with `domain/` to cross a domain boundary or to disambiguate a colliding name.
+
+### 2.3 Patterns (`PATTERN`)
+
+A closed set of DDD-canonical keywords (§3). Each is a single identifier token (underscore-joined), matched contextually like the existing edge keywords — no new lexer machinery.
+
+---
+
+## 3. The pattern catalog & direction
+
+**Eight patterns, community-recognized DDD names** (chosen over plainer verbs deliberately: recognizability for DDD practitioners, and the readability problem was the `bc:` noise, now gone).
+
+### 3.1 Direction convention — **LEFT = upstream, RIGHT = downstream** (settled)
+
+A pattern keyword is a relationship *label*, not a directional verb, so direction is a **convention, documented once and applied uniformly**: every directional statement reads `<upstream> <pattern> <downstream>`. This matches how a DDD context-map diagram is read (arrow points upstream→downstream). Consumers read direction from the metadata table (§4), never re-derive it.
+
+| Pattern | Class | Left (role) | Right (role) |
 |---|---|---|---|
-| `customer_supplier` | directional | upstream = supplier | downstream = customer |
-| `conformist` | directional | upstream | downstream conforms |
+| `customer_supplier`    | directional | supplier (upstream) | customer (downstream) |
+| `conformist`           | directional | upstream (model owner) | conformist (downstream) |
 | `anticorruption_layer` | directional | upstream | downstream (owns the ACL) |
-| `open_host_service` | directional | upstream (provides OHS) | downstream |
-| `published_language` | directional | upstream (publishes PL) | downstream |
-| `partnership` | symmetric | — | — |
-| `shared_kernel` | symmetric | — | — |
-| `separate_ways` | symmetric | — | — |
+| `open_host_service`    | directional | upstream (provides OHS) | downstream (consumer) |
+| `published_language`   | directional | upstream (publishes PL) | downstream (consumer) |
+| `partnership`          | symmetric | — | — |
+| `shared_kernel`        | symmetric | — | — |
+| `separate_ways`        | symmetric | — | — |
 
-`big_ball_of_mud` is intentionally **excluded** — it is a boundary/zone designation, not a
-pairwise edge (see §11).
+For **symmetric** patterns endpoint order is meaningless: `a partnership b` ≡ `b partnership a`.
 
-### 3.1 Direction convention — LEFT = upstream, RIGHT = downstream
+`big_ball_of_mud` is intentionally **excluded** — it is a zone/boundary marker over one-or-more BCs, not a pairwise edge (§11).
 
-For every **directional** verb, the edge reads **`bc:<upstream> <verb> bc:<downstream>`** —
-the standard context-map diagram reading (arrow points upstream → downstream). This is
-uniform across all five directional verbs regardless of whether the pattern names an
-upstream role (OHS, PL) or a downstream role (conformist, ACL, customer): the *slot* is
-fixed (left=upstream), the *verb* names the pattern.
+### 3.2 One pattern per statement
 
-For **symmetric** verbs, endpoint order carries no meaning; `A partnership B` ≡ `B partnership A`.
+A BC pair that is both open-host-service and published-language upstream becomes **two statements**, not a bracket list — clearer and individually diagnosable.
 
-> **Decision (settled 2026-07-16): LEFT = upstream.** Chosen for diagram fidelity and
-> uniformity across all five directional verbs, over the LEFT = downstream alternative (which
-> reads more naturally for downstream-role verbs like `conformist`/ACL but inverts for
-> OHS/PL). This convention is encoded once in the verb-metadata table (§4) so consumers read
-> direction from craft and never re-derive it. Every directional edge reads
-> `bc:<upstream> <verb> bc:<downstream>`.
+---
 
 ## 4. Model & exported API
 
-`model.Edge{Left, Verb, Right}` is **unchanged** — the verb already carries the pattern.
-Add exported classification so consumers (the hub, docs, tooling) read verb semantics from
-craft instead of hard-coding them, mirroring the existing `syntax.EdgeKeywords()` accessor:
+`model.Edge{ Left, Verb, Right string }` is **retained as-is**; `Verb` carries the pattern keyword, `Left`/`Right` carry the (bare or qualified) BC references as authored. Direction/symmetry are **not** stored on the edge — they are properties of the verb, read from a metadata table.
 
-- In `internal/syntax/parser.go`, extend `edgeKeywords` (the single source of truth) with the
-  eight new verbs.
-- Add a verb-category/metadata table. Recommended home: a small exported surface in
-  `pkg/craft` (so it ships with the stable API), e.g.:
+Single source of truth in `internal/syntax` (importable by both `internal/sema` and `pkg/craft`, no cycle):
 
 ```go
-// pkg/craft (new: edges.go)
-
-type EdgeCategory string
+// internal/syntax/edge_meta.go
+type EdgeClass string
 const (
-    EdgeRealization  EdgeCategory = "realization"   // bc: -> service:
-    EdgeTermRelation EdgeCategory = "term_relation" // term: -> term:
-    EdgeRelationship EdgeCategory = "relationship"  // bc: -> bc:  (NEW)
+    EdgeDirectional EdgeClass = "directional"
+    EdgeSymmetric   EdgeClass = "symmetric"
 )
-
-// EdgeVerbInfo describes one context_map edge verb.
-type EdgeVerbInfo struct {
-    Verb       string
-    Category   EdgeCategory
-    Symmetric  bool // true => endpoint order is meaningless (partnership/shared_kernel/separate_ways)
-    LeftKind   string // "bc" | "service" | "term"
-    RightKind  string // "bc" | "service" | "term"
+type EdgeVerbMeta struct {
+    Verb      string     // e.g. "customer_supplier"
+    Class     EdgeClass  // directional | symmetric
+    // For directional verbs the left endpoint is upstream, right is downstream.
+    UpstreamRole   string // human label for the left role, e.g. "supplier"
+    DownstreamRole string // human label for the right role, e.g. "customer"
 }
-
-func EdgeVerbs() []EdgeVerbInfo        // all verbs across all categories
-func LookupEdgeVerb(verb string) (EdgeVerbInfo, bool)
+func EdgeVerbMetas() []EdgeVerbMeta
+func LookupEdgeVerbMeta(verb string) (EdgeVerbMeta, bool)
+func EdgeVerbSymmetric(verb string) bool
 ```
 
-This lets the hub map a parsed edge to `{Upstream, Downstream, Bidirectional}` with **no
-verb list of its own**: `Symmetric ⇒ Bidirectional`; else `Upstream=Left, Downstream=Right`
-under the §3.1 convention. Keep `internal/syntax`’s existing `edgeKeywords` as the parser’s
-gate and have the `pkg/craft` table derive from / stay in sync with it (add a sync test,
-matching how the tags plan added the `EdgeKeywords()` sync test).
+`pkg/craft` re-exports a stable public surface wrapping it (`EdgeVerbInfo`, `EdgeVerbs()`, `LookupEdgeVerb()`), so consumers read pattern semantics from craft rather than hard-coding them. `internal/syntax.edgeKeywords` remains the parser gate; a sync test asserts `edgeKeywords`, the metadata table, and the sema membership maps all agree.
 
-## 5. Parser changes (`internal/syntax/parser.go`)
+---
 
-- Add the eight verbs to `edgeKeywords`. That alone makes `isEdgeKeyword` accept them,
-  `parseEdgeStmt` parse them, and the "expected an edge keyword (…)" diagnostic list grow —
-  **update that diagnostic message** (it currently enumerates the five verbs) to avoid a
-  stale hint. Consider grouping the message by category so it doesn't become an unreadable
-  8-item list (e.g. "an edge keyword: a realization (realized_by/also_realizes), a term
-  relation (same_as/contrasts/distinct_from), or a relationship pattern
-  (customer_supplier/conformist/…)").
-- No changes to `parseEdgeEndpoint` — `bc:` endpoints already parse (they were always legal
-  ref shapes; only sema constrained which verb allows which kind).
+## 5. Parser changes (`internal/syntax`)
 
-## 6. Sema validation (`internal/sema/validate.go`)
+- **Replace `edgeKeywords`** with the eight relationship patterns. **Remove** `realized_by`, `also_realizes`, `same_as`, `contrasts`, `distinct_from` from `context_map` (term verbs relocate to `glossary`, §9; realization is removed outright). Verify no internal consumer depends on the removed verbs (the visualizer derives from use cases, not from these edges).
+- **`context_map` gains an optional domain-scope identifier** after the keyword.
+- **`edge_stmt` endpoints become `bc_ref`** (bare or `domain/name`), no `kind:` prefix. Reuse the existing slug parsing; drop the `bc:` requirement.
+- Update the "expected an edge keyword" diagnostic to enumerate the eight patterns (grouped: directional vs symmetric).
 
-Add a third verb→endpoint-kind map beside `edgeRealizationVerbs` and `edgeTermVerbs`:
+## 6. Endpoint resolution & sema validation (`internal/sema`)
 
-```go
-// edgeRelationshipVerbs require a bc: left endpoint and a bc: right endpoint.
-var edgeRelationshipVerbs = map[string]bool{
-    "customer_supplier": true, "conformist": true, "anticorruption_layer": true,
-    "open_host_service": true, "published_language": true,
-    "partnership": true, "shared_kernel": true, "separate_ways": true,
-}
-```
+Resolution:
+- In `context_map <d> { }`, a bare `name` resolves to BC `name` declared in domain `d`.
+- In an unscoped `context_map { }`, a bare `name` must resolve to a BC that is **globally unique** across declared domains; if two domains declare that name, it is **ambiguous ⇒ error**, "qualify as `<domain>/<name>`".
+- `domain/name` resolves explicitly.
+- A ref that resolves to no declared BC ⇒ **warning** `craft/sema/unresolved-bc` (best-effort, mirrors the existing `unresolved-ref-local` philosophy — the file-set may be partial).
 
-Extend `classifyEdgeVerb` with the relationship branch: **both endpoints must be `bc:`**;
-otherwise emit `craft/sema/edge-endpoint-kind` (reuse the existing endpoint-kind diagnostic
-code/shape used by the realization and term branches — keep it uniform). The v2.11.0
-default-case (unknown-verb error) now never fires for these verbs since they're in
-`edgeKeywords`.
+Validation:
+| Code | Severity | When |
+|---|---|---|
+| `craft/sema/edge-endpoint-not-bc` | error | an endpoint resolves to a domain/service/actor, not a bounded context |
+| `craft/sema/self-relationship` | error | `X <pattern> X` (same resolved BC both sides) |
+| `craft/lint/redundant-relationship` | warning | same unordered pair + same **symmetric** pattern declared twice (directional duplicates in opposite order are NOT redundant) |
+| `craft/sema/unresolved-bc` | warning | endpoint resolves to no declared BC |
 
-Add two **relationship-specific checks** (both warning-level unless noted):
-
-1. **Self-relationship** — `bc:X <verb> bc:X` is meaningless. `craft/sema/self-relationship`,
-   **error** (a genuine authoring bug, cheaply provable). Applies to all relationship verbs.
-2. **Redundant symmetric duplicate** — the same unordered pair declared twice with the same
-   symmetric verb (e.g. `A partnership B` and `B partnership A`). `craft/lint/redundant-relationship`,
-   warning. (Directional duplicates in opposite orders are *not* redundant — they may model a
-   genuinely different-direction relationship — so only flag symmetric verbs.)
-
-**Explicitly NOT validated** (preserves the §1.1 boundary — craft checks shape, not truth):
-no check that a directional relationship's direction is "correct", no check for conflicting
-patterns on the same pair (e.g. both `conformist` and `partnership`), no completeness/
-"every BC pair must have a relationship" check. Those are modeling judgments; if the hub
-wants them, they live hub-side as cross-validation.
+**Explicitly NOT validated** (craft checks shape, not truth): whether a stated direction is "correct"; conflicting patterns on one pair; completeness. Those are modeling judgments (or the cross-validation lint, §10), not shape checks.
 
 ## 7. Diagnostics summary
 
-| Code | Severity | When |
-|---|---|---|
-| `craft/sema/edge-endpoint-kind` (existing) | error | a relationship verb with a non-`bc:` endpoint |
-| `craft/sema/self-relationship` (new) | error | `bc:X <relationship-verb> bc:X` |
-| `craft/lint/redundant-relationship` (new) | warning | same unordered pair + same symmetric verb twice |
-
-All flow through the existing `internal/sema` path and the `testdata/broken/*.diagnostics.json`
-harness (see §9).
+All flow through `internal/sema` and the `testdata/broken/*.diagnostics.json` harness. Codes as in §6.
 
 ## 8. tree-sitter grammar sync (`tree-sitter-craft`)
 
-Following the vNext Slice F / tags-plan precedent:
+- `context_map` rule: add the optional domain-scope identifier; endpoints become bare/`domain/name` refs (drop the `bc:` requirement); `edge_verb` becomes the eight relationship patterns (remove the five old verbs from this block).
+- `queries/highlights.scm`: `(edge_verb)` already captures the whole node, so new verbs highlight automatically; verify.
+- `test/corpus/*`: cases for a directional pattern, a symmetric pattern, a domain-scoped block, and a cross-domain qualified endpoint.
+- Regenerate `src/*`; keep the corpus + full-craft-corpus compat green.
+- `craft-vscode-extension`: update its keyword list only if it enumerates edge verbs separately.
 
-- If the grammar enumerates edge verbs as literals, add the eight; if it treats the verb as
-  a generic identifier slot validated downstream, no grammar change is needed — **verify
-  which** in `grammar.js` (the `edge_stmt` / edge-verb rule) before editing.
-- `queries/highlights.scm`: ensure the new verbs highlight as edge keywords (extend the
-  existing edge-keyword capture list if it's an explicit set).
-- `test/corpus/*`: add cases covering a directional and a symmetric relationship edge.
-- Regenerate `src/*`; keep the 12/12 corpus baseline green (+ the new cases).
-- `craft-vscode-extension`: only if it carries a separate TextMate keyword list (not
-  tree-sitter-query-driven) — add the verbs there too; otherwise nothing to do.
+## 9. `glossary { }` block — term relations' new home (sibling feature)
 
-## 9. Test plan
+Term relations leave `context_map`. Their intended home is a dedicated `glossary { }` block with the same design grain — homogeneous endpoints (all terms), prefix dropped, canonical relation verbs:
 
-- `testdata/corpus/**/` — add `context_map` fixtures with relationship edges (a directional
-  `customer_supplier`/`anticorruption_layer`, a symmetric `partnership`), plus their
-  regenerated `.craftjson` goldens. Confirm `Edge{Left, Verb, Right}` round-trips.
-- `testdata/broken/` — `relationship_bad_endpoint.{craft,diagnostics.json}` (a `term:` or
-  `service:` endpoint on a relationship verb ⇒ `edge-endpoint-kind`);
-  `relationship_self.{craft,diagnostics.json}` (`bc:X partnership bc:X` ⇒ `self-relationship`).
-- `internal/sema/validate_test.go` — table cases for `classifyEdgeVerb` covering each new
-  verb (bc→bc ok; wrong-kind error; self-relationship error), and the symmetric-duplicate lint.
-- `pkg/craft` — a sync test asserting `EdgeVerbs()` / `edgeRelationshipVerbs` /
-  `edgeKeywords` agree (no verb in one set missing from another), mirroring the tags plan's
-  `EdgeKeywords()` sync test.
+```craft
+glossary {
+  billing/Invoice      same_as       subscriptions/Invoice
+  ordering/order       distinct_from  offering/order
+}
+```
 
-## 10. Consumer migration (the RE knowledge-hub) — informational, not part of this craft change
+The **detailed glossary design is a separate spec**; this spec only records the decision (terms move out of `context_map`) and removes term verbs from the `context_map` grammar. If the glossary block is not built in the same cycle, term relations are simply unavailable until it is (acceptable — no files use them).
 
-Once craft ships this, the hub (`svc-re-go-arch-context`,
-`internal/infrastructure/graphstore`) deletes `bc-relationships.craft` + its regex
-(`reBCRelationshipsHdr`, `reBCRelationshipEdge`, `loadBCRelationships`) — the last non-craft
-parsing in the loader. Relationship edges move into the central `context_map.craft`, parsed
-by `craft.Parse`. The hub maps each `Edge` via craft's `LookupEdgeVerb`:
-`Symmetric ⇒ contextMapEdge.Bidirectional`; else `Upstream=Left, Downstream=Right`;
-`Patterns = [verb]`. Note the modeling shift: the hub's old syntax allowed a bracket list of
-patterns per edge (`billing -> vas [customer_supplier, published_language]`); craft models
-**one pattern per edge statement** (clearer, individually diagnosable) — a pairing like OHS+PL
-becomes two statements. `readLines`/`numberedLine` in the hub loader can then also go if
-nothing else uses them.
+## 10. Cross-validation lint (later slice)
 
-## 11. Out of scope (name them so they aren't silently assumed)
+Derive the BC interaction graph from use-case `asks`/`notifies` (the visualizer already builds an equivalent) and cross-check classifications:
+- `separate_ways` between interacting BCs ⇒ `craft/lint/contradicts-interaction` (warning).
+- directional integration patterns (customer_supplier/conformist/ACL/OHS/PL) between non-interacting BCs ⇒ `craft/lint/unbacked-relationship` (warning, info-level).
+- interacting BC pair with no classification ⇒ `craft/lint/unclassified-relationship` (info).
 
-- **`big_ball_of_mud`** — a zone/boundary marker over one-or-more BCs, not a pairwise edge;
-  needs a different construct (a BC annotation or a named region), deferred.
-- **Multiple patterns per edge statement** — modeled as multiple statements (§10); no
-  bracket-list grammar.
-- **Role sub-annotations** (e.g. naming the ACL, or the published language) — deferred; the
-  verb is the whole payload for v1.
-- **Semantic-correctness / conflict / completeness validation** — modeling judgment, not
-  craft's job (§6).
+Warnings only — craft cannot assume the interaction graph is complete. Scoped to its own slice so the core ships first.
 
-## 12. File-by-file change list
+## 11. Broader schism (adjacent, note-and-defer)
 
-- `internal/syntax/parser.go` — extend `edgeKeywords` (+8); update the "expected an edge
-  keyword" diagnostic message (categorized).
-- `internal/sema/validate.go` — `edgeRelationshipVerbs` map; relationship branch in
-  `classifyEdgeVerb` (bc→bc); `self-relationship` check; `redundant-relationship` symmetric lint.
-- `internal/sema/validate_test.go` — table cases for the new verbs + lints.
-- `pkg/craft/edges.go` (new) — `EdgeCategory`, `EdgeVerbInfo`, `EdgeVerbs()`,
-  `LookupEdgeVerb()`; the §3 verb-metadata table (direction convention baked in here).
-- `pkg/craft/edges_test.go` (new) — sync test (`EdgeVerbs` ↔ `edgeKeywords` ↔ sema maps).
-- `testdata/corpus/**/context_map_relationships.{craft,craftjson}` — goldens.
-- `testdata/broken/relationship_bad_endpoint.*`, `testdata/broken/relationship_self.*`.
-- `CHANGELOG.md` — new minor (v2.12.0): "context_map DDD strategic relationship patterns".
-- `tree-sitter-craft`: `grammar.js` (if verbs are literal), `queries/highlights.scm`,
-  `test/corpus/*`, regenerated `src/*`.
-- (consumer, separate repo/PR) hub: delete `bc-relationships.craft` + regex; author in
-  `context_map.craft`; map via `LookupEdgeVerb`.
+use-case targets and `notifies`/`listens` events also use `bc:`/typed slugs today, while subjects use bare names. The tidy end-state is one context-identity notation (`domain/name`, bare when unambiguous) used **everywhere**. This spec adopts it for `context_map` and keeps the notation compatible for use cases to follow, but the use-case ref migration is **out of scope here** — a separate consistency pass.
 
-## 13. Suggested slicing
+## 12. Out of scope (named so they aren't silently assumed)
 
-- **Slice 1 — core:** `edgeKeywords` + sema endpoint-kind branch + `self-relationship` +
-  corpus/broken goldens + unit tests. (Shippable: authors can write relationship edges,
-  craft validates shape.)
-- **Slice 2 — API + lint:** `pkg/craft` verb-metadata/classification API + sync test +
-  `redundant-relationship` lint. (Unblocks the hub to drop its regex.)
-- **Slice 3 — grammar sync:** tree-sitter + highlights + vscode.
-- **Slice 4 — release:** CHANGELOG, tag v2.12.0.
+- `big_ball_of_mud` (zone marker, not a pairwise edge).
+- Multiple patterns per statement / bracket lists (use multiple statements).
+- Role sub-annotations (naming the ACL, the published language).
+- Semantic-correctness / conflict / completeness validation (modeling judgment; see §10 for the lint that gets closest).
+- Full `glossary` block design (§9) and use-case ref unification (§11) — separate specs.
+
+## 13. Data model / migration
+
+No `.craft` files and no external consumer exist, so realization and term edges are **removed outright** from `context_map`, no deprecation shim. `model.Edge` shape is unchanged (`Left`/`Verb`/`Right`); its values now hold bare/qualified BC names and relationship-pattern verbs. Regenerate all affected corpus `.craftjson` goldens.
+
+## 14. Suggested slicing
+
+1. **Core:** replace `edgeKeywords` with the eight patterns; `context_map` endpoints become bare/`domain/name` (drop `bc:`); remove realization/term verbs from the block; endpoint-kind + `self-relationship` validation; corpus + broken goldens; unit tests.
+2. **Blocks + resolution:** optional domain scope; repeatable/merged blocks; bare-name resolution (scoped/global/ambiguous/unresolved); `redundant-relationship` lint.
+3. **Exported API:** `internal/syntax` metadata table + `pkg/craft` `EdgeVerbs`/`LookupEdgeVerb` + sync test.
+4. **Grammar sync:** tree-sitter (scope, endpoints, verbs) + highlights + corpus; vscode if needed.
+5. **Cross-validation lint** (§10).
+6. **Release:** CHANGELOG, tag (next minor).
+7. *(sibling specs, not gated on this)* `glossary { }` block; use-case ref unification.
+
+## 15. File-by-file (core + API)
+
+- `internal/syntax/parser.go` — `edgeKeywords` → 8 patterns; `context_map` optional domain scope; `bc_ref` endpoints (no `bc:`); categorized diagnostic.
+- `internal/syntax/edge_meta.go` *(new)* — metadata table + accessors (single source of truth).
+- `internal/sema/validate.go` — endpoint-must-be-BC; `self-relationship`; `redundant-relationship`; bare-name resolution + `unresolved-bc`.
+- `internal/sema/*_test.go` — table tests + sync test.
+- `pkg/craft/edges.go` *(new)* + `edges_test.go` — public metadata API + sync test.
+- `testdata/corpus/05_context_map/*` — goldens (directional, symmetric, scoped, cross-domain).
+- `testdata/broken/relationship_*` — endpoint-not-bc, self, redundant, ambiguous-bare.
+- `CHANGELOG.md` — next minor.
+- `tree-sitter-craft/*` — grammar (scope/endpoints/verbs), highlights, corpus, regenerated `src/`.
