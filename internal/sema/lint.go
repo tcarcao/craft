@@ -29,6 +29,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintDeadEvents(perFileTrees, lis)...)
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
 	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
+	diags = append(diags, lintContextMapConsistency(perFileTrees, ws, lis)...)
 	return diags
 }
 
@@ -204,6 +205,202 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 						check(action.EventValue(), uri, action.Line(li), action.EventCol(li), action.EventIsString())
 					}
 				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── context-map-consistency ───────────────────────────────────────────────────
+// Cross-validates context_map relationships against the communication that
+// actually happens between bounded contexts in use-case scenarios.
+//
+// Both communication primitives reduce to one directed DEPENDENCY EDGE
+// `D -> U` ("downstream depends on upstream"):
+//   - sync `X asks Y`            -> edge `X -> Y` (asker depends on asked)
+//   - async `Y notifies E` +
+//     `X listens E`              -> edge `X -> Y` (listener depends on publisher)
+//
+// The dependency adjacency built here is PARTIAL: it only records what the
+// use-case scenarios actually say. Absence of a recorded dependency NEVER by
+// itself produces a warning — only a contradicting context_map edge does.
+// This structure (build adjacency, then walk context_map edges checking it)
+// is designed so later rules (B2 direction-inverted/bidirectional, B3
+// unclassified-communication) can extend the same adjacency without
+// rebuilding it.
+
+// pairKey is an unordered communicating BC pair, canonicalised by sorting the
+// two resolved "domain/name" identities so `a < b` lexically. fwd/rev on the
+// associated depInfo record which direction(s) of dependency were observed
+// relative to that sorted order.
+type pairKey struct {
+	a, b string
+}
+
+// depInfo records the directions of dependency observed for a pairKey, plus
+// the first communicating-action's position (kept for Task B3's range needs;
+// unused by R1).
+type depInfo struct {
+	fwd, rev            bool
+	firstLine, firstCol int
+	firstURI            string
+}
+
+// newPairKey canonicalises a directed pair (from depends on to) into a sorted
+// pairKey plus whether that direction runs "forward" (a->b) relative to the
+// sort.
+func newPairKey(from, to string) (key pairKey, fwd bool) {
+	if from <= to {
+		return pairKey{a: from, b: to}, true
+	}
+	return pairKey{a: to, b: from}, false
+}
+
+// recordDependency adds one observed directed dependency (from depends on to)
+// to deps. Self-pairs and empty identities are ignored. The first observed
+// site (uri/line/col) is retained for later tasks.
+func recordDependency(deps map[pairKey]depInfo, from, to, uri string, line, col int) {
+	if from == "" || to == "" || from == to {
+		return
+	}
+	key, fwd := newPairKey(from, to)
+	info := deps[key]
+	if fwd {
+		info.fwd = true
+	} else {
+		info.rev = true
+	}
+	if info.firstURI == "" {
+		info.firstLine, info.firstCol, info.firstURI = line, col, uri
+	}
+	deps[key] = info
+}
+
+// asyncSite records one resolved async publisher or listener site, keyed
+// externally by event value, for cross-file publisher/listener pairing.
+type asyncSite struct {
+	bc, uri   string
+	line, col int
+}
+
+// buildDependencyEdges walks every use-case scenario in perFileTrees and
+// builds the dependency adjacency described above: sync `asks` edges direct,
+// async `notifies`/`listens` edges paired by equal event value across the
+// whole workspace (mirroring how lintDeadEvents matches publish/consume
+// workspace-wide).
+func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) map[pairKey]depInfo {
+	deps := map[pairKey]depInfo{}
+	publishersByEvent := map[string][]asyncSite{}
+	listenersByEvent := map[string][]asyncSite{}
+
+	for uri, tree := range perFileTrees {
+		li := lis[uri]
+		file := syntax.AsFile(tree)
+		for _, uc := range file.UseCases() {
+			for _, sc := range uc.Scenarios() {
+				trigger := sc.Trigger()
+				if trigger.Kind() == "domain_listen" {
+					if ev := trigger.EventValue(); ev != "" {
+						if ctx := trigger.ContextName(); ctx != "" {
+							resolved, kind, ambiguous := resolveBCRef(ws, "", ctx)
+							if kind == "bc" && !ambiguous && resolved != "" {
+								whenTok := sc.When()
+								line := 0
+								if whenTok != nil {
+									line, _ = li.LineCol(whenTok.Offset())
+								}
+								listenersByEvent[ev] = append(listenersByEvent[ev], asyncSite{
+									bc: resolved, uri: uri, line: line, col: trigger.ActorCol(li),
+								})
+							}
+						}
+					}
+				}
+
+				for _, action := range sc.Actions() {
+					switch action.Kind() {
+					case "sync_action":
+						subject, subjectKind, subjectAmbig := resolveBCRef(ws, "", action.SubjectName())
+						target, targetKind, targetAmbig := resolveBCRef(ws, "", action.TargetName())
+						if subjectKind == "bc" && !subjectAmbig && targetKind == "bc" && !targetAmbig {
+							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li))
+						}
+					case "async_action":
+						if ev := action.EventValue(); ev != "" {
+							resolved, kind, ambiguous := resolveBCRef(ws, "", action.SubjectName())
+							if kind == "bc" && !ambiguous && resolved != "" {
+								publishersByEvent[ev] = append(publishersByEvent[ev], asyncSite{
+									bc: resolved, uri: uri, line: action.Line(li), col: action.SubjectCol(li),
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Pair publishers and listeners of the same event across the whole
+	// workspace: a listener depends on every bc that publishes that event.
+	for event, listeners := range listenersByEvent {
+		for _, publisher := range publishersByEvent[event] {
+			for _, listener := range listeners {
+				recordDependency(deps, listener.bc, publisher.bc, listener.uri, listener.line, listener.col)
+			}
+		}
+	}
+
+	return deps
+}
+
+// lintContextMapConsistency cross-checks context_map edges against the
+// dependency adjacency built by buildDependencyEdges. R1 (this task):
+// separate-ways-violation — a `separate_ways` edge whose endpoints have ANY
+// observed dependency (either direction) between them is contradictory,
+// since separate_ways declares that no relationship should exist. Later
+// tasks (B2, B3) add further rules over the same adjacency.
+func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
+	deps := buildDependencyEdges(perFileTrees, ws, lis)
+
+	var diags []model.Diagnostic
+	for uri, tree := range perFileTrees {
+		li := lis[uri]
+		file := syntax.AsFile(tree)
+		for _, cm := range file.ContextMaps() {
+			scope := cm.Domain()
+			for _, edge := range cm.Edges() {
+				if edge.Verb() != "separate_ways" {
+					continue
+				}
+				leftResolved, leftKind, leftAmbig := resolveBCRef(ws, scope, edge.Left())
+				rightResolved, rightKind, rightAmbig := resolveBCRef(ws, scope, edge.Right())
+				if leftKind != "bc" || leftAmbig || rightKind != "bc" || rightAmbig {
+					continue
+				}
+				if leftResolved == "" || rightResolved == "" || leftResolved == rightResolved {
+					continue
+				}
+				key, _ := newPairKey(leftResolved, rightResolved)
+				info, hasDep := deps[key]
+				if !hasDep || !(info.fwd || info.rev) {
+					continue
+				}
+
+				leftLine, leftCol := 0, 0
+				if lr := edge.LeftRef(); lr != nil {
+					leftLine, leftCol = lr.Line(li), lr.Col(li)
+				}
+				startChar := colToLSP(leftCol)
+				diags = append(diags, model.Diagnostic{
+					Code:      "craft/lint/separate-ways-violation",
+					Message:   fmt.Sprintf("%q and %q are declared separate_ways but communicate in a use case", leftResolved, rightResolved),
+					Severity:  model.SeverityWarning,
+					SourceURI: uri,
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
+						End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(edge.Left())},
+					},
+				})
 			}
 		}
 	}
