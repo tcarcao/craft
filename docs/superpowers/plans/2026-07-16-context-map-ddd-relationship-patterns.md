@@ -236,7 +236,9 @@ git commit -m "feat(syntax): optional domain scope on context_map; blocks repeat
 Run: `go test ./internal/sema/ -run Relationship`
 Expected: FAIL (compile / wrong behavior — kind-based classify still in place).
 
-- [ ] **Step 3: Rework `classifyEdgeVerb` → resolution-based.** Replace `edgeRealizationVerbs`/`edgeTermVerbs` with `edgeRelationshipVerbs` (the 8). Write `resolveBCRef(ws, scopeDomain, ref)`:
+> **Scope note (corrected during execution):** the verb-vocabulary swap in sema (`edgeRealizationVerbs`/`edgeTermVerbs` → `edgeRelationshipVerbs`) and the sync-test update were folded into **Task 1** (the vocabulary must move atomically across parser+sema, else the tree is red between tasks). This task now implements only the RESOLUTION + validation logic on top of already-recognized verbs.
+
+- [ ] **Step 3: Add resolution-based validation to `classifyEdgeVerb`.** `edgeRelationshipVerbs` (the 8) already exists from Task 1 and its branch currently returns no diagnostic. Write `resolveBCRef(ws, scopeDomain, ref)`:
   - if `ref` is `domain/name`: look up `ws.Domains[domain]`; if it lists `name` → ("<domain>/<name>","bc",false) else fall through to unresolved.
   - else bare `name`: if `scopeDomain != ""` and `ws.Domains[scopeDomain]` lists `name` → resolved in scope; else consult `ws.BoundedContexts[name]` — resolved to that domain's BC; detect ambiguity by counting domains that declare `name` (needs a small count; if the workspace can't distinguish, treat a name present in ≥2 domains as ambiguous). If it resolves to a domain/service/actor symbol instead of a BC → kind accordingly.
   For each edge: resolve both endpoints; if either kind is non-`bc` and non-empty → `edge-endpoint-not-bc` error; if unresolved (kind=="") → `unresolved-bc` warning; if ambiguous → `ambiguous-bc` error ("qualify as `<domain>/<name>`"). If both resolve to the SAME bc → `self-relationship` error. Thread `scopeDomain` from `edge`'s owning `ContextMapDecl.Domain()`.
