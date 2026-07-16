@@ -17,9 +17,10 @@ type CraftDoc struct {
 	ContextMap    []Edge      `json:"contextMap,omitempty"`
 }
 
-// Edge is one authored typed edge from a context_map block, connecting two
-// node slugs (e.g. "bc:re/subscriptions") with a verb (e.g. "realized_by").
-// Endpoint-kind validation (bc -> service, etc.) is a sema concern, not
+// Edge is one authored relationship edge from a context_map block, connecting
+// two bounded-context endpoints (bare or domain-qualified names, e.g.
+// "re/billing") with a DDD strategic relationship verb (e.g.
+// "customer_supplier"). Endpoint resolution/validation is a sema concern, not
 // captured here — this is a shape-only projection of the parsed edges.
 type Edge struct {
 	Left  string `json:"left"`

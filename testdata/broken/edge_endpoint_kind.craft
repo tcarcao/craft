@@ -1,3 +1,0 @@
-context_map {
-  bc:re/subscriptions same_as service:subscriptions-api
-}

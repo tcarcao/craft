@@ -2020,7 +2020,7 @@ func (e EdgeDecl) Right() string {
 	return RefDecl{node: refs[1]}.RefText()
 }
 
-// Verb returns the edge keyword token text (e.g. "realized_by"), or "" if malformed.
+// Verb returns the edge keyword token text (e.g. "customer_supplier"), or "" if malformed.
 func (e EdgeDecl) Verb() string {
 	tok := e.node.ChildToken(SyntaxKindEdgeKw)
 	if tok == nil {

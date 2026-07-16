@@ -18,11 +18,18 @@ import (
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
-// edgeRealizationVerbs require a `bc:` left endpoint and a `service:` right endpoint.
-var edgeRealizationVerbs = map[string]bool{"realized_by": true, "also_realizes": true}
-
-// edgeTermVerbs require `term:` endpoints on both sides.
-var edgeTermVerbs = map[string]bool{"same_as": true, "contrasts": true, "distinct_from": true}
+// edgeRelationshipVerbs is sema's recognition set for context_map edge verbs:
+// the 8 DDD strategic context-mapping patterns. It MUST stay in sync with the
+// parser's edgeKeywords (asserted by TestEdgeVerbVocabulariesInSync). Recognition
+// only — endpoint resolution, endpoint-not-bc, self-relationship, and redundant
+// symmetric lint are LATER tasks and are deliberately not implemented here.
+var edgeRelationshipVerbs = map[string]bool{
+	// directional
+	"customer_supplier": true, "conformist": true, "anticorruption_layer": true,
+	"open_host_service": true, "published_language": true,
+	// symmetric
+	"partnership": true, "shared_kernel": true, "separate_ways": true,
+}
 
 // SlugRefSite records a single kind-prefixed node-slug reference (domain:,
 // bc:, or service: — term: is skipped, since craft tracks no term
@@ -266,54 +273,34 @@ func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, h
 			checkSlugRef(uri, left, leftLine, leftCol, &diags, &refs)
 			checkSlugRef(uri, right, rightLine, rightCol, &diags, &refs)
 
-			leftKind, rightKind := refKindWord(left), refKindWord(right)
-			diags = append(diags, classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right, leftLine, leftCol)...)
+			diags = append(diags, classifyEdgeVerb(uri, verb, left, leftLine, leftCol)...)
 		}
 	}
 	return diags, refs
 }
 
-// classifyEdgeVerb returns endpoint-kind diagnostics for one edge. Extracted from
-// the tree walk so the default branch (unreachable via .craft source because the
-// parser's isEdgeKeyword gates it) is unit-testable.
-func classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right string, leftLine, leftCol int) []model.Diagnostic {
-	switch {
-	case edgeRealizationVerbs[verb]:
-		if leftKind != "bc" || rightKind != "service" {
-			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "a `bc:` left endpoint and a `service:` right endpoint", left, right, leftLine, leftCol)}
-		}
-	case edgeTermVerbs[verb]:
-		if leftKind != "term" || rightKind != "term" {
-			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "`term:` endpoints on both sides", left, right, leftLine, leftCol)}
-		}
-	default:
-		startChar := colToLSP(leftCol)
-		return []model.Diagnostic{{
-			Code:      "craft/sema/unrecognised-edge-verb",
-			Message:   fmt.Sprintf("edge verb %q has no endpoint-kind rule (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
-			Severity:  model.SeverityError,
-			SourceURI: uri,
-			Range: model.Range{
-				Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-				End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
-			},
-		}}
+// classifyEdgeVerb recognises one context_map edge verb. A verb in
+// edgeRelationshipVerbs (the 8 DDD patterns) is accepted with NO diagnostic —
+// endpoint resolution / endpoint-not-bc / self-relationship / redundant lint are
+// LATER tasks. The default branch is unreachable via .craft source (the parser's
+// isEdgeKeyword gates the same vocabulary, kept in sync by
+// TestEdgeVerbVocabulariesInSync); it exists only to make parser/sema drift a
+// loud internal error and is unit-tested directly.
+func classifyEdgeVerb(uri, verb, left string, leftLine, leftCol int) []model.Diagnostic {
+	if edgeRelationshipVerbs[verb] {
+		return nil
 	}
-	return nil
-}
-
-func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) model.Diagnostic {
-	startChar := colToLSP(col)
-	return model.Diagnostic{
-		Code:      "craft/sema/edge-endpoint-kind",
-		Message:   fmt.Sprintf("edge %q %s %q requires %s", left, verb, right, requirement),
+	startChar := colToLSP(leftCol)
+	return []model.Diagnostic{{
+		Code:      "craft/sema/unrecognised-edge-verb",
+		Message:   fmt.Sprintf("edge verb %q is not a recognised relationship pattern (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
 		Severity:  model.SeverityError,
 		SourceURI: uri,
 		Range: model.Range{
-			Start: model.Position{Line: lineToLSP(line), Character: startChar},
-			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(left)},
+			Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
+			End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
 		},
-	}
+	}}
 }
 
 // validateServiceAnchors flags a repeated opslevel: or repo: field within a

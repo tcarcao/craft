@@ -1845,10 +1845,12 @@ func (p *Parser) parseExposureBlock() []model.Diagnostic {
 }
 
 // parseContextMapBlock parses: context_map { edge_stmt* }
-// edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword
-// (realized_by/also_realizes/same_as/contrasts/distinct_from) matched by
-// value, like asks/notifies elsewhere (Q3). Endpoint kind validation
-// (bc -> service, etc.) is sema's job (Task 7), not the parser's.
+// edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword — one of
+// the 8 DDD strategic context-mapping patterns (customer_supplier/conformist/
+// anticorruption_layer/open_host_service/published_language/partnership/
+// shared_kernel/separate_ways) — matched by value, like asks/notifies
+// elsewhere (Q3). Endpoint resolution/kind validation is sema's job, not the
+// parser's.
 func (p *Parser) parseContextMapBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindContextMapDecl)
 	var diags []model.Diagnostic

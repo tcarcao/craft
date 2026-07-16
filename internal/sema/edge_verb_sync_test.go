@@ -1,6 +1,6 @@
-// Internal (whitebox) test package: classifyEdgeVerb and the edgeRealizationVerbs/
-// edgeTermVerbs maps are unexported, so these tests live in package sema rather
-// than package sema_test (see validate_test.go for the blackbox validation tests).
+// Internal (whitebox) test package: classifyEdgeVerb and the edgeRelationshipVerbs
+// map are unexported, so these tests live in package sema rather than package
+// sema_test (see validate_test.go for the blackbox validation tests).
 package sema
 
 import (
@@ -14,7 +14,7 @@ import (
 func TestClassifyEdgeVerb_UnrecognisedVerb(t *testing.T) {
 	// A verb outside both maps is unreachable from .craft source (isEdgeKeyword
 	// gates it), so test the sema classifier directly.
-	diags := classifyEdgeVerb("f.craft", "bogus_verb", "bc", "service", "bc:x", "service:y", 1, 0)
+	diags := classifyEdgeVerb("f.craft", "bogus_verb", "bc:x", 1, 0)
 	if len(diags) != 1 {
 		t.Fatalf("want 1 diagnostic, got %d: %+v", len(diags), diags)
 	}
@@ -32,10 +32,7 @@ func TestEdgeVerbVocabulariesInSync(t *testing.T) {
 		parser[k] = true
 	}
 	sema := map[string]bool{}
-	for k := range edgeRealizationVerbs {
-		sema[k] = true
-	}
-	for k := range edgeTermVerbs {
+	for k := range edgeRelationshipVerbs {
 		sema[k] = true
 	}
 	if !reflect.DeepEqual(parser, sema) {

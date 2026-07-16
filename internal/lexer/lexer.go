@@ -78,9 +78,11 @@ const (
 	// Top-level structural keywords
 	TokenKwImport // import
 
-	// context_map block keyword (Task 5). Edge keywords (realized_by,
-	// also_realizes, same_as, contrasts, distinct_from) remain plain
-	// identifiers, matched by value in the parser like asks/notifies (Q3).
+	// context_map block keyword (Task 5). Edge keywords (the 8 DDD strategic
+	// context-mapping patterns: customer_supplier/conformist/
+	// anticorruption_layer/open_host_service/published_language/partnership/
+	// shared_kernel/separate_ways) remain plain identifiers, matched by value
+	// in the parser like asks/notifies (Q3).
 	TokenKwContextMap // context_map
 
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
