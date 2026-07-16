@@ -82,6 +82,13 @@ const (
 	// TokenIdent, like asks/notifies elsewhere.
 	SyntaxKindEdgeKw
 
+	// SyntaxKindContextMapDomain is the optional domain-scope identifier
+	// directly after the `context_map` keyword and before its `{`, e.g. the
+	// `re` in `context_map re { ... }` (Task 3). Consumed positionally from
+	// TokenIdent — not matched by value, unlike the contextual keywords
+	// above.
+	SyntaxKindContextMapDomain
+
 	// SyntaxKindKwTags is the contextual keyword `tags` introducing a use_case's
 	// tags { } sub-block (Task 3, Slice B). Matched by value from TokenIdent,
 	// like when/asks/notifies elsewhere — not a reserved word.

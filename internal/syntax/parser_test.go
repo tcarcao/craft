@@ -606,6 +606,37 @@ func TestContextMap_Edges(t *testing.T) {
 	}
 }
 
+// TestParse_ContextMap_DomainScope is the Task 3 TDD lock for the optional
+// domain scope on a context_map block: `context_map re { ... }` scopes the
+// block to domain "re", while a bare `context_map { ... }` is unscoped
+// (Domain() == ""). Also confirms the block is repeatable — two blocks in
+// one file both parse and both surface through File.ContextMaps().
+func TestParse_ContextMap_DomainScope(t *testing.T) {
+	src := "context_map re {\n  billing customer_supplier vas\n}\ncontext_map {\n  re/billing partnership payments/ledger\n}\n"
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	// Round-trip: the block must reassemble to the exact source text.
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	cms := file.ContextMaps()
+	if len(cms) != 2 {
+		t.Fatalf("expected 2 ContextMapDecl views, got %d", len(cms))
+	}
+	if got := cms[0].Domain(); got != "re" {
+		t.Errorf("cms[0].Domain() = %q, want %q", got, "re")
+	}
+	if got := cms[1].Domain(); got != "" {
+		t.Errorf("cms[1].Domain() = %q, want empty", got)
+	}
+}
+
 // parseWithHangGuard runs syntax.Parse on its own goroutine behind a short
 // watchdog timeout, so a parser infinite loop fails this single test fast
 // (a few seconds) instead of hanging the entire `go test` run until the

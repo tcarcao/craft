@@ -1844,7 +1844,12 @@ func (p *Parser) parseExposureBlock() []model.Diagnostic {
 	return diags
 }
 
-// parseContextMapBlock parses: context_map { edge_stmt* }
+// parseContextMapBlock parses: context_map [domain] { edge_stmt* }
+// The domain scope is an optional bare identifier between the `context_map`
+// keyword and `{` (e.g. `context_map re { ... }`); it is stored as
+// SyntaxKindContextMapDomain and surfaced via ContextMapDecl.Domain() (Task
+// 3). Blocks are repeatable — a file may contain several context_map blocks,
+// scoped or not, and their edges are merged by the projection layer.
 // edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword — one of
 // the 8 DDD strategic context-mapping patterns (customer_supplier/conformist/
 // anticorruption_layer/open_host_service/published_language/partnership/
@@ -1859,6 +1864,11 @@ func (p *Parser) parseContextMapBlock() []model.Diagnostic {
 	p.attachTrivia()
 	kwTok := p.peek()
 	p.consumeAs(SyntaxKindKwContextMap)
+
+	// Optional domain scope: `context_map <domain> { ... }`.
+	if p.peek().Type == lexer.TokenIdent {
+		p.consumeAs(SyntaxKindContextMapDomain)
+	}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))

@@ -1980,6 +1980,16 @@ func (c ContextMapDecl) Keyword() *SyntaxToken {
 	return c.node.ChildToken(SyntaxKindKwContextMap)
 }
 
+// Domain returns the optional domain-scope identifier (e.g. "re" in
+// `context_map re { ... }`), or "" if the block is unscoped (Task 3).
+func (c ContextMapDecl) Domain() string {
+	tok := c.node.ChildToken(SyntaxKindContextMapDomain)
+	if tok == nil {
+		return ""
+	}
+	return tok.Text()
+}
+
 // Line returns the 1-based source line of the `context_map` keyword using li.
 func (c ContextMapDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(c.node, li) }
 
