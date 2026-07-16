@@ -53,14 +53,14 @@
   ],
   "contextMap": [
     {
-      "left": "bc:re/subscriptions",
-      "verb": "realized_by",
-      "right": "service:subscriptions-api"
+      "left": "re/billing",
+      "verb": "customer_supplier",
+      "right": "re/vas"
     },
     {
-      "left": "term:subscriptions/dunning",
-      "verb": "contrasts",
-      "right": "term:billing/dunning"
+      "left": "re/billing",
+      "verb": "partnership",
+      "right": "re/subscriptions"
     }
   ]
 }

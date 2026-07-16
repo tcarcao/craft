@@ -7,8 +7,8 @@ services {
 }
 
 context_map {
-  bc:re/subscriptions realized_by service:subscriptions-api
-  term:subscriptions/dunning contrasts term:billing/dunning
+  re/billing customer_supplier re/vas
+  re/billing partnership re/subscriptions
 }
 
 use_case "Renewal with typed refs and flexible prose" {

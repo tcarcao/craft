@@ -48,7 +48,8 @@ export default defineConfig({
           { text: 'Services', link: '/language/services' },
           { text: 'Use Cases', link: '/language/use-cases' },
           { text: 'Architecture', link: '/language/architecture' },
-          { text: 'Exposures', link: '/language/exposures' }
+          { text: 'Exposures', link: '/language/exposures' },
+          { text: 'Context Map', link: '/language/context-map' }
         ]
       },
       {

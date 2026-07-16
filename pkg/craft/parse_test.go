@@ -338,3 +338,40 @@ func TestParseFiles_WorkspaceDiagnosticOrderDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// TestParse_ContextMap_RelationshipEdge is the Task 1 TDD lock for the
+// context_map redesign: edge verbs are now the 8 DDD strategic
+// context-mapping patterns (not the old realized_by/also_realizes/same_as/
+// contrasts/distinct_from), and endpoints are bare or domain-qualified
+// bounded-context names with NO `bc:`/kind prefix required.
+func TestParse_ContextMap_RelationshipEdge(t *testing.T) {
+	doc, _, err := craft.Parse("f.craft", []byte("context_map {\n  billing customer_supplier vas\n  re/billing partnership payments/ledger\n}\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(doc.ContextMap) != 2 {
+		t.Fatalf("want 2 edges, got %d: %+v", len(doc.ContextMap), doc.ContextMap)
+	}
+	e := doc.ContextMap[0]
+	if e.Left != "billing" || e.Verb != "customer_supplier" || e.Right != "vas" {
+		t.Errorf("edge0 = %+v, want {billing customer_supplier vas}", e)
+	}
+	if doc.ContextMap[1].Left != "re/billing" || doc.ContextMap[1].Right != "payments/ledger" {
+		t.Errorf("edge1 = %+v, want qualified endpoints", doc.ContextMap[1])
+	}
+}
+
+// TestParse_ContextMap_DomainScope is the Task 3 TDD lock for the optional
+// domain scope on a context_map block (`context_map re { ... }`) and for
+// context_map blocks being repeatable + merged: two blocks (one scoped, one
+// unscoped) must contribute all of their edges to the single projected
+// doc.ContextMap slice.
+func TestParse_ContextMap_DomainScope(t *testing.T) {
+	doc, _, err := craft.Parse("f.craft", []byte("context_map re {\n  billing customer_supplier vas\n}\ncontext_map {\n  re/billing partnership payments/ledger\n}\n"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(doc.ContextMap) != 2 { // repeatable + merged
+		t.Fatalf("want 2 merged edges, got %d", len(doc.ContextMap))
+	}
+}

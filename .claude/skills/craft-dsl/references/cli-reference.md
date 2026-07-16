@@ -33,12 +33,16 @@ craft validate docs/payments.craft --format json
 craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 ```
 
-**vNext diagnostic codes.** `craft validate` checks *local well-formedness only* — node-slug shape, `context_map` edge endpoint kinds, and deprecated syntax. Cross-repo/cross-context resolution against real code is a hub concern, not `craft`'s.
+**vNext diagnostic codes.** `craft validate` checks *local well-formedness only* — node-slug shape, `context_map` endpoint/pattern shape, and deprecated syntax. Cross-repo/cross-context resolution against real code is a hub concern, not `craft`'s.
 
 | Code | Severity | Meaning |
 |------|----------|---------|
 | `craft/sema/malformed-slug` | error | A `kind:`-prefixed node slug (`domain:`/`bc:`/`term:`/`service:`) doesn't match its kind's namespace shape (e.g. `domain:re/<name>`, `bc:<domain>/<name>`, `term:<bc>/<name>`, `service:<alias>` with no namespace), or uses an unrecognised `kind:` word |
-| `craft/sema/edge-endpoint-kind` | error | A `context_map` edge's endpoints don't match its verb's required kinds — `realized_by`/`also_realizes` need `bc:` on the left and `service:` on the right; `same_as`/`contrasts`/`distinct_from` need `term:` on both sides |
+| `craft/sema/edge-endpoint-not-bc` | error | A `context_map` endpoint resolves to a domain, service, or actor — not a bounded context |
+| `craft/sema/self-relationship` | error | A `context_map` statement's two endpoints resolve to the same bounded context (`X <pattern> X`) |
+| `craft/sema/ambiguous-bc` | error | A bare `context_map` endpoint name is a bounded context in two or more domains — qualify it as `<domain>/<name>` |
+| `craft/sema/unresolved-bc` | warning | A `context_map` endpoint doesn't resolve to any declared bounded context |
+| `craft/lint/redundant-relationship` | warning | The same unordered bounded-context pair is declared with the same **symmetric** pattern (`partnership`/`shared_kernel`/`separate_ways`) more than once — directional duplicates in opposite order are not redundant |
 | `craft/sema/duplicate-service-anchor` | error | A service block declares `opslevel:` or `repo:` more than once |
 | `craft/lint/deprecated-string-ref` | warning | A `notifies`/`listens` uses the legacy quoted-string event form instead of a typed event ref — migrate to the dotted-id form (e.g. `order.OrderCreated`) |
 | `craft/sema/unresolved-ref-local` | warning | A node-slug ref (`domain:`/`bc:`/`service:`) doesn't resolve to anything declared in the current file-set. This is a **local, best-effort** check only — an unresolved ref may still be valid once cross-repo/hub resolution is applied, so it's a warning, not an error |

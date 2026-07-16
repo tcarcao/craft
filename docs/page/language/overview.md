@@ -27,6 +27,7 @@ A Craft file can contain any combination of these blocks:
 - **Use Cases** - Model business scenarios and flows
 - **Architecture** - Define component flows and system design
 - **Exposures** - Define external access points
+- **Context Map** - Classify bounded-context relationships with DDD strategic patterns
 
 ## Basic Syntax Rules
 
@@ -108,6 +109,7 @@ Center your models around business domains, not technical components.
 | Use Cases | `use_case` | Model business scenarios |
 | Architecture | `arch` | Define component flows |
 | Exposures | `exposure` | Define API access |
+| Context Map | `context_map` | Classify BC-to-BC relationships (DDD patterns) |
 
 ## Next Steps
 
@@ -117,3 +119,4 @@ Center your models around business domains, not technical components.
 - [Use Cases](/language/use-cases) - Model business logic
 - [Architecture](/language/architecture) - Define system components
 - [Exposures](/language/exposures) - Control external access
+- [Context Map](/language/context-map) - Classify bounded-context relationships

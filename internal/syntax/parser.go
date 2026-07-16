@@ -1844,11 +1844,18 @@ func (p *Parser) parseExposureBlock() []model.Diagnostic {
 	return diags
 }
 
-// parseContextMapBlock parses: context_map { edge_stmt* }
-// edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword
-// (realized_by/also_realizes/same_as/contrasts/distinct_from) matched by
-// value, like asks/notifies elsewhere (Q3). Endpoint kind validation
-// (bc -> service, etc.) is sema's job (Task 7), not the parser's.
+// parseContextMapBlock parses: context_map [domain] { edge_stmt* }
+// The domain scope is an optional bare identifier between the `context_map`
+// keyword and `{` (e.g. `context_map re { ... }`); it is stored as
+// SyntaxKindContextMapDomain and surfaced via ContextMapDecl.Domain() (Task
+// 3). Blocks are repeatable — a file may contain several context_map blocks,
+// scoped or not, and their edges are merged by the projection layer.
+// edge_stmt := ref EDGE_KW ref, where EDGE_KW is a contextual keyword — one of
+// the 8 DDD strategic context-mapping patterns (customer_supplier/conformist/
+// anticorruption_layer/open_host_service/published_language/partnership/
+// shared_kernel/separate_ways) — matched by value, like asks/notifies
+// elsewhere (Q3). Endpoint resolution/kind validation is sema's job, not the
+// parser's.
 func (p *Parser) parseContextMapBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindContextMapDecl)
 	var diags []model.Diagnostic
@@ -1857,6 +1864,11 @@ func (p *Parser) parseContextMapBlock() []model.Diagnostic {
 	p.attachTrivia()
 	kwTok := p.peek()
 	p.consumeAs(SyntaxKindKwContextMap)
+
+	// Optional domain scope: `context_map <domain> { ... }`.
+	if p.peek().Type == lexer.TokenIdent {
+		p.consumeAs(SyntaxKindContextMapDomain)
+	}
 
 	if p.peek().Type != lexer.TokenLBrace {
 		diags = append(diags, p.diagUnexpected(p.peek(), "{"))
@@ -1910,7 +1922,7 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 
 	left := p.peek()
 	if left.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(left.Type) {
-		diags = append(diags, p.diagUnexpected(left, "a node reference (e.g. bc:re/subscriptions)"))
+		diags = append(diags, p.diagUnexpected(left, "a node reference (e.g. billing or re/billing)"))
 		p.consumeAs(SyntaxKindError)
 		p.builder.FinishNode()
 		return diags
@@ -1921,14 +1933,14 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 	if verb.Type == lexer.TokenIdent && isEdgeKeyword(verb.Value) {
 		p.consumeAs(SyntaxKindEdgeKw)
 	} else {
-		diags = append(diags, p.diagUnexpected(verb, "an edge keyword (realized_by/also_realizes/same_as/contrasts/distinct_from)"))
+		diags = append(diags, p.diagUnexpected(verb, "a relationship pattern: directional (customer_supplier/conformist/anticorruption_layer/open_host_service/published_language) or symmetric (partnership/shared_kernel/separate_ways)"))
 		p.builder.FinishNode()
 		return diags
 	}
 
 	right := p.peek()
 	if right.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(right.Type) {
-		diags = append(diags, p.diagUnexpected(right, "a node reference (e.g. service:subscriptions-api)"))
+		diags = append(diags, p.diagUnexpected(right, "a node reference (e.g. billing or re/billing)"))
 		p.builder.FinishNode()
 		return diags
 	}
@@ -1951,8 +1963,8 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 // on a BARE keyword-as-ident endpoint with no following ':' made it consume
 // zero tokens; parseEdgeStmt then also made zero progress, and
 // parseContextMapBlock's loop called it again on the same position forever
-// — the Task 5 hang (`context_map { service realized_by service:x }`,
-// `context_map { term:x contrasts domain }`).
+// — the Task 5 hang (`context_map { service customer_supplier billing }`,
+// `context_map { billing separate_ways domain }`).
 //
 // The fix mirrors the established idiom at the other parseRef call sites
 // (parseAsksAction, parseNotifiesAction, parseTrigger's listens branch):
@@ -1999,8 +2011,15 @@ func (p *Parser) parseEdgeEndpoint() []model.Diagnostic {
 	return diags
 }
 
-// edgeKeywords is the single source of truth for context_map edge verbs.
-var edgeKeywords = []string{"realized_by", "also_realizes", "same_as", "contrasts", "distinct_from"}
+// edgeKeywords is the single source of truth for context_map relationship verbs
+// (DDD strategic context-mapping patterns). LEFT = upstream for directional verbs.
+var edgeKeywords = []string{
+	// directional
+	"customer_supplier", "conformist", "anticorruption_layer",
+	"open_host_service", "published_language",
+	// symmetric
+	"partnership", "shared_kernel", "separate_ways",
+}
 
 // isEdgeKeyword reports whether s is a recognised context_map edge verb.
 func isEdgeKeyword(s string) bool {

@@ -1,0 +1,11 @@
+domain re {
+    billing
+}
+
+domain payments {
+    charging
+}
+
+context_map re {
+    billing customer_supplier payments
+}

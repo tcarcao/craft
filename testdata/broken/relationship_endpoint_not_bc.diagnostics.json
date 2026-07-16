@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/edge-endpoint-not-bc",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 9,
+        "character": 30
+      },
+      "end": {
+        "line": 9,
+        "character": 38
+      }
+    }
+  }
+]

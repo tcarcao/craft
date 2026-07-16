@@ -74,7 +74,7 @@ func assertSeverity(t *testing.T, diags []model.Diagnostic, rule string, want mo
 
 func TestValidate_MalformedSlug(t *testing.T) {
 	src := `context_map {
-  foo:re/x same_as term:billing/y
+  foo:re/x customer_supplier term:billing/y
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertHasDiag(t, diags, "malformed-slug")
@@ -85,7 +85,7 @@ func TestValidate_MalformedSlug_BadNamespaceShape(t *testing.T) {
 	// domain: namespace is fixed to the literal "re" segment (design §3.1);
 	// "billing" is not a valid domain namespace.
 	src := `context_map {
-  domain:billing/x realized_by service:y
+  domain:billing/x customer_supplier service:y
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertHasDiag(t, diags, "malformed-slug")
@@ -94,7 +94,7 @@ func TestValidate_MalformedSlug_BadNamespaceShape(t *testing.T) {
 func TestValidate_MalformedSlug_ServiceWithNamespace(t *testing.T) {
 	// service: must have NO namespace/slash.
 	src := `context_map {
-  bc:re/x realized_by service:ns/y
+  bc:re/x customer_supplier service:ns/y
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertHasDiag(t, diags, "malformed-slug")
@@ -102,33 +102,21 @@ func TestValidate_MalformedSlug_ServiceWithNamespace(t *testing.T) {
 
 func TestValidate_ValidSlugs_NoMalformedSlug(t *testing.T) {
 	src := `context_map {
-  bc:re/subscriptions realized_by service:subscriptions-api
-  bc:re/vas also_realizes service:vas-application-api
-  term:subscriptions/dunning contrasts term:billing/dunning
-  term:ordering/order same_as term:offering/order
-  term:vas/apply distinct_from term:billing/apply
+  bc:re/subscriptions customer_supplier service:subscriptions-api
+  bc:re/vas conformist service:vas-application-api
+  term:subscriptions/dunning partnership term:billing/dunning
+  term:ordering/order shared_kernel term:offering/order
+  term:vas/apply separate_ways term:billing/apply
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertNoDiag(t, diags, "malformed-slug")
-	assertNoDiag(t, diags, "edge-endpoint-kind")
 }
 
-func TestValidate_EdgeEndpointKind(t *testing.T) {
-	src := `context_map {
-  bc:re/x same_as service:y
-}`
-	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
-	assertHasDiag(t, diags, "edge-endpoint-kind")
-	assertSeverity(t, diags, "edge-endpoint-kind", model.SeverityError)
-}
-
-func TestValidate_EdgeEndpointKind_RealizedByWrongDirection(t *testing.T) {
-	src := `context_map {
-  service:x realized_by bc:re/y
-}`
-	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
-	assertHasDiag(t, diags, "edge-endpoint-kind")
-}
+// NOTE: the endpoint-kind validation tests (edge-endpoint-kind: bc→service and
+// term→term rules) were removed here alongside the old realization/term verb
+// vocabulary. Endpoint resolution / endpoint-not-bc / self-relationship / the
+// symmetric redundant lint are LATER tasks in the context_map redesign; their
+// coverage returns with those tasks.
 
 func TestValidate_DeprecatedStringRef(t *testing.T) {
 	src := `use_case "x" {
@@ -256,7 +244,7 @@ func TestValidate_UnresolvedRefLocal_Warning(t *testing.T) {
   }
 }
 context_map {
-  bc:re/x realized_by service:unknown-svc
+  bc:re/x customer_supplier service:unknown-svc
 }`
 	uri := "file:///a.craft"
 	tree := parseTreeFor(src)

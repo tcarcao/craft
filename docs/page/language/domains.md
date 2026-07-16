@@ -310,9 +310,20 @@ use_case "Order Flow" {
 }
 ```
 
+## Domain Relationships (Strategic View)
+
+The use-case interactions above are the **communication view** — who calls whom. Craft also has a **strategic view**, [`context_map`](/language/context-map), for classifying how the bounded contexts declared here relate using DDD patterns (customer/supplier, conformist, anticorruption layer, and others):
+
+```craft
+context_map Order {
+  OrderManagement open_host_service OrderTracking
+}
+```
+
 ## Next Steps
 
 - Learn about [services](/language/services) to group domains
 - Model interactions with [use cases](/language/use-cases)
+- Classify relationships with the [context map](/language/context-map)
 - Define [actors](/language/actors) that interact with domains
 - See [complete examples](/examples/ecommerce)

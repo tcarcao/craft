@@ -18,11 +18,18 @@ import (
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
-// edgeRealizationVerbs require a `bc:` left endpoint and a `service:` right endpoint.
-var edgeRealizationVerbs = map[string]bool{"realized_by": true, "also_realizes": true}
-
-// edgeTermVerbs require `term:` endpoints on both sides.
-var edgeTermVerbs = map[string]bool{"same_as": true, "contrasts": true, "distinct_from": true}
+// edgeRelationshipVerbs is sema's recognition set for context_map edge verbs:
+// the 8 DDD strategic context-mapping patterns. It MUST stay in sync with the
+// parser's edgeKeywords (asserted by TestEdgeVerbVocabulariesInSync). Recognition
+// only — endpoint resolution, endpoint-not-bc, self-relationship, and redundant
+// symmetric lint are LATER tasks and are deliberately not implemented here.
+var edgeRelationshipVerbs = map[string]bool{
+	// directional
+	"customer_supplier": true, "conformist": true, "anticorruption_layer": true,
+	"open_host_service": true, "published_language": true,
+	// symmetric
+	"partnership": true, "shared_kernel": true, "separate_ways": true,
+}
 
 // SlugRefSite records a single kind-prefixed node-slug reference (domain:,
 // bc:, or service: — term: is skipped, since craft tracks no term
@@ -238,10 +245,10 @@ func deprecatedStringRefDiag(uri, verb, event string, line, col int) model.Diagn
 	}
 }
 
-// validateContextMapEdges checks each context_map edge's endpoint kinds
-// against its verb (edge-endpoint-kind) and each endpoint's slug shape
-// (malformed-slug). Also returns well-formed slug refs collected for
-// cross-file resolution.
+// validateContextMapEdges checks each context_map edge for slug-shape
+// validity (malformed-slug) and verb recognition. Endpoint-kind validation
+// and cross-file resolution are DEFERRED to a later task. Also returns
+// well-formed slug refs collected for resolution.
 func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, hasLI bool) ([]model.Diagnostic, []SlugRefSite) {
 	var diags []model.Diagnostic
 	var refs []SlugRefSite
@@ -266,54 +273,262 @@ func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, h
 			checkSlugRef(uri, left, leftLine, leftCol, &diags, &refs)
 			checkSlugRef(uri, right, rightLine, rightCol, &diags, &refs)
 
-			leftKind, rightKind := refKindWord(left), refKindWord(right)
-			diags = append(diags, classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right, leftLine, leftCol)...)
+			diags = append(diags, classifyEdgeVerb(uri, verb, left, leftLine, leftCol)...)
 		}
 	}
 	return diags, refs
 }
 
-// classifyEdgeVerb returns endpoint-kind diagnostics for one edge. Extracted from
-// the tree walk so the default branch (unreachable via .craft source because the
-// parser's isEdgeKeyword gates it) is unit-testable.
-func classifyEdgeVerb(uri, verb, leftKind, rightKind, left, right string, leftLine, leftCol int) []model.Diagnostic {
-	switch {
-	case edgeRealizationVerbs[verb]:
-		if leftKind != "bc" || rightKind != "service" {
-			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "a `bc:` left endpoint and a `service:` right endpoint", left, right, leftLine, leftCol)}
-		}
-	case edgeTermVerbs[verb]:
-		if leftKind != "term" || rightKind != "term" {
-			return []model.Diagnostic{edgeEndpointKindDiag(uri, verb, "`term:` endpoints on both sides", left, right, leftLine, leftCol)}
-		}
-	default:
-		startChar := colToLSP(leftCol)
-		return []model.Diagnostic{{
-			Code:      "craft/sema/unrecognised-edge-verb",
-			Message:   fmt.Sprintf("edge verb %q has no endpoint-kind rule (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
-			Severity:  model.SeverityError,
-			SourceURI: uri,
-			Range: model.Range{
-				Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-				End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
-			},
-		}}
+// classifyEdgeVerb recognises one context_map edge verb. A verb in
+// edgeRelationshipVerbs (the 8 DDD patterns) is accepted with NO diagnostic —
+// endpoint resolution / endpoint-not-bc / self-relationship / redundant lint are
+// LATER tasks. The default branch is unreachable via .craft source (the parser's
+// isEdgeKeyword gates the same vocabulary, kept in sync by
+// TestEdgeVerbVocabulariesInSync); it exists only to make parser/sema drift a
+// loud internal error and is unit-tested directly.
+func classifyEdgeVerb(uri, verb, left string, leftLine, leftCol int) []model.Diagnostic {
+	if edgeRelationshipVerbs[verb] {
+		return nil
 	}
-	return nil
-}
-
-func edgeEndpointKindDiag(uri, verb, requirement, left, right string, line, col int) model.Diagnostic {
-	startChar := colToLSP(col)
-	return model.Diagnostic{
-		Code:      "craft/sema/edge-endpoint-kind",
-		Message:   fmt.Sprintf("edge %q %s %q requires %s", left, verb, right, requirement),
+	startChar := colToLSP(leftCol)
+	return []model.Diagnostic{{
+		Code:      "craft/sema/unrecognised-edge-verb",
+		Message:   fmt.Sprintf("edge verb %q is not a recognised relationship pattern (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
 		Severity:  model.SeverityError,
 		SourceURI: uri,
 		Range: model.Range{
-			Start: model.Position{Line: lineToLSP(line), Character: startChar},
-			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(left)},
+			Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
+			End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
 		},
+	}}
+}
+
+// ContextMapEdgeSite records one context_map edge for cross-file endpoint
+// resolution in AnalyzeWorkspace (Task 4). Mirrors SlugRefSite: collected
+// per-file in AnalyzeFile (which has no WorkspaceSymbols) and resolved in the
+// workspace pass, so a BC declared in another file is not false-flagged.
+type ContextMapEdgeSite struct {
+	// ScopeDomain is the owning block's domain scope (ContextMapDecl.Domain(),
+	// "" if the block is unscoped).
+	ScopeDomain string
+	// Left, Right are the raw endpoint texts (bare `name` or qualified `domain/name`).
+	Left, Right         string
+	Verb                string
+	URI                 string
+	LeftLine, LeftCol   int
+	RightLine, RightCol int
+}
+
+// collectContextMapEdgeSites gathers one ContextMapEdgeSite per edge, using the
+// same position-extraction idiom as validateContextMapEdges. Resolution is
+// deferred to AnalyzeWorkspace (endpoints are cross-domain / cross-file).
+func collectContextMapEdgeSites(uri string, file syntax.File, li green.LineIndex, hasLI bool) []ContextMapEdgeSite {
+	var sites []ContextMapEdgeSite
+	for _, cm := range file.ContextMaps() {
+		scope := cm.Domain()
+		for _, edge := range cm.Edges() {
+			leftLine, leftCol := 0, 0
+			if hasLI {
+				if lr := edge.LeftRef(); lr != nil {
+					leftLine, leftCol = lr.Line(li), lr.Col(li)
+				}
+			}
+			rightLine, rightCol := 0, 0
+			if hasLI {
+				if rr := edge.RightRef(); rr != nil {
+					rightLine, rightCol = rr.Line(li), rr.Col(li)
+				}
+			}
+			sites = append(sites, ContextMapEdgeSite{
+				ScopeDomain: scope,
+				Left:        edge.Left(),
+				Right:       edge.Right(),
+				Verb:        edge.Verb(),
+				URI:         uri,
+				LeftLine:    leftLine,
+				LeftCol:     leftCol,
+				RightLine:   rightLine,
+				RightCol:    rightCol,
+			})
+		}
 	}
+	return sites
+}
+
+// resolveBCRef resolves a context_map endpoint against the workspace symbol table.
+// scopeDomain is the owning block's domain scope ("" if unscoped).
+// Returns (canonical "domain/name" when a BC, kind, ambiguous).
+// kind ∈ {"bc","domain","service","actor",""}; "" means fully unresolved.
+func resolveBCRef(ws WorkspaceSymbols, scopeDomain, ref string) (resolved, kind string, ambiguous bool) {
+	// 1. Qualified `domain/name`: names a specific BC. If that domain doesn't
+	// declare it, it's fully unresolved (not endpoint-not-bc).
+	if idx := strings.IndexByte(ref, '/'); idx >= 0 {
+		domain, name := ref[:idx], ref[idx+1:]
+		if dom, ok := ws.Domains[domain]; ok && domainHasBC(dom, name) {
+			return domain + "/" + name, "bc", false
+		}
+		return "", "", false
+	}
+
+	// 2. Bare `name`, scope-first: a BC of the owning block's domain wins.
+	if scopeDomain != "" {
+		if dom, ok := ws.Domains[scopeDomain]; ok && domainHasBC(dom, ref) {
+			return scopeDomain + "/" + ref, "bc", false
+		}
+	}
+
+	// 3. Bare `name`, ambiguity count across all domains. (ws.BoundedContexts
+	// maps to a single owner and hides ambiguity, so it is not used here.)
+	owner, count := "", 0
+	for domName, dom := range ws.Domains {
+		if domainHasBC(dom, ref) {
+			owner = domName
+			count++
+		}
+	}
+	if count == 1 {
+		return owner + "/" + ref, "bc", false
+	}
+	if count >= 2 {
+		return "", "bc", true
+	}
+
+	// 4. Bare `name`, not a BC: fall through to domain / service / actor.
+	if _, ok := ws.Domains[ref]; ok {
+		return ref, "domain", false
+	}
+	if _, ok := ws.Services[ref]; ok {
+		return ref, "service", false
+	}
+	if _, ok := ws.Actors[ref]; ok {
+		return ref, "actor", false
+	}
+	return "", "", false
+}
+
+func domainHasBC(dom DomainSymbol, name string) bool {
+	for _, bc := range dom.BoundedContexts {
+		if bc == name {
+			return true
+		}
+	}
+	return false
+}
+
+// relationshipEdgeDiags resolves both endpoints of a collected context_map edge
+// and emits the endpoint-kind and self-relationship diagnostics (Task 4).
+func relationshipEdgeDiags(ws WorkspaceSymbols, site ContextMapEdgeSite) []model.Diagnostic {
+	var diags []model.Diagnostic
+
+	leftResolved, leftKind, leftAmbig := resolveBCRef(ws, site.ScopeDomain, site.Left)
+	rightResolved, rightKind, rightAmbig := resolveBCRef(ws, site.ScopeDomain, site.Right)
+
+	diags = append(diags, endpointDiag(site.URI, site.Left, leftKind, leftAmbig, site.LeftLine, site.LeftCol)...)
+	diags = append(diags, endpointDiag(site.URI, site.Right, rightKind, rightAmbig, site.RightLine, site.RightCol)...)
+
+	// A relationship must not connect a bounded context to itself. Only fires
+	// when BOTH endpoints resolved unambiguously to the SAME bc.
+	if leftKind == "bc" && !leftAmbig && rightKind == "bc" && !rightAmbig &&
+		leftResolved != "" && leftResolved == rightResolved {
+		startChar := colToLSP(site.LeftCol)
+		diags = append(diags, model.Diagnostic{
+			Code:      "craft/sema/self-relationship",
+			Message:   fmt.Sprintf("relationship connects bounded context %q to itself", leftResolved),
+			Severity:  model.SeverityError,
+			SourceURI: site.URI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+			},
+		})
+	}
+	return diags
+}
+
+// redundantRelationshipDiag flags a symmetric context_map edge (partnership,
+// shared_kernel, separate_ways) whose resolved BC pair + verb was already
+// seen elsewhere in the workspace (Task 5). Symmetric verbs express an
+// undirected fact, so "a partnership b" and "b partnership a" are the same
+// declaration; the second (and any later) occurrence is redundant. Only
+// fires when both endpoints resolved unambiguously to a bc — unresolved or
+// ambiguous endpoints already get their own diagnostics from
+// relationshipEdgeDiags and must not also trigger this lint. seen is shared
+// across the whole workspace resolution loop so duplicates split across
+// files still dedupe.
+func redundantRelationshipDiag(ws WorkspaceSymbols, site ContextMapEdgeSite, seen map[string]bool) []model.Diagnostic {
+	if !syntax.EdgeVerbSymmetric(site.Verb) {
+		return nil
+	}
+
+	leftResolved, leftKind, leftAmbig := resolveBCRef(ws, site.ScopeDomain, site.Left)
+	rightResolved, rightKind, rightAmbig := resolveBCRef(ws, site.ScopeDomain, site.Right)
+
+	if leftKind != "bc" || leftAmbig || leftResolved == "" ||
+		rightKind != "bc" || rightAmbig || rightResolved == "" {
+		return nil
+	}
+
+	pair := [2]string{leftResolved, rightResolved}
+	if pair[0] > pair[1] {
+		pair[0], pair[1] = pair[1], pair[0]
+	}
+	key := pair[0] + "|" + pair[1] + "|" + site.Verb
+
+	if seen[key] {
+		startChar := colToLSP(site.LeftCol)
+		return []model.Diagnostic{{
+			Code: "craft/lint/redundant-relationship",
+			Message: fmt.Sprintf(
+				"%s relationship between %q and %q is already declared elsewhere in the workspace",
+				site.Verb, leftResolved, rightResolved,
+			),
+			Severity:  model.SeverityWarning,
+			SourceURI: site.URI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+			},
+		}}
+	}
+	seen[key] = true
+	return nil
+}
+
+// endpointDiag emits at most one diagnostic for a single resolved endpoint:
+// ambiguous-bc (error), edge-endpoint-not-bc (error), or unresolved-bc (warning).
+func endpointDiag(uri, ref, kind string, ambiguous bool, line, col int) []model.Diagnostic {
+	startChar := colToLSP(col)
+	rng := model.Range{
+		Start: model.Position{Line: lineToLSP(line), Character: startChar},
+		End:   model.Position{Line: lineToLSP(line), Character: startChar + len(ref)},
+	}
+	switch {
+	case ambiguous:
+		return []model.Diagnostic{{
+			Code:      "craft/sema/ambiguous-bc",
+			Message:   fmt.Sprintf("bounded context %q is declared in multiple domains; qualify it as <domain>/%s", ref, ref),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	case kind != "" && kind != "bc":
+		return []model.Diagnostic{{
+			Code:      "craft/sema/edge-endpoint-not-bc",
+			Message:   fmt.Sprintf("context_map endpoint %q resolves to a %s, not a bounded context", ref, kind),
+			Severity:  model.SeverityError,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	case kind == "":
+		return []model.Diagnostic{{
+			Code:      "craft/sema/unresolved-bc",
+			Message:   fmt.Sprintf("context_map endpoint %q does not resolve to any bounded context", ref),
+			Severity:  model.SeverityWarning,
+			SourceURI: uri,
+			Range:     rng,
+		}}
+	}
+	return nil
 }
 
 // validateServiceAnchors flags a repeated opslevel: or repo: field within a

@@ -1,0 +1,9 @@
+domain re {
+    billing
+    vas
+}
+
+context_map re {
+    billing partnership vas
+    vas partnership billing
+}

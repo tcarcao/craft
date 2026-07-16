@@ -25,6 +25,14 @@ domain Monetization {
   VASScheduling
 }
 
+context_map Monetization {
+  Wallet open_host_service WalletItemPurchase
+  Wallet open_host_service VASScheduling
+  Wallet open_host_service WalletItemAddition
+  OrderManagement customer_supplier OrderFulfilment
+  WalletItemPurchase partnership VASScheduling
+}
+
 use_case "Purchase VAS to Wallet" {
   when Business_User purchases VAS to wallet
     WalletItemPurchase asks Wallet to initiate a VAS addition

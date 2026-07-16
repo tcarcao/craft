@@ -76,9 +76,18 @@ const (
 	SyntaxKindKwImport // hard keyword `import`
 
 	// SyntaxKindEdgeKw is the contextual keyword for a context_map edge verb:
-	// one of realized_by/also_realizes/same_as/contrasts/distinct_from (Task 5).
-	// Matched by value from TokenIdent, like asks/notifies elsewhere.
+	// one of the 8 DDD strategic context-mapping patterns (customer_supplier/
+	// conformist/anticorruption_layer/open_host_service/published_language/
+	// partnership/shared_kernel/separate_ways). Matched by value from
+	// TokenIdent, like asks/notifies elsewhere.
 	SyntaxKindEdgeKw
+
+	// SyntaxKindContextMapDomain is the optional domain-scope identifier
+	// directly after the `context_map` keyword and before its `{`, e.g. the
+	// `re` in `context_map re { ... }` (Task 3). Consumed positionally from
+	// TokenIdent — not matched by value, unlike the contextual keywords
+	// above.
+	SyntaxKindContextMapDomain
 
 	// SyntaxKindKwTags is the contextual keyword `tags` introducing a use_case's
 	// tags { } sub-block (Task 3, Slice B). Matched by value from TokenIdent,

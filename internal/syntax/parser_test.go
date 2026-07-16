@@ -544,15 +544,18 @@ func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
 
 // TestContextMap_Edges is the Task 5 TDD lock for the new `context_map { }`
 // top-level block: edge_stmt := ref EDGE_KW ref, where EDGE_KW is a
-// contextual keyword (realized_by/also_realizes/same_as/contrasts/
-// distinct_from) matched by value, like asks/notifies. Asserts edges surface
-// through the pkg/craft projection layer with Left/Right taken from
-// RefText() — NOT Name(), which would truncate a kind-prefixed slug like
-// "bc:re/subscriptions" down to just "bc".
+// contextual keyword — one of the 8 DDD relationship patterns
+// (customer_supplier/conformist/anticorruption_layer/open_host_service/
+// published_language/partnership/shared_kernel/separate_ways), matched by
+// value, like asks/notifies (Task 1: verb vocabulary swapped from the old
+// realized_by/also_realizes/same_as/contrasts/distinct_from set). Asserts
+// edges surface through the pkg/craft projection layer with Left/Right taken
+// from RefText() — NOT Name(), which would truncate a kind-prefixed slug
+// like "bc:re/subscriptions" down to just "bc".
 func TestContextMap_Edges(t *testing.T) {
 	src := `context_map {
-  bc:re/subscriptions realized_by service:subscriptions-api
-  term:subscriptions/dunning contrasts term:billing/dunning
+  bc:re/subscriptions customer_supplier service:subscriptions-api
+  term:subscriptions/dunning partnership term:billing/dunning
 }`
 	gn, li, diags := syntax.Parse(src)
 	if len(diags) != 0 {
@@ -570,10 +573,10 @@ func TestContextMap_Edges(t *testing.T) {
 	if len(edges) != 2 {
 		t.Fatalf("want 2 edges, got %d: %+v", len(edges), edges)
 	}
-	if edges[0].Left != "bc:re/subscriptions" || edges[0].Verb != "realized_by" || edges[0].Right != "service:subscriptions-api" {
+	if edges[0].Left != "bc:re/subscriptions" || edges[0].Verb != "customer_supplier" || edges[0].Right != "service:subscriptions-api" {
 		t.Fatalf("edge0 = %+v", edges[0])
 	}
-	if edges[1].Left != "term:subscriptions/dunning" || edges[1].Verb != "contrasts" || edges[1].Right != "term:billing/dunning" {
+	if edges[1].Left != "term:subscriptions/dunning" || edges[1].Verb != "partnership" || edges[1].Right != "term:billing/dunning" {
 		t.Fatalf("edge1 = %+v", edges[1])
 	}
 
@@ -595,11 +598,42 @@ func TestContextMap_Edges(t *testing.T) {
 	if got := astEdges[0].Left(); got != "bc:re/subscriptions" {
 		t.Errorf("astEdges[0].Left() = %q, want %q", got, "bc:re/subscriptions")
 	}
-	if got := astEdges[0].Verb(); got != "realized_by" {
-		t.Errorf("astEdges[0].Verb() = %q, want %q", got, "realized_by")
+	if got := astEdges[0].Verb(); got != "customer_supplier" {
+		t.Errorf("astEdges[0].Verb() = %q, want %q", got, "customer_supplier")
 	}
 	if got := astEdges[0].Right(); got != "service:subscriptions-api" {
 		t.Errorf("astEdges[0].Right() = %q, want %q", got, "service:subscriptions-api")
+	}
+}
+
+// TestParse_ContextMap_DomainScope is the Task 3 TDD lock for the optional
+// domain scope on a context_map block: `context_map re { ... }` scopes the
+// block to domain "re", while a bare `context_map { ... }` is unscoped
+// (Domain() == ""). Also confirms the block is repeatable — two blocks in
+// one file both parse and both surface through File.ContextMaps().
+func TestParse_ContextMap_DomainScope(t *testing.T) {
+	src := "context_map re {\n  billing customer_supplier vas\n}\ncontext_map {\n  re/billing partnership payments/ledger\n}\n"
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	// Round-trip: the block must reassemble to the exact source text.
+	if got := reassembleGreen(gn); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	root := syntax.Root(gn)
+	file := syntax.AsFile(root)
+	cms := file.ContextMaps()
+	if len(cms) != 2 {
+		t.Fatalf("expected 2 ContextMapDecl views, got %d", len(cms))
+	}
+	if got := cms[0].Domain(); got != "re" {
+		t.Errorf("cms[0].Domain() = %q, want %q", got, "re")
+	}
+	if got := cms[1].Domain(); got != "" {
+		t.Errorf("cms[1].Domain() = %q, want empty", got)
 	}
 }
 
@@ -641,7 +675,7 @@ func parseWithHangGuard(t *testing.T, src string) (*green.GreenNode, green.LineI
 // makes parseRef always consume its first token when called on an
 // ident/keyword-as-ident start, guaranteeing forward progress.
 func TestContextMap_HangRegression_BareKeywordLeftEndpoint(t *testing.T) {
-	src := "context_map {\n  service realized_by service:x\n}"
+	src := "context_map {\n  service customer_supplier service:x\n}"
 	gn, _, diags := parseWithHangGuard(t, src)
 
 	if len(diags) == 0 {
@@ -657,12 +691,12 @@ func TestContextMap_HangRegression_BareKeywordLeftEndpoint(t *testing.T) {
 
 // TestContextMap_HangRegression_BareKeywordRightEndpoint is the mirror image
 // of TestContextMap_HangRegression_BareKeywordLeftEndpoint for the RIGHT
-// endpoint: `term:x contrasts domain` — a valid left ref, a valid edge verb,
+// endpoint: `term:x partnership domain` — a valid left ref, a valid edge verb,
 // then a bare keyword-as-ident right endpoint ("domain") with no colon. The
 // same zero-progress hazard applied to the right endpoint's call to
 // parseRef() before the fix.
 func TestContextMap_HangRegression_BareKeywordRightEndpoint(t *testing.T) {
-	src := "context_map {\n  term:x contrasts domain\n}"
+	src := "context_map {\n  term:x partnership domain\n}"
 	gn, _, diags := parseWithHangGuard(t, src)
 
 	if len(diags) == 0 {

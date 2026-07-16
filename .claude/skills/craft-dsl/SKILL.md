@@ -53,17 +53,20 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 <deployment_rule>    ::= <percentage> "->" <identifier>
 
 // --- Node slugs: typed, code-anchored references (vNext) ---
-// [kind:][namespace/]name — used as asks targets and context_map endpoints
+// [kind:][namespace/]name — used as asks targets
 <node_slug>          ::= (<slug_kind> ":")? <slug_path>
 <slug_kind>          ::= "domain" | "bc" | "term" | "service"
 <slug_path>          ::= <identifier> ("/" <identifier>)*
 // Event ref: dotted qualified id (FQ Avro record name / OpenAPI operationId)
 <event_ref>          ::= <identifier> ("." <identifier>)+ | <string>   // <string> form is DEPRECATED
 
-// --- Context Map: typed inter-BC/service and inter-term edges (vNext) ---
-<context_map>        ::= "context_map" "{" <edge_stmt>+ "}"
-<edge_stmt>           ::= <node_slug> <edge_verb> <node_slug>
-<edge_verb>           ::= "realized_by" | "also_realizes" | "same_as" | "contrasts" | "distinct_from"
+// --- Context Map: DDD strategic relationship patterns between bounded contexts ---
+<context_map>        ::= "context_map" <identifier>? "{" <edge_stmt>+ "}"
+<edge_stmt>           ::= <bc_ref> <pattern> <bc_ref>
+<bc_ref>              ::= <identifier> ("/" <identifier>)?   // bare, or domain-qualified — no bc:/service:/term: prefix
+<pattern>             ::= "customer_supplier" | "conformist" | "anticorruption_layer"
+                        | "open_host_service" | "published_language"
+                        | "partnership" | "shared_kernel" | "separate_ways"
 
 // --- Architecture: component topology ---
 <arch>               ::= "arch" <identifier>? "{" <arch_section>+ "}"
@@ -214,38 +217,55 @@ A **node slug** is the typed, code-anchored way to reference a domain, bounded c
 
 A malformed namespace (wrong segment count, empty segment, or an unrecognised `kind:` word) is a `craft/sema/malformed-slug` error.
 
-Node slugs are used in two places:
+Node slugs are used for:
 - **`asks` targets** — `Subscriptions asks bc:re/billing for a fresh charge attempt` (a bare identifier like `Billing` is still valid too — it's the short form, resolved by context)
-- **`context_map` edge endpoints** (see below)
+
+`context_map` endpoints do **not** use node slugs — they use a simpler bare-or-domain-qualified bounded-context reference (see below).
 
 **Term module-scoping:** a bare term name written inside its own bounded context resolves to that BC's namespace automatically. Any **cross-BC** term reference must use the fully-qualified `term:<bc>/<name>` slug — a bare cross-context term reference can't be locally verified and is a hub-side error.
 
 ### Context Map
 
-The `context_map` block declares typed edges between bounded contexts, services, and terms — the DDD context map, as code:
+The `context_map` block declares the DDD **strategic relationship** between two bounded contexts — customer/supplier, conformist, anticorruption layer, open-host service, published language, partnership, shared kernel, or separate ways:
 
 ```craft
-context_map {
-    bc:re/subscriptions realized_by service:subscriptions-api
-    bc:re/vas           also_realizes service:vas-application-api
+context_map re {
+    billing customer_supplier vas
+    billing open_host_service subscriptions
+    billing partnership vas
+}
 
-    term:subscriptions/dunning contrasts     term:billing/dunning
-    term:ordering/order        same_as       term:offering/order
-    term:vas/apply             distinct_from term:billing/apply
+context_map {
+    re/billing separate_ways legacy/reporting
 }
 ```
 
-Five typed edge verbs, each with fixed endpoint kinds:
+- The block is **repeatable** and optionally scoped to a domain (`context_map re { }`); an unscoped `context_map { }` is the shared/global map.
+- Endpoints (`bc_ref`) are bare (`billing`) or domain-qualified (`re/billing`) bounded-context names — **no `bc:`/`service:`/`term:` prefix** inside `context_map`. `/` is the domain/bc separator; `.` stays reserved for event refs and must never appear in an endpoint.
+- One pattern per statement, one statement per line.
 
-| Verb | Left endpoint | Right endpoint | Meaning |
-|------|---------------|-----------------|---------|
-| `realized_by` | `bc:` | `service:` | This bounded context is realized by this service |
-| `also_realizes` | `bc:` | `service:` | This bounded context is also (partially) realized by this service |
-| `same_as` | `term:` | `term:` | These two terms mean the same thing |
-| `contrasts` | `term:` | `term:` | These two terms are related but distinct — call out the contrast |
-| `distinct_from` | `term:` | `term:` | These two terms are unrelated despite similar naming |
+Eight patterns — five **directional** (endpoint order carries meaning, `LEFT = upstream`, `RIGHT = downstream`) and three **symmetric** (order is meaningless):
 
-A `bc:`/`service:` edge with the wrong endpoint kinds (e.g. `service:` on the left) is a `craft/sema/edge-endpoint-kind` error, as is a `term:` edge with a non-`term:` endpoint.
+| Pattern | Class | Left (role) | Right (role) |
+|---|---|---|---|
+| `customer_supplier` | directional | supplier (upstream) | customer (downstream) |
+| `conformist` | directional | upstream (model owner) | conformist (downstream) |
+| `anticorruption_layer` | directional | upstream | downstream (owns the ACL) |
+| `open_host_service` | directional | host (upstream) | consumer (downstream) |
+| `published_language` | directional | publisher (upstream) | consumer (downstream) |
+| `partnership` | symmetric | — | — |
+| `shared_kernel` | symmetric | — | — |
+| `separate_ways` | symmetric | — | — |
+
+Validation is about shape, not modeling correctness:
+
+| Code | Severity | When |
+|------|----------|------|
+| `craft/sema/edge-endpoint-not-bc` | error | an endpoint resolves to a domain, service, or actor — not a bounded context |
+| `craft/sema/self-relationship` | error | both endpoints resolve to the same bounded context (`X <pattern> X`) |
+| `craft/sema/ambiguous-bc` | error | a bare endpoint name is a bounded context in two or more domains — qualify it as `<domain>/<name>` |
+| `craft/sema/unresolved-bc` | warning | an endpoint doesn't resolve to any declared bounded context |
+| `craft/lint/redundant-relationship` | warning | the same unordered pair is declared with the same **symmetric** pattern more than once (directional duplicates in opposite order are not redundant) |
 
 ### Architecture
 
@@ -395,7 +415,7 @@ The good version shows that each delivery channel reacts independently to the sa
 1. `actors` — who interacts with the system
 2. `domains` — business capability boundaries
 3. `services` — deployable units with tech stack
-4. `context_map` — typed edges between bounded contexts, services, and terms
+4. `context_map` — DDD strategic relationships between bounded contexts
 5. `arch` — component topology
 6. `exposure` — external access rules
 7. `use_case` — behavioral scenarios
@@ -434,7 +454,7 @@ These are the most frequent syntax errors. Avoid them:
 8. **Actions outside a when block** — Every action must be inside a scenario (under a `when` trigger). Orphaned actions are invalid
 9. **Connector word confusion** — Connector words (`a`, `an`, `the`, `to`, `from`, etc.) are optional in phrases but they make the DSL read naturally. Use them for readability
 10. **Trailing comma on last item of a multi-line list** — When splitting a list across lines, the final item must not have a trailing comma. `contexts: Foo, Bar,\n    Baz` is valid; `contexts: Foo, Bar,\n    Baz,\ndata-stores: db` is not
-11. **Wrong context_map edge endpoint kinds** — `realized_by`/`also_realizes` require `bc:` on the left and `service:` on the right; `same_as`/`contrasts`/`distinct_from` require `term:` on both sides. Mismatched kinds are a `craft/sema/edge-endpoint-kind` error
+11. **`context_map` endpoint with a `bc:`/`service:`/`term:` prefix** — `context_map` endpoints are bare or domain-qualified bounded-context names only (`billing`, `re/billing`); there is no kind prefix inside a `context_map` block. An endpoint that resolves to a domain, service, or actor instead of a bounded context is a `craft/sema/edge-endpoint-not-bc` error
 12. **Unspaced `//` inside prose is NOT a comment** — `http://api`, `50/50`, `and/maybe` stay as prose because there's no whitespace before the `//`/`/`. A comment needs a space (or line-start) before it: `Auth checks token  // TODO`
 
 ---
@@ -521,10 +541,9 @@ services {
     }
 }
 
-// Context map: typed edges between bounded contexts, services, and terms
+// Context map: DDD strategic relationships between bounded contexts
 context_map {
-    bc:re/authentication realized_by service:user-service
-    term:auth/account     same_as     term:communications/account
+    Authentication open_host_service Notifier
 }
 
 // Architecture
@@ -573,4 +592,4 @@ use_case "Scheduled Cleanup" {
 }
 ```
 
-Notice how the "User Registration" use case uses event-driven choreography: `Authentication` publishes `auth.UserRegistered`, then both `Profile` and `Notifier` independently react to it in separate scenarios. This models real-world decoupling — the authentication bounded context doesn't need to know about profile creation or email sending. Note also the unquoted prose tail `(retry x3! & backoff)` on the `asks` step — special characters don't need quoting — and the `context_map` block declaring that `Authentication` is realized by `UserService` (matching its `opslevel:` alias) and that the `auth/account` and `communications/account` terms mean the same thing.
+Notice how the "User Registration" use case uses event-driven choreography: `Authentication` publishes `auth.UserRegistered`, then both `Profile` and `Notifier` independently react to it in separate scenarios. This models real-world decoupling — the authentication bounded context doesn't need to know about profile creation or email sending. Note also the unquoted prose tail `(retry x3! & backoff)` on the `asks` step — special characters don't need quoting — and the `context_map` block declaring that `Authentication` is an open-host service for `Notifier` (LEFT `Authentication` is the upstream host, RIGHT `Notifier` is the downstream consumer).
