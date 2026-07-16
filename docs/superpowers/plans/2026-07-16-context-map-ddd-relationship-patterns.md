@@ -400,7 +400,40 @@ Expected: PASS (existing corpus green after updating any context_map cases to ne
 
 ---
 
-## Task 10: CHANGELOG + release (GATED on user confirmation)
+## Task 10: Docs + CLI
+
+**Files:**
+- Create: `docs/page/language/context-map.md` (new language-reference page)
+- Modify: `docs/page/language/overview.md` (add context_map to the feature list/summary), the VitePress nav config (`docs/page/.vitepress/config.*` — add the new page to the `language/` sidebar), `docs/page/language/domains.md` (cross-link, since BCs are declared there)
+- Modify: `CLAUDE.md` (add a `context_map` row to the DSL keyword table + a short example) — optional but recommended for agent context
+- Add: a `context_map { }` block to one `examples/*.craft` (e.g. `examples/e-comerce.craft` or `banking-system.craft`) to showcase the feature end-to-end
+- Verify: `cmd/craft` handles the new syntax (parse/validate/inspect)
+
+**Interfaces:** consumes the shipped syntax (Tasks 1–8); no code API changes.
+
+- [ ] **Step 1: Write `docs/page/language/context-map.md`.** Cover: what a context map is (the strategic view, contrast with the inferred communication view); the block (`context_map { }` and `context_map <domain> { }`, repeatable + merged); endpoints (bare `billing` / qualified `re/billing`, no `bc:`); the eight patterns in a table with the LEFT=upstream reading and a one-line meaning each; symmetric vs directional; one-pattern-per-line; a full worked example. Match the tone/structure of the sibling pages (`services.md`, `use-cases.md`) — read one first.
+
+- [ ] **Step 2: Wire it in.** Add the page to the VitePress sidebar/nav config and reference it from `overview.md`. Build the docs site to confirm no broken links/nav: `cd docs/page && npm run build` (or the repo's documented docs build command); expected: build succeeds, the new page renders.
+
+- [ ] **Step 3: CLI verification.** Author a small `.craft` with a `context_map` (scoped + shared) and run the CLI end-to-end — parse, `validate`, and `inspect` — confirming it succeeds and that `inspect` output represents the context_map edges (if `inspect` summarizes edges; if it doesn't today, note it — extending `inspect` is optional, not required by this plan). Run: `go run ./cmd/craft validate <file>` and `go run ./cmd/craft inspect <file>` (use the actual subcommand names — check `cmd/craft` first). Expected: clean validate, edges visible/inspectable.
+
+- [ ] **Step 4: CLAUDE.md + example.** Add a `context_map` keyword row + tiny example to `CLAUDE.md`'s DSL table, and add a `context_map { }` block to one `examples/*.craft`. Confirm the example parses: `go run ./cmd/craft validate examples/<file>.craft`.
+
+- [ ] **Step 5: Run the Go suite** (the example/CLI tests):
+
+Run: `go test ./cmd/... && go build ./...`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add docs/page/language/context-map.md docs/page/language/overview.md docs/page/.vitepress CLAUDE.md examples
+git commit -m "docs: context_map language reference + example; CLI verified"
+```
+
+---
+
+## Task 11: CHANGELOG + release (GATED on user confirmation)
 
 - [ ] **Step 1:** Add a `## [next-minor]` CHANGELOG entry: "context_map redesigned as the DDD strategic relationship view — eight relationship patterns (customer_supplier … separate_ways), bare/domain-qualified BC endpoints, repeatable + domain-scoped blocks; realization/term edges removed; exported edge-verb metadata API." Match the existing entry format.
 - [ ] **Step 2:** Commit.
