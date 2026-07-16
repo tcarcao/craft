@@ -85,6 +85,12 @@ const (
 	// in the parser like asks/notifies (Q3).
 	TokenKwContextMap // context_map
 
+	// glossary block keyword (cross-context term-relation declarations).
+	// Relation verbs (same_as/contrasts/distinct_from) remain plain
+	// identifiers, matched by value in the parser like context_map's edge
+	// verbs (Q3).
+	TokenKwGlossary // glossary
+
 	// Future keyword slots (other slices add their tokens before TokenSentinel)
 	TokenSentinel // keep last
 )
@@ -103,6 +109,7 @@ var keywords = map[string]TokenType{
 	"exposure":    TokenKwExposure,
 	"import":      TokenKwImport,
 	"context_map": TokenKwContextMap,
+	"glossary":    TokenKwGlossary,
 }
 
 // Token is a scanned unit from the source.

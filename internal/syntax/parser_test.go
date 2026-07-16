@@ -637,6 +637,39 @@ func TestParse_ContextMap_DomainScope(t *testing.T) {
 	}
 }
 
+// TestParse_Glossary_ScopedAndShared is the TDD lock for the glossary block
+// (Task A1): `glossary re { ... }` scopes the block to domain "re", while a
+// bare `glossary { ... }` is unscoped (Domain() == ""). Mirrors
+// TestParse_ContextMap_DomainScope. Also confirms relation endpoints
+// (multi-segment term slugs like billing/Invoice) round-trip and surface
+// through GlossaryRelationDecl.Left()/Verb()/Right().
+func TestParse_Glossary_ScopedAndShared(t *testing.T) {
+	src := "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n}\nglossary {\n  ordering/order distinct_from offering/order\n}\n"
+	greenRoot, li, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == "error" {
+			t.Fatalf("unexpected parse error: [%s] %s", d.Code, d.Message)
+		}
+	}
+	// Round-trip must be byte-identical.
+	if got := reassembleGreen(greenRoot); got != src {
+		t.Fatalf("round-trip mismatch:\n got: %q\nwant: %q", got, src)
+	}
+	file := syntax.AsFile(syntax.Root(greenRoot))
+	gs := file.Glossaries()
+	if len(gs) != 2 {
+		t.Fatalf("want 2 glossary blocks, got %d", len(gs))
+	}
+	if gs[0].Domain() != "re" || gs[1].Domain() != "" {
+		t.Fatalf("domains: got %q,%q want re,\"\"", gs[0].Domain(), gs[1].Domain())
+	}
+	rels := gs[0].Relations()
+	if len(rels) != 1 || rels[0].Left() != "billing/Invoice" || rels[0].Verb() != "same_as" || rels[0].Right() != "subscriptions/Invoice" {
+		t.Fatalf("unexpected relation: %+v", rels)
+	}
+	_ = li
+}
+
 // parseWithHangGuard runs syntax.Parse on its own goroutine behind a short
 // watchdog timeout, so a parser infinite loop fails this single test fast
 // (a few seconds) instead of hanging the entire `go test` run until the
