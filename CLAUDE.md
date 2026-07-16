@@ -60,6 +60,7 @@ examples/       Example .craft files
 | `notifies`    | Asynchronous event publication |
 | `domain`      | A top-level domain grouping bounded contexts |
 | `expose`      | API exposure definition |
+| `context_map` | Strategic view classifying BC-to-BC relationships with DDD patterns (`customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language`, `partnership`, `shared_kernel`, `separate_ways`) |
 
 ### Key DSL Example
 
@@ -83,6 +84,17 @@ use_case "User Registration" {
 
 > **Breaking change (v2.0):** `domains:` was renamed to `contexts:` in service blocks.
 > `of:` was renamed to `contexts:` in exposure blocks.
+
+### `context_map` Example
+
+```craft
+context_map Monetization {
+  Wallet open_host_service WalletItemPurchase
+  OrderManagement customer_supplier OrderFulfilment
+}
+```
+
+Endpoints are bare bounded-context names (no `bc:` prefix); `LEFT` is always the upstream side. See `docs/page/language/context-map.md` for the full pattern catalog and validation rules.
 
 ---
 
