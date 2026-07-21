@@ -84,9 +84,14 @@ type Service struct {
 	DataStores []string           `json:"dataStores,omitempty"`
 	Language   string             `json:"language,omitempty"`
 	Deployment DeploymentStrategy `json:"deployment,omitempty"`
-	OpsLevel   string             `json:"opsLevel,omitempty"`
-	Repo       string             `json:"repo,omitempty"`
-	Line       int                `json:"line,omitempty"`
+	// CatalogRef is the service's stable identifier in the org's service
+	// catalog — an identity anchor, never a location. The language does not
+	// name the catalog vendor; which catalog resolves it is deployment
+	// configuration. Empty when the service declares no catalog_ref:.
+	CatalogRef string `json:"catalogRef,omitempty"`
+	// Repo is the source repository reference (a repo slug, not a file path).
+	Repo string `json:"repo,omitempty"`
+	Line int    `json:"line,omitempty"`
 }
 
 // DeploymentStrategy describes how a service is deployed.

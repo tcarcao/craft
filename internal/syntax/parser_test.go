@@ -757,14 +757,14 @@ func TestContextMap_HangRegression_BareKeywordRightEndpoint(t *testing.T) {
 	}
 }
 
-// TestServiceAnchors covers Task 6: the optional `opslevel:` / `repo:`
+// TestServiceAnchors covers Task 6: the optional `catalog_ref:` / `repo:`
 // service properties. `repo:` is parsed via parseRef so a slash-bearing
 // slug (e.g. "olxeu/realestate/subscriptions") is captured as one value.
 func TestServiceAnchors(t *testing.T) {
 	src := `services {
   SubscriptionsApi {
     contexts: Subscriptions
-    opslevel: subscriptions-api
+    catalog_ref: subscriptions-api
     repo: olxeu/realestate/subscriptions
   }
 }`
@@ -784,17 +784,107 @@ func TestServiceAnchors(t *testing.T) {
 		t.Fatalf("want 1 service, got %d: %+v", len(doc.Services), doc.Services)
 	}
 	svc := doc.Services[0]
-	if svc.OpsLevel != "subscriptions-api" || svc.Repo != "olxeu/realestate/subscriptions" {
-		t.Fatalf("anchors = %q / %q", svc.OpsLevel, svc.Repo)
+	if svc.CatalogRef != "subscriptions-api" || svc.Repo != "olxeu/realestate/subscriptions" {
+		t.Fatalf("anchors = %q / %q", svc.CatalogRef, svc.Repo)
 	}
 
 	// Also verify the AST accessors directly.
 	file := syntax.AsFile(root)
 	astSvc := file.Services()[0]
-	if got := astSvc.OpsLevel(); got != "subscriptions-api" {
-		t.Errorf("ServiceDecl.OpsLevel() = %q, want %q", got, "subscriptions-api")
+	if got := astSvc.CatalogRef(); got != "subscriptions-api" {
+		t.Errorf("ServiceDecl.CatalogRef() = %q, want %q", got, "subscriptions-api")
 	}
 	if got := astSvc.Repo(); got != "olxeu/realestate/subscriptions" {
 		t.Errorf("ServiceDecl.Repo() = %q, want %q", got, "olxeu/realestate/subscriptions")
+	}
+}
+
+// TestServiceAnchors_Optional covers each anchor independently: either one may
+// be declared alone, and a service with neither still parses exactly as before
+// (both values empty, no diagnostics).
+func TestServiceAnchors_Optional(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		wantCatalogRef string
+		wantRepo       string
+	}{
+		{
+			name:           "catalog_ref only (repo absent)",
+			body:           "    catalog_ref: subscriptions-api\n",
+			wantCatalogRef: "subscriptions-api",
+			wantRepo:       "",
+		},
+		{
+			name:           "repo only (catalog_ref absent)",
+			body:           "    repo: olxeu/realestate/subscriptions\n",
+			wantCatalogRef: "",
+			wantRepo:       "olxeu/realestate/subscriptions",
+		},
+		{
+			name:           "both absent",
+			body:           "",
+			wantCatalogRef: "",
+			wantRepo:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "services {\n  SubscriptionsApi {\n    contexts: Subscriptions\n" + tt.body + "  }\n}"
+			gn, li, diags := syntax.Parse(src)
+			if len(diags) != 0 {
+				t.Fatalf("unexpected diagnostics: %v", diags)
+			}
+			if got := reassembleGreen(gn); got != src {
+				t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+			}
+
+			doc := syntax.ProjectFromTree(syntax.Root(gn), li)
+			if len(doc.Services) != 1 {
+				t.Fatalf("want 1 service, got %d: %+v", len(doc.Services), doc.Services)
+			}
+			svc := doc.Services[0]
+			if svc.CatalogRef != tt.wantCatalogRef {
+				t.Errorf("CatalogRef = %q, want %q", svc.CatalogRef, tt.wantCatalogRef)
+			}
+			if svc.Repo != tt.wantRepo {
+				t.Errorf("Repo = %q, want %q", svc.Repo, tt.wantRepo)
+			}
+		})
+	}
+}
+
+// TestServiceAnchors_OpsLevelRemoved pins the v2.15.0 rename: the former
+// vendor-named `opslevel:` spelling is no longer part of the grammar and must
+// be rejected as an unknown service field rather than silently accepted.
+func TestServiceAnchors_OpsLevelRemoved(t *testing.T) {
+	src := `services {
+  SubscriptionsApi {
+    contexts: Subscriptions
+    opslevel: subscriptions-api
+  }
+}`
+	gn, li, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatalf("want a diagnostic for the removed `opslevel:` spelling, got none")
+	}
+	found := false
+	for _, d := range diags {
+		if d.Code == "craft/syntax/unexpected-token" && strings.Contains(d.Message, "opslevel") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("want an unexpected-token diagnostic naming %q, got %v", "opslevel", diags)
+	}
+
+	// The value must not leak into the model under any field.
+	doc := syntax.ProjectFromTree(syntax.Root(gn), li)
+	if len(doc.Services) != 1 {
+		t.Fatalf("want 1 service, got %d", len(doc.Services))
+	}
+	if got := doc.Services[0].CatalogRef; got != "" {
+		t.Errorf("CatalogRef = %q, want %q (removed spelling must not populate the anchor)", got, "")
 	}
 }

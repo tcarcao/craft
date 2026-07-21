@@ -6,7 +6,7 @@
         "Subscriptions"
       ],
       "deployment": {},
-      "opsLevel": "subscriptions-api",
+      "catalogRef": "subscriptions-api",
       "repo": "olxeu/realestate/subscriptions",
       "line": 2
     }

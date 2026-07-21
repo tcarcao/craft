@@ -602,8 +602,8 @@ func (p *Parser) parseServiceBody() []model.Diagnostic {
 			p.consumeAs(SyntaxKindKwLanguage)
 		case "deployment":
 			p.consumeAs(SyntaxKindKwDeployment)
-		case "opslevel":
-			p.consumeAs(SyntaxKindKwOpsLevel)
+		case "catalog_ref":
+			p.consumeAs(SyntaxKindKwCatalogRef)
 		case "repo":
 			p.consumeAs(SyntaxKindKwRepo)
 		default:
@@ -636,11 +636,11 @@ func (p *Parser) parseServiceBody() []model.Diagnostic {
 		case "deployment":
 			dd := p.parseDeploymentSpec()
 			diags = append(diags, dd...)
-		case "opslevel":
+		case "catalog_ref":
 			if p.peek().Type == lexer.TokenIdent {
 				p.consumeAs(SyntaxKindIdent)
 			} else {
-				diags = append(diags, p.diagUnexpected(p.peek(), "opslevel identifier"))
+				diags = append(diags, p.diagUnexpected(p.peek(), "catalog_ref identifier"))
 			}
 		case "repo":
 			p.parseRef()

@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.15.0] — 2026-07-21
+
+### Changed (breaking, within the `service` block)
+- **The `opslevel:` service anchor is renamed to `catalog_ref:`.** The property is unchanged in meaning and shape — it is still the service's stable identifier in the org's service catalog, still optional, still at most once per service — but the language no longer names the catalog vendor. Which catalog resolves the anchor is deployment configuration, not part of the grammar, so the catalog can be swapped without a DSL migration. The name is `catalog_ref`, not `catalog_slug`: this field is an *immutable identity anchor*, and "slug" is reserved in this design's vocabulary for *mutable* human-readable names.
+  - **The old `opslevel:` spelling is removed, not deprecated.** It no longer parses; a service block declaring it now gets a `craft/syntax/unexpected-token` error, the same as any other unknown service field. There is no alias and no migration period — rename the property in your `.craft` files.
+  - **`model.Service.OpsLevel` → `model.Service.CatalogRef`**, exported through `pkg/craft.Service`. The JSON tag changes from `opsLevel` to `catalogRef` (still `omitempty`), so `craft inspect --json`, the LSP, and every `.craftjson` golden move with it.
+  - `internal/syntax` follows: `ServiceDecl.OpsLevel()` → `ServiceDecl.CatalogRef()`, `ServiceField.IsOpsLevel()` → `ServiceField.IsCatalogRef()`, `SyntaxKindKwOpsLevel` → `SyntaxKindKwCatalogRef`.
+  - The `craft/sema/duplicate-service-anchor` diagnostic keeps its code and severity; only the field name in its message text changes (`service "Foo": "catalog_ref" is already declared; only one `catalog_ref:` is allowed per service`).
+- **`repo:` is unchanged** — same spelling, same shape, same `model.Service.Repo` / `repo` JSON key. It already bound by identity (a repo slug, never a checkout path) and needed no migration.
+
+### Added
+- **Code anchors are documented in the language reference.** `docs/page/language/services.md` gained a `catalog_ref:` / `repo:` property reference and a "Code Anchors" section stating the governing principle — **bind by identity, never by location** — and the division of labour: craft validates anchor *shape* only; resolving an anchor against a real catalog or repository is the consuming system's job. The anchors shipped in v2.9.0 but had never been covered outside the authoring skill.
+
+### Notes
+- Minor, not major: the version line continues at 2.15.0. `pkg/craft`'s stability promise exists to protect downstream consumers, and the sole consumer of the anchor field is first-party and is being bumped in lockstep — so the rename is taken outright rather than carried as a dual-spelling alias. Consumers reading `Service.OpsLevel` must move to `Service.CatalogRef`; consumers reading the `opsLevel` JSON key must move to `catalogRef`.
+- The `tree-sitter-craft` grammar renames its `opslevel_property` rule to `catalog_ref_property` and its highlight query to match; its corpus-compat pin (`CORPUS_VERSION`) bumps to `v2.15.0` at release time.
+
 ## [2.14.0] — 2026-07-16
 
 ### Added

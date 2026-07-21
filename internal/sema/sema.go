@@ -554,7 +554,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 
 	// Task 7 (Slice E): local well-formedness validation — slug shape,
 	// context_map edge endpoint kinds, deprecated quoted notifies/listens
-	// forms, and duplicate service opslevel:/repo: anchors. Well-formed
+	// forms, and duplicate service catalog_ref:/repo: anchors. Well-formed
 	// kind-prefixed slug refs are also collected into syms.SlugRefs for
 	// AnalyzeWorkspace's cross-file unresolved-ref-local check.
 	ucDiags, ucRefs := validateUseCaseRefs(uri, file, lineIdx, hasLI)

@@ -46,7 +46,7 @@ This is the complete grammar. All generated `.craft` files must conform to it.
                        | "data-stores" ":" <identifier_list>
                        | "language" ":" <identifier>
                        | "deployment" ":" <deployment_strategy>
-                       | "opslevel" ":" <identifier>
+                       | "catalog_ref" ":" <identifier>
                        | "repo" ":" <slug_path>
 <deployment_strategy>::= ("canary" | "blue_green" | "rolling")
                          ("(" <deployment_rule> ("," <deployment_rule>)* ")")?
@@ -174,7 +174,7 @@ Properties (all optional except `contexts`):
 - `data-stores:` — persistence (note the **hyphen**: `data-stores`, not `datastores`)
 - `language:` — implementation language
 - `deployment:` — strategy: `rolling`, `blue_green`, or `canary(percentage -> target, ...)`
-- `opslevel:` — the service's OpsLevel alias (code anchor; vNext)
+- `catalog_ref:` — the service's stable id in the org's service catalog (identity anchor; vendor-neutral)
 - `repo:` — the service's repo slug (code anchor; vNext, no file paths)
 
 ```
@@ -192,7 +192,7 @@ services {
     }
     SubscriptionsApi {
         contexts: Subscriptions
-        opslevel: subscriptions-api
+        catalog_ref: subscriptions-api
         repo: olxeu/realestate/subscriptions
     }
 }
@@ -202,7 +202,7 @@ Service names with spaces must be quoted: `"Order Service"`.
 
 For a single standalone service outside a `services` block, use `service UserService { ... }` instead of wrapping in `services { }`.
 
-**Service anchors (`opslevel:`/`repo:`):** these bind a service block to real code identity — `opslevel:` is the OpsLevel component alias, `repo:` is a repo slug (not a file path). Each may appear **at most once per service** — a repeated `opslevel:` or `repo:` in the same block is a `craft/sema/duplicate-service-anchor` error. Craft only checks local shape; a hub system resolves the anchor against real infrastructure.
+**Service anchors (`catalog_ref:`/`repo:`):** these bind a service block to real code identity — `catalog_ref:` is the service's stable identifier in the org's service catalog, `repo:` is a repo slug (not a file path). The principle is **bind by identity, never by location**: no file paths, no line numbers, because those rot. The grammar deliberately does not name the catalog vendor — which catalog resolves the anchor is deployment configuration, so the catalog can be swapped without a DSL migration. (It is `catalog_ref`, not `catalog_slug`: "slug" is reserved here for *mutable* human-readable names.) Each may appear **at most once per service** — a repeated `catalog_ref:` or `repo:` in the same block is a `craft/sema/duplicate-service-anchor` error. Craft only checks local shape; a hub system resolves the anchor against real infrastructure.
 
 ### Node Slugs
 
@@ -532,7 +532,7 @@ services {
         data-stores: user_db
         language: golang
         deployment: rolling
-        opslevel: user-service
+        catalog_ref: user-service
         repo: acme/platform/user-service
     }
     CommsService {
