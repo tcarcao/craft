@@ -137,11 +137,11 @@ func TestValidate_TypedRefs_NoDeprecatedStringRef(t *testing.T) {
 	assertNoDiag(t, diags, "deprecated-string-ref")
 }
 
-func TestValidate_DuplicateServiceAnchor_OpsLevel(t *testing.T) {
+func TestValidate_DuplicateServiceAnchor_CatalogRef(t *testing.T) {
 	src := `services {
   Foo {
-    opslevel: foo-api
-    opslevel: bar-api
+    catalog_ref: foo-api
+    catalog_ref: bar-api
   }
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
@@ -171,8 +171,8 @@ func TestValidate_DuplicateServiceAnchor_Repo(t *testing.T) {
 // service name.
 func TestValidate_DuplicateServiceAnchor_QuotedServiceName(t *testing.T) {
 	src := `service "Foo Service" {
-  opslevel: foo-api
-  opslevel: bar-api
+  catalog_ref: foo-api
+  catalog_ref: bar-api
 }`
 	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
 	assertDiagCount(t, diags, "duplicate-service-anchor", 1)
@@ -186,7 +186,7 @@ func TestValidate_DuplicateServiceAnchor_QuotedServiceName(t *testing.T) {
 	if got == nil {
 		t.Fatalf("no duplicate-service-anchor diagnostic found in %v", diagCodes(diags))
 	}
-	wantMsg := `service "Foo Service": "opslevel" is already declared; only one ` + "`opslevel:`" + ` is allowed per service`
+	wantMsg := `service "Foo Service": "catalog_ref" is already declared; only one ` + "`catalog_ref:`" + ` is allowed per service`
 	if got.Message != wantMsg {
 		t.Errorf("message = %q, want %q", got.Message, wantMsg)
 	}
@@ -195,7 +195,7 @@ func TestValidate_DuplicateServiceAnchor_QuotedServiceName(t *testing.T) {
 func TestValidate_ServiceAnchors_NoDuplicate(t *testing.T) {
 	src := `services {
   Foo {
-    opslevel: foo-api
+    catalog_ref: foo-api
     repo: olxeu/realestate/subscriptions
   }
 }`
@@ -240,7 +240,7 @@ func TestValidate_UnresolvedRefLocal_Warning(t *testing.T) {
 	// service:unknown-svc remain genuinely unresolved.
 	src := `services {
   RealSvc {
-    opslevel: real-svc
+    catalog_ref: real-svc
   }
 }
 context_map {

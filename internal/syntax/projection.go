@@ -432,8 +432,8 @@ func projectServicesFromViews(file File, li green.LineIndex) []model.Service {
 		if e.svc.Language == "" {
 			e.svc.Language = svc.Language()
 		}
-		if e.svc.OpsLevel == "" {
-			e.svc.OpsLevel = svc.OpsLevel()
+		if e.svc.CatalogRef == "" {
+			e.svc.CatalogRef = svc.CatalogRef()
 		}
 		if e.svc.Repo == "" {
 			e.svc.Repo = svc.Repo()

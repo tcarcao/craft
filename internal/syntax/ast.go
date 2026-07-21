@@ -222,11 +222,11 @@ func isAstFieldSentinel(tokens []SyntaxToken, i int) bool {
 	k := tokens[i].Kind()
 	return k == SyntaxKindIdent || k == SyntaxKindKwContexts || k == SyntaxKindKwDataStores ||
 		k == SyntaxKindKwLanguage || k == SyntaxKindKwDeployment ||
-		k == SyntaxKindKwOpsLevel || k == SyntaxKindKwRepo
+		k == SyntaxKindKwCatalogRef || k == SyntaxKindKwRepo
 }
 
 // serviceFieldName returns the field name string for a token that is a service
-// body field keyword (contexts, data-stores, language, deployment, opslevel,
+// body field keyword (contexts, data-stores, language, deployment, catalog_ref,
 // repo) or a plain ident. Returns "" for other token kinds.
 func serviceFieldName(tok SyntaxToken) string {
 	switch tok.Kind() {
@@ -238,8 +238,8 @@ func serviceFieldName(tok SyntaxToken) string {
 		return "language"
 	case SyntaxKindKwDeployment:
 		return "deployment"
-	case SyntaxKindKwOpsLevel:
-		return "opslevel"
+	case SyntaxKindKwCatalogRef:
+		return "catalog_ref"
 	case SyntaxKindKwRepo:
 		return "repo"
 	case SyntaxKindIdent:
@@ -613,9 +613,9 @@ func (sf ServiceField) IsDeployment() bool {
 	return sf.node.ChildToken(SyntaxKindKwDeployment) != nil
 }
 
-// IsOpsLevel reports whether this is an opslevel: field.
-func (sf ServiceField) IsOpsLevel() bool {
-	return sf.node.ChildToken(SyntaxKindKwOpsLevel) != nil
+// IsCatalogRef reports whether this is a catalog_ref: field.
+func (sf ServiceField) IsCatalogRef() bool {
+	return sf.node.ChildToken(SyntaxKindKwCatalogRef) != nil
 }
 
 // IsRepo reports whether this is a repo: field.
@@ -704,7 +704,7 @@ type serviceBodyFields struct {
 	Language        string
 	DeploymentType  string
 	DeploymentRules []struct{ Percentage, Target string }
-	OpsLevel        string
+	CatalogRef      string
 }
 
 // parseServiceBody scans the service body tokens and extracts field values.
@@ -738,9 +738,9 @@ func (s ServiceDecl) parseServiceBody() serviceBodyFields {
 				f.Language = tokens[i].Text()
 				i++
 			}
-		case "opslevel":
+		case "catalog_ref":
 			if i < len(tokens) && tokens[i].Kind() == SyntaxKindIdent {
-				f.OpsLevel = tokens[i].Text()
+				f.CatalogRef = tokens[i].Text()
 				i++
 			}
 		case "repo":
@@ -897,8 +897,11 @@ func (s ServiceDecl) Language() string { return s.parseServiceBody().Language }
 // DeploymentType returns the deployment strategy type (e.g. "canary"), or empty string.
 func (s ServiceDecl) DeploymentType() string { return s.parseServiceBody().DeploymentType }
 
-// OpsLevel returns the opslevel: value (the OpsLevel alias), or "" if absent.
-func (s ServiceDecl) OpsLevel() string { return s.parseServiceBody().OpsLevel }
+// CatalogRef returns the catalog_ref: value — the service's stable identifier
+// in the org's service catalog — or "" if absent. The language deliberately
+// does not name the catalog vendor: which catalog resolves the anchor is
+// deployment configuration, not part of the grammar.
+func (s ServiceDecl) CatalogRef() string { return s.parseServiceBody().CatalogRef }
 
 // Repo returns the repo: value as its full ref text (e.g.
 // "olxeu/realestate/subscriptions"), or "" if absent. The value was parsed

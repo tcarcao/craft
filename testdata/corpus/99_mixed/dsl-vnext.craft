@@ -1,7 +1,7 @@
 services {
   SubscriptionsApi {
     contexts: Subscriptions
-    opslevel: subscriptions-api
+    catalog_ref: subscriptions-api
     repo: olxeu/realestate/subscriptions
   }
 }

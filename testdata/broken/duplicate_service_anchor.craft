@@ -1,6 +1,6 @@
 services {
   SubscriptionsApi {
-    opslevel: subscriptions-api
-    opslevel: subscriptions-api-2
+    catalog_ref: subscriptions-api
+    catalog_ref: subscriptions-api-2
   }
 }

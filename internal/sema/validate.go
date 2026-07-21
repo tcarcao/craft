@@ -1,6 +1,6 @@
 // Task 7 (Slice E): local well-formedness validation — slug shape,
 // context_map edge endpoint kinds, deprecated quoted notifies/listens forms,
-// and duplicate service opslevel:/repo: anchors. craft validates SHAPE only;
+// and duplicate service catalog_ref:/repo: anchors. craft validates SHAPE only;
 // the hub is authoritative for cross-context / cross-repo resolution. See
 // docs/superpowers/specs/2026-07-14-craft-dsl-vnext-design.md §6.
 //
@@ -759,7 +759,7 @@ func endpointDiag(uri, ref, kind string, ambiguous bool, line, col int) []model.
 	return nil
 }
 
-// validateServiceAnchors flags a repeated opslevel: or repo: field within a
+// validateServiceAnchors flags a repeated catalog_ref: or repo: field within a
 // single service block (duplicate-service-anchor). Every occurrence after
 // the first is reported.
 func validateServiceAnchors(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
@@ -769,14 +769,14 @@ func validateServiceAnchors(uri string, file syntax.File, li green.LineIndex, ha
 		if nameTok := svc.Name(); nameTok != nil {
 			svcName = syntax.StringAwareText(*nameTok)
 		}
-		seenOpsLevel, seenRepo := false, false
+		seenCatalogRef, seenRepo := false, false
 		for _, f := range svc.Fields() {
 			switch {
-			case f.IsOpsLevel():
-				if seenOpsLevel {
-					diags = append(diags, duplicateAnchorDiag(uri, "opslevel", svcName, f, li, hasLI))
+			case f.IsCatalogRef():
+				if seenCatalogRef {
+					diags = append(diags, duplicateAnchorDiag(uri, "catalog_ref", svcName, f, li, hasLI))
 				}
-				seenOpsLevel = true
+				seenCatalogRef = true
 			case f.IsRepo():
 				if seenRepo {
 					diags = append(diags, duplicateAnchorDiag(uri, "repo", svcName, f, li, hasLI))

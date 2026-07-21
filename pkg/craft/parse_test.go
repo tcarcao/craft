@@ -375,3 +375,75 @@ func TestParse_ContextMap_DomainScope(t *testing.T) {
 		t.Fatalf("want 2 merged edges, got %d", len(doc.ContextMap))
 	}
 }
+
+// TestParse_ServiceAnchors is the consumer-facing lock for the code-anchored
+// service references: a downstream service parsing through the public API must
+// be able to read a service's catalog identity and source repo off the model,
+// and see them under the vendor-neutral `catalogRef` / `repo` JSON keys.
+func TestParse_ServiceAnchors(t *testing.T) {
+	src := []byte("services {\n  SubscriptionsApi {\n    contexts: Subscriptions\n    catalog_ref: subscriptions-api\n    repo: olxeu/realestate/subscriptions\n  }\n}\n")
+	doc, _, err := craft.ParseFiles(map[string][]byte{"a.craft": src})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(doc.Services) != 1 {
+		t.Fatalf("want 1 service, got %d", len(doc.Services))
+	}
+	svc := doc.Services[0]
+	if svc.CatalogRef != "subscriptions-api" {
+		t.Errorf("Service.CatalogRef = %q, want %q", svc.CatalogRef, "subscriptions-api")
+	}
+	if svc.Repo != "olxeu/realestate/subscriptions" {
+		t.Errorf("Service.Repo = %q, want %q", svc.Repo, "olxeu/realestate/subscriptions")
+	}
+
+	got := mustMarshalIndent(t, svc)
+	if !strings.Contains(got, `"catalogRef": "subscriptions-api"`) {
+		t.Errorf("JSON is missing the catalogRef key:\n%s", got)
+	}
+	if strings.Contains(got, "opsLevel") {
+		t.Errorf("JSON still carries the removed opsLevel key:\n%s", got)
+	}
+}
+
+// TestParse_ServiceAnchors_Corpus parses the checked-in vNext corpus fixture
+// through the public API, so the anchors stay reachable end-to-end from a real
+// .craft file (not just an inline literal).
+func TestParse_ServiceAnchors_Corpus(t *testing.T) {
+	src := repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craft")
+	doc, _, err := craft.ParseFiles(map[string][]byte{"dsl-vnext.craft": src})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(doc.Services) != 1 {
+		t.Fatalf("want 1 service, got %d", len(doc.Services))
+	}
+	if doc.Services[0].CatalogRef != "subscriptions-api" {
+		t.Errorf("CatalogRef = %q, want %q", doc.Services[0].CatalogRef, "subscriptions-api")
+	}
+	if doc.Services[0].Repo != "olxeu/realestate/subscriptions" {
+		t.Errorf("Repo = %q, want %q", doc.Services[0].Repo, "olxeu/realestate/subscriptions")
+	}
+}
+
+// TestParse_ServiceAnchors_NoAnchors is the backward-compatibility lock: a
+// service block that declares neither anchor parses exactly as it always has,
+// with both fields empty and omitted from JSON.
+func TestParse_ServiceAnchors_NoAnchors(t *testing.T) {
+	src := repoFile(t, "testdata/corpus/03_services/simple.craft")
+	doc, _, err := craft.ParseFiles(map[string][]byte{"simple.craft": src})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(doc.Services) == 0 {
+		t.Fatalf("want at least 1 service, got 0")
+	}
+	for _, svc := range doc.Services {
+		if svc.CatalogRef != "" || svc.Repo != "" {
+			t.Errorf("service %q: want empty anchors, got %q / %q", svc.Name, svc.CatalogRef, svc.Repo)
+		}
+	}
+	if got := mustMarshalIndent(t, doc.Services[0]); strings.Contains(got, "catalogRef") || strings.Contains(got, `"repo"`) {
+		t.Errorf("absent anchors must be omitted from JSON:\n%s", got)
+	}
+}

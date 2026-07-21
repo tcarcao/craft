@@ -66,9 +66,9 @@ const (
 	SyntaxKindKwTrue  // future: boolean values in modifier properties
 	SyntaxKindKwFalse // future: boolean values in modifier properties
 
-	// SyntaxKindKwOpsLevel/SyntaxKindKwRepo are contextual keywords for the
-	// service anchor properties `opslevel:` / `repo:` (Task 6).
-	SyntaxKindKwOpsLevel
+	// SyntaxKindKwCatalogRef/SyntaxKindKwRepo are contextual keywords for the
+	// service anchor properties `catalog_ref:` / `repo:` (Task 6).
+	SyntaxKindKwCatalogRef
 	SyntaxKindKwRepo
 
 	// New contextual keywords for triggers and imports
