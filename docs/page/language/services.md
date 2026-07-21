@@ -72,6 +72,55 @@ deployment: blue_green
 deployment: canary(50% -> staging, 100% -> production)
 ```
 
+### catalog_ref
+The service's stable identifier in your organization's service catalog:
+
+```craft
+catalog_ref: subscriptions-api
+```
+
+### repo
+The source repository reference:
+
+```craft
+repo: olxeu/realestate/subscriptions
+```
+
+## Code Anchors
+
+`catalog_ref:` and `repo:` are **code anchors** — they bind a `service` block to
+the real thing it describes. Both are optional; a service that declares neither
+behaves exactly as it always has.
+
+The governing principle is **bind by identity, never by location**. Anchors name
+*what* a service is, not *where* its files sit — there are no file paths and no
+line numbers in either value, because those rot on the first refactor.
+
+- **`catalog_ref:`** is an *immutable identity anchor*: the token your service
+  catalog uses to identify this service, stable across renames. The language
+  deliberately does not name the catalog vendor — which catalog resolves the
+  anchor is deployment configuration, not part of the grammar, so the catalog can
+  be swapped without a DSL migration. (It is `catalog_ref`, not `catalog_slug`:
+  "slug" is reserved in this vocabulary for *mutable* human-readable names.)
+- **`repo:`** is a repository slug, not a checkout path.
+
+Each anchor may appear **at most once per service**; a repeat is a
+`craft/sema/duplicate-service-anchor` error.
+
+Craft validates *shape* only — that a declared anchor is present and
+well-formed. Resolving an anchor against a real catalog or a real repository is
+the consuming system's job, not the language's.
+
+```craft
+services {
+  SubscriptionsApi {
+    contexts: Subscriptions
+    catalog_ref: subscriptions-api
+    repo: olxeu/realestate/subscriptions
+  }
+}
+```
+
 ## Deployment Strategies
 
 ### Rolling Deployment

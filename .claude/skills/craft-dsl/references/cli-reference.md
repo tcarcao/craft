@@ -43,7 +43,7 @@ craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 | `craft/sema/ambiguous-bc` | error | A bare `context_map` endpoint name is a bounded context in two or more domains — qualify it as `<domain>/<name>` |
 | `craft/sema/unresolved-bc` | warning | A `context_map` endpoint doesn't resolve to any declared bounded context |
 | `craft/lint/redundant-relationship` | warning | The same unordered bounded-context pair is declared with the same **symmetric** pattern (`partnership`/`shared_kernel`/`separate_ways`) more than once — directional duplicates in opposite order are not redundant |
-| `craft/sema/duplicate-service-anchor` | error | A service block declares `opslevel:` or `repo:` more than once |
+| `craft/sema/duplicate-service-anchor` | error | A service block declares `catalog_ref:` or `repo:` more than once |
 | `craft/lint/deprecated-string-ref` | warning | A `notifies`/`listens` uses the legacy quoted-string event form instead of a typed event ref — migrate to the dotted-id form (e.g. `order.OrderCreated`) |
 | `craft/sema/unresolved-ref-local` | warning | A node-slug ref (`domain:`/`bc:`/`service:`) doesn't resolve to anything declared in the current file-set. This is a **local, best-effort** check only — an unresolved ref may still be valid once cross-repo/hub resolution is applied, so it's a warning, not an error |
 
