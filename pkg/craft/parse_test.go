@@ -447,3 +447,109 @@ func TestParse_ServiceAnchors_NoAnchors(t *testing.T) {
 		t.Errorf("absent anchors must be omitted from JSON:\n%s", got)
 	}
 }
+
+// posOf returns the 0-based line and character of substr's first occurrence in
+// src, matching the LSP-style positions diagnostics carry. Tests use it instead
+// of hardcoded column numbers so the expectation reads as "points at this text".
+func posOf(t *testing.T, src, substr string) (int, int) {
+	t.Helper()
+	for i, line := range strings.Split(src, "\n") {
+		if col := strings.Index(line, substr); col >= 0 {
+			return i, col
+		}
+	}
+	t.Fatalf("substring %q not found in source", substr)
+	return 0, 0
+}
+
+// findDiags returns every diagnostic with the given code, in order.
+func findDiags(diags []craft.Diagnostic, code string) []craft.Diagnostic {
+	var out []craft.Diagnostic
+	for _, d := range diags {
+		if d.Code == code {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// Regression: sema diagnostics from Parse must carry real source positions.
+//
+// parseOne used to call sema.AnalyzeFile without the LineIndex (a deliberate
+// plan-D3 choice to keep CLI output byte-identical during the LSP migration),
+// which silently pinned every sema diagnostic to line 0 / column 0 — `craft
+// validate` reported them all on line 1. The two warnings here sit on different
+// lines, so a regression collapses them onto each other.
+func TestParse_SemaDiagnosticsCarrySourcePositions(t *testing.T) {
+	src := `use_case "Legacy" {
+  when Customer places order
+    Order notifies "Order Created"
+  when Payment listens "Order Created"
+    Payment charges card
+}
+`
+	_, diags, err := craft.Parse("legacy.craft", []byte(src))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := findDiags(diags, "craft/lint/deprecated-string-ref")
+	if len(got) != 2 {
+		t.Fatalf("want 2 deprecated-string-ref diagnostics, got %d: %+v", len(got), diags)
+	}
+
+	// Both warnings point at the opening quote of their own event string.
+	notifiesLine, notifiesCol := posOf(t, src, `"Order Created"`)
+	listensLine, listensCol := posOf(t, src, "listens \"Order Created\"")
+	listensCol += len("listens ")
+
+	for _, tc := range []struct {
+		verb            string
+		wantLine, wantC int
+	}{
+		{"notifies", notifiesLine, notifiesCol},
+		{"listens", listensLine, listensCol},
+	} {
+		var d *craft.Diagnostic
+		for i := range got {
+			if strings.HasPrefix(got[i].Message, tc.verb) {
+				d = &got[i]
+			}
+		}
+		if d == nil {
+			t.Fatalf("no deprecated-string-ref diagnostic for %s: %+v", tc.verb, got)
+		}
+		if d.Range.Start.Line != tc.wantLine || d.Range.Start.Character != tc.wantC {
+			t.Errorf("%s diagnostic at line %d char %d, want line %d char %d",
+				tc.verb, d.Range.Start.Line, d.Range.Start.Character, tc.wantLine, tc.wantC)
+		}
+	}
+}
+
+// Regression: ParseFiles must forward per-file LineIndexes to BOTH the per-file
+// sema pass and LintWorkspace. The lint half was a separate drop (the variadic
+// perFileLineIndices argument was simply not passed), so dead-event and the
+// other position-bearing lints reported at line 0 too.
+func TestParseFiles_WorkspaceLintDiagnosticsCarrySourcePositions(t *testing.T) {
+	src := `use_case "Orders" {
+  when Customer places order
+    Order validates the basket
+    Order notifies order.OrderCreated
+}
+`
+	_, diags, err := craft.ParseFiles(map[string][]byte{"orders.craft": []byte(src)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Nothing listens for order.OrderCreated, so it is a dead event.
+	got := findDiags(diags, "craft/lint/dead-event")
+	if len(got) != 1 {
+		t.Fatalf("want 1 dead-event diagnostic, got %d: %+v", len(got), diags)
+	}
+	wantLine, wantCol := posOf(t, src, "order.OrderCreated")
+	if got[0].Range.Start.Line != wantLine || got[0].Range.Start.Character != wantCol {
+		t.Errorf("dead-event at line %d char %d, want line %d char %d (the notifies event ref)",
+			got[0].Range.Start.Line, got[0].Range.Start.Character, wantLine, wantCol)
+	}
+}

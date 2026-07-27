@@ -82,7 +82,7 @@ S2 (AFK) ──┘             └─▶ S13 (AFK, parallel after S3)
 | S9 | Error recovery end-to-end + diagnostic-codebook consolidation | AFK | ✅ Complete 2026-04-23 | A4, P0.5, B5 (lint merge); Q19 codebook consolidation | Harness C green on 13 broken-corpus files; syntax-error corpus added; lint rules ported to sema; last-good AST cache in workspace; DIAGNOSTICS.md consolidated |
 | S10 | Perf + residual audit | AFK | ✅ Complete 2026-04-23 | A-bench, A4.5 (residual only per Q10) | Full corpus parses cold ~1.5ms / warm ~0.5ms (33× / 9.6× under budget); 3 bugs/gaps back-filled (keyword-as-context bug, service merging, blue_green+rolling deployment coverage); 1 known deferred gap (complex deployment rules canary(%)) |
 | S11a | Flip default to v2 + pre-release publish | HITL | ✅ Complete 2026-04-24 | A5a (flip half), C-trace, D4, partial D3 (pre-release channel) | `craft` ships with `--parser=v2` default via VSCode pre-release channel; dogfooding complete |
-| S11b | Stable v0.1.0 release + macOS signing + tree-sitter pin | HITL | ✅ Complete 2026-04-24 | A5a (release half), D3 (stable publish), D5 (CORPUS_VERSION pin), Phase 1 DoD, **macOS signing deferred from S2 (Q8)** | `tree-sitter-craft/CORPUS_VERSION` pinned to `v0.1.0`; compat CI + D6 warning-only job wired; CHANGELOG finalized; VSIX stable release handled separately |
+| S11b | Stable v0.1.0 release + macOS signing + tree-sitter pin | HITL | ✅ Complete 2026-04-24 — ⚠️ see S11b addendum: the stable-publish deliverable did not actually ship until 2026-07-27 | A5a (release half), D3 (stable publish), D5 (CORPUS_VERSION pin), Phase 1 DoD, **macOS signing deferred from S2 (Q8)** | `tree-sitter-craft/CORPUS_VERSION` pinned to `v0.1.0`; compat CI + D6 warning-only job wired; CHANGELOG finalized; VSIX stable release handled separately |
 | S12 | Delete ANTLR | HITL | ✅ Complete 2026-04-24 | A5b | ANTLR, adapter, Harness B, `--parser` flag, `diff-parsers` subcommand all gone |
 | S13 | Tree-sitter corpus-coupling infrastructure | AFK (parallel after S3) | ✅ Complete 2026-04-24 | D5 (infra half), D6; grammar catch-up itself is in S3–S8 paired PRs per Q12 | `CORPUS_VERSION` + fetch script + bidirectional CI wired; warning-only on craft side |
 
@@ -470,7 +470,7 @@ The "one working day, zero P0 issues" gate is judged against this explicit list:
 
 ---
 
-### S11b — Stable v0.1.0 release + macOS signing + tree-sitter pin *(HITL)* ✅ Complete 2026-04-24
+### S11b — Stable v0.1.0 release + macOS signing + tree-sitter pin *(HITL)* ✅ Complete 2026-04-24 (stable-publish deliverable actually closed 2026-07-27 — see addendum at the end of this slice)
 
 **Source-plan ref:** A5a (release half), D3 (stable publish path), D5 (tree-sitter `CORPUS_VERSION` pin), full Phase 1 Definition of Done. Inherits the macOS signing work deferred from S2 per Q8.
 
@@ -499,6 +499,14 @@ The "one working day, zero P0 issues" gate is judged against this explicit list:
 - Apple signing credential use.
 - Marketplace/OpenVSX stable-channel credential use.
 - Final "this is 1.0-worthy" sign-off.
+
+#### Addendum 2026-07-27 — the stable-publish deliverable slipped for three months
+
+S11b was marked complete on 2026-04-24 with the status note *"VSIX stable release handled separately."* That deferral was never closed, and the slice's second deliverable — *"Stable VSIXs published to Marketplace + OpenVSX (no `--pre-release` flag)"* — did not happen. `--pre-release` was added to both publish steps in S11a (`craft-vscode-extension@a65ad60`) and no later commit touched those lines, so **every extension release from `v0.1.0` through `v0.2.0` published to the pre-release channel only.** Users on the default stable channel never received the LSP-based extension at all. Nothing failed loudly: the workflow succeeded on every tag, the GitHub release was created, and the VSIX was attached.
+
+Closed on 2026-07-27 by deriving the channel from the version instead of hardcoding a flag: odd minor → pre-release, even minor → stable, per [VS Code's pre-release recommendation](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#prerelease-extensions). A semver prerelease suffix (`0.3.0-beta.1`) was considered and rejected as the signal — `vsce publish` refuses such versions outright ("The VS Marketplace doesn't support prerelease versions"), so minor parity is the only scheme both registries accept. The same commit made packaging happen after the channel resolves and publish from that one artifact via `--packagePath`, so the GitHub release asset and both registry copies can no longer differ.
+
+**Process lesson for future HITL slices:** a slice whose deliverable requires a credential the AFK agent cannot use should not be marked ✅ on the strength of the merged code. Here the code half (workflow + CHANGELOG + pin) was genuinely done, and "handled separately" read as scheduling rather than as an open deliverable. Either keep the slice open until the external action is observed, or record the deferral as its own tracked item with a verification step ("confirm the extension's stable channel serves the new version") rather than a parenthetical in a status cell.
 
 ---
 
