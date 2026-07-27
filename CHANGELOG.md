@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.15.1] — 2026-07-27
+
+### Fixed
+- **`craft validate`, `craft check`, and `pkg/craft` now report sema and lint diagnostics at their real source position.** Every diagnostic from these paths carried line 0 / column 0 (printed as `file:1:` by the CLI), so a `deprecated-string-ref` warning about line 40 pointed at line 1, and multiple warnings in one file were indistinguishable. Some lints were worse than useless: `dead-event` leaked a raw byte offset as its column.
+  - Cause: `pkg/craft`'s `parseOne` called `sema.AnalyzeFile` without the `LineIndex`, and `ParseFiles` additionally omitted the per-file `LineIndex` map from `sema.LintWorkspace`. Both were deliberate during the LSP migration (plan D3 kept CLI diagnostic bytes identical while the parser was swapped underneath) and were never revisited after the swap completed. `internal/workspace` always passed its indexes through, so **the LSP and the VS Code extension were never affected** — this was a CLI/library-only defect.
+  - Positions now match what the LSP publishes for the same file. Affects `craft/lint/deprecated-string-ref`, `craft/sema/malformed-slug`, `craft/lint/dead-event`, `craft/lint/event-not-past-tense`, the `context_map` cross-validation lints, and every other position-bearing sema/lint diagnostic.
+  - Regression tests in `pkg/craft/parse_test.go` assert positions for both the per-file and workspace-lint paths; they derive the expected line/column from the source text rather than hardcoding numbers.
+
+### Notes
+- Diagnostic *positions* from the CLI change (they were wrong; they are now right). Codes, severities, messages, and counts are unchanged. Any downstream consumer that pinned to the old line-1 behaviour — or that parsed `craft validate` output positionally — should expect real line numbers now.
+
 ## [2.15.0] — 2026-07-21
 
 ### Changed (breaking, within the `service` block)

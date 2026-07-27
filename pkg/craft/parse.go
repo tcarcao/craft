@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -30,17 +31,23 @@ func Parse(filename string, src []byte) (*CraftDoc, []Diagnostic, error) {
 
 // parseOne runs the single-file pipeline exactly as `craft check` does:
 // syntax.Parse -> Root -> ProjectFromTree, then sema.AnalyzeFile for
-// single-file semantic diagnostics. LineIndex is intentionally NOT forwarded to
-// AnalyzeFile, matching the current CLI (see plan D3). Every diagnostic's
-// SourceURI is normalized to filename (the sema passes set an internal file://
-// URI on some of them; stampURI overwrites it uniformly).
+// single-file semantic diagnostics. Every diagnostic's SourceURI is normalized
+// to filename (the sema passes set an internal file:// URI on some of them;
+// stampURI overwrites it uniformly).
+//
+// The LineIndex IS forwarded to AnalyzeFile. It deliberately was not during the
+// LSP migration (plan D3: keep CLI diagnostic bytes identical while the parser
+// was swapped), but that left every sema diagnostic from this path pinned to
+// line 0 / column 0 — `craft validate` reported them all on line 1 regardless of
+// where the offending construct was. The LSP never had the problem because
+// internal/workspace passes its per-file index through.
 func parseOne(filename, src string) (*CraftDoc, []Diagnostic) {
 	uri := "file://" + filename
 	greenRoot, li, parseDiags := syntax.Parse(src)
 	tree := syntax.Root(greenRoot)
 	doc := syntax.ProjectFromTree(tree, li, filename)
 
-	_, semaDiags := sema.AnalyzeFile(uri, tree)
+	_, semaDiags := sema.AnalyzeFile(uri, tree, li)
 
 	diags := make([]Diagnostic, 0, len(parseDiags)+len(semaDiags))
 	diags = append(diags, parseDiags...)
@@ -68,19 +75,21 @@ func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
 	diags := []Diagnostic{}
 	perFileTrees := make(map[string]syntax.SyntaxNode, len(files))
 	perFileSyms := make(map[string]sema.Symbols, len(files))
+	perFileLIs := make(map[string]green.LineIndex, len(files))
 
 	for _, key := range keys {
 		uri := "file://" + key
 		greenRoot, li, parseDiags := syntax.Parse(string(files[key]))
 		tree := syntax.Root(greenRoot)
 		perFileTrees[uri] = tree
+		perFileLIs[uri] = li
 
 		doc := syntax.ProjectFromTree(tree, li, key)
 		mergeDoc(merged, doc)
 
 		diags = append(diags, stampURI(parseDiags, key)...)
 
-		syms, semaDiags := sema.AnalyzeFile(uri, tree)
+		syms, semaDiags := sema.AnalyzeFile(uri, tree, li)
 		perFileSyms[uri] = syms
 		diags = append(diags, stampURI(semaDiags, key)...)
 	}
@@ -92,7 +101,7 @@ func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
 		_, resDiags := sema.AnalyzeWorkspace(perFileSyms, ws)
 		diags = append(diags, sortDiags(remapURIs(resDiags))...)
 
-		diags = append(diags, sortDiags(remapURIs(sema.LintWorkspace(perFileTrees, ws)))...)
+		diags = append(diags, sortDiags(remapURIs(sema.LintWorkspace(perFileTrees, ws, perFileLIs)))...)
 	}
 
 	return merged, diags, nil
