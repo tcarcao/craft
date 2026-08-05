@@ -1,6 +1,6 @@
 ---
 name: craft-dsl
-description: "Generate, extend, explain, and analyze Craft DSL (.craft) files — a domain-specific language for modeling DDD architectures with actors, domains, services, use cases, architecture blocks, and exposures. Use this skill whenever the user works with .craft files, mentions the Craft DSL, wants to model a domain or system in Craft, asks to add or modify use cases, services, domains, actors, exposures, or arch blocks in a .craft file, or wants to understand an existing .craft file. Also trigger when the user wants to document domain-driven design artifacts and there are .craft files in the project."
+description: "Generate, extend, explain, and analyze Craft DSL (.craft) files — a domain-specific language for modeling DDD architectures with actors, domains, services, use cases, architecture blocks, exposures, context maps, and glossaries. Use this skill whenever the user works with .craft files, mentions the Craft DSL, wants to model a domain or system in Craft, asks to add or modify use cases, services, domains, actors, exposures, arch blocks, context maps, or glossaries in a .craft file, or wants to understand an existing .craft file. Also trigger when the user wants to document domain-driven design artifacts and there are .craft files in the project."
 ---
 
 # Craft DSL
@@ -25,7 +25,7 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 
 ```bnf
 <dsl>                ::= (<actor_def> | <actors_def> | <domain_def> | <domains_def>
-                         | <service_def> | <services_def> | <context_map> | <arch> | <exposure>
+                         | <service_def> | <services_def> | <context_map> | <glossary> | <arch> | <exposure>
                          | <use_case>)*
 
 // --- Actors: who interacts with the system ---
@@ -67,6 +67,12 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 <pattern>             ::= "customer_supplier" | "conformist" | "anticorruption_layer"
                         | "open_host_service" | "published_language"
                         | "partnership" | "shared_kernel" | "separate_ways"
+
+// --- Glossary: symmetric term relations across bounded contexts ---
+<glossary>           ::= "glossary" <identifier>? "{" <term_stmt>+ "}"
+<term_stmt>           ::= <term_node> <term_verb> <term_node>
+<term_node>           ::= <identifier> "/" <identifier> ("/" <identifier>)?   // <bc>/<term> or <domain>/<bc>/<term>; last segment is the term
+<term_verb>           ::= "same_as" | "contrasts" | "distinct_from"           // all symmetric — order carries no meaning
 
 // --- Architecture: component topology ---
 <arch>               ::= "arch" <identifier>? "{" <arch_section>+ "}"
@@ -267,6 +273,55 @@ Validation is about shape, not modeling correctness:
 | `craft/sema/unresolved-bc` | warning | an endpoint doesn't resolve to any declared bounded context |
 | `craft/lint/redundant-relationship` | warning | the same unordered pair is declared with the same **symmetric** pattern more than once (directional duplicates in opposite order are not redundant) |
 
+**Cross-validation with the communication view.** When a workspace is validated (multiple files, or one file with both a `context_map` and use cases), craft cross-checks each declared relationship against the communication it *infers* from use-case `asks`/`notifies`. Both interaction primitives reduce to one directed **dependency edge `D → U`** ("downstream depends on upstream"): `X asks Y` gives `X → Y`; `Y notifies E` paired with `when X listens E` gives `X → Y`. With `LEFT = upstream`, every directional pattern expects the observed edge to run `RIGHT → LEFT`. Four signals result:
+
+| Code | Severity | When |
+|------|----------|------|
+| `craft/lint/separate-ways-violation` | warning | a `separate_ways A B` edge exists, yet *any* dependency edge (either direction, sync or async) is observed between A and B |
+| `craft/lint/relationship-direction-inverted` | warning | a directional pattern edge whose *only* observed dependency runs the wrong way (`LEFT → RIGHT`), with no correct-direction edge present |
+| `craft/lint/relationship-bidirectional` | hint | a directional pattern edge with observed dependency in *both* directions (consider `partnership`) |
+| `craft/lint/unclassified-communication` | hint | a bounded-context pair that clearly communicates has *no* `context_map` edge at all, in any block |
+
+Guiding principle: **absence of communication never warns.** A declared relationship with no observed traffic is silent — the lint only flags observed communication that *contradicts* a declaration (or is entirely unclassified).
+
+### Glossary
+
+The `glossary` block is craft's **ubiquitous-language view**: it relates *terms* across bounded contexts, where `context_map` relates the bounded contexts themselves. The same word can mean the same, a related-but-different, or a deliberately distinct thing depending on which context you stand in — `glossary` records that judgment.
+
+```craft
+glossary re {
+    billing/Invoice     same_as        subscriptions/Invoice
+    billing/dunning     contrasts      subscriptions/dunning
+}
+
+glossary {
+    re/billing/Invoice  distinct_from  legacy/reporting/Invoice
+}
+```
+
+- The block is **repeatable** and optionally scoped to a domain (`glossary re { }`); an unscoped `glossary { }` is the shared/global glossary. All blocks merge into one glossary.
+- Each statement is `<term_node> <verb> <term_node>`, one relation per line.
+- **Term-node identity:** a term node is `<bc>/<term>` or `<domain>/<bc>/<term>` — the **last** `/`-separated segment is the term name, everything before it is the bounded-context reference (bare `bc` or `domain/bc`). `/` is the separator (one level deeper than a `context_map` endpoint); `.` stays reserved for event refs and must never appear in a term node. A bare term with no BC segment (just `Invoice`) is invalid. Terms are only *referenced*, never declared — `glossary` records relations, not definitions.
+
+Three verbs, **all symmetric** (order carries no meaning — `A verb B` equals `B verb A`):
+
+| Verb | Meaning |
+|---|---|
+| `same_as` | the two terms denote the same concept across the context boundary |
+| `contrasts` | the two terms are related but meaningfully different |
+| `distinct_from` | the two terms are unrelated beyond sharing a name |
+
+Validation checks shape and resolution, not modeling correctness:
+
+| Code | Severity | When |
+|------|----------|------|
+| `craft/sema/glossary-endpoint-not-bc` | error | the BC part of a term node resolves to a domain, service, or actor — not a bounded context |
+| `craft/sema/glossary-unresolved-bc` | warning | the BC part of a term node doesn't resolve to any declared bounded context |
+| `craft/sema/glossary-ambiguous-bc` | error | a bare BC name is a bounded context in two or more domains — qualify it as `domain/bc/term` |
+| `craft/sema/glossary-self-relation` | error | both sides resolve to the same term node (same BC and same term) |
+| `craft/lint/glossary-redundant` | warning | the same unordered term-node pair is declared with the same verb more than once |
+| `craft/lint/glossary-conflicting-relation` | warning | the same unordered term-node pair is declared `same_as` and also `distinct_from` or `contrasts` |
+
 ### Architecture
 
 Defines component topology with two sections:
@@ -416,9 +471,10 @@ The good version shows that each delivery channel reacts independently to the sa
 2. `domains` — business capability boundaries
 3. `services` — deployable units with tech stack
 4. `context_map` — DDD strategic relationships between bounded contexts
-5. `arch` — component topology
-6. `exposure` — external access rules
-7. `use_case` — behavioral scenarios
+5. `glossary` — ubiquitous-language term relations across bounded contexts
+6. `arch` — component topology
+7. `exposure` — external access rules
+8. `use_case` — behavioral scenarios
 
 This flows from "who and what exists" to "how it's built" to "what happens."
 
@@ -456,6 +512,7 @@ These are the most frequent syntax errors. Avoid them:
 10. **Trailing comma on last item of a multi-line list** — When splitting a list across lines, the final item must not have a trailing comma. `contexts: Foo, Bar,\n    Baz` is valid; `contexts: Foo, Bar,\n    Baz,\ndata-stores: db` is not
 11. **`context_map` endpoint with a `bc:`/`service:`/`term:` prefix** — `context_map` endpoints are bare or domain-qualified bounded-context names only (`billing`, `re/billing`); there is no kind prefix inside a `context_map` block. An endpoint that resolves to a domain, service, or actor instead of a bounded context is a `craft/sema/edge-endpoint-not-bc` error
 12. **Unspaced `//` inside prose is NOT a comment** — `http://api`, `50/50`, `and/maybe` stay as prose because there's no whitespace before the `//`/`/`. A comment needs a space (or line-start) before it: `Auth checks token  // TODO`
+13. **Malformed `glossary` term node** — a term node is `<bc>/<term>` or `<domain>/<bc>/<term>`; the last `/`-segment is the term. A bare term with no BC (`Invoice same_as Bill`) is invalid, and `.` is never allowed in a term node (it's reserved for event refs). The glossary verbs are `same_as`, `contrasts`, `distinct_from` — all symmetric, so don't worry about which side is which
 
 ---
 
@@ -496,7 +553,7 @@ After generating or extending a `.craft` file, review your own output for these 
 ## What This Skill Does NOT Do
 
 - **Generate code** from `.craft` files — separate tooling handles that
-- **Modify the grammar** — the grammar is defined in `Craft.g4` and `tree-sitter-craft/grammar.js`
+- **Modify the grammar** — the grammar is defined by the hand-written parser in `internal/syntax` (and mirrored in `tree-sitter-craft/grammar.js` for editor support)
 - **Make architecture decisions** — the DSL documents decisions; it doesn't prescribe them
 - **Generate diagrams** — use `craft generate` or the VS Code extension for visualization
 
@@ -546,6 +603,11 @@ context_map {
     Authentication open_host_service Notifier
 }
 
+// Glossary: how terms relate across bounded contexts
+glossary {
+    Authentication/Account same_as Profile/Account
+}
+
 // Architecture
 arch {
     presentation:
@@ -592,4 +654,4 @@ use_case "Scheduled Cleanup" {
 }
 ```
 
-Notice how the "User Registration" use case uses event-driven choreography: `Authentication` publishes `auth.UserRegistered`, then both `Profile` and `Notifier` independently react to it in separate scenarios. This models real-world decoupling — the authentication bounded context doesn't need to know about profile creation or email sending. Note also the unquoted prose tail `(retry x3! & backoff)` on the `asks` step — special characters don't need quoting — and the `context_map` block declaring that `Authentication` is an open-host service for `Notifier` (LEFT `Authentication` is the upstream host, RIGHT `Notifier` is the downstream consumer).
+Notice how the "User Registration" use case uses event-driven choreography: `Authentication` publishes `auth.UserRegistered`, then both `Profile` and `Notifier` independently react to it in separate scenarios. This models real-world decoupling — the authentication bounded context doesn't need to know about profile creation or email sending. Note also the unquoted prose tail `(retry x3! & backoff)` on the `asks` step — special characters don't need quoting — and the `context_map` block declaring that `Authentication` is an open-host service for `Notifier` (LEFT `Authentication` is the upstream host, RIGHT `Notifier` is the downstream consumer). The `glossary` block records that the `Account` term means the same thing in `Authentication` as it does in `Profile` — a symmetric term relation, distinct from the strategic BC-to-BC relationship the `context_map` captures.

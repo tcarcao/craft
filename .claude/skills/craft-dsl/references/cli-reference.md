@@ -43,6 +43,16 @@ craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 | `craft/sema/ambiguous-bc` | error | A bare `context_map` endpoint name is a bounded context in two or more domains — qualify it as `<domain>/<name>` |
 | `craft/sema/unresolved-bc` | warning | A `context_map` endpoint doesn't resolve to any declared bounded context |
 | `craft/lint/redundant-relationship` | warning | The same unordered bounded-context pair is declared with the same **symmetric** pattern (`partnership`/`shared_kernel`/`separate_ways`) more than once — directional duplicates in opposite order are not redundant |
+| `craft/lint/separate-ways-violation` | warning | *(cross-validation)* A `separate_ways` pair nonetheless communicates — a dependency edge (from `asks`/`notifies`, either direction) is observed between the two bounded contexts |
+| `craft/lint/relationship-direction-inverted` | warning | *(cross-validation)* A directional `context_map` pattern whose only observed dependency runs the wrong way (`LEFT → RIGHT`), with no correct-direction traffic present |
+| `craft/lint/relationship-bidirectional` | hint | *(cross-validation)* A directional `context_map` pattern with observed dependency in both directions — consider `partnership` |
+| `craft/lint/unclassified-communication` | hint | *(cross-validation)* A bounded-context pair that clearly communicates has no `context_map` edge at all, in any block |
+| `craft/sema/glossary-endpoint-not-bc` | error | The BC part of a `glossary` term node resolves to a domain, service, or actor — not a bounded context |
+| `craft/sema/glossary-unresolved-bc` | warning | The BC part of a `glossary` term node doesn't resolve to any declared bounded context |
+| `craft/sema/glossary-ambiguous-bc` | error | A bare BC name in a `glossary` term node is a bounded context in two or more domains — qualify it as `domain/bc/term` |
+| `craft/sema/glossary-self-relation` | error | A `glossary` statement's two sides resolve to the same term node (same BC and same term) |
+| `craft/lint/glossary-redundant` | warning | The same unordered `glossary` term-node pair is declared with the same verb more than once |
+| `craft/lint/glossary-conflicting-relation` | warning | The same unordered `glossary` term-node pair is declared `same_as` and also `distinct_from` or `contrasts` |
 | `craft/sema/duplicate-service-anchor` | error | A service block declares `catalog_ref:` or `repo:` more than once |
 | `craft/lint/deprecated-string-ref` | warning | A `notifies`/`listens` uses the legacy quoted-string event form instead of a typed event ref — migrate to the dotted-id form (e.g. `order.OrderCreated`) |
 | `craft/sema/unresolved-ref-local` | warning | A node-slug ref (`domain:`/`bc:`/`service:`) doesn't resolve to anything declared in the current file-set. This is a **local, best-effort** check only — an unresolved ref may still be valid once cross-repo/hub resolution is applied, so it's a warning, not an error |
