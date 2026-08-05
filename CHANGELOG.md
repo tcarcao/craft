@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.15.2] — 2026-08-05
+
+### Fixed
+- **`textDocument/semanticTokens/full` no longer crashes on files containing non-ASCII characters.** Editing a `.craft` file with an accented name, an em dash in a comment, or an emoji produced `internal error: runtime error: slice bounds out of range` for every semantic-token request, so syntax highlighting silently died for that file.
+  - Cause: the lexer scans `[]rune`, so `Token.Column` counts runes — but its doc comment claimed bytes, and the parser fed that column to `LineIndex.Offset`, which adds it to a *byte* line-start. On a line with multi-byte characters, every token after the first one got a byte start that was too small. When the drift pushed a token's computed start behind the previous token's end, `emitWhitespaceBefore` dropped the negative gap while `prevEnd` still advanced, so those bytes were counted twice and the green tree ended up wider than the source. Red-tree offsets accumulate green widths, so the trailing tokens reported offsets past EOF; converting one to an LSP position sliced the source out of range.
+  - `lexer.Token` now carries a true byte `Offset`, and the parser builds the green tree from it. The tree-width invariant (`root.Width() == len(src)`) holds for non-ASCII sources again, which also restores the lossless round-trip — `internal/visualizer/testdata/vas.craft` previously reassembled 3 bytes longer than the original.
+- **Incremental `didChange` edits no longer corrupt documents containing non-ASCII characters.** `applyIncrementalChange` treated LSP `Position.Character` (a count of UTF-16 code units) as a byte column, so an edit on a line with an accented character or emoji was applied at the wrong offset — sometimes splitting a rune and leaving invalid UTF-8 in the server's copy of the buffer, which then disagreed with the editor.
+- **Completion resolves the cursor correctly on non-ASCII lines.** The same UTF-16-as-bytes confusion in `treeEnclosingBlock` and in the line-prefix slice could pick the wrong enclosing block.
+- **Every position the LSP publishes is now a real UTF-16 column.** `internal/sema` derived symbol and diagnostic columns with `LineIndex.LineCol`, which counts *bytes*, and then emitted them as LSP `Position.Character`, which counts UTF-16 code units. On any line containing a multi-byte character, everything to the right of it was reported too far right by one column per extra byte. This affected go-to-definition targets and hit-testing, document symbols, hovers, all sema and lint diagnostic ranges, semantic-token lengths, and the end position of the whole-document formatting edit. Range *ends* were equally wrong: they were computed as `start + len(name)`, a byte count.
+  - Every column bound for LSP now comes from the new `LineIndex.LineCol16`, and every span length from `green.UTF16Len`. Semantic-token lengths, `rawLen` cursor hit-tests, and the formatting edit's end position all moved over.
+- **Semantic-token lengths were byte counts.** A token containing an accented character was highlighted several columns too wide, bleeding the colour onto whatever followed it.
+
+### Added
+- `green.LineIndex.OffsetFromUTF16(line, utf16col)` — the inverse of `UTF16Col`, and the only correct way to turn an LSP position into a byte offset. `Offset(line, col)` remains byte-in/byte-out and must not be used for LSP positions.
+- `green.LineIndex.LineCol16(offset)` — `LineCol` with the column in UTF-16 code units. Every column destined for an LSP position must come from this.
+- `green.UTF16Len(s)` — a string's width in UTF-16 code units, for computing range ends and token lengths.
+- `LineIndex` now carries the source it was built from, so `UTF16Col`/`OffsetFromUTF16` can no longer be handed a mismatched string. Both lost their `src` parameter; `Src()` exposes it for callers that were threading it separately.
+- `UTF16Col` clamps an out-of-range offset instead of panicking. A position-conversion bug should degrade one token, not take down the request handler.
+- **Tree-width invariant check in `syntax.Parse`.** If the green tree's width ever again disagrees with `len(src)`, the parser emits `craft/internal/tree-width-mismatch` naming both numbers, instead of the corruption surfacing as a slice-bounds panic several layers away.
+- Non-ASCII coverage: lossless and tree-width cases in `internal/syntax`, UTF-16 round-trip cases in `internal/green`, and an `internal/lsp` regression test that runs `SemanticTokensFull` over every `.craft` file in `testdata/corpus`, `examples`, and `internal/visualizer/testdata`, checking that every emitted position exists in the source. The previous test corpus was entirely ASCII, which is why the invariant went unguarded.
+- **ASCII-twin oracle** (`internal/lsp/utf16_twin_internal_test.go`). A non-ASCII fixture is paired with an ASCII document built to be identical in UTF-16 columns (`Ação`/`Acao`, `café`/`cafe`, `🚀`/`xx`), and `DocumentSymbol`, `Definition`, `Hover`, `Formatting`, `SemanticTokensFull`, and both per-file and workspace diagnostics must return identical geometry for the two. A self-check asserts the fixture really is UTF-16-identical and byte-different, and each comparison fails loudly if it collected nothing to compare. Any future byte column or byte length reaching an LSP position breaks this immediately.
+
+### Notes
+- `Token.Column` is unchanged and still counts runes — that is what the parser's same-line and adjacency checks want. Only the byte-offset consumers moved to `Token.Offset`, and only the LSP-bound columns moved to `LineCol16`.
+- Diagnostic and definition *positions* on files containing non-ASCII characters change (they were wrong; they are now right). Codes, severities, messages, and counts are unchanged. Pure-ASCII files are byte-for-byte unaffected.
+
 ## [2.15.1] — 2026-07-27
 
 ### Fixed
