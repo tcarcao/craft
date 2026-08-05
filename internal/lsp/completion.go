@@ -29,18 +29,14 @@ const (
 	ctxUnknown
 )
 
-// splitLines splits content into lines.
-func splitLines(content string) []string {
-	return strings.Split(content, "\n")
-}
-
 // treeEnclosingBlock returns the enclosing DSL keyword string for the cursor
 // position by walking the syntax tree — the same values findEnclosingKeyword
 // returns ("service", "domain", "actors", "use_case", "expose", "arch", or "").
 // Tree-based lookup correctly handles `}` characters inside comments and strings.
+// cursorCol is a 0-based UTF-16 column, as sent by the editor.
 func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, cursorCol int) string {
-	offset := li.Offset(cursorLine+1, cursorCol+1)
-	node := root.NodeAt(green.TextSize(offset))
+	offset := li.OffsetFromUTF16(cursorLine+1, cursorCol)
+	node := root.NodeAt(offset)
 	for node != nil {
 		switch node.Kind() {
 		case syntax.SyntaxKindServiceField:
@@ -86,16 +82,12 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 // the cursor sits in the grammar. It uses the syntax tree to find the nearest
 // enclosing keyword, and checks the current line for field-value patterns
 // (e.g. "language: ").
-func detectContext(root syntax.SyntaxNode, li green.LineIndex, lines []string, cursorLine, cursorCol int) completionContext {
-	linePrefix := ""
-	if cursorLine < len(lines) {
-		l := lines[cursorLine]
-		if cursorCol <= len(l) {
-			linePrefix = l[:cursorCol]
-		} else {
-			linePrefix = l
-		}
-	}
+func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, cursorCol int) completionContext {
+	// cursorCol is a UTF-16 column, so slice the line by the byte offset it
+	// maps to — not by the column itself, which would cut mid-rune.
+	cursorOffset := li.OffsetFromUTF16(cursorLine+1, cursorCol)
+	lineStart := li.OffsetFromUTF16(cursorLine+1, 0)
+	linePrefix := li.Src()[lineStart:cursorOffset]
 
 	enclosing := treeEnclosingBlock(root, li, cursorLine, cursorCol)
 
@@ -203,12 +195,11 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return nil
 	}
 
-	lines := splitLines(f.Content)
 	cursorLine := int(params.Position.Line)
 	cursorCol := int(params.Position.Character)
 
 	root := syntax.Root(f.Green)
-	ctx := detectContext(root, f.LineIndex, lines, cursorLine, cursorCol)
+	ctx := detectContext(root, f.LineIndex, cursorLine, cursorCol)
 
 	switch ctx {
 	case ctxTopLevel:

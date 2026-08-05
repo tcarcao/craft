@@ -70,18 +70,20 @@ func lspLine(line int) uint32 {
 }
 
 // lspPosFromOffset converts a byte offset to an LSP Position using LineIndex.
-func lspPosFromOffset(li green.LineIndex, src string, offset green.TextSize) protocol.Position {
+func lspPosFromOffset(li green.LineIndex, offset green.TextSize) protocol.Position {
 	line, _ := li.LineCol(offset)
-	startChar := li.UTF16Col(src, offset)
+	startChar := li.UTF16Col(offset)
 	return protocol.Position{Line: lspLine(line), Character: startChar}
 }
 
 // applyIncrementalChange applies one LSP incremental text change to content.
-// r is in LSP coordinates (0-based line and character); li must be the
-// LineIndex for content BEFORE this change is applied.
+// r is in LSP coordinates (0-based line, and character as a count of UTF-16
+// code units); li must be the LineIndex for content BEFORE this change is
+// applied. The UTF-16 conversion is what keeps edits on lines containing
+// multi-byte characters from landing mid-rune and corrupting the buffer.
 func applyIncrementalChange(content string, li green.LineIndex, r protocol.Range, newText string) string {
-	start := int(li.Offset(int(r.Start.Line)+1, int(r.Start.Character)+1))
-	end := int(li.Offset(int(r.End.Line)+1, int(r.End.Character)+1))
+	start := int(li.OffsetFromUTF16(int(r.Start.Line)+1, int(r.Start.Character)))
+	end := int(li.OffsetFromUTF16(int(r.End.Line)+1, int(r.End.Character)))
 	n := len(content)
 	if start < 0 {
 		start = 0
@@ -345,7 +347,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			if i >= len(ctxToks) {
 				continue
 			}
-			ctxLine, ctxCol := f.LineIndex.LineCol(ctxToks[i].Offset())
+			ctxLine, ctxCol := f.LineIndex.LineCol16(ctxToks[i].Offset())
 			if ctxLine != cursorLine {
 				continue
 			}
@@ -355,7 +357,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			// using the unquoted ctxName's length here would leave the cursor
 			// hit-test short for quoted context entries. ctxName (unquoted) is
 			// still used below for the resolution-map lookup key.
-			rawLen := len(ctxToks[i].Text())
+			rawLen := int(green.UTF16Len(ctxToks[i].Text()))
 			if cursorChar < ctxCol || cursorChar >= ctxCol+rawLen {
 				continue
 			}
@@ -371,7 +373,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 				URI: protocol.DocumentURI(domSym.URI),
 				Range: protocol.Range{
 					Start: protocol.Position{Line: uint32(domSym.Line - 1), Character: domStartChar},
-					End:   protocol.Position{Line: uint32(domSym.Line - 1), Character: domStartChar + uint32(len(domSym.Name))},
+					End:   protocol.Position{Line: uint32(domSym.Line - 1), Character: domStartChar + green.UTF16Len(domSym.Name)},
 				},
 			}}, nil
 		}
@@ -431,8 +433,8 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	// lookup key must go through syntax.StringAwareText.
 	for _, exp := range file.Exposures() {
 		for _, tok := range exp.ToTokens() {
-			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			rawLen := len(tok.Text())
+			tokLine, tokCol := f.LineIndex.LineCol16(tok.Offset())
+			rawLen := int(green.UTF16Len(tok.Text()))
 			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
@@ -445,14 +447,14 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 					URI: protocol.DocumentURI(sym.URI),
 					Range: protocol.Range{
 						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 					},
 				}}, nil
 			}
 		}
 		for _, tok := range exp.ThroughTokens() {
-			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			rawLen := len(tok.Text())
+			tokLine, tokCol := f.LineIndex.LineCol16(tok.Offset())
+			rawLen := int(green.UTF16Len(tok.Text()))
 			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
@@ -465,14 +467,14 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 					URI: protocol.DocumentURI(sym.URI),
 					Range: protocol.Range{
 						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 					},
 				}}, nil
 			}
 		}
 		for _, tok := range exp.ContextsTokens() {
-			tokLine, tokCol := f.LineIndex.LineCol(tok.Offset())
-			rawLen := len(tok.Text())
+			tokLine, tokCol := f.LineIndex.LineCol16(tok.Offset())
+			rawLen := int(green.UTF16Len(tok.Text()))
 			if tokLine != cursorLine || cursorChar < tokCol || cursorChar >= tokCol+rawLen {
 				continue
 			}
@@ -486,7 +488,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 					URI: protocol.DocumentURI(sym.URI),
 					Range: protocol.Range{
 						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 					},
 				}}, nil
 			}
@@ -499,7 +501,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 					URI: protocol.DocumentURI(sym.URI),
 					Range: protocol.Range{
 						Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+						End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 					},
 				}}, nil
 			}
@@ -533,7 +535,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
 				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
 	case "domain":
@@ -549,7 +551,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
 				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
 	case "bounded_context":
@@ -562,7 +564,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 				URI: protocol.DocumentURI(target.BCURI),
 				Range: protocol.Range{
 					Start: protocol.Position{Line: uint32(target.BCLine - 1), Character: col},
-					End:   protocol.Position{Line: uint32(target.BCLine - 1), Character: col + uint32(len(name))},
+					End:   protocol.Position{Line: uint32(target.BCLine - 1), Character: col + green.UTF16Len(name)},
 				},
 			}, true
 		}
@@ -579,7 +581,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
 				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: domFbStartChar},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: domFbStartChar + uint32(len(sym.Name))},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: domFbStartChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
 	case "service":
@@ -595,7 +597,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 			URI: protocol.DocumentURI(sym.URI),
 			Range: protocol.Range{
 				Start: protocol.Position{Line: uint32(sym.Line - 1), Character: startChar},
-				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + uint32(len(sym.Name))},
+				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
 	}
@@ -1332,14 +1334,15 @@ func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormatti
 	if formatted == f.Content {
 		return nil, nil
 	}
-	lines := strings.Split(f.Content, "\n")
-	lastLine := uint32(len(lines) - 1)
-	lastChar := uint32(len(lines[len(lines)-1]))
+	// End-of-document position. Derive it from the LineIndex so the character
+	// is a UTF-16 column; len() of the last line would be a byte count and
+	// would overshoot whenever that line holds a multi-byte character.
+	end := lspPosFromOffset(f.LineIndex, green.TextSize(len(f.Content)))
 	return []protocol.TextEdit{
 		{
 			Range: protocol.Range{
 				Start: protocol.Position{Line: 0, Character: 0},
-				End:   protocol.Position{Line: lastLine, Character: lastChar},
+				End:   end,
 			},
 			NewText: formatted,
 		},
@@ -1548,8 +1551,8 @@ func (s *Server) PrepareRename(_ context.Context, params *protocol.PrepareRename
 	if tok == nil {
 		return nil, nil
 	}
-	startPos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
-	endPos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset()+green.TextSize(len(tok.Text())))
+	startPos := lspPosFromOffset(f.LineIndex, tok.Offset())
+	endPos := lspPosFromOffset(f.LineIndex, tok.Offset()+green.TextSize(len(tok.Text())))
 	return &protocol.Range{
 		Start: startPos,
 		End:   endPos,
@@ -1618,7 +1621,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 			protocol.TextEdit{
 				Range: protocol.Range{
 					Start: protocol.Position{Line: startLine, Character: startChar},
-					End:   protocol.Position{Line: startLine, Character: startChar + uint32(len(oldName))},
+					End:   protocol.Position{Line: startLine, Character: startChar + green.UTF16Len(oldName)},
 				},
 				NewText: text,
 			},
@@ -1626,7 +1629,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 	}
 
 	// Declaration site.
-	declLine, declCol := f.LineIndex.LineCol(nameTok.Offset())
+	declLine, declCol := f.LineIndex.LineCol16(nameTok.Offset())
 	addEdit(uri, declLine, declCol, declNewText)
 
 	// Reference sites: use-case refs from all files.
@@ -1681,7 +1684,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 				if i >= len(ctxToks) {
 					continue
 				}
-				tokLine, tokCol := wf.LineIndex.LineCol(ctxToks[i].Offset())
+				tokLine, tokCol := wf.LineIndex.LineCol16(ctxToks[i].Offset())
 				addEdit(wf.URI, tokLine, tokCol, newName)
 			}
 		}
@@ -2001,8 +2004,8 @@ func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.Semantic
 			}
 			// tok.Text() is the exact raw source text; for strings it already
 			// includes both quotes (Bug 8a fix), so no length adjustment needed.
-			length := uint32(len(tok.Text()))
-			pos := lspPosFromOffset(f.LineIndex, f.Content, tok.Offset())
+			length := green.UTF16Len(tok.Text())
+			pos := lspPosFromOffset(f.LineIndex, tok.Offset())
 			tokens = append(tokens, semanticToken{
 				line:      pos.Line,
 				startChar: pos.Character,
@@ -2042,7 +2045,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 		if l <= 0 {
 			return 0, 0, false
 		}
-		return lspLine(l), li.UTF16Col(src, tok.Offset()), true
+		return lspLine(l), li.UTF16Col(tok.Offset()), true
 	}
 
 	// tokPosVal returns the LSP line/char for a SyntaxToken value.
@@ -2051,7 +2054,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 		if l <= 0 {
 			return 0, 0, false
 		}
-		return lspLine(l), li.UTF16Col(src, tok.Offset()), true
+		return lspLine(l), li.UTF16Col(tok.Offset()), true
 	}
 
 	// Actors: craft-actor-definition, modifier 1 (declaration).
@@ -2067,7 +2070,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 		tokens = append(tokens, semanticToken{
 			line:      line,
 			startChar: col,
-			length:    uint32(len(nameTok.Text())),
+			length:    green.UTF16Len(nameTok.Text()),
 			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeActorDecl),
 			modifiers: 1, // declaration
 		})
@@ -2086,7 +2089,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 		tokens = append(tokens, semanticToken{
 			line:      line,
 			startChar: col,
-			length:    uint32(len(nameTok.Text())),
+			length:    green.UTF16Len(nameTok.Text()),
 			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeDomainName),
 			modifiers: 1, // declaration
 		})
@@ -2103,7 +2106,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			tokens = append(tokens, semanticToken{
 				line:      bcLine,
 				startChar: bcCol,
-				length:    uint32(len(bcTok.Text())),
+				length:    green.UTF16Len(bcTok.Text()),
 				tokenType: semanticTokenTypeIndexConst(semanticTokenTypeContextName),
 				modifiers: 1, // declaration
 			})
@@ -2123,7 +2126,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 		tokens = append(tokens, semanticToken{
 			line:      line,
 			startChar: col,
-			length:    uint32(len(nameTok.Text())),
+			length:    green.UTF16Len(nameTok.Text()),
 			tokenType: semanticTokenTypeIndexConst(semanticTokenTypeServiceName),
 			modifiers: 1, // declaration
 		})
@@ -2144,7 +2147,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 				tokens = append(tokens, semanticToken{
 					line:      tokLine,
 					startChar: tokCol,
-					length:    uint32(len(tok.Text())),
+					length:    green.UTF16Len(tok.Text()),
 					tokenType: uint32(svcDsIdx),
 				})
 			}
@@ -2157,7 +2160,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					tokens = append(tokens, semanticToken{
 						line:      tokLine,
 						startChar: tokCol,
-						length:    uint32(len(tok.Text())),
+						length:    green.UTF16Len(tok.Text()),
 						tokenType: uint32(svcLangIdx),
 					})
 				}
@@ -2171,7 +2174,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					tokens = append(tokens, semanticToken{
 						line:      tokLine,
 						startChar: tokCol,
-						length:    uint32(len(tok.Text())),
+						length:    green.UTF16Len(tok.Text()),
 						tokenType: uint32(svcDtIdx),
 					})
 				}
@@ -2187,7 +2190,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 				tokens = append(tokens, semanticToken{
 					line:      tokLine,
 					startChar: tokCol,
-					length:    uint32(len(tok.Text())),
+					length:    green.UTF16Len(tok.Text()),
 					tokenType: uint32(svcTargIdx),
 				})
 			}
@@ -2209,7 +2212,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			tokens = append(tokens, semanticToken{
 				line:      line,
 				startChar: col,
-				length:    uint32(len(nameTok.Text())),
+				length:    green.UTF16Len(nameTok.Text()),
 				tokenType: uint32(expIdx),
 			})
 		}
@@ -2232,7 +2235,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					tokens = append(tokens, semanticToken{
 						line:      line,
 						startChar: col,
-						length:    uint32(len(nameTok.Text())),
+						length:    green.UTF16Len(nameTok.Text()),
 						tokenType: uint32(compIdx),
 					})
 				}
@@ -2255,7 +2258,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			tokens = append(tokens, semanticToken{
 				line:      line,
 				startChar: col,
-				length:    uint32(len(typTok.Text())),
+				length:    green.UTF16Len(typTok.Text()),
 				tokenType: uint32(actorTypeIdx),
 			})
 		}
@@ -2281,12 +2284,12 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, triggerLine); ok {
 					col := uint32(0)
 					if subj := trigger.Subject(); subj != nil {
-						col = li.UTF16Col(src, subj.Offset())
+						col = li.UTF16Col(subj.Offset())
 					}
 					tokens = append(tokens, semanticToken{
 						line:      lspLine(triggerLine),
 						startChar: col,
-						length:    uint32(len(triggerName)),
+						length:    green.UTF16Len(triggerName),
 						tokenType: tt,
 					})
 				}
@@ -2318,11 +2321,11 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 					if !unicode.IsUpper([]rune(val)[0]) && !isConnectorWord(val) {
 						continue
 					}
-					tokCol := li.UTF16Col(src, tok.Offset())
+					tokCol := li.UTF16Col(tok.Offset())
 					tokens = append(tokens, semanticToken{
 						line:      tokLine,
 						startChar: tokCol,
-						length:    uint32(len(val)),
+						length:    green.UTF16Len(val),
 						tokenType: uint32(phraseWordIdx),
 					})
 				}
@@ -2344,7 +2347,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 						tokens = append(tokens, semanticToken{
 							line:      uint32(actionLine - 1),
 							startChar: col,
-							length:    uint32(len(subj)),
+							length:    green.UTF16Len(subj),
 							tokenType: tt,
 						})
 					}
@@ -2359,7 +2362,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 						tokens = append(tokens, semanticToken{
 							line:      uint32(actionLine - 1),
 							startChar: col,
-							length:    uint32(len(target)),
+							length:    green.UTF16Len(target),
 							tokenType: tt,
 						})
 					}
@@ -2409,8 +2412,8 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		}
 		result = append(result, semanticToken{
 			line:      lspLine(l),
-			startChar: li.UTF16Col(src, tok.Offset()),
-			length:    uint32(len(tok.Text())),
+			startChar: li.UTF16Col(tok.Offset()),
+			length:    green.UTF16Len(tok.Text()),
 			tokenType: uint32(typeIdx),
 		})
 	}
@@ -2549,13 +2552,12 @@ func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.F
 
 	file := syntax.AsFile(syntax.Root(f.Green))
 	li := f.LineIndex
-	src := f.Content
 
 	for _, uc := range file.UseCases() {
 		if title := uc.Title(); title != nil {
 			l, _ := li.LineCol(title.Offset())
 			if l > 0 {
-				pos := lspPosFromOffset(li, src, title.Offset())
+				pos := lspPosFromOffset(li, title.Offset())
 				overrides[posKey{pos.Line, pos.Character}] = ucStringIdx
 			}
 		}
@@ -2563,7 +2565,7 @@ func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.F
 			trigger := sc.Trigger()
 			if trigger.Kind() == "event" || trigger.Kind() == "domain_listen" {
 				if evTok := trigger.Event(); evTok != nil && trigger.EventIsString() {
-					pos := lspPosFromOffset(li, src, evTok.Offset())
+					pos := lspPosFromOffset(li, evTok.Offset())
 					overrides[posKey{pos.Line, pos.Character}] = evStringIdx
 				}
 			}

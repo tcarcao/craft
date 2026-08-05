@@ -38,7 +38,7 @@ func nodeFirstTokenCol(node SyntaxNode, li green.LineIndex) int {
 	if len(toks) == 0 {
 		return 0
 	}
-	_, col := li.LineCol(toks[0].Offset())
+	_, col := li.LineCol16(toks[0].Offset())
 	return col
 }
 
@@ -1234,7 +1234,7 @@ func (t TriggerDecl) ActorCol(li green.LineIndex) int {
 	if tok == nil {
 		return 0
 	}
-	_, col := li.LineCol(tok.Offset())
+	_, col := li.LineCol16(tok.Offset())
 	return col
 }
 
@@ -1324,13 +1324,13 @@ func (t TriggerDecl) EventCol(li green.LineIndex) int {
 	case "event":
 		tokens := t.node.Tokens()
 		if len(tokens) > 0 {
-			_, col := li.LineCol(tokens[0].Offset())
+			_, col := li.LineCol16(tokens[0].Offset())
 			return col
 		}
 	case "domain_listen":
 		elems := significantElements(t.node)
 		if len(elems) >= 3 {
-			_, col := li.LineCol(refAwareOffset(elems[2]))
+			_, col := li.LineCol16(refAwareOffset(elems[2]))
 			return col
 		}
 	}
@@ -1423,7 +1423,7 @@ func (a ActionDecl) SubjectCol(li green.LineIndex) int {
 	if tok == nil {
 		return 0
 	}
-	_, col := li.LineCol(tok.Offset())
+	_, col := li.LineCol16(tok.Offset())
 	return col
 }
 
@@ -1465,14 +1465,14 @@ func (a ActionDecl) TargetCol(li green.LineIndex) int {
 	case "sync_action":
 		elems := significantElements(a.node)
 		if len(elems) >= 3 && (elems[2].Kind() == SyntaxKindIdent || elems[2].Kind() == SyntaxKindRef) {
-			_, col := li.LineCol(refAwareOffset(elems[2]))
+			_, col := li.LineCol16(refAwareOffset(elems[2]))
 			return col
 		}
 	case "return_action":
 		tokens := a.node.Tokens()
 		for i, tok := range tokens {
 			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
-				_, col := li.LineCol(tokens[i+1].Offset())
+				_, col := li.LineCol16(tokens[i+1].Offset())
 				return col
 			}
 		}
@@ -1501,7 +1501,7 @@ func (a ActionDecl) EventCol(li green.LineIndex) int {
 	}
 	elems := significantElements(a.node)
 	if len(elems) >= 3 {
-		_, col := li.LineCol(refAwareOffset(elems[2]))
+		_, col := li.LineCol16(refAwareOffset(elems[2]))
 		return col
 	}
 	return 0
