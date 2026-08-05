@@ -166,7 +166,7 @@ func malformedSlugDiag(uri, text, reason string, line, col int) model.Diagnostic
 		SourceURI: uri,
 		Range: model.Range{
 			Start: model.Position{Line: lineToLSP(line), Character: startChar},
-			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(text)},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen(text)},
 		},
 	}
 }
@@ -298,7 +298,7 @@ func classifyEdgeVerb(uri, verb, left string, leftLine, leftCol int) []model.Dia
 		SourceURI: uri,
 		Range: model.Range{
 			Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-			End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(left)},
+			End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + lspLen(left)},
 		},
 	}}
 }
@@ -438,7 +438,7 @@ func relationshipEdgeDiags(ws WorkspaceSymbols, site ContextMapEdgeSite) []model
 			SourceURI: site.URI,
 			Range: model.Range{
 				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
-				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + lspLen(site.Left)},
 			},
 		})
 	}
@@ -527,7 +527,7 @@ func glossaryEndpointDiag(uri, ref, kind string, ambiguous bool, line, col int) 
 	startChar := colToLSP(col)
 	rng := model.Range{
 		Start: model.Position{Line: lineToLSP(line), Character: startChar},
-		End:   model.Position{Line: lineToLSP(line), Character: startChar + len(ref)},
+		End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen(ref)},
 	}
 	switch {
 	case ambiguous:
@@ -583,7 +583,7 @@ func glossaryRelationDiags(ws WorkspaceSymbols, site GlossaryRelationSite) []mod
 			SourceURI: site.URI,
 			Range: model.Range{
 				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
-				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + lspLen(site.Left)},
 			},
 		})
 	}
@@ -630,7 +630,7 @@ func glossaryLintDiags(
 	startChar := colToLSP(site.LeftCol)
 	rng := model.Range{
 		Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
-		End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+		End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + lspLen(site.Left)},
 	}
 
 	var diags []model.Diagnostic
@@ -714,7 +714,7 @@ func redundantRelationshipDiag(ws WorkspaceSymbols, site ContextMapEdgeSite, see
 			SourceURI: site.URI,
 			Range: model.Range{
 				Start: model.Position{Line: lineToLSP(site.LeftLine), Character: startChar},
-				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + len(site.Left)},
+				End:   model.Position{Line: lineToLSP(site.LeftLine), Character: startChar + lspLen(site.Left)},
 			},
 		}}
 	}
@@ -728,7 +728,7 @@ func endpointDiag(uri, ref, kind string, ambiguous bool, line, col int) []model.
 	startChar := colToLSP(col)
 	rng := model.Range{
 		Start: model.Position{Line: lineToLSP(line), Character: startChar},
-		End:   model.Position{Line: lineToLSP(line), Character: startChar + len(ref)},
+		End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen(ref)},
 	}
 	switch {
 	case ambiguous:
@@ -801,7 +801,7 @@ func duplicateAnchorDiag(uri, field, svcName string, f syntax.ServiceField, li g
 		SourceURI: uri,
 		Range: model.Range{
 			Start: model.Position{Line: lineToLSP(line), Character: startChar},
-			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(field)},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen(field)},
 		},
 	}
 }
@@ -839,7 +839,7 @@ func validateUseCaseTags(uri string, file syntax.File, li green.LineIndex, hasLI
 func duplicateTagKeyDiag(uri, ucName, key string, keyTok *syntax.SyntaxToken, li green.LineIndex, hasLI bool) model.Diagnostic {
 	line, col := 0, 0
 	if hasLI {
-		line, col = li.LineCol(keyTok.Offset())
+		line, col = li.LineCol16(keyTok.Offset())
 	}
 	startChar := colToLSP(col)
 	return model.Diagnostic{
@@ -849,7 +849,7 @@ func duplicateTagKeyDiag(uri, ucName, key string, keyTok *syntax.SyntaxToken, li
 		SourceURI: uri,
 		Range: model.Range{
 			Start: model.Position{Line: lineToLSP(line), Character: startChar},
-			End:   model.Position{Line: lineToLSP(line), Character: startChar + len(key)},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen(key)},
 		},
 	}
 }
@@ -858,7 +858,7 @@ func duplicateTagBlockDiag(uri, ucName string, tb syntax.TagsBlock, li green.Lin
 	line, col := 0, 0
 	if hasLI {
 		if kw := tb.Keyword(); kw != nil {
-			line, col = li.LineCol(kw.Offset())
+			line, col = li.LineCol16(kw.Offset())
 		}
 	}
 	startChar := colToLSP(col)
@@ -869,7 +869,7 @@ func duplicateTagBlockDiag(uri, ucName string, tb syntax.TagsBlock, li green.Lin
 		SourceURI: uri,
 		Range: model.Range{
 			Start: model.Position{Line: lineToLSP(line), Character: startChar},
-			End:   model.Position{Line: lineToLSP(line), Character: startChar + len("tags")},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen("tags")},
 		},
 	}
 }

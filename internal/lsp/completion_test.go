@@ -114,10 +114,9 @@ func TestDetectContext(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			lines := splitLines(tc.src)
 			gn, li, _ := syntax.Parse(tc.src)
 			root := syntax.Root(gn)
-			got := detectContext(root, li, lines, tc.line, tc.col)
+			got := detectContext(root, li, tc.line, tc.col)
 			if got != tc.want {
 				t.Errorf("detectContext: got %v, want %v", got, tc.want)
 			}
@@ -132,10 +131,9 @@ func TestDetectContext(t *testing.T) {
 func TestDetectContext_BlankLineInsideBlock(t *testing.T) {
 	src := "service Foo {\n  \n}"
 	// Cursor at the blank line (line 1, col 2) — inside the service body.
-	lines := splitLines(src)
 	gn, li, _ := syntax.Parse(src)
 	root := syntax.Root(gn)
-	got := detectContext(root, li, lines, 1, 2)
+	got := detectContext(root, li, 1, 2)
 	if got != ctxServiceField {
 		t.Errorf("blank line inside service: got %v, want ctxServiceField", got)
 	}
@@ -149,10 +147,9 @@ func TestDetectContext_CommentBraceFix(t *testing.T) {
 
 }`
 	// Cursor at the blank line (line 2, col 0) — inside the domain body.
-	lines := splitLines(src)
 	gn, li, _ := syntax.Parse(src)
 	root := syntax.Root(gn)
-	got := detectContext(root, li, lines, 2, 0)
+	got := detectContext(root, li, 2, 0)
 	if got != ctxDomainBody {
 		t.Errorf("detectContext with comment brace: got %v, want ctxDomainBody", got)
 	}

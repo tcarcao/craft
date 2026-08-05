@@ -28,7 +28,6 @@ type Parser struct {
 	pos     int
 	builder green.GreenNodeBuilder
 	src     string
-	li      green.LineIndex
 	prevEnd green.TextSize // byte offset after last emitted token
 }
 
@@ -37,9 +36,31 @@ type Parser struct {
 func Parse(src string) (*green.GreenNode, green.LineIndex, []model.Diagnostic) {
 	li := green.NewLineIndex(src)
 	l := lexer.New(src)
-	p := &Parser{tokens: l.All(), src: src, li: li}
+	p := &Parser{tokens: l.All(), src: src}
 	root, diags := p.parseFile()
+	diags = append(diags, checkTreeWidth(root, len(src))...)
 	return root, li, diags
+}
+
+// checkTreeWidth asserts the losslessness invariant: the green tree's total
+// width must equal the source length. Red-tree offsets are accumulated green
+// widths, so drift here puts token offsets past EOF and silently misplaces
+// every position derived from the tree — highlighting, hovers, diagnostics.
+//
+// This should never fire. It is here because when it did fire (rune columns
+// fed to a byte-based Offset), the symptom was a slice-bounds panic several
+// layers away with nothing pointing back at the parser.
+func checkTreeWidth(root *green.GreenNode, srcLen int) []model.Diagnostic {
+	if root == nil || int(root.Width()) == srcLen {
+		return nil
+	}
+	return []model.Diagnostic{{
+		Code: "craft/internal/tree-width-mismatch",
+		Message: fmt.Sprintf(
+			"internal parser error: syntax tree spans %d bytes but the source is %d; positions in this file may be wrong",
+			root.Width(), srcLen),
+		Severity: model.SeverityError,
+	}}
 }
 
 // --- main parse loop ---
@@ -1519,7 +1540,7 @@ func (p *Parser) emitWhitespaceBefore(tok lexer.Token) {
 	if tok.Type == lexer.TokenEOF {
 		return
 	}
-	currentStart := p.li.Offset(tok.Line, tok.Column)
+	currentStart := green.TextSize(tok.Offset)
 	if currentStart > p.prevEnd {
 		ws := p.src[p.prevEnd:currentStart]
 		p.builder.Token(SyntaxKindWhitespace, ws)
@@ -1532,8 +1553,7 @@ func (p *Parser) updatePrevEnd(tok lexer.Token) {
 	if tok.Type == lexer.TokenEOF {
 		return
 	}
-	start := p.li.Offset(tok.Line, tok.Column)
-	p.prevEnd = start + green.TextSize(len(tokenText(tok)))
+	p.prevEnd = green.TextSize(tok.Offset + len(tokenText(tok)))
 }
 
 // tokenText returns the exact raw source text for tok, for green-tree Text

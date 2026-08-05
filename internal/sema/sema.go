@@ -35,12 +35,22 @@ func lineToLSP(line int) int {
 
 // colToLSP converts a 1-based source column to a 0-based LSP character offset.
 // Returns 0 for any non-positive input.
+//
+// The input must already be a UTF-16 column — every Column field in this
+// package is produced by LineIndex.LineCol16, never LineCol. LSP measures
+// Position.Character in UTF-16 code units, so a byte column here would place
+// diagnostics and definitions to the left of their real position on any line
+// containing a multi-byte character.
 func colToLSP(col int) int {
 	if col <= 0 {
 		return 0
 	}
 	return col - 1
 }
+
+// lspLen is the width of a name in LSP character units (UTF-16 code units),
+// for computing a range End from its Start. len(s) would be a byte count.
+func lspLen(s string) int { return int(green.UTF16Len(s)) }
 
 // ActorSymbol holds collected information about an actor declaration.
 type ActorSymbol struct {
@@ -267,7 +277,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		actorType := a.ActorTypeValue()
 		actorLine, actorCol := 0, 0
 		if hasLI {
-			actorLine, actorCol = lineIdx.LineCol(nameTok.Offset())
+			actorLine, actorCol = lineIdx.LineCol16(nameTok.Offset())
 		}
 		sym := ActorSymbol{
 			Name:   nameTok.Text(),
@@ -284,7 +294,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				Severity: model.SeverityError,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + lspLen(nameTok.Text())},
 				},
 			})
 			continue
@@ -315,7 +325,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		}
 		domLine, domCol := 0, 0
 		if hasLI {
-			domLine, domCol = lineIdx.LineCol(nameTok.Offset())
+			domLine, domCol = lineIdx.LineCol16(nameTok.Offset())
 		}
 		domEndLine := 0
 		if hasLI {
@@ -338,7 +348,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				Severity: model.SeverityError,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + lspLen(nameTok.Text())},
 				},
 			})
 			continue
@@ -357,7 +367,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 			}
 			bcLine, bcCol := 0, 0
 			if hasLI {
-				bcLine, bcCol = lineIdx.LineCol(bcTok.Offset())
+				bcLine, bcCol = lineIdx.LineCol16(bcTok.Offset())
 			}
 			syms.BCPositions[bcTok.Text()] = BCPosition{
 				Line:   bcLine,
@@ -378,7 +388,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		nameContent := syntax.StringAwareText(*nameTok)
 		svcLine, svcCol := 0, 0
 		if hasLI {
-			svcLine, svcCol = lineIdx.LineCol(nameTok.Offset())
+			svcLine, svcCol = lineIdx.LineCol16(nameTok.Offset())
 		}
 		svcEndLine := 0
 		if hasLI {
@@ -403,7 +413,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				Severity: model.SeverityError,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(nameTok.Text())},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + lspLen(nameTok.Text())},
 				},
 			})
 			continue
@@ -426,7 +436,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				Severity: model.SeverityWarning,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(domSym.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(domSym.Line), Character: startChar + len(name)},
+					End:   model.Position{Line: lineToLSP(domSym.Line), Character: startChar + lspLen(name)},
 				},
 			})
 		}
@@ -459,7 +469,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 				Severity: model.SeverityError,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(ucLine)},
-					End:   model.Position{Line: lineToLSP(ucLine), Character: len(name)},
+					End:   model.Position{Line: lineToLSP(ucLine), Character: lspLen(name)},
 				},
 			})
 			continue
@@ -615,7 +625,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 					SourceURI: s.URI,
 					Range: model.Range{
 						Start: model.Position{Line: lineToLSP(s.Line), Character: startChar},
-						End:   model.Position{Line: lineToLSP(s.Line), Character: startChar + len(s.Name)},
+						End:   model.Position{Line: lineToLSP(s.Line), Character: startChar + lspLen(s.Name)},
 					},
 				})
 				// Keep the first declaration in the map so resolution is stable.
@@ -668,7 +678,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 						SourceURI: uri,
 						Range: model.Range{
 							Start: model.Position{Line: lineToLSP(svc.Line), Character: startChar},
-							End:   model.Position{Line: lineToLSP(svc.Line), Character: startChar + len(svc.Name)},
+							End:   model.Position{Line: lineToLSP(svc.Line), Character: startChar + lspLen(svc.Name)},
 						},
 					})
 					continue
@@ -701,7 +711,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 				SourceURI: uri,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(ref.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(ref.Line), Character: startChar + len(ref.Name)},
+					End:   model.Position{Line: lineToLSP(ref.Line), Character: startChar + lspLen(ref.Name)},
 				},
 			})
 		}
@@ -715,7 +725,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 		for _, exp := range syms.Exposures {
 			expRange := model.Range{
 				Start: model.Position{Line: lineToLSP(exp.Line)},
-				End:   model.Position{Line: lineToLSP(exp.Line), Character: len(exp.Name)},
+				End:   model.Position{Line: lineToLSP(exp.Line), Character: lspLen(exp.Name)},
 			}
 			// `to:` must name actors.
 			for _, name := range exp.To {
@@ -827,7 +837,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 					SourceURI: uri,
 					Range: model.Range{
 						Start: model.Position{Line: lineToLSP(sr.Line), Character: startChar},
-						End:   model.Position{Line: lineToLSP(sr.Line), Character: startChar + len(sr.Text)},
+						End:   model.Position{Line: lineToLSP(sr.Line), Character: startChar + lspLen(sr.Text)},
 					},
 				})
 			}

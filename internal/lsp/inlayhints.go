@@ -84,7 +84,6 @@ func handleInlayHint(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.R
 	rm := ws.ResolutionMap()
 	tree := syntax.Root(file.Green)
 	li := file.LineIndex
-	src := file.Content
 
 	var hints []inlayHint
 	for _, svc := range syntax.AsFile(tree).Services() {
@@ -111,7 +110,7 @@ func handleInlayHint(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.R
 			}
 			// Place hint at the character immediately after the context name token.
 			endOffset := ctxTok.TextRange().End
-			pos := lspPosFromOffset(li, src, endOffset)
+			pos := lspPosFromOffset(li, endOffset)
 			hints = append(hints, inlayHint{
 				Position: inlayPosition{Line: pos.Line, Character: pos.Character},
 				Label:    " ← " + domSym.Name,

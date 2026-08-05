@@ -147,7 +147,7 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 				Severity: model.SeverityWarning,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(sym.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + len(name)},
+					End:   model.Position{Line: lineToLSP(sym.Line), Character: startChar + lspLen(name)},
 				},
 				SourceURI: sym.URI,
 			})
@@ -328,7 +328,7 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 									line, _ = li.LineCol(whenTok.Offset())
 								}
 								listenersByEvent[ev] = append(listenersByEvent[ev], asyncSite{
-									bc: resolved, uri: uri, line: line, col: trigger.ActorCol(li), nameLen: len(ctx),
+									bc: resolved, uri: uri, line: line, col: trigger.ActorCol(li), nameLen: lspLen(ctx),
 								})
 							}
 						}
@@ -341,14 +341,14 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 						subject, subjectKind, subjectAmbig := resolveBCRef(ws, "", action.SubjectName())
 						target, targetKind, targetAmbig := resolveBCRef(ws, "", action.TargetName())
 						if subjectKind == "bc" && !subjectAmbig && targetKind == "bc" && !targetAmbig {
-							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li), len(action.SubjectName()))
+							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li), lspLen(action.SubjectName()))
 						}
 					case "async_action":
 						if ev := action.EventValue(); ev != "" {
 							resolved, kind, ambiguous := resolveBCRef(ws, "", action.SubjectName())
 							if kind == "bc" && !ambiguous && resolved != "" {
 								publishersByEvent[ev] = append(publishersByEvent[ev], asyncSite{
-									bc: resolved, uri: uri, line: action.Line(li), col: action.SubjectCol(li), nameLen: len(action.SubjectName()),
+									bc: resolved, uri: uri, line: action.Line(li), col: action.SubjectCol(li), nameLen: lspLen(action.SubjectName()),
 								})
 							}
 						}
@@ -404,7 +404,7 @@ func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 				startChar := colToLSP(leftCol)
 				edgeRange := model.Range{
 					Start: model.Position{Line: lineToLSP(leftLine), Character: startChar},
-					End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + len(edge.Left())},
+					End:   model.Position{Line: lineToLSP(leftLine), Character: startChar + lspLen(edge.Left())},
 				}
 
 				if verb == "separate_ways" {
