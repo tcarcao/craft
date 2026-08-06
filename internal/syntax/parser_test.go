@@ -968,3 +968,52 @@ func TestOpAnnotation_RoundTripsExactly(t *testing.T) {
 		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 	}
 }
+
+// A `}` inside a templated path payload (brace depth > 0) must not be mistaken
+// for the enclosing block's closing brace. Regression for a reviewer-found bug
+// where opAnnotationStart broke the scan unconditionally on any TokenRBrace,
+// which both defeated annotation detection and, downstream, left the `}` of
+// `{id}` unconsumed so it closed the use_case block early.
+func TestOpAnnotation_TemplatedPathBraces(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    A asks B for c [POST /v1/accounts/{id}/charges]
+}`
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", diags)
+	}
+	tree := syntax.Root(g)
+	ucs := syntax.AsFile(tree).UseCases()
+	if len(ucs) != 1 {
+		t.Fatalf("expected 1 use_case (the `}` in {id} must not close the block early), got %d", len(ucs))
+	}
+	actions := ucs[0].Scenarios()[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	a := actions[0]
+	if a.OpAnnotation() == nil {
+		t.Fatal("expected an op annotation")
+	}
+	if got := a.OpText(); got != "POST /v1/accounts/{id}/charges" {
+		t.Errorf("OpText() = %q, want %q", got, "POST /v1/accounts/{id}/charges")
+	}
+}
+
+// notifies has no phrase, so a trailing annotation is only recognised when it
+// starts immediately after the event (lookahead index 0). Regression for a
+// reviewer-found bug where a stray token between the event and `[` (like a
+// malformed multi-word event) still satisfied `opAnnotationStart(...) >= 0`,
+// mis-anchoring parseOpAnnotation on the stray token instead of `[`.
+func TestOpAnnotation_NotifiesStrayTokenBeforeBracketStaysUnopened(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    A notifies Order Created [TOPIC t]
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Errorf("expected no op annotation when a stray token precedes `[`, got OpText() = %q", a.OpText())
+	}
+}

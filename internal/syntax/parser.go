@@ -1148,7 +1148,11 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 		diags = append(diags, p.diagUnterminatedString(eventTok))
 		p.consumeAs(SyntaxKindError)
 	}
-	if p.opAnnotationStart(eventTok.Line) >= 0 {
+	// notifies has no phrase between the event and a possible annotation, so
+	// the cursor is only correctly positioned on `[` when the annotation
+	// starts immediately (lookahead index 0). A stray token in between (e.g.
+	// a malformed multi-word event) must not be swallowed as if it were `[`.
+	if p.opAnnotationStart(eventTok.Line) == 0 {
 		diags = append(diags, p.parseOpAnnotation()...)
 	}
 	return diags
@@ -1188,12 +1192,27 @@ func (p *Parser) parseReturnsAction(line int) {
 // puts `[batch]` in the phrase and `[POST /v1/entries]` in the annotation.
 // Requiring the line to end in `]` is what lets an unclosed `[` stay prose, so
 // files that do not use the feature keep today's sweep-everything behaviour.
+//
+// A `}` only terminates the scan at brace depth 0. This lets a templated path
+// payload such as `[POST /v1/accounts/{id}/charges]` keep its `{id}` on the
+// scanned line instead of being mistaken for the enclosing block's closing
+// brace; a genuine block-closing `}` (depth 0, no unmatched `{` before it on
+// this line) still terminates the scan exactly as before.
 func (p *Parser) opAnnotationStart(actionLine int) int {
 	lastLBracket, lastTok := -1, -1
+	depth := 0
 	for i := 0; ; i++ {
 		t := p.peekAt(i)
-		if t.Type == lexer.TokenEOF || t.Type == lexer.TokenRBrace || t.Line != actionLine {
+		if t.Type == lexer.TokenEOF || t.Line != actionLine {
 			break
+		}
+		if t.Type == lexer.TokenRBrace {
+			if depth == 0 {
+				break
+			}
+			depth--
+		} else if t.Type == lexer.TokenLBrace {
+			depth++
 		}
 		if t.Type == lexer.TokenLBracket {
 			lastLBracket = i
