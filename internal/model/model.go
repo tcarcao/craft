@@ -154,6 +154,19 @@ const (
 	TriggerTypeDomainListen TriggerType = "domain_listen"
 )
 
+// Operation is the trailing `[...]` operation annotation on an action line, for
+// example `[POST /v1/charges]`. It records the wire call an action corresponds
+// to, which makes a use_case readable as an integration contract.
+//
+// Verb is a recognised protocol verb (GET/POST/GRPC/TOPIC/...) or "" when the
+// annotation body did not start with one. Payload is the body with the verb
+// stripped. Text is the whole body verbatim, and is always populated.
+type Operation struct {
+	Verb    string `json:"verb,omitempty"`
+	Payload string `json:"payload,omitempty"`
+	Text    string `json:"text"`
+}
+
 // Action is a step that takes place within a scenario.
 type Action struct {
 	ID            string     `json:"id"`
@@ -168,11 +181,15 @@ type Action struct {
 	// Empty for the legacy quoted `notifies "X"` form and for
 	// return_action/internal_action — TargetContext/Event still carry the
 	// value either way, for existing consumers.
-	Ref         string `json:"ref,omitempty"`
-	Connector   string `json:"connector,omitempty"`
-	Phrase      string `json:"phrase,omitempty"`
-	Description string `json:"description"`
-	Line        int    `json:"line,omitempty"`
+	Ref string `json:"ref,omitempty"`
+	// Operation is nil when the action carries no `[...]` annotation. It is a
+	// pointer with omitempty so an absent annotation emits no JSON key at all,
+	// keeping .craftjson goldens for unannotated files byte-identical.
+	Operation   *Operation `json:"operation,omitempty"`
+	Connector   string     `json:"connector,omitempty"`
+	Phrase      string     `json:"phrase,omitempty"`
+	Description string     `json:"description"`
+	Line        int        `json:"line,omitempty"`
 }
 
 // ActionType classifies the interaction pattern of an action.

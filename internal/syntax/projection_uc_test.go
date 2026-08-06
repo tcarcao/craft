@@ -2,6 +2,7 @@ package syntax_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -72,4 +73,53 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
 
 	b, _ := json.MarshalIndent(doc, "", "  ")
 	t.Logf("output:\n%s", string(b))
+}
+
+func TestProject_ActionOperation(t *testing.T) {
+	src := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt [POST /v1/charges]
+    Billing asks Ledger to record the entry
+}`
+	g, li, _ := syntax.Parse(src)
+	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	actions := doc.UseCases[0].Scenarios[0].Actions
+
+	if actions[0].Operation == nil {
+		t.Fatal("action 0: expected Operation to be set")
+	}
+	if got := actions[0].Operation.Verb; got != "POST" {
+		t.Errorf("Verb = %q, want POST", got)
+	}
+	if got := actions[0].Operation.Payload; got != "/v1/charges" {
+		t.Errorf("Payload = %q, want /v1/charges", got)
+	}
+	if got := actions[0].Operation.Text; got != "POST /v1/charges" {
+		t.Errorf("Text = %q, want %q", got, "POST /v1/charges")
+	}
+	if got := actions[0].Phrase; got != "a fresh charge attempt" {
+		t.Errorf("Phrase = %q, want %q", got, "a fresh charge attempt")
+	}
+	if got := actions[0].Description; got != "Subscriptions asks Billing for a fresh charge attempt" {
+		t.Errorf("Description = %q, must not contain the annotation", got)
+	}
+
+	if actions[1].Operation != nil {
+		t.Errorf("action 1: expected nil Operation, got %+v", actions[1].Operation)
+	}
+}
+
+// An absent annotation must marshal to no `operation` key at all, so existing
+// .craftjson goldens stay byte-identical.
+func TestProject_ActionOperation_OmittedWhenAbsent(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n}"
+	g, li, _ := syntax.Parse(src)
+	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	b, err := json.Marshal(doc.UseCases[0].Scenarios[0].Actions[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "operation") {
+		t.Errorf("absent annotation must not emit an operation key, got %s", b)
+	}
 }

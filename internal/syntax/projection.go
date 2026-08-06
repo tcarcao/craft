@@ -348,6 +348,14 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) model.Ac
 	if toks := a.Tokens(); len(toks) > 0 {
 		actionLine, _ = li.LineCol(toks[0].Offset())
 	}
+	var operation *model.Operation
+	if text := a.OpText(); text != "" {
+		operation = &model.Operation{
+			Verb:    a.OpVerb(),
+			Payload: a.OpPayload(),
+			Text:    text,
+		}
+	}
 	return model.Action{
 		ID:            id,
 		Type:          model.ActionType(kind),
@@ -356,6 +364,7 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) model.Ac
 		TargetContext: target,
 		Event:         event,
 		Ref:           ref,
+		Operation:     operation,
 		Connector:     connector,
 		Phrase:        phrase,
 		Description:   description,
