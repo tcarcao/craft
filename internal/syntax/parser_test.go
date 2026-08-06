@@ -888,3 +888,83 @@ func TestServiceAnchors_OpsLevelRemoved(t *testing.T) {
 		t.Errorf("CatalogRef = %q, want %q (removed spelling must not populate the anchor)", got, "")
 	}
 }
+
+func TestOpAnnotation_AllActionForms(t *testing.T) {
+	src := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt [POST /v1/charges]
+    Billing notifies billing.ChargeSucceeded [TOPIC billing.v1.charged]
+    Gateway returns to Billing the authorization result [200 AuthResult]
+    Subscriptions marks the subscription active [op1/op2/op3]
+}`
+	tree := astParse(src)
+	actions := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) != 4 {
+		t.Fatalf("expected 4 actions, got %d", len(actions))
+	}
+	for i, a := range actions {
+		if a.OpAnnotation() == nil {
+			t.Errorf("action %d (%s): expected an op annotation, got none", i, a.Kind())
+		}
+	}
+}
+
+func TestOpAnnotation_Absent(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Error("expected no op annotation")
+	}
+	if got := a.PhraseText(); got != "record the entry" {
+		t.Errorf("PhraseText() = %q, want %q", got, "record the entry")
+	}
+}
+
+// A `[` in prose that does not close at end of line stays prose. This preserves
+// today's sweep-everything phrase behaviour for any line not using the feature.
+func TestOpAnnotation_UnclosedBracketStaysProse(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry [not closed
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Error("an unclosed [ must not open an annotation")
+	}
+	if got := a.PhraseText(); got != "record the entry [not closed" {
+		t.Errorf("PhraseText() = %q, want the bracket swept as prose", got)
+	}
+}
+
+// When the line has more than one `[`, the LAST one whose `]` ends the line
+// opens the annotation; earlier brackets stay prose.
+func TestOpAnnotation_LastBracketWins(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record [batch] entries [POST /v1/entries]
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() == nil {
+		t.Fatal("expected an op annotation")
+	}
+	if got := a.PhraseText(); got != "record [batch] entries" {
+		t.Errorf("PhraseText() = %q, want %q", got, "record [batch] entries")
+	}
+	if got := a.OpText(); got != "POST /v1/entries" {
+		t.Errorf("OpText() = %q, want %q", got, "POST /v1/entries")
+	}
+}
+
+func TestOpAnnotation_RoundTripsExactly(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c  [POST /v1/x?q=1]\n}"
+	g, _, _ := syntax.Parse(src)
+	if got := reassembleGreen(g); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+}

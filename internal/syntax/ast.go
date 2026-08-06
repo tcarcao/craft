@@ -1615,6 +1615,29 @@ func (a ActionDecl) PhraseText() string {
 // Tokens returns the raw token list for the action node.
 func (a ActionDecl) Tokens() []SyntaxToken { return a.node.Tokens() }
 
+// OpAnnotation returns the action's trailing operation annotation node, or nil
+// when the action has none.
+func (a ActionDecl) OpAnnotation() *SyntaxNode {
+	return a.node.ChildNode(SyntaxKindOpAnnotation)
+}
+
+// OpText returns the annotation body verbatim, e.g. "POST /v1/charges", or ""
+// when the action has no annotation.
+func (a ActionDecl) OpText() string {
+	n := a.OpAnnotation()
+	if n == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, tok := range n.AllTokens() {
+		if tok.Kind() == SyntaxKindLBracket || tok.Kind() == SyntaxKindRBracket {
+			continue
+		}
+		sb.WriteString(tok.Text())
+	}
+	return strings.TrimSpace(sb.String())
+}
+
 // PhraseStartIndex returns the index into a.Tokens() at which the free-text
 // phrase begins, i.e. the same index PhraseText() starts reading from. It
 // accounts for multi-token (Ref) targets (e.g. "bc:re/billing") by skipping

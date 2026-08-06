@@ -1014,8 +1014,10 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == verbTok.Line {
 		p.consumeAs(SyntaxKindIdent)
 	}
-	// Collect phrase tokens on the same line.
-	p.collectPhrase(verbTok.Line)
+	// Collect phrase tokens on the same line. Trigger phrases don't support a
+	// trailing op annotation (out of scope for this feature), so always sweep
+	// to end of line.
+	p.collectPhrase(verbTok.Line, -1)
 
 	p.builder.FinishNode()
 	return diags
@@ -1095,7 +1097,11 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == actionLine {
 			p.consumeAs(SyntaxKindIdent)
 		}
-		p.collectPhrase(actionLine)
+		start := p.opAnnotationStart(actionLine)
+		p.collectPhrase(actionLine, start)
+		if start >= 0 {
+			p.parseOpAnnotation()
+		}
 		p.builder.FinishNode()
 		return diags
 	}
@@ -1121,7 +1127,11 @@ func (p *Parser) parseAsksAction(line int) {
 		}
 	}
 
-	p.collectPhrase(line)
+	start := p.opAnnotationStart(line)
+	p.collectPhrase(line, start)
+	if start >= 0 {
+		p.parseOpAnnotation()
+	}
 }
 
 // parseNotifiesAction parses the "<event>" or event-ident after `notifies`.
@@ -1137,6 +1147,9 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 	} else if eventTok.Type == lexer.TokenError {
 		diags = append(diags, p.diagUnterminatedString(eventTok))
 		p.consumeAs(SyntaxKindError)
+	}
+	if p.opAnnotationStart(eventTok.Line) >= 0 {
+		diags = append(diags, p.parseOpAnnotation()...)
 	}
 	return diags
 }
@@ -1158,26 +1171,109 @@ func (p *Parser) parseReturnsAction(line int) {
 		p.consumeAs(SyntaxKindIdent)
 	}
 
-	p.collectPhrase(line)
+	start := p.opAnnotationStart(line)
+	p.collectPhrase(line, start)
+	if start >= 0 {
+		p.parseOpAnnotation()
+	}
+}
+
+// opAnnotationStart scans ahead over the remainder of actionLine and returns the
+// lookahead index of the `[` that opens a trailing operation annotation, or -1
+// when the line has none.
+//
+// The annotation is the LAST `[` on the line whose matching `]` is the line's
+// final token. Anchoring on the last bracket rather than the first is what lets
+// a phrase keep using `[` as prose: `record [batch] entries [POST /v1/entries]`
+// puts `[batch]` in the phrase and `[POST /v1/entries]` in the annotation.
+// Requiring the line to end in `]` is what lets an unclosed `[` stay prose, so
+// files that do not use the feature keep today's sweep-everything behaviour.
+func (p *Parser) opAnnotationStart(actionLine int) int {
+	lastLBracket, lastTok := -1, -1
+	for i := 0; ; i++ {
+		t := p.peekAt(i)
+		if t.Type == lexer.TokenEOF || t.Type == lexer.TokenRBrace || t.Line != actionLine {
+			break
+		}
+		if t.Type == lexer.TokenLBracket {
+			lastLBracket = i
+		}
+		lastTok = i
+	}
+	if lastLBracket < 0 || lastTok <= lastLBracket {
+		return -1
+	}
+	if p.peekAt(lastTok).Type != lexer.TokenRBracket {
+		return -1
+	}
+	return lastLBracket
+}
+
+// parseOpAnnotation consumes a `[ ... ]` operation annotation at the current
+// position and emits it as a SyntaxKindOpAnnotation node. The caller must have
+// confirmed via opAnnotationStart that a well-formed annotation begins here.
+//
+// The body is hybrid: a recognised uppercase protocol verb at the head is
+// emitted as SyntaxKindOpVerb, and everything up to the closing `]` is swept in
+// verbatim as payload. An unrecognised head word is just the first payload
+// token, which is what keeps `[op1/op2/op3]` and `[legacy-txn-44]` legal.
+func (p *Parser) parseOpAnnotation() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindOpAnnotation)
+	p.consumeAs(SyntaxKindLBracket)
+
+	if t := p.peek(); (t.Type == lexer.TokenIdent || isAnyKeywordAsIdent(t.Type)) && isProtocolVerb(t.Value) {
+		p.consumeAs(SyntaxKindOpVerb)
+	}
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBracket {
+		switch p.peek().Type {
+		case lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case lexer.TokenNumber, lexer.TokenPercentage:
+			p.consumeAs(SyntaxKindNumber)
+		default:
+			// Idents, keywords-as-idents, and TokenError punctuation (/ ? = { } …)
+			// are all swept into the payload as raw tokens, mirroring collectPhrase.
+			p.consumeAs(SyntaxKindIdent)
+		}
+	}
+
+	if p.peek().Type == lexer.TokenRBracket {
+		p.consumeAs(SyntaxKindRBracket)
+	} else {
+		// Defensive: opAnnotationStart guarantees the `]` exists.
+		diags = append(diags, p.diagUnexpected(p.peek(), "]"))
+	}
+
+	p.builder.FinishNode()
+	return diags
 }
 
 // collectPhrase emits phrase tokens on actionLine into the current builder scope.
 //
 // The prose tail is display-only free text (see ActionDecl.PhraseText), so every
-// same-line token is swept in verbatim — including TokenError punctuation such as
-// `!`, `&`, `*`, `/` — until a line change, `}`, EOF, or a comment token ends it.
-// (peek() already skips comment tokens transparently when scanning for the next
-// token, so a trailing `//...` comment naturally falls on a later line or is
-// filtered before the line check below; the explicit comment case exists for
-// clarity/defensiveness even though peek() means it is not normally reachable.)
-func (p *Parser) collectPhrase(actionLine int) {
+// same-line token is swept in verbatim, including TokenError punctuation such as
+// `!`, `&`, `*`, `/`, until a line change, `}`, EOF, or a comment token ends it.
+//
+// maxTokens bounds how many tokens may be consumed: callers pass the lookahead
+// index returned by opAnnotationStart so the phrase stops just before a trailing
+// operation annotation. Pass -1 for "sweep to end of line".
+func (p *Parser) collectPhrase(actionLine int, maxTokens int) {
+	if maxTokens == 0 {
+		return
+	}
 	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 		return
 	}
 	if p.peek().Line != actionLine {
 		return
 	}
+	consumed := 0
 	for {
+		if maxTokens >= 0 && consumed >= maxTokens {
+			return
+		}
 		tok := p.peek()
 		if tok.Type == lexer.TokenRBrace || tok.Type == lexer.TokenEOF {
 			return
@@ -1193,10 +1289,9 @@ func (p *Parser) collectPhrase(actionLine int) {
 		case lexer.TokenNumber:
 			p.consumeAs(SyntaxKindNumber)
 		default:
-			// Idents, keywords-as-idents, and TokenError punctuation (! & * / # …)
-			// are all swept into prose as raw tokens.
 			p.consumeAs(SyntaxKindIdent)
 		}
+		consumed++
 	}
 }
 
