@@ -926,3 +926,62 @@ func TestServiceDecl_ContextLinesWith(t *testing.T) {
 		t.Errorf("expected both context lines == 3, got %v", lines)
 	}
 }
+
+func TestActionDecl_OpVerbAndPayload(t *testing.T) {
+	cases := []struct {
+		name        string
+		line        string
+		wantVerb    string
+		wantPayload string
+		wantText    string
+	}{
+		{"http", "A asks B for c [POST /v1/charges]", "POST", "/v1/charges", "POST /v1/charges"},
+		{"grpc", "A asks B for c [GRPC ledger.Postings/Create]", "GRPC", "ledger.Postings/Create", "GRPC ledger.Postings/Create"},
+		{"topic", "A asks B for c [TOPIC billing.v1.charged]", "TOPIC", "billing.v1.charged", "TOPIC billing.v1.charged"},
+		{"opaque path", "A asks B for c [op1/op2/op3/op4/op5]", "", "op1/op2/op3/op4/op5", "op1/op2/op3/op4/op5"},
+		{"opaque words", "A asks B for c [legacy-mainframe-txn-44]", "", "legacy-mainframe-txn-44", "legacy-mainframe-txn-44"},
+		{"lowercase is not a verb", "A asks B for c [post /v1/x]", "", "post /v1/x", "post /v1/x"},
+		{"query string", "A asks B for c [GET /v1/products?q=]", "GET", "/v1/products?q=", "GET /v1/products?q="},
+		{"templated path", "A asks B for c [POST /v1/accounts/{id}/charges]", "POST", "/v1/accounts/{id}/charges", "POST /v1/accounts/{id}/charges"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.OpVerb(); got != tc.wantVerb {
+				t.Errorf("OpVerb() = %q, want %q", got, tc.wantVerb)
+			}
+			if got := a.OpPayload(); got != tc.wantPayload {
+				t.Errorf("OpPayload() = %q, want %q", got, tc.wantPayload)
+			}
+			if got := a.OpText(); got != tc.wantText {
+				t.Errorf("OpText() = %q, want %q", got, tc.wantText)
+			}
+			if got := a.PhraseText(); got != "c" {
+				t.Errorf("PhraseText() = %q, want %q (annotation must be excluded)", got, "c")
+			}
+		})
+	}
+}
+
+func TestActionDecl_OpAccessors_NoAnnotation(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n}"
+	a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Error("OpAnnotation() should be nil")
+	}
+	if a.OpVerb() != "" || a.OpPayload() != "" || a.OpText() != "" {
+		t.Errorf("op accessors should be empty, got verb=%q payload=%q text=%q",
+			a.OpVerb(), a.OpPayload(), a.OpText())
+	}
+}
+
+// The description string must not leak the annotation, since it is what the
+// visualizers render as the edge label.
+func TestActionDecl_Description_ExcludesAnnotation(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for a fresh charge [POST /v1/charges]\n}"
+	a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if got := a.Description(); got != "A asks B for a fresh charge" {
+		t.Errorf("Description() = %q, want %q", got, "A asks B for a fresh charge")
+	}
+}

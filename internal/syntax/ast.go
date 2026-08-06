@@ -1598,9 +1598,20 @@ func (a ActionDecl) PhraseText() string {
 		return ""
 	}
 	startOffset := tokens[start].Offset()
+	// An operation annotation is a child of the action node, so its tokens are in
+	// AllTokens() and would otherwise be appended to the phrase. Stop before it.
+	var endOffset green.TextSize = -1
+	if op := a.OpAnnotation(); op != nil {
+		if opToks := op.AllTokens(); len(opToks) > 0 {
+			endOffset = opToks[0].Offset()
+		}
+	}
 	var sb strings.Builder
 	writing := false
 	for _, tok := range a.node.AllTokens() {
+		if endOffset >= 0 && tok.Offset() >= endOffset {
+			break
+		}
 		if !writing {
 			if tok.Offset() < startOffset {
 				continue
@@ -1636,6 +1647,35 @@ func (a ActionDecl) OpText() string {
 		sb.WriteString(tok.Text())
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+// OpVerb returns the recognised protocol verb of the action's operation
+// annotation (e.g. "POST", "GRPC"), or "" when the annotation has no recognised
+// verb or the action has no annotation.
+func (a ActionDecl) OpVerb() string {
+	n := a.OpAnnotation()
+	if n == nil {
+		return ""
+	}
+	if tok := n.ChildToken(SyntaxKindOpVerb); tok != nil {
+		return tok.Text()
+	}
+	return ""
+}
+
+// OpPayload returns the annotation body with any recognised protocol verb
+// stripped, e.g. "/v1/charges" for `[POST /v1/charges]` and the whole body for
+// `[op1/op2/op3]`. Returns "" when the action has no annotation.
+func (a ActionDecl) OpPayload() string {
+	n := a.OpAnnotation()
+	if n == nil {
+		return ""
+	}
+	verb := a.OpVerb()
+	if verb == "" {
+		return a.OpText()
+	}
+	return strings.TrimSpace(strings.TrimPrefix(a.OpText(), verb))
 }
 
 // PhraseStartIndex returns the index into a.Tokens() at which the free-text
