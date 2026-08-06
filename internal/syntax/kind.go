@@ -106,6 +106,13 @@ const (
 	// like when/asks/notifies elsewhere — not a reserved word.
 	SyntaxKindKwTags
 
+	// SyntaxKindOpVerb is the recognised uppercase protocol verb at the head of
+	// an operation annotation body, e.g. the POST in `[POST /v1/charges]`.
+	// Matched by value from TokenIdent, like asks/notifies elsewhere. An
+	// unrecognised leading word is emitted as SyntaxKindIdent and the whole
+	// body is treated as an opaque payload.
+	SyntaxKindOpVerb
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -145,4 +152,9 @@ const (
 
 	SyntaxKindTagsBlock // tags { tag_stmt* } inside a use_case
 	SyntaxKindTagStmt   // IDENT ':' (IDENT | STRING | ref), inside a tags block
+
+	// SyntaxKindOpAnnotation wraps a trailing `[ ... ]` operation annotation on
+	// an action line, e.g. `[POST /v1/charges]`. It is always the last child of
+	// a SyntaxKindAction node.
+	SyntaxKindOpAnnotation
 )
