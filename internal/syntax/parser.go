@@ -140,6 +140,12 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 		}
 	}
 
+	// Trailing comments are trivia like any other: peek() skips comment
+	// tokens, so at EOF the main loop leaves them unconsumed. Emit them as
+	// comment tokens before sweeping the rest, or they land inside one
+	// whitespace blob and no token-walking consumer can see them.
+	p.attachTrivia()
+
 	// Capture trailing whitespace/newlines after the last token.
 	if int(p.prevEnd) < len(p.src) {
 		p.builder.Token(SyntaxKindWhitespace, p.src[p.prevEnd:])

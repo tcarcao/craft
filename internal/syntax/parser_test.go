@@ -1520,3 +1520,33 @@ func TestParse_TokenTextMatchesItsRange(t *testing.T) {
 		}
 	}
 }
+
+// Comments after the last declaration must be comment tokens, not folded
+// into a trailing whitespace blob. The formatter walks tokens, so a comment
+// hidden inside whitespace cannot be formatted like every other comment.
+func TestParse_TrailingCommentsAreTokens(t *testing.T) {
+	cases := map[string]string{
+		"trailing line":  "domain re { Billing }\n// trail\n",
+		"comment only":   "// just this\n",
+		"trailing block": "domain re { Billing }\n/* trail */\n",
+		"two trailing":   "domain re { Billing }\n// one\n// two\n",
+		"trailing doc":   "domain re { Billing }\n/// doc\n",
+	}
+	for name, src := range cases {
+		gn, _, _ := syntax.Parse(src)
+		comments := 0
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			switch tk.Kind() {
+			case syntax.SyntaxKindLineComment, syntax.SyntaxKindBlockComment, syntax.SyntaxKindDocComment:
+				comments++
+			case syntax.SyntaxKindWhitespace:
+				if strings.Contains(tk.Text(), "//") || strings.Contains(tk.Text(), "/*") {
+					t.Errorf("%s: comment folded into whitespace token %q", name, tk.Text())
+				}
+			}
+		}
+		if comments == 0 {
+			t.Errorf("%s: expected at least one comment token, got none", name)
+		}
+	}
+}
