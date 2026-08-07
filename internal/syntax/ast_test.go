@@ -985,3 +985,56 @@ func TestActionDecl_Description_ExcludesAnnotation(t *testing.T) {
 		t.Errorf("Description() = %q, want %q", got, "A asks B for a fresh charge")
 	}
 }
+
+// TestActionDecl_SourceText pins the source-faithful renderer directly, so the
+// contract holds even if the LSP formatter stops being its only caller.
+//
+// It is the counterpart to TestActionDecl_Description_ExcludesAnnotation: that
+// test pins the display label, which must NOT carry the annotation. These two
+// tests together are the record of why the two methods exist.
+func TestActionDecl_SourceText(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+	}{
+		{"sync action", "Auth asks DB to check email"},
+		{"sync action with annotation", "Auth asks DB to check email [POST /v1/check]"},
+		{"sync action with for connector", "A asks B for a fresh charge"},
+		{"async action with typed event ref", "Billing notifies billing.ChargeSucceeded"},
+		{"async action with legacy quoted event", "Billing notifies \"Order Created\""},
+		{"async action with annotation", "Billing notifies billing.ChargeSucceeded [GRPC Pay]"},
+		{"return action with target", "Auth returns to User charge result"},
+		{"return action without target", "Auth returns charge result"},
+		{"internal action", "Auth validates email format"},
+		{"internal action with connector", "Wallet creates an unconfirmed reservation"},
+		{"qualified subject and target", "re/billing asks re/ledger to record the entry"},
+		{"qualified returns target", "re/subscriptions returns to re/billing charge result"},
+		{"phrase with tight punctuation", "Auth checks (1! & 2!) quickly"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.SourceText(); got != tc.line {
+				t.Errorf("SourceText() = %q, want %q", got, tc.line)
+			}
+		})
+	}
+}
+
+// TestActionDecl_SourceText_EscapedEventSurvives guards the one case a naive
+// %q re-quote would corrupt: the legacy quoted event form carrying escapes.
+// EventValue() unquotes and resolves them, so re-quoting through %q is not
+// guaranteed to reproduce the original spelling. SourceText reads the raw
+// token instead.
+func TestActionDecl_SourceText_EscapedEventSurvives(t *testing.T) {
+	// An unrecognised escape passes through the lexer as backslash + char
+	// (see unquoteStringText), so EventValue() holds a literal backslash that
+	// %q would re-escape into `\\/`, changing the source.
+	line := `Billing notifies "Order \/ Created"`
+	src := "use_case \"X\" {\n  when U does x\n    " + line + "\n}"
+	a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if got := a.SourceText(); got != line {
+		t.Errorf("SourceText() = %q, want %q", got, line)
+	}
+}

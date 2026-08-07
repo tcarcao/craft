@@ -1730,12 +1730,19 @@ func phraseStartIndex(a ActionDecl, tokens []SyntaxToken) int {
 // which the parser emits for every gap — see parser.go emitWhitespaceBefore)
 // rather than from a raw offset-based source slice.
 func (a ActionDecl) PhraseText() string {
+	return a.rawTextFrom(phraseStartIndex(a, a.node.Tokens()))
+}
+
+// rawTextFrom returns the exact raw source substring of this action from
+// token index start up to (but excluding) any trailing operation annotation,
+// trimmed. Inter-token whitespace is preserved, so tight punctuation such as
+// `(1! & 2!)` keeps its original spacing instead of being space-joined.
+//
+// PhraseText starts at the phrase; SourceText starts earlier, at the connector
+// or the verb, so it can rebuild the line without re-deriving those words.
+func (a ActionDecl) rawTextFrom(start int) string {
 	tokens := a.node.Tokens()
-	if len(tokens) == 0 {
-		return ""
-	}
-	start := phraseStartIndex(a, tokens)
-	if start >= len(tokens) {
+	if start < 0 || start >= len(tokens) {
 		return ""
 	}
 	startOffset := tokens[start].Offset()
@@ -1762,6 +1769,87 @@ func (a ActionDecl) PhraseText() string {
 		sb.WriteString(tok.Text())
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+// SourceText renders the action as canonical .craft source: the exact line the
+// LSP formatter writes back into the document.
+//
+// This is deliberately NOT Description(). The two have opposed contracts and
+// one method cannot satisfy both:
+//
+//   - Description() is a display label. Its shape is mirrored by
+//     projection.go into model.Action.Description, which the visualizers render
+//     as an edge label, and Task 6 decided a label must NOT leak the `[...]`
+//     operation annotation (see TestActionDecl_Description_ExcludesAnnotation).
+//     It also always quotes the async event and reflows `returns to <target>`
+//     into `returns <phrase> to <target>`, both of which read better as prose.
+//   - SourceText() must reparse to the same action. It therefore KEEPS the
+//     annotation, quotes an event only when the source quoted it, and preserves
+//     the `returns to <target> <phrase>` word order.
+//
+// The formatter used to call Description(), which is how Format Document came
+// to silently delete `[POST /v1/charges]` annotations, downgrade typed event
+// refs to the deprecated quoted-string form, and move a returns target into the
+// phrase. Anything rendering source belongs here; anything rendering a label
+// belongs in Description.
+func (a ActionDecl) SourceText() string {
+	var sb strings.Builder
+	sb.WriteString(a.SubjectName())
+	switch a.Kind() {
+	case "async_action":
+		sb.WriteString(" notifies ")
+		sb.WriteString(a.eventSourceText())
+	case "sync_action":
+		sb.WriteString(" asks ")
+		sb.WriteString(a.TargetName())
+		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
+	case "return_action":
+		sb.WriteString(" returns")
+		if target := a.TargetName(); target != "" {
+			sb.WriteString(" to ")
+			sb.WriteString(target)
+		}
+		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
+	default: // internal_action
+		// The verb sits one token before the slot end, so reading raw from
+		// there carries verb, connector and phrase in their original words.
+		// With no verb at all there is nothing after the subject to emit.
+		if a.VerbValue() != "" {
+			appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)-1))
+		}
+	}
+	if op := a.OpText(); op != "" {
+		sb.WriteString(" [")
+		sb.WriteString(op)
+		sb.WriteString("]")
+	}
+	return sb.String()
+}
+
+// eventSourceText returns the async_action event exactly as it was written: the
+// raw quoted literal for the legacy string form, so escapes and non-ASCII
+// survive verbatim rather than being re-escaped by a %q round trip, or the
+// full ref text otherwise. EventValue() unquotes, which is right for a label
+// and wrong for source.
+func (a ActionDecl) eventSourceText() string {
+	elems := significantElements(a.node)
+	if len(elems) < 3 {
+		return ""
+	}
+	if tok, ok := elems[2].(SyntaxToken); ok {
+		return tok.Text()
+	}
+	return refAwareText(elems[2])
+}
+
+// appendSpaced appends s to sb preceded by a single space, or does nothing when
+// s is empty, so callers never emit a trailing or doubled space.
+func appendSpaced(sb *strings.Builder, s string) {
+	if s == "" {
+		return
+	}
+	sb.WriteByte(' ')
+	sb.WriteString(s)
 }
 
 // Tokens returns the raw token list for the action node.

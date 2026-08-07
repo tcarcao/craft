@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -183,6 +184,93 @@ func TestFormatDocument_QualifiedRefRoundTrip(t *testing.T) {
 			// a fixed point, so a second pass cannot drift further.
 			if again := FormatDocument(got); again != got {
 				t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+			}
+		})
+	}
+}
+
+// actionShape is the semantic content of one action line, used to prove that
+// formatting preserves meaning and not merely that the output parses.
+type actionShape struct {
+	kind, subject, target, event, connector, phrase, op string
+	eventQuoted                                         bool
+}
+
+func shapesOf(t *testing.T, src string) []actionShape {
+	t.Helper()
+	g, _, diags := syntax.Parse(src)
+	for _, d := range diags {
+		t.Fatalf("fixture does not parse: [%s] %s\nsrc:\n%s", d.Code, d.Message, src)
+	}
+	var out []actionShape
+	for _, uc := range syntax.AsFile(syntax.Root(g)).UseCases() {
+		for _, sc := range uc.Scenarios() {
+			for _, a := range sc.Actions() {
+				out = append(out, actionShape{
+					kind: a.Kind(), subject: a.SubjectName(), target: a.TargetName(),
+					event: a.EventValue(), connector: a.ConnectorValue(),
+					phrase: a.PhraseText(), op: a.OpText(), eventQuoted: a.EventIsString(),
+				})
+			}
+		}
+	}
+	return out
+}
+
+// TestFormatDocument_UseCaseRoundTrip is the guard for a whole class of
+// formatter bugs, not one instance of it.
+//
+// formatUseCaseDecl does not copy source text; it re-renders each trigger and
+// action from typed accessors. Any accessor that drops or rewrites part of the
+// line therefore silently rewrites the user's file. Three separate defects of
+// exactly that shape shipped before this test existed: a qualified ref got
+// split into "re / billing", a typed event ref got requoted into the
+// deprecated string form, and a trailing [POST /v1/charges] annotation was
+// deleted outright.
+//
+// Each case is already in canonical form, so all four assertions below must
+// hold: the output is byte-identical to the input, it parses clean, formatting
+// is idempotent, and the parsed model is unchanged. The last one is what makes
+// this a semantic guard rather than a spelling guard.
+func TestFormatDocument_UseCaseRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"sync action", "use_case \"X\" {\n  when User creates Account\n    Auth asks DB to check email\n}\n"},
+		{"sync action with annotation", "use_case \"X\" {\n  when U does x\n    Auth asks DB to check email [POST /v1/check]\n}\n"},
+		{"async action with typed event ref", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded\n}\n"},
+		{"async action with legacy quoted event", "use_case \"X\" {\n  when U does x\n    Billing notifies \"Order Created\"\n}\n"},
+		{"async action with annotation", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded [GRPC Pay]\n}\n"},
+		{"return action with target", "use_case \"X\" {\n  when U does x\n    Auth returns to User charge result\n}\n"},
+		{"return action without target", "use_case \"X\" {\n  when U does x\n    Auth returns charge result\n}\n"},
+		{"internal action", "use_case \"X\" {\n  when U does x\n    Auth validates email format\n}\n"},
+		{"internal action with connector", "use_case \"X\" {\n  when U does x\n    Wallet creates an unconfirmed reservation\n}\n"},
+		{"qualified refs in every slot", "use_case \"X\" {\n  when re/billing listens vas.VasApplied\n" +
+			"    re/billing asks re/ledger to record the entry\n" +
+			"    re/billing notifies billing.ChargeSucceeded\n" +
+			"    re/subscriptions returns to re/billing charge result\n" +
+			"    re/billing validates invoice format\n}\n"},
+		{"event trigger", "use_case \"X\" {\n  when \"SomeEvent\"\n    A does x\n}\n"},
+		{"cron trigger", "use_case \"X\" {\n  when cron \"0 * * * *\"\n    A does x\n}\n"},
+		{"periodic trigger", "use_case \"X\" {\n  when every \"1h\"\n    A does x\n}\n"},
+		{"legacy quoted listens event", "use_case \"X\" {\n  when Billing listens \"Charged\"\n    A does x\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatDocument(tc.src)
+			if got != tc.src {
+				t.Errorf("not a fixed point on canonical source\nwant: %q\ngot:  %q", tc.src, got)
+			}
+			if _, _, diags := syntax.Parse(got); len(diags) != 0 {
+				t.Errorf("formatted output does not parse cleanly: %+v\ngot:\n%s", diags, got)
+			}
+			if again := FormatDocument(got); again != got {
+				t.Errorf("format is not idempotent\nfirst:  %q\nsecond: %q", got, again)
+			}
+			want, have := shapesOf(t, tc.src), shapesOf(t, got)
+			if !reflect.DeepEqual(want, have) {
+				t.Errorf("formatting changed the parsed model\nbefore: %+v\nafter:  %+v", want, have)
 			}
 		})
 	}
