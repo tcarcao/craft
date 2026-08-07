@@ -41,8 +41,12 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// One space after a field colon, even if the author wrote none, so
 	// `contexts:A` normalises to `contexts: A`. A colon inside a ref
 	// (`bc:re/billing`) is not a field colon and must stay tight, which the
-	// parent check distinguishes.
-	if prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev) {
+	// parent check distinguishes. But when the author wrapped the value onto
+	// its own line, that line break is intentional and must survive: falling
+	// through to the newline handling below is what keeps
+	// `contexts:\n  A` wrapped instead of collapsing it onto one line, and
+	// matches the same rule for a comma immediately below.
+	if prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev) && !strings.Contains(gap, "\n") {
 		return " "
 	}
 	// A comma normally gets one space after it, even if the author wrote

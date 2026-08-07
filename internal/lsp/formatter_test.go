@@ -786,6 +786,15 @@ func TestWriteTokens_PreservesEveryNonWhitespaceToken(t *testing.T) {
 		"context_map {\n  re/billing customer_supplier re/vas\n}\n",
 		"glossary re {\n  billing/Invoice same_as subs/Invoice\n}\n",
 		"use_case \"X\" {\n  when U does x\n    A asks re/b for c  [POST /v1/x]\n}\n",
+		// The five fixtures above are the constructs formatDecl already had a
+		// branch for. The five below are exactly the constructs nobody wrote
+		// one for, which is the class of defect this rewrite exists to close.
+		"actor user Alice\n",
+		"actors {\n  user Alice\n  system Cron\n}\n",
+		"arch {\n  presentation:\n    WebApp\n}\n",
+		"exposure default {\n  to: Alice\n  through: Gateway\n}\n",
+		"import \"other.craft\"\n",
+		"use_case \"X\" {\n  tags {\n    owner: team\n  }\n  when U does x\n    A does y\n}\n",
 	}
 	for _, src := range srcs {
 		gn, _, _ := syntax.Parse(src)
@@ -850,5 +859,28 @@ func TestWriteTokens_KeepsTrailingCommentsInPlace(t *testing.T) {
 	out := sb.String()
 	if !strings.Contains(out, "a.B  // note") && !strings.Contains(out, "a.B // note") {
 		t.Errorf("trailing comment did not stay on its line:\n%s", out)
+	}
+}
+
+// TestWriteTokens_WrappedColonAndCommaStayInSync pins the field colon and the
+// comma to the same rule: a line break the author wrote after either one
+// survives. This is one fixture wrapping both `contexts:` and its list, so
+// the two branches in separatorFor cannot drift apart again without this
+// test catching it, the way a comma-only fix once did.
+func TestWriteTokens_WrappedColonAndCommaStayInSync(t *testing.T) {
+	src := "services {\n  S {\n    contexts:\n    Authentication,\n    Profile\n  }\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	// writeTokens renders one declaration and never appends the document's
+	// final newline (that is FormatDocumentChecked's job, not called here),
+	// so the trailing "\n" is trimmed before the byte-for-byte comparison.
+	want := strings.TrimSuffix(src, "\n")
+	if got := sb.String(); got != want {
+		t.Errorf("wrapped contexts list did not round-trip byte-for-byte:\nwant %q\ngot  %q", want, got)
 	}
 }
