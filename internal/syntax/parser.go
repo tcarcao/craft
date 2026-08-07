@@ -1127,7 +1127,7 @@ func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
 		// so a kind-prefixed target using one of them (e.g.
 		// "domain:re/monetization", "service:billing-api") lands here, not in
 		// the TokenIdent branch above. Only hand it to parseRef when it is
-		// immediately followed by ':' — parseRef's own kind-prefix branch
+		// immediately followed by ':', since parseRef's own kind-prefix branch
 		// handles that shape correctly. A bare keyword-as-ident with no colon
 		// is not a ref shape; consume it directly instead, mirroring
 		// parseEdgeEndpoint's guard against parseRef's zero-progress hole on
@@ -1876,7 +1876,7 @@ func (p *Parser) diagKindPrefixInTarget(tok lexer.Token, kind string) model.Diag
 	return model.Diagnostic{
 		Code: "craft/syntax/kind-prefix-in-target",
 		Message: fmt.Sprintf(
-			"remove the %q prefix: an asks target is always a bounded context, write the bare or <domain>/<name> form",
+			"remove the %q prefix: an asks target is always a bounded context, write the bare name or the <domain>/<name> form",
 			kind+":"),
 		Severity: model.SeverityError,
 		Range:    tokenRange(tok),

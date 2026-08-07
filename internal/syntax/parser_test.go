@@ -488,7 +488,7 @@ func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 // Since Task 5, a `bc:` prefix in the asks target slot is itself rejected
 // (the slot already implies a bounded context), so this fixture now also
 // carries exactly that one diagnostic. TargetName() must still round-trip
-// the full, untruncated text — Task 5 only adds a diagnostic, it does not
+// the full, untruncated text: Task 5 only adds a diagnostic, it does not
 // change what parseRef consumes.
 func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
 	src := `use_case "x" {
