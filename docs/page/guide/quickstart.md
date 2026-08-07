@@ -163,10 +163,12 @@ Use cases start with triggers:
 
 ### Actions
 Four types of actions:
-1. **Sync** - `Domain asks Domain to do something` (target can also be a node slug like `bc:re/billing`)
+1. **Sync** - `Domain asks Domain to do something` (target can also be domain-qualified, like `re/billing`; a `kind:` prefix such as `bc:re/billing` is not accepted)
 2. **Async** - `Domain notifies module.EventName`
 3. **Internal** - `Domain does something`
 4. **Return** - `Domain returns to Domain the result`
+
+Any action can end with a bracketed operation annotation describing the wire call it makes, e.g. `Domain asks Domain to do something [POST /v1/charges]`. See [Operation Annotations](/language/use-cases#operation-annotations) for the full syntax.
 
 ::: tip
 The old quoted-string form (`when "Event Name"`, `notifies "Event Name"`) still parses but is deprecated in favor of typed event refs.
