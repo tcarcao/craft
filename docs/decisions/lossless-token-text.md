@@ -141,14 +141,24 @@ The offset is a byte offset, not a rune count, because `splitAnnotation` compare
 `strings.LastIndex`. A rune count is never larger, so the error would always be in the direction
 that reads comment text as an annotation and rewrites whitespace inside a comment.
 
-## Known limitations of the alignment pass
+## Formatting is now idempotent for every input
 
-**A whitespace-only file never reaches a fixed point.** Formatting alternates between the empty
-string and a single newline: `""` becomes `"\n"`, which becomes `""`, and so on. This predates
-this work and is byte-for-byte unchanged by it, verified by measuring both sides. It is broader
-than a note in the review suggested: every whitespace-only input collapses to `""` on the first
-pass and then oscillates, not only the two shapes named there. No file in the corpus is
-whitespace-only, and a document with any content at all is a fixed point.
+The last exception was a whitespace-only file, which alternated forever: `""` became `"\n"`,
+which became `""`. It predated this work, and the cause was a single early return in
+`FormatDocumentChecked` special-casing the empty string to `"\n"`. Every other path already
+agreed that a document with no declarations produces `""`; only that one line disagreed with
+the rest of the formatter.
+
+Deleting it makes every whitespace-only input reach `""` and stay there. The reasoning is the
+formatter's own invariant: its freedom is the whitespace it emits *between* tokens, so with no
+tokens there is nothing for it to emit. An empty file is legitimately zero bytes, and gofmt
+treats one the same way.
+
+This is a small behaviour change. An empty document formats to an empty document rather than
+gaining a newline, and `TestFormatDocument_EmptyInput`, which asserted the old result, is
+replaced by `TestFormatDocument_NoContentIsAFixedPoint`. That test was written before
+idempotence was a stated property of this formatter, and it encoded the oscillation rather than
+catching it.
 
 ### Recorded in error
 

@@ -33,9 +33,6 @@ func FormatDocument(content string) string {
 // The second result is nil when the document was formatted, and otherwise the
 // diagnostic that blocked it.
 func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
-	if content == "" {
-		return "\n", nil
-	}
 	gn, _, diags := syntax.Parse(content)
 	for _, d := range diags {
 		if bailsFormatting(d) {
@@ -151,20 +148,26 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 // against is the one nobody has written yet.
 //
 // The token-stream rewrite made it unreachable for any document the parser
-// accepts without diagnostics, and left it load bearing for those it does not.
-// One shape is known to reach it, and it is a typo rather than a formatter
-// bug: an unterminated string at end of line yields an Ident whose Text() is
-// the string's contents at the offset of the opening quote, with the leftover
-// byte landing in a Whitespace token. The widths still sum, so the tree passes
-// the losslessness check, but the token texts no longer reproduce the source
-// and re-rendering from them therefore cannot either. That is a lexer defect
-// upstream of the formatter and predates this branch; the message says nothing
-// about a formatter bug because for the only known trigger it would be wrong.
+// accepts without diagnostics. One shape used to reach it anyway, and it was a
+// typo rather than a formatter bug: an unterminated string at end of line
+// yielded a token whose Text() was the string's contents at the offset of the
+// opening quote, with the leftover byte landing in a Whitespace token. The
+// widths still summed, so the tree passed the losslessness check, but the token
+// texts no longer reproduced the source. The message says nothing about a
+// formatter bug because for that trigger it would have been wrong.
 //
-// That trigger is fixed now: every token's text is sliced from source at its
-// own range, so no known real input reaches this function with content that
-// differs by more than whitespace. TestContentDrift_RefusesToLoseContent
-// exercises it directly instead.
+// That was a parser defect, and it is fixed: every token's text is now sliced
+// from source at its own range and checkTreeText asserts the tree reproduces
+// its file, so no input reaches this function with content differing by more
+// than whitespace. What it still guards is a bug in the walker itself dropping,
+// duplicating or reordering a token, which no upstream invariant can rule out.
+// TestContentDrift_RefusesToLoseContent exercises it directly, since nothing
+// reaches it end to end.
+//
+// Note what it cannot catch: it compares whitespace-squashed strings, so it is
+// blind to whitespace defects by construction. Both whitespace bugs found on
+// this branch, an unterminated block comment growing a newline per save and a
+// comment body padded to an alignment column, passed it untouched.
 func contentDrift(in, out string) *craft.Diagnostic {
 	if squashWhitespace(in) == squashWhitespace(out) {
 		return nil

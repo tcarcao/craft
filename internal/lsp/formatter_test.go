@@ -77,10 +77,25 @@ func TestFormatDocument_TopLevelBlankLines(t *testing.T) {
 	}
 }
 
-func TestFormatDocument_EmptyInput(t *testing.T) {
-	got := FormatDocument("")
-	if got != "\n" {
-		t.Errorf("FormatDocument empty: got %q, want %q", got, "\n")
+// A document with no declarations formats to nothing, and every document with
+// no content at all reaches that same fixed point.
+//
+// This used to be a special case returning "\n" for the empty string, which was
+// the last thing on this branch that broke idempotence: "" became "\n", "\n"
+// became "", and formatting alternated between them forever. The rest of the
+// formatter already agreed that a document with no declarations produces "";
+// only that one early return disagreed. The formatter's freedom is the
+// whitespace it puts BETWEEN tokens, so with no tokens there is nothing for it
+// to emit.
+func TestFormatDocument_NoContentIsAFixedPoint(t *testing.T) {
+	for _, in := range []string{"", "\n", "   ", "\n\n\n", "  \n  \n", "\t\n"} {
+		got := FormatDocument(in)
+		if got != "" {
+			t.Errorf("FormatDocument(%q) = %q, want %q", in, got, "")
+		}
+		if again := FormatDocument(got); again != got {
+			t.Errorf("FormatDocument(%q) is not a fixed point: %q then %q", in, got, again)
+		}
 	}
 }
 
