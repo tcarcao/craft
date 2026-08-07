@@ -15,6 +15,8 @@ package syntax
 
 import (
 	"fmt"
+	"strings"
+	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/lexer"
@@ -38,29 +40,59 @@ func Parse(src string) (*green.GreenNode, green.LineIndex, []model.Diagnostic) {
 	l := lexer.New(src)
 	p := &Parser{tokens: l.All(), src: src}
 	root, diags := p.parseFile()
-	diags = append(diags, checkTreeWidth(root, len(src))...)
+	diags = append(diags, checkTreeText(root, src)...)
 	return root, li, diags
 }
 
-// checkTreeWidth asserts the losslessness invariant: the green tree's total
-// width must equal the source length. Red-tree offsets are accumulated green
-// widths, so drift here puts token offsets past EOF and silently misplaces
-// every position derived from the tree — highlighting, hovers, diagnostics.
+// checkTreeText asserts rowan's invariant: concatenating the tree's tokens
+// reproduces the source exactly. This supersedes a width-sum check, which
+// could not detect a token whose text diverged from its source range because
+// the token's length was derived from that same wrong text.
 //
-// This should never fire. It is here because when it did fire (rune columns
-// fed to a byte-based Offset), the symptom was a slice-bounds panic several
-// layers away with nothing pointing back at the parser.
-func checkTreeWidth(root *green.GreenNode, srcLen int) []model.Diagnostic {
-	if root == nil || int(root.Width()) == srcLen {
+// This panics rather than returning a diagnostic. Token text is a slice of
+// the source and error recovery wraps tokens in an ErrorNode rather than
+// dropping them, so no input can reach here: a failure is a parser bug.
+//
+// Only a parser bug can get here: token text is a slice of the source and
+// error recovery wraps tokens rather than dropping them, so no input can
+// violate this. Fail hard under test so CI cannot miss it, but degrade to a
+// diagnostic in production: syntax.Parse is reached from pkg/craft, which is
+// a public library API, and panicking there would crash a consumer.
+func checkTreeText(root *green.GreenNode, src string) []model.Diagnostic {
+	if root == nil {
 		return nil
 	}
+	var sb strings.Builder
+	sb.Grow(len(src))
+	collectGreenText(root, &sb)
+	if sb.String() == src {
+		return nil
+	}
+	msg := fmt.Sprintf(
+		"internal parser error: syntax tree does not reproduce its source (tree %d bytes, source %d bytes); positions in this file may be wrong",
+		sb.Len(), len(src))
+	if testing.Testing() {
+		panic(msg)
+	}
 	return []model.Diagnostic{{
-		Code: "craft/internal/tree-width-mismatch",
-		Message: fmt.Sprintf(
-			"internal parser error: syntax tree spans %d bytes but the source is %d; positions in this file may be wrong",
-			root.Width(), srcLen),
+		Code:     "craft/internal/tree-text-mismatch",
+		Message:  msg,
 		Severity: model.SeverityError,
 	}}
+}
+
+// collectGreenText walks the green tree in document order, appending every
+// leaf token's text to sb. Internal nodes carry no text of their own; only
+// tokens do.
+func collectGreenText(n *green.GreenNode, sb *strings.Builder) {
+	for _, c := range n.Children {
+		switch e := c.(type) {
+		case *green.GreenToken:
+			sb.WriteString(e.Text)
+		case *green.GreenNode:
+			collectGreenText(e, sb)
+		}
+	}
 }
 
 // --- main parse loop ---

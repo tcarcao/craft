@@ -1,6 +1,8 @@
 package syntax_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +11,37 @@ import (
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
+
+// Every .craft file in the repository must round-trip through the tree.
+func TestParse_ConcatEqualsSource_AllRepoFiles(t *testing.T) {
+	var files []string
+	for _, root := range []string{"../../testdata", "../../examples", "../../docs"} {
+		filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && strings.HasSuffix(p, ".craft") {
+				files = append(files, p)
+			}
+			return nil
+		})
+	}
+	if len(files) < 90 {
+		t.Fatalf("expected to find at least 90 .craft files, found %d", len(files))
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		src := string(b)
+		gn, _, _ := syntax.Parse(src)
+		var sb strings.Builder
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			sb.WriteString(tk.Text())
+		}
+		if sb.String() != src {
+			t.Errorf("%s: tree does not reproduce source", f)
+		}
+	}
+}
 
 func parseRoot(t *testing.T, src string) syntax.SyntaxNode {
 	t.Helper()
