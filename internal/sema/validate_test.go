@@ -255,3 +255,59 @@ context_map {
 	assertHasDiag(t, diags, "unresolved-ref-local")
 	assertSeverity(t, diags, "unresolved-ref-local", model.SeverityWarning)
 }
+
+// TestValidate_MalformedQualifiedRef locks the shape check on every use-case
+// slot that accepts a qualified <domain>/<name> reference.
+//
+// Before Task 6b a stray '/' in the subject slot did not parse at all, so the
+// author got craft/syntax/unexpected-token. Opening the slot to refs made the
+// whole run parse as one name, which turned a reported error into silent
+// acceptance of a malformed name.
+//
+// The asks target and the notifies/listens event slots are covered too,
+// because they had the same hole from the moment they were ref-wrapped:
+// slugShapeError only inspected text carrying a "kind:" prefix, so a
+// slash-shaped name skipped shape validation entirely.
+func TestValidate_MalformedQualifiedRef(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"internal subject trailing slash", "use_case \"X\" {\n  when U does x\n    re/ billing validates x\n}"},
+		{"internal subject double slash", "use_case \"X\" {\n  when U does x\n    re//billing validates x\n}"},
+		{"asks subject", "use_case \"X\" {\n  when U does x\n    re//billing asks Ledger to x\n}"},
+		{"asks target", "use_case \"X\" {\n  when U does x\n    A asks re//billing to x\n}"},
+		{"returns target", "use_case \"X\" {\n  when U does x\n    A returns to re//billing charge result\n}"},
+		{"listens trigger context", "use_case \"X\" {\n  when re//billing listens ev.X\n    A does x\n}"},
+		{"external trigger actor", "use_case \"X\" {\n  when re/ billing listens ev.X\n    A does x\n}"},
+		{"notifies event", "use_case \"X\" {\n  when U does x\n    A notifies re//OrderPlaced\n}"},
+		{"listens event", "use_case \"X\" {\n  when Billing listens re//OrderPlaced\n    A does x\n}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(tc.src))
+			assertHasDiag(t, diags, "malformed-slug")
+			assertSeverity(t, diags, "malformed-slug", model.SeverityError)
+		})
+	}
+}
+
+// TestValidate_WellFormedQualifiedRef_NoMalformedSlug is the over-fire guard
+// for TestValidate_MalformedQualifiedRef: a bare name imposes no shape at all,
+// and a two-segment qualified name is exactly the form the ambiguous-bc
+// diagnostic recommends, so neither may be reported as malformed.
+func TestValidate_WellFormedQualifiedRef_NoMalformedSlug(t *testing.T) {
+	src := `use_case "X" {
+  when re/Billing listens vas.VasApplied
+    re/Billing asks Subscriptions to renew
+    re/Subscriptions returns to re/Billing charge result
+    re/Billing notifies billing.ChargeSucceeded
+    Subscriptions validates invoice format
+}`
+	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	for _, d := range diags {
+		if diagRuleName(d.Code) == "malformed-slug" {
+			t.Errorf("well-formed ref reported as malformed: %+v", d)
+		}
+	}
+}

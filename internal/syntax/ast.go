@@ -1358,11 +1358,30 @@ func (t TriggerDecl) EventValue() string {
 // Description returns the human-readable trigger line (without the leading `when`).
 // String tokens' raw Text() already includes both quotes (Bug 8a fix), so no
 // manual quote-wrapping is needed here — that used to double the quotes.
+//
+// This walks significant ELEMENTS, not flat tokens. A space-joined token walk
+// is a one-token-per-slot assumption in disguise: a SyntaxKindRef slot such as
+// a qualified subject (Task 6b) or a ref-wrapped listens event (Task 4)
+// flattens into several leaf tokens, so joining them with spaces emitted
+// "re / billing". The LSP formatter rebuilds trigger lines from this string,
+// so that turned a valid document into one that no longer parsed. A ref
+// contributes its reconstructed text as a single part; every other shape
+// contributes its leaf tokens individually, exactly as before.
 func (t TriggerDecl) Description() string {
-	tokens := t.node.Tokens()
-	parts := make([]string, 0, len(tokens))
-	for _, tok := range tokens {
-		parts = append(parts, tok.Text())
+	var parts []string
+	for _, el := range significantElements(t.node) {
+		switch v := el.(type) {
+		case SyntaxNode:
+			if v.Kind() == SyntaxKindRef {
+				parts = append(parts, RefDecl{node: v}.RefText())
+				continue
+			}
+			for _, tok := range v.Tokens() {
+				parts = append(parts, tok.Text())
+			}
+		case SyntaxToken:
+			parts = append(parts, v.Text())
+		}
 	}
 	return strings.Join(parts, " ")
 }

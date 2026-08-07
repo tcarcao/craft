@@ -3,6 +3,8 @@ package lsp
 import (
 	"strings"
 	"testing"
+
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 func TestFormatDocument_DomainsBlock(t *testing.T) {
@@ -125,5 +127,63 @@ func TestFormatDocument_QuotedServiceNameRoundTrip(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("FormatDocument quoted service: missing %q\ngot:\n%s", want, got)
 		}
+	}
+}
+
+// TestFormatDocument_QualifiedRefRoundTrip is the regression lock for a
+// formatter bug that turned a valid file into an invalid one.
+//
+// TriggerDecl.Description() rebuilt the trigger line by space-joining the
+// node's flat tokens, which is a one-token-per-slot assumption in disguise: a
+// qualified subject ("re/billing") and a ref-wrapped listens event
+// ("re/OrderPlaced") each flatten to three leaf tokens, so the formatter
+// emitted "re / billing" and the result no longer parsed. Formatting must be
+// a fixed point on already-canonical input, and must never emit source that
+// fails to parse.
+func TestFormatDocument_QualifiedRefRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "qualified listens context",
+			src:  "use_case \"X\" {\n  when re/billing listens vas.VasApplied\n    A does x\n}\n",
+			want: "  when re/billing listens vas.VasApplied\n",
+		},
+		{
+			name: "ref-wrapped listens event",
+			src:  "use_case \"X\" {\n  when Billing listens re/OrderPlaced\n    A does x\n}\n",
+			want: "  when Billing listens re/OrderPlaced\n",
+		},
+		{
+			name: "qualified external actor",
+			src:  "use_case \"X\" {\n  when re/billing creates the Account\n    A does x\n}\n",
+			want: "  when re/billing creates the Account\n",
+		},
+		{
+			name: "qualified action subject and targets",
+			src: "use_case \"X\" {\n  when U does x\n" +
+				"    re/billing asks re/ledger to record the entry\n" +
+				"    re/subscriptions returns charge result to re/billing\n" +
+				"    re/billing validates invoice format\n}\n",
+			want: "    re/billing asks re/ledger to record the entry\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatDocument(tc.src)
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("missing %q\ngot:\n%s", tc.want, got)
+			}
+			if _, _, diags := syntax.Parse(got); len(diags) != 0 {
+				t.Errorf("formatted output does not parse cleanly: %+v\ngot:\n%s", diags, got)
+			}
+			// Formatting is idempotent: the already-canonical source must be
+			// a fixed point, so a second pass cannot drift further.
+			if again := FormatDocument(got); again != got {
+				t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+			}
+		})
 	}
 }

@@ -1262,11 +1262,21 @@ func TestQualifiedSubject_RejectsKindPrefix(t *testing.T) {
 		name string
 		src  string
 		want func(syntax.ScenarioDecl) string
+		text string
 	}{
 		{
 			name: "action subject",
 			src:  "use_case \"X\" {\n  when U does x\n    bc:re/billing asks Ledger to record\n}",
 			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].SubjectName() },
+		},
+		{
+			// "domain" lexes as a hard keyword, not TokenIdent, so this row
+			// covers the keyword-as-ident branch of refShapedAhead that the
+			// bc: rows above never reach.
+			name: "action subject with hard-keyword kind word",
+			src:  "use_case \"X\" {\n  when U does x\n    domain:re/billing asks Ledger to record\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].SubjectName() },
+			text: "domain:re/billing",
 		},
 		{
 			name: "trigger context",
@@ -1292,8 +1302,12 @@ func TestQualifiedSubject_RejectsKindPrefix(t *testing.T) {
 				t.Errorf("expected craft/syntax/kind-prefix-in-target, got %+v", diags)
 			}
 			sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
-			if got := tc.want(sc); got != "bc:re/billing" {
-				t.Errorf("accessor = %q, want %q (must not be truncated to the kind word)", got, "bc:re/billing")
+			wantText := tc.text
+			if wantText == "" {
+				wantText = "bc:re/billing"
+			}
+			if got := tc.want(sc); got != wantText {
+				t.Errorf("accessor = %q, want %q (must not be truncated to the kind word)", got, wantText)
 			}
 		})
 	}

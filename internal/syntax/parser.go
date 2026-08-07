@@ -1883,6 +1883,11 @@ func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
 // only legal spelling. slot names the position, with its article, e.g.
 // "an asks target". tok is the slot's leading token, captured before parseRef
 // consumed it.
+//
+// The code string still says "in-target" even though the rule now fires in
+// three slots that are not targets. That is deliberate: it shipped as a
+// published diagnostic code in Task 5, and renaming it would break anyone
+// filtering or suppressing on it. Do not "fix" it without a migration.
 func (p *Parser) diagKindPrefixInSlot(tok lexer.Token, kind, slot string) model.Diagnostic {
 	return model.Diagnostic{
 		Code: "craft/syntax/kind-prefix-in-target",
