@@ -94,22 +94,28 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	if curr.Kind() == syntax.SyntaxKindRBrace {
 		return "\n" + indentFor(depth)
 	}
-	if prev.Kind() == syntax.SyntaxKindRBrace && !strings.Contains(gap, "\n") {
-		return "\n" + indentFor(depth)
-	}
-
-	newlines := strings.Count(gap, "\n")
 
 	// A scenario always gets a blank line before it, even if the author wrote
 	// none. This is the one place the formatter adds vertical space rather than
 	// preserving it, and it matches what the previous formatter did. `when` at
 	// the very start of a use_case body is not a new scenario, and prev being
 	// `{` is how that case is recognised.
+	//
+	// This sits ABOVE the `prev == RBrace` rule below, and the order is load
+	// bearing. A `tags { }` block followed immediately by a `when` puts a `}`
+	// and a `when` next to each other. With the brace rule first, a minified
+	// `}when` got a plain newline on the first pass and the blank line only on
+	// the second, once the newline was in the gap, so formatting was not
+	// idempotent for that shape.
 	if curr.Kind() == syntax.SyntaxKindKwWhen && depth == 1 && prev.Kind() != syntax.SyntaxKindLBrace {
 		return "\n\n" + indentFor(depth)
 	}
 
-	switch newlines {
+	if prev.Kind() == syntax.SyntaxKindRBrace && !strings.Contains(gap, "\n") {
+		return "\n" + indentFor(depth)
+	}
+
+	switch strings.Count(gap, "\n") {
 	case 0:
 		if gap == "" {
 			return ""

@@ -82,7 +82,19 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			r := node.TextRange()
 			sb.WriteString(strings.TrimSpace(content[r.Start:r.End]))
 		default:
-			writeTokens(&sb, node)
+			// Alignment runs per declaration, on the walker's own output, and
+			// never over the assembled document. Run over the document it would
+			// also rewrite the verbatim arch slice above, where `WebApp[ssl,
+			// cache]` is a modifier list rather than an operation annotation:
+			// splitAnnotation cannot tell the two apart, so it would pad
+			// `WebApp` out to a column and break the verbatim guarantee.
+			//
+			// Per declaration is not a weaker pass. An alignment run is bounded
+			// by blank lines, and top-level declarations are always joined by
+			// one, so no run could ever have spanned two declarations anyway.
+			var decl strings.Builder
+			writeTokens(&decl, node)
+			sb.WriteString(alignAnnotations(decl.String()))
 		}
 	}
 
@@ -98,7 +110,7 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 		sb.WriteByte('\n')
 	}
 
-	formatted := alignAnnotations(sb.String())
+	formatted := sb.String()
 	if drift := contentDrift(content, formatted); drift != nil {
 		slog.Error("craft formatter: refusing to format, output would change content",
 			"detail", drift.Message)

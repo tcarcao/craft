@@ -66,13 +66,36 @@ func alignAnnotations(s string) string {
 // The boundary matches the parser's: the annotation is the last `[` on the line
 // whose `]` is the line's final character. A `[` that does not close at end of
 // line is prose, and this must leave it alone.
+//
+// A comment is never an annotation, however it ends. `// see note [1]` would
+// otherwise be treated as an annotated line, and because it is usually the
+// longest line in the run it would push every real annotation out to match its
+// width. writeAlignedActions, which this pass replaced, excluded comment lines
+// from the column for exactly that reason, and dropping the exclusion would
+// have been a silent regression.
 func splitAnnotation(line string) (body, ann string, ok bool) {
 	trimmed := strings.TrimRight(line, " \t")
 	if !strings.HasSuffix(trimmed, "]") {
 		return "", "", false
 	}
+
+	// A comment on its own line, including the `*` continuation of a block
+	// comment.
+	switch lead := strings.TrimLeft(trimmed, " \t"); {
+	case strings.HasPrefix(lead, "//"), strings.HasPrefix(lead, "/*"), strings.HasPrefix(lead, "*"):
+		return "", "", false
+	}
+
 	open := strings.LastIndex(trimmed, "[")
 	if open <= 0 {
+		return "", "", false
+	}
+
+	// A `[` sitting inside a trailing comment is comment text, not an
+	// annotation, as in `A asks B for c // see [1]`. Only a `//` BEFORE the
+	// bracket disqualifies it, so a path inside a real annotation such as
+	// `[GET http://x/y]` is unaffected.
+	if i := strings.Index(trimmed, "//"); i >= 0 && i < open {
 		return "", "", false
 	}
 	body = strings.TrimRight(trimmed[:open], " \t")

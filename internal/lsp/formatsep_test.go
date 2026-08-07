@@ -120,9 +120,10 @@ func TestSeparatorFor_AuthorBraceOnItsOwnLineSurvives(t *testing.T) {
 // that breaks the line before `}`. Without it `}Commerce{` never broke, so two
 // sibling blocks ran together on one line.
 func TestSeparatorFor_NewLineAfterAClosingBrace(t *testing.T) {
+	// Token indices: 0 domains, 1 {, 2 Auth, 3 {, 4 Login, 5 }, 6 Commerce.
 	src := "domains{Auth{Login}Commerce{Cart}}\n"
-	prev := sepTok(t, src, 4) // } closing Auth
-	curr := sepTok(t, src, 5) // Commerce
+	prev := sepTok(t, src, 5) // } closing Auth
+	curr := sepTok(t, src, 6) // Commerce
 	if got := separatorFor(&prev, "", curr, 1); got != "\n  " {
 		t.Errorf("got %q, want a newline and one level of indent", got)
 	}

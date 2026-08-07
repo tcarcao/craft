@@ -69,3 +69,58 @@ func TestAlignAnnotations_LeavesTextWithoutAnnotationsAlone(t *testing.T) {
 		t.Errorf("unannotated text changed:\ngot:  %q\nwant: %q", got, in)
 	}
 }
+
+// TestAlignAnnotations_CommentLineTakesNoPartInTheColumn is the regression lock
+// for a behaviour that writeAlignedActions had and this pass initially lost. A
+// comment ending in `]` looked like an annotated line, and since a comment is
+// usually the longest line in a scenario it pushed every real annotation out to
+// match its width.
+func TestAlignAnnotations_CommentLineTakesNoPartInTheColumn(t *testing.T) {
+	in := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    // a very long explanatory note about [1]\n" +
+		"    A asks B for c [POST /v1/x]\n" +
+		"}\n"
+	got := alignAnnotations(in)
+	if !strings.Contains(got, "    // a very long explanatory note about [1]\n") {
+		t.Errorf("the comment line was itself rewritten:\n%s", got)
+	}
+	if !strings.Contains(got, "    A asks B for c  [POST /v1/x]") {
+		t.Errorf("the comment's width leaked into the alignment column:\n%s", got)
+	}
+}
+
+// TestAlignAnnotations_BracketInATrailingCommentIsNotAnAnnotation covers the
+// same defect where the comment trails real content rather than owning the line.
+func TestAlignAnnotations_BracketInATrailingCommentIsNotAnAnnotation(t *testing.T) {
+	in := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A asks B for c // see [1]\n" +
+		"    LongerSubjectHere asks B for c [GET /v1/y]\n" +
+		"}\n"
+	got := alignAnnotations(in)
+	if !strings.Contains(got, "    A asks B for c // see [1]\n") {
+		t.Errorf("a bracket inside a trailing comment was aligned as an annotation:\n%s", got)
+	}
+}
+
+// TestAlignAnnotations_PathInsideAnAnnotationStillAligns guards the rule above
+// from over-reaching: the `//` in a URL sits after the `[`, so it must not
+// disqualify a real annotation.
+func TestAlignAnnotations_PathInsideAnAnnotationStillAligns(t *testing.T) {
+	in := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A asks B for c [GET http://x/y]\n" +
+		"    LongerSubject asks B for c [GET /v1/y]\n" +
+		"}\n"
+	got := alignAnnotations(in)
+	var cols []int
+	for _, line := range strings.Split(got, "\n") {
+		if i := strings.Index(line, "["); i >= 0 {
+			cols = append(cols, i)
+		}
+	}
+	if len(cols) != 2 || cols[0] != cols[1] {
+		t.Errorf("annotations should share a column, got %v:\n%s", cols, got)
+	}
+}

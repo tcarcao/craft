@@ -166,7 +166,7 @@ func stripPositions(v any) any {
 // TestFormatDocument_UseCaseRoundTrip asserts the same properties, but only
 // over hand-written use_case fixtures. That is exactly why the context_map and
 // glossary corruption survived: nothing formatted those blocks, so nothing
-// noticed that formatDecl space-joined `billing/Invoice` into
+// noticed that the old renderer space-joined `billing/Invoice` into
 // `billing / Invoice` and collapsed every relation onto one line. The same
 // blind spot hid a `repo: olxeu/realestate/subscriptions` service field and the
 // silent deletion of every comment in a document.

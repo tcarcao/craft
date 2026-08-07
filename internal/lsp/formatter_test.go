@@ -247,13 +247,16 @@ func shapesOf(t *testing.T, src string) []scenarioShape {
 // TestFormatDocument_UseCaseRoundTrip is the guard for a whole class of
 // formatter bugs, not one instance of it.
 //
-// formatUseCaseDecl does not copy source text; it re-renders each trigger and
-// action from typed accessors. Any accessor that drops or rewrites part of the
-// line therefore silently rewrites the user's file. Three separate defects of
-// exactly that shape shipped before this test existed: a qualified ref got
-// split into "re / billing", a typed event ref got requoted into the
+// The formatter used to re-render each trigger and action from typed
+// accessors rather than copying source text, so any accessor that dropped or
+// rewrote part of the line silently rewrote the user's file. Three separate
+// defects of exactly that shape shipped before this test existed: a qualified
+// ref got split into "re / billing", a typed event ref got requoted into the
 // deprecated string form, and a trailing [POST /v1/charges] annotation was
 // deleted outright.
+//
+// The token walker cannot reintroduce any of them, because it copies token
+// text verbatim and re-renders nothing. These cases stay as the lock on that.
 //
 // Each case is already in canonical form, so all four assertions below must
 // hold: the output is byte-identical to the input, it parses clean, formatting
@@ -334,7 +337,17 @@ func TestFormatDocument_UseCaseRoundTrip(t *testing.T) {
 // formatSource calls the same entry point the LSP formatting handler uses.
 func formatSource(t *testing.T, src string) string {
 	t.Helper()
-	return FormatDocument(src)
+	got, blocked := FormatDocumentChecked(src)
+	// FormatDocument discards the diagnostic, and a drift refusal returns the
+	// input unchanged, so a fixture written in canonical form would still
+	// compare equal and pass while the formatter was in fact refusing to run.
+	// Every byte-identity assertion built on this helper would go hollow at
+	// exactly the moment it mattered. Declining a genuinely broken parse is
+	// still fine and is left to the caller.
+	if blocked != nil && blocked.Code == "craft/internal/formatter-content-drift" {
+		t.Fatalf("contentDrift fired: the formatter refused to format, so any byte-identity assertion below would pass vacuously\nsrc:\n%s", src)
+	}
+	return got
 }
 
 // TestFormatDocument_AlignsOpAnnotations is the RED/GREEN case for the
@@ -503,8 +516,9 @@ func TestFormatDocument_TemplatedPathStillAligns(t *testing.T) {
 }
 
 // TestFormatDocument_UnbalancedRBraceDoesNotPanic covers I2: a stray `}` only
-// produces a warning-severity diagnostic, so it used to reach formatDecl's
-// RBrace branch with depth 0 and crash on `strings.Repeat("  ", -1)`.
+// produces a warning-severity diagnostic, so it used to reach the renderer's
+// RBrace branch with depth 0 and crash on `strings.Repeat("  ", -1)`. indentFor
+// floors at zero for the same reason.
 func TestFormatDocument_UnbalancedRBraceDoesNotPanic(t *testing.T) {
 	src := "use_case \"X\" {\n when U does y\n A does {x}\n}\n"
 	defer func() {
@@ -517,10 +531,10 @@ func TestFormatDocument_UnbalancedRBraceDoesNotPanic(t *testing.T) {
 	}
 }
 
-// formatDecl is reachable with an unbalanced `}` only through a top-level
-// stray brace, so exercise that shape directly too rather than relying on the
-// use_case route staying the same.
-func TestFormatDecl_StrayTopLevelRBraceDoesNotPanic(t *testing.T) {
+// A negative depth is reachable with an unbalanced `}` through a top-level
+// stray brace as well, so exercise that shape directly too rather than relying
+// on the use_case route staying the same.
+func TestFormatDocument_StrayTopLevelRBraceDoesNotPanic(t *testing.T) {
 	src := "services {\n  A {\n    contexts: X\n  }\n}\n}\n"
 	defer func() {
 		if r := recover(); r != nil {
@@ -573,8 +587,10 @@ func TestFormatDocument_GlossaryRoundTrip(t *testing.T) {
 // TestFormatDocument_QualifiedFieldValuesSurvive covers the instance of the
 // same defect that nobody had reported: a service field value is a ref too, so
 // `repo: olxeu/realestate/subscriptions` was space-joined into
-// `olxeu / realestate / subscriptions`, which does not parse. Fixing it in
-// formatDecl rather than per block covers exposure and domain values too.
+// `olxeu / realestate / subscriptions`, which does not parse. Fixing it
+// centrally rather than per block covers exposure and domain values too, and
+// the token walker now makes it structural: a ref has no gaps between its
+// parts, so its separators are all empty and the parts concatenate.
 func TestFormatDocument_QualifiedFieldValuesSurvive(t *testing.T) {
 	cases := []struct {
 		name string
@@ -803,9 +819,10 @@ func TestWriteTokens_PreservesEveryNonWhitespaceToken(t *testing.T) {
 		"context_map {\n  re/billing customer_supplier re/vas\n}\n",
 		"glossary re {\n  billing/Invoice same_as subs/Invoice\n}\n",
 		"use_case \"X\" {\n  when U does x\n    A asks re/b for c  [POST /v1/x]\n}\n",
-		// The five fixtures above are the constructs formatDecl already had a
-		// branch for. The five below are exactly the constructs nobody wrote
-		// one for, which is the class of defect this rewrite exists to close.
+		// The five fixtures above are the constructs the old renderer already
+		// had a branch for. The five below are exactly the constructs nobody
+		// wrote one for, which is the class of defect this rewrite closes: the
+		// walker has no branches at all, so there is nothing left to omit.
 		"actor user Alice\n",
 		"actors {\n  user Alice\n  system Cron\n}\n",
 		"arch {\n  presentation:\n    WebApp\n}\n",
@@ -945,4 +962,65 @@ func TestWriteTokens_ExpandsMinifiedDeclaration(t *testing.T) {
 	if !strings.Contains(got, "Foo {\n  contexts: A\n}") {
 		t.Errorf("minified declaration did not expand:\n%q", got)
 	}
+}
+
+// TestFormatDocument_ArchModifiersAreNotAligned is the regression lock for the
+// alignment pass reaching the arch verbatim slice.
+//
+// `WebApp[ssl, cache]` is a component modifier list, not a trailing operation
+// annotation, but splitAnnotation cannot tell them apart: both are a bracketed
+// run at end of line. While alignment ran over the whole assembled document it
+// padded these out to a column, which silently broke the standing guarantee
+// that arch is reproduced byte for byte. Alignment now runs per declaration on
+// the walker's own output, so it never sees this text.
+func TestFormatDocument_ArchModifiersAreNotAligned(t *testing.T) {
+	src := "arch ModifiedArch {\n" +
+		"    presentation:\n" +
+		"        WebApp[ssl, cache]\n" +
+		"        MobileApp[auth:oauth, timeout:30s]\n" +
+		"}\n"
+	got := FormatDocument(src)
+	if got != src {
+		t.Errorf("arch must be reproduced verbatim\nwant:\n%s\ngot:\n%s", src, got)
+	}
+	if strings.Contains(got, "WebApp ") {
+		t.Errorf("arch modifiers were column-aligned:\n%s", got)
+	}
+}
+
+// TestFormatDocument_ClosingBraceBeforeWhenIsIdempotent covers an ordering bug
+// in separatorFor. A `tags { }` block puts a `}` directly before a `when`.
+// While the `prev == RBrace` rule ran first it returned a plain newline, and
+// the scenario blank line only appeared on the second pass once that newline
+// was in the gap, so formatting was not a fixed point for this shape. No file
+// in the repo has it, which is why the corpus guard did not catch it.
+func TestFormatDocument_ClosingBraceBeforeWhenIsIdempotent(t *testing.T) {
+	src := "use_case \"X\" {\n  tags {\n    owner: billing\n  }when U does x\n    A asks B for c\n}\n"
+	once := FormatDocument(src)
+	twice := FormatDocument(once)
+	if once != twice {
+		t.Errorf("formatting is not idempotent for `}when`\nfirst:\n%s\nsecond:\n%s", once, twice)
+	}
+	if !strings.Contains(once, "  }\n\n  when U does x") {
+		t.Errorf("a scenario after a tags block must still get its blank line:\n%s", once)
+	}
+}
+
+// TestFormatDocument_SeveralStatementsOnOneLineRoundTrip pins the accepted
+// limit of minified expansion end to end, not just at the separator. The
+// formatter leaves these crammed lines alone, and doing so must still produce
+// output that parses, is a fixed point, and has lost nothing.
+func TestFormatDocument_SeveralStatementsOnOneLineRoundTrip(t *testing.T) {
+	src := "actors{user Alice system Bot}\n"
+	got := formatSource(t, src)
+	if _, _, diags := syntax.Parse(got); len(diags) != 0 {
+		t.Errorf("output does not parse cleanly: %+v\ngot:\n%s", diags, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("not a fixed point\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+	if !strings.Contains(got, "user Alice system Bot") {
+		t.Errorf("the crammed statements should be left as written:\n%s", got)
+	}
+	assertContentPreserved(t, src, got)
 }
