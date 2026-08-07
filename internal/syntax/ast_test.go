@@ -840,9 +840,9 @@ func TestTriggerDecl_KeywordSubjectName(t *testing.T) {
 	}
 }
 
-// TestActionDecl_Description_ConnectorPreservation verifies that connector words
-// stored as SyntaxKindIdent (a, an, the, etc.) are preserved in Description().
-func TestActionDecl_Description_ConnectorPreservation(t *testing.T) {
+// TestActionDecl_SourceText_ConnectorPreservation verifies that connector words
+// stored as SyntaxKindIdent (a, an, the, etc.) survive the source renderer.
+func TestActionDecl_SourceText_ConnectorPreservation(t *testing.T) {
 	cases := []struct {
 		src  string
 		want string
@@ -877,16 +877,16 @@ func TestActionDecl_Description_ConnectorPreservation(t *testing.T) {
 		if len(actions) == 0 {
 			t.Fatalf("no actions: %q", tc.src)
 		}
-		got := actions[0].Description()
+		got := actions[0].SourceText()
 		if got != tc.want {
-			t.Errorf("Description() = %q, want %q", got, tc.want)
+			t.Errorf("SourceText() = %q, want %q", got, tc.want)
 		}
 	}
 }
 
-// TestTriggerDecl_Description verifies Description() reconstructs the trigger
+// TestTriggerDecl_SourceText verifies SourceText() reconstructs the trigger
 // text correctly, including quoted event strings.
-func TestTriggerDecl_Description(t *testing.T) {
+func TestTriggerDecl_SourceText(t *testing.T) {
 	cases := []struct {
 		src  string
 		want string
@@ -903,9 +903,9 @@ func TestTriggerDecl_Description(t *testing.T) {
 		if len(ucs) == 0 {
 			t.Fatalf("no use cases: %q", tc.src)
 		}
-		got := ucs[0].Scenarios()[0].Trigger().Description()
+		got := ucs[0].Scenarios()[0].Trigger().SourceText()
 		if got != tc.want {
-			t.Errorf("src=%q: Description() = %q, want %q", tc.src, got, tc.want)
+			t.Errorf("src=%q: SourceText() = %q, want %q", tc.src, got, tc.want)
 		}
 	}
 }
@@ -924,5 +924,158 @@ func TestServiceDecl_ContextLinesWith(t *testing.T) {
 	}
 	if lines[0] != 3 || lines[1] != 3 {
 		t.Errorf("expected both context lines == 3, got %v", lines)
+	}
+}
+
+func TestActionDecl_OpVerbAndPayload(t *testing.T) {
+	cases := []struct {
+		name        string
+		line        string
+		wantVerb    string
+		wantPayload string
+		wantText    string
+	}{
+		{"http", "A asks B for c [POST /v1/charges]", "POST", "/v1/charges", "POST /v1/charges"},
+		{"grpc", "A asks B for c [GRPC ledger.Postings/Create]", "GRPC", "ledger.Postings/Create", "GRPC ledger.Postings/Create"},
+		{"topic", "A asks B for c [TOPIC billing.v1.charged]", "TOPIC", "billing.v1.charged", "TOPIC billing.v1.charged"},
+		{"opaque path", "A asks B for c [op1/op2/op3/op4/op5]", "", "op1/op2/op3/op4/op5", "op1/op2/op3/op4/op5"},
+		{"opaque words", "A asks B for c [legacy-mainframe-txn-44]", "", "legacy-mainframe-txn-44", "legacy-mainframe-txn-44"},
+		{"lowercase is not a verb", "A asks B for c [post /v1/x]", "", "post /v1/x", "post /v1/x"},
+		{"query string", "A asks B for c [GET /v1/products?q=]", "GET", "/v1/products?q=", "GET /v1/products?q="},
+		{"templated path", "A asks B for c [POST /v1/accounts/{id}/charges]", "POST", "/v1/accounts/{id}/charges", "POST /v1/accounts/{id}/charges"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.OpVerb(); got != tc.wantVerb {
+				t.Errorf("OpVerb() = %q, want %q", got, tc.wantVerb)
+			}
+			if got := a.OpPayload(); got != tc.wantPayload {
+				t.Errorf("OpPayload() = %q, want %q", got, tc.wantPayload)
+			}
+			if got := a.OpText(); got != tc.wantText {
+				t.Errorf("OpText() = %q, want %q", got, tc.wantText)
+			}
+			if got := a.PhraseText(); got != "c" {
+				t.Errorf("PhraseText() = %q, want %q (annotation must be excluded)", got, "c")
+			}
+		})
+	}
+}
+
+func TestActionDecl_OpAccessors_NoAnnotation(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n}"
+	a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Error("OpAnnotation() should be nil")
+	}
+	if a.OpVerb() != "" || a.OpPayload() != "" || a.OpText() != "" {
+		t.Errorf("op accessors should be empty, got verb=%q payload=%q text=%q",
+			a.OpVerb(), a.OpPayload(), a.OpText())
+	}
+}
+
+// TestActionDecl_SourceText pins the source-faithful renderer directly, so the
+// contract holds even if the LSP formatter stops being its only caller.
+//
+// Its counterpart is TestProject_UseCase_DescriptionExcludesAnnotation in
+// projection_uc_test.go, which pins the opposite property on the display label.
+// The two together are the record of why source and label are separate.
+func TestActionDecl_SourceText(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+	}{
+		{"sync action", "Auth asks DB to check email"},
+		{"sync action with annotation", "Auth asks DB to check email [POST /v1/check]"},
+		{"sync action with for connector", "A asks B for a fresh charge"},
+		{"async action with typed event ref", "Billing notifies billing.ChargeSucceeded"},
+		{"async action with legacy quoted event", "Billing notifies \"Order Created\""},
+		{"async action with annotation", "Billing notifies billing.ChargeSucceeded [GRPC Pay]"},
+		{"return action with target", "Auth returns to User charge result"},
+		{"return action without target", "Auth returns charge result"},
+		{"internal action", "Auth validates email format"},
+		{"internal action with connector", "Wallet creates an unconfirmed reservation"},
+		{"qualified subject and target", "re/billing asks re/ledger to record the entry"},
+		{"qualified returns target", "re/subscriptions returns to re/billing charge result"},
+		{"phrase with tight punctuation", "Auth checks (1! & 2!) quickly"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.SourceText(); got != tc.line {
+				t.Errorf("SourceText() = %q, want %q", got, tc.line)
+			}
+		})
+	}
+}
+
+// TestActionDecl_SourceTextWithoutOp pins the contract the formatter's
+// alignment pass relies on: the body accessor is exactly SourceText minus the
+// trailing ` [op]`, and the two stay in step by construction rather than by
+// the formatter re-spelling the suffix to trim it off. If they ever drift, a
+// trim-based formatter would silently no-op and emit the annotation twice.
+func TestActionDecl_SourceTextWithoutOp(t *testing.T) {
+	cases := []struct {
+		name     string
+		line     string
+		wantBody string
+	}{
+		{"sync with annotation", "Auth asks DB to check email [POST /v1/check]", "Auth asks DB to check email"},
+		{"async with annotation", "Billing notifies billing.ChargeSucceeded [GRPC Pay]", "Billing notifies billing.ChargeSucceeded"},
+		{"return with annotation", "Auth returns to User charge result [200 Result]", "Auth returns to User charge result"},
+		{"internal with annotation", "Auth validates email format [op1/op2]", "Auth validates email format"},
+		{"templated payload", "A asks B for c [POST /v1/accounts/{id}/charges]", "A asks B for c"},
+		{"bracket in phrase too", "A asks B to record [batch] entries [POST /v1/entries]", "A asks B to record [batch] entries"},
+		{"no annotation", "Auth asks DB to check email", "Auth asks DB to check email"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.SourceTextWithoutOp(); got != tc.wantBody {
+				t.Errorf("SourceTextWithoutOp() = %q, want %q", got, tc.wantBody)
+			}
+			want := tc.wantBody
+			if op := a.OpText(); op != "" {
+				want += " [" + op + "]"
+			}
+			if got := a.SourceText(); got != want {
+				t.Errorf("SourceText() = %q, want %q (body + suffix must agree)", got, want)
+			}
+		})
+	}
+}
+
+// TestActionDecl_SourceText_TruncatedLine checks the renderer emits no trailing
+// space when a slot it would normally fill is missing. The input is already
+// broken, but a formatter that appends invisible whitespace makes a broken file
+// noisier to diff than it needs to be.
+func TestActionDecl_SourceText_TruncatedLine(t *testing.T) {
+	for _, line := range []string{"A asks", "A notifies", "A returns", "A"} {
+		src := "use_case \"X\" {\n  when U does x\n    " + line + "\n}"
+		a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+		if got := a.SourceText(); got != line {
+			t.Errorf("SourceText() = %q, want %q (no trailing space)", got, line)
+		}
+	}
+}
+
+// TestActionDecl_SourceText_EscapedEventSurvives guards the one case a naive
+// %q re-quote would corrupt: the legacy quoted event form carrying escapes.
+// EventValue() unquotes and resolves them, so re-quoting through %q is not
+// guaranteed to reproduce the original spelling. SourceText reads the raw
+// token instead.
+func TestActionDecl_SourceText_EscapedEventSurvives(t *testing.T) {
+	// An unrecognised escape passes through the lexer as backslash + char
+	// (see unquoteStringText), so EventValue() holds a literal backslash that
+	// %q would re-escape into `\\/`, changing the source.
+	line := `Billing notifies "Order \/ Created"`
+	src := "use_case \"X\" {\n  when U does x\n    " + line + "\n}"
+	a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if got := a.SourceText(); got != line {
+		t.Errorf("SourceText() = %q, want %q", got, line)
 	}
 }

@@ -27,6 +27,7 @@ type (
 	TriggerType        = model.TriggerType
 	Action             = model.Action
 	ActionType         = model.ActionType
+	Operation          = model.Operation
 	Interaction        = model.Interaction
 	Domain             = model.Domain
 	Actor              = model.Actor
@@ -46,6 +47,21 @@ const (
 	ActionTypeAsync    = model.ActionTypeAsync
 	ActionTypeInternal = model.ActionTypeInternal
 	ActionTypeReturn   = model.ActionTypeReturn
+
+	// OpVerb* are the recognised protocol verbs for an Operation annotation's
+	// Verb field. Untyped string constants, not a named type: the verb set is
+	// open by design (an unrecognised leading word is payload, not an error),
+	// so Operation.Verb stays a plain string rather than a closed enum.
+	OpVerbGET     = "GET"
+	OpVerbPOST    = "POST"
+	OpVerbPUT     = "PUT"
+	OpVerbPATCH   = "PATCH"
+	OpVerbDELETE  = "DELETE"
+	OpVerbHEAD    = "HEAD"
+	OpVerbOPTIONS = "OPTIONS"
+	OpVerbGRPC    = "GRPC"
+	OpVerbTOPIC   = "TOPIC"
+	OpVerbQUERY   = "QUERY"
 
 	ActorTypeUser    = model.ActorTypeUser
 	ActorTypeSystem  = model.ActorTypeSystem

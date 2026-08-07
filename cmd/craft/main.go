@@ -17,7 +17,7 @@ func newRootCmd() *cobra.Command {
 		Long:    "Parse, lint, inspect, and generate diagrams from .craft files.",
 		Version: version,
 	}
-	root.AddCommand(validateCmd(), generateCmd(), inspectCmd(), checkCmd(), lspCmd())
+	root.AddCommand(validateCmd(), generateCmd(), inspectCmd(), checkCmd(), fmtCmd(), lspCmd())
 	return root
 }
 

@@ -979,10 +979,14 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 		p.builder.FinishNode()
 		return diags
 	}
-	// Always emit the trigger subject as SyntaxKindIdent so that ActorName() /
-	// ContextName() (which call ChildToken(SyntaxKindIdent)) find it correctly,
-	// even when the lexer classifies it as a keyword (e.g. "Actor" → TokenKwActor).
-	p.consumeAs(SyntaxKindIdent)
+	// The subject of a `listens` trigger names a bounded context, so it accepts
+	// the qualified `<domain>/<name>` form. Which trigger form this is is not
+	// known until the verb is read, one slot later, so the external form
+	// accepts a qualified actor too. A bare subject is still emitted as a
+	// single SyntaxKindIdent token, even when the lexer classifies it as a
+	// keyword (e.g. "Actor" → TokenKwActor), so ActorName() / ContextName()
+	// read it the way they always have.
+	diags = append(diags, p.parseNameSlot("a trigger subject")...)
 
 	// The second token is the verb.  If it is `listens` (ident), this is domain_listen.
 	verbTok := p.peek()
@@ -1014,8 +1018,10 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == verbTok.Line {
 		p.consumeAs(SyntaxKindIdent)
 	}
-	// Collect phrase tokens on the same line.
-	p.collectPhrase(verbTok.Line)
+	// Collect phrase tokens on the same line. Trigger phrases don't support a
+	// trailing op annotation (out of scope for this feature), so always sweep
+	// to end of line.
+	p.collectPhrase(verbTok.Line, -1)
 
 	p.builder.FinishNode()
 	return diags
@@ -1053,10 +1059,12 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		return diags
 	}
 	actionLine := subjectTok.Line
-	// Always emit the action subject as SyntaxKindIdent so that SubjectName()
-	// (which calls ChildToken(SyntaxKindIdent)) finds it correctly, even when
-	// the lexer classifies it as a keyword (e.g. "Service" → TokenKwService).
-	p.consumeAs(SyntaxKindIdent)
+	// The subject names a bounded context, so it accepts the qualified
+	// `<domain>/<name>` form the ambiguous-bc diagnostic recommends. A bare
+	// subject is still emitted as a single SyntaxKindIdent token, even when
+	// the lexer classifies it as a keyword (e.g. "Service" → TokenKwService),
+	// so SubjectName() reads it the way it always has.
+	diags = append(diags, p.parseNameSlot("an action subject")...)
 
 	verbTok := p.peek()
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
@@ -1073,7 +1081,8 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 	switch verb {
 	case "asks":
 		p.consumeAs(SyntaxKindKwAsks)
-		p.parseAsksAction(actionLine)
+		d := p.parseAsksAction(actionLine)
+		diags = append(diags, d...)
 		p.builder.FinishNode()
 		return diags
 	case "notifies":
@@ -1084,7 +1093,8 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		return diags
 	case "returns":
 		p.consumeAs(SyntaxKindKwReturns)
-		p.parseReturnsAction(actionLine)
+		d := p.parseReturnsAction(actionLine)
+		diags = append(diags, d...)
 		p.builder.FinishNode()
 		return diags
 	default:
@@ -1095,7 +1105,11 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == actionLine {
 			p.consumeAs(SyntaxKindIdent)
 		}
-		p.collectPhrase(actionLine)
+		start := p.opAnnotationStart(actionLine)
+		p.collectPhrase(actionLine, start)
+		if start >= 0 {
+			diags = append(diags, p.parseOpAnnotation()...)
+		}
 		p.builder.FinishNode()
 		return diags
 	}
@@ -1103,12 +1117,35 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 
 // parseAsksAction parses: <target> to|for <phrase>
 // The `asks` keyword token has already been consumed by parseAction.
-func (p *Parser) parseAsksAction(line int) {
+//
+// A `kind:` prefix in the target slot is rejected: the slot already implies a
+// bounded context, the same rule context_map enforces for its endpoints. The
+// qualified `<domain>/<name>` form stays legal.
+func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
+	var diags []model.Diagnostic
 	targetTok := p.peek()
 	if targetTok.Type == lexer.TokenIdent {
-		p.parseRef()
+		if kind := p.parseRef(); kind != "" {
+			diags = append(diags, p.diagKindPrefixInSlot(targetTok, kind, "an asks target"))
+		}
 	} else if isAnyKeywordAsIdent(targetTok.Type) {
-		p.consumeAs(SyntaxKindIdent)
+		// "domain" and "service" lex as hard keywords rather than TokenIdent,
+		// so a kind-prefixed target using one of them (e.g.
+		// "domain:re/monetization", "service:billing-api") lands here, not in
+		// the TokenIdent branch above. Only hand it to parseRef when it is
+		// immediately followed by ':', since parseRef's own kind-prefix branch
+		// handles that shape correctly. A bare keyword-as-ident with no colon
+		// is not a ref shape; consume it directly instead, mirroring
+		// parseEdgeEndpoint's guard against parseRef's zero-progress hole on
+		// that shape (see the comment on parseEdgeEndpoint).
+		hasColon := p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == targetTok.Line && adjacentTokens(targetTok, p.peekAt(1))
+		if hasColon {
+			if kind := p.parseRef(); kind != "" {
+				diags = append(diags, p.diagKindPrefixInSlot(targetTok, kind, "an asks target"))
+			}
+		} else {
+			p.consumeAs(SyntaxKindIdent)
+		}
 	}
 
 	// connector: "to" or "for"
@@ -1121,7 +1158,12 @@ func (p *Parser) parseAsksAction(line int) {
 		}
 	}
 
-	p.collectPhrase(line)
+	start := p.opAnnotationStart(line)
+	p.collectPhrase(line, start)
+	if start >= 0 {
+		diags = append(diags, p.parseOpAnnotation()...)
+	}
+	return diags
 }
 
 // parseNotifiesAction parses the "<event>" or event-ident after `notifies`.
@@ -1138,17 +1180,29 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 		diags = append(diags, p.diagUnterminatedString(eventTok))
 		p.consumeAs(SyntaxKindError)
 	}
+	// notifies has no phrase between the event and a possible annotation, so
+	// the cursor is only correctly positioned on `[` when the annotation
+	// starts immediately (lookahead index 0). A stray token in between (e.g.
+	// a malformed multi-word event) must not be swallowed as if it were `[`.
+	if p.opAnnotationStart(eventTok.Line) == 0 {
+		diags = append(diags, p.parseOpAnnotation()...)
+	}
 	return diags
 }
 
 // parseReturnsAction parses [to <target>] [connector_word] <phrase> after `returns`.
-func (p *Parser) parseReturnsAction(line int) {
+//
+// The target names a bounded context, so it takes the same qualified
+// `<domain>/<name>` form as the asks target and the action subject, and
+// rejects a `kind:` prefix for the same reason.
+func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
+	var diags []model.Diagnostic
 	// Check for optional `to <target>`
 	if p.peek().Type == lexer.TokenIdent && p.peek().Value == "to" {
 		p.consumeAs(SyntaxKindKwTo)
 		targetTok := p.peek()
 		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
-			p.consumeAs(SyntaxKindIdent)
+			diags = append(diags, p.parseNameSlot("a returns target")...)
 		}
 	}
 
@@ -1158,26 +1212,134 @@ func (p *Parser) parseReturnsAction(line int) {
 		p.consumeAs(SyntaxKindIdent)
 	}
 
-	p.collectPhrase(line)
+	start := p.opAnnotationStart(line)
+	p.collectPhrase(line, start)
+	if start >= 0 {
+		diags = append(diags, p.parseOpAnnotation()...)
+	}
+	return diags
+}
+
+// opAnnotationStart scans ahead over the remainder of actionLine and returns the
+// lookahead index of the `[` that opens a trailing operation annotation, or -1
+// when the line has none.
+//
+// The annotation is the LAST `[` on the line whose matching `]` is the line's
+// final token. Anchoring on the last bracket rather than the first is what lets
+// a phrase keep using `[` as prose: `record [batch] entries [POST /v1/entries]`
+// puts `[batch]` in the phrase and `[POST /v1/entries]` in the annotation.
+// Requiring the line to end in `]` is what lets an unclosed `[` stay prose, so
+// files that do not use the feature keep today's sweep-everything behaviour.
+//
+// A `}` only terminates the scan at brace depth 0 AND before the first `[`.
+// Braces are only tracked once an opening `[` has been seen, because a
+// templated path payload such as `[POST /v1/accounts/{id}/charges]` is by
+// definition inside the annotation. Restricting depth tracking that way keeps
+// this scan in step with collectPhrase, which returns unconditionally at the
+// first `}`: a balanced `{...}` in the PHRASE (`charge {amount} [POST /pay]`)
+// must terminate both, or the two disagree about where the line ends and
+// parseOpAnnotation mis-anchors on the `}` instead of the `[`. A genuine
+// block-closing `}` still terminates the scan exactly as before.
+func (p *Parser) opAnnotationStart(actionLine int) int {
+	lastLBracket, lastTok := -1, -1
+	depth := 0
+	for i := 0; ; i++ {
+		t := p.peekAt(i)
+		if t.Type == lexer.TokenEOF || t.Line != actionLine {
+			break
+		}
+		if t.Type == lexer.TokenRBrace {
+			if depth == 0 || lastLBracket < 0 {
+				break
+			}
+			depth--
+		} else if t.Type == lexer.TokenLBrace {
+			depth++
+		}
+		if t.Type == lexer.TokenLBracket {
+			lastLBracket = i
+		}
+		lastTok = i
+	}
+	if lastLBracket < 0 || lastTok <= lastLBracket {
+		return -1
+	}
+	if p.peekAt(lastTok).Type != lexer.TokenRBracket {
+		return -1
+	}
+	return lastLBracket
+}
+
+// parseOpAnnotation consumes a `[ ... ]` operation annotation at the current
+// position and emits it as a SyntaxKindOpAnnotation node. The caller must have
+// confirmed via opAnnotationStart that a well-formed annotation begins here.
+//
+// The body is hybrid: a recognised uppercase protocol verb at the head is
+// emitted as SyntaxKindOpVerb, and everything up to the closing `]` is swept in
+// verbatim as payload. An unrecognised head word is just the first payload
+// token, which is what keeps `[op1/op2/op3]` and `[legacy-txn-44]` legal.
+func (p *Parser) parseOpAnnotation() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindOpAnnotation)
+	lbTok := p.consumeAs(SyntaxKindLBracket)
+
+	if rbTok := p.peek(); rbTok.Type == lexer.TokenRBracket {
+		// Empty `[]` annotation: the body is missing, not empty-but-valid.
+		diags = append(diags, p.diagEmptyOpAnnotation(lbTok, rbTok))
+	}
+
+	if t := p.peek(); (t.Type == lexer.TokenIdent || isAnyKeywordAsIdent(t.Type)) && isProtocolVerb(t.Value) {
+		p.consumeAs(SyntaxKindOpVerb)
+	}
+
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBracket {
+		switch p.peek().Type {
+		case lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case lexer.TokenNumber, lexer.TokenPercentage:
+			p.consumeAs(SyntaxKindNumber)
+		default:
+			// Idents, keywords-as-idents, and TokenError punctuation (/ ? = { } …)
+			// are all swept into the payload as raw tokens, mirroring collectPhrase.
+			p.consumeAs(SyntaxKindIdent)
+		}
+	}
+
+	if p.peek().Type == lexer.TokenRBracket {
+		p.consumeAs(SyntaxKindRBracket)
+	} else {
+		// Defensive: opAnnotationStart guarantees the `]` exists.
+		diags = append(diags, p.diagUnexpected(p.peek(), "]"))
+	}
+
+	p.builder.FinishNode()
+	return diags
 }
 
 // collectPhrase emits phrase tokens on actionLine into the current builder scope.
 //
 // The prose tail is display-only free text (see ActionDecl.PhraseText), so every
-// same-line token is swept in verbatim — including TokenError punctuation such as
-// `!`, `&`, `*`, `/` — until a line change, `}`, EOF, or a comment token ends it.
-// (peek() already skips comment tokens transparently when scanning for the next
-// token, so a trailing `//...` comment naturally falls on a later line or is
-// filtered before the line check below; the explicit comment case exists for
-// clarity/defensiveness even though peek() means it is not normally reachable.)
-func (p *Parser) collectPhrase(actionLine int) {
+// same-line token is swept in verbatim, including TokenError punctuation such as
+// `!`, `&`, `*`, `/`, until a line change, `}`, EOF, or a comment token ends it.
+//
+// maxTokens bounds how many tokens may be consumed: callers pass the lookahead
+// index returned by opAnnotationStart so the phrase stops just before a trailing
+// operation annotation. Pass -1 for "sweep to end of line".
+func (p *Parser) collectPhrase(actionLine int, maxTokens int) {
+	if maxTokens == 0 {
+		return
+	}
 	if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
 		return
 	}
 	if p.peek().Line != actionLine {
 		return
 	}
+	consumed := 0
 	for {
+		if maxTokens >= 0 && consumed >= maxTokens {
+			return
+		}
 		tok := p.peek()
 		if tok.Type == lexer.TokenRBrace || tok.Type == lexer.TokenEOF {
 			return
@@ -1193,10 +1355,9 @@ func (p *Parser) collectPhrase(actionLine int) {
 		case lexer.TokenNumber:
 			p.consumeAs(SyntaxKindNumber)
 		default:
-			// Idents, keywords-as-idents, and TokenError punctuation (! & * / # …)
-			// are all swept into prose as raw tokens.
 			p.consumeAs(SyntaxKindIdent)
 		}
+		consumed++
 	}
 }
 
@@ -1705,6 +1866,43 @@ func (p *Parser) diagUnexpected(tok lexer.Token, expected string) model.Diagnost
 	}
 }
 
+// diagEmptyOpAnnotation produces a craft/syntax/empty-op-annotation diagnostic
+// for a `[]` operation annotation whose body is missing. lb and rb are the
+// bracket tokens; the range spans from `[` through `]`.
+func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
+	r := tokenRange(lb)
+	r.End = tokenRange(rb).End
+	return model.Diagnostic{
+		Code:     "craft/syntax/empty-op-annotation",
+		Message:  "empty operation annotation `[]`; expected a verb and/or payload, e.g. [POST /v1/charges]",
+		Severity: model.SeverityError,
+		Range:    r,
+	}
+}
+
+// diagKindPrefixInSlot produces a craft/syntax/kind-prefix-in-target
+// diagnostic for a name slot that carries a recognised `kind:` prefix
+// (bc:/domain:/service:/term:). Such a slot already implies what it names, so
+// the prefix is rejected; the bare or qualified `<domain>/<name>` form is the
+// only legal spelling. slot names the position, with its article, e.g.
+// "an asks target". tok is the slot's leading token, captured before parseRef
+// consumed it.
+//
+// The code string still says "in-target" even though the rule now fires in
+// three slots that are not targets. That is deliberate: it shipped as a
+// published diagnostic code in Task 5, and renaming it would break anyone
+// filtering or suppressing on it. Do not "fix" it without a migration.
+func (p *Parser) diagKindPrefixInSlot(tok lexer.Token, kind, slot string) model.Diagnostic {
+	return model.Diagnostic{
+		Code: "craft/syntax/kind-prefix-in-target",
+		Message: fmt.Sprintf(
+			"remove the %q prefix: %s is written as a bare name or in the <domain>/<name> form",
+			kind+":", slot),
+		Severity: model.SeverityError,
+		Range:    tokenRange(tok),
+	}
+}
+
 // diagUnterminatedString produces a craft/syntax/unterminated-string diagnostic.
 // tok is the TokenError produced by the lexer; tok.Column is the 1-based column
 // of the opening `"`, and tok.Value is the partial content (no quotes).
@@ -1731,10 +1929,24 @@ func (p *Parser) diagUnterminatedString(tok lexer.Token) model.Diagnostic {
 	}
 }
 
+// diagNotImplemented reports a token the parser could not place.
+//
+// The message used to end with "use --parser=antlr for full support". No such
+// flag exists on any subcommand; the ANTLR parser was removed when parser v2
+// landed, and the text outlived it. Telling someone to pass a flag that does
+// not exist is worse than saying nothing, and the C3 fix routes a real and
+// reachable case here: a `{}` in an action's phrase means a trailing
+// `[...]` annotation on that line cannot be recognised, so its `[` arrives
+// unplaced.
 func (p *Parser) diagNotImplemented(tok lexer.Token) model.Diagnostic {
+	msg := fmt.Sprintf("unexpected %q here; this construct is not part of the Craft grammar and was skipped", tok.Value)
+	if tok.Value == "[" {
+		msg = "a trailing [operation] annotation is not recognised on a line whose phrase contains braces; " +
+			"move the `{...}` out of the phrase, or drop the annotation from this line"
+	}
 	return model.Diagnostic{
 		Code:     "craft/syntax/not-yet-implemented",
-		Message:  fmt.Sprintf("construct starting with %q is not yet supported by parser v2; use --parser=antlr for full support", tok.Value),
+		Message:  msg,
 		Severity: model.SeverityWarning,
 		Range:    tokenRange(tok),
 	}
@@ -2226,6 +2438,55 @@ func (p *Parser) parseRef() string {
 	}
 	p.builder.FinishNode()
 	return kind
+}
+
+// refShapedAhead reports whether the token at the cursor starts a MULTI-token
+// reference: an ident (or keyword-as-ident) immediately followed, with no
+// intervening whitespace and on the same line, by '/' (a qualified
+// `<domain>/<name>` path) or by ':' after a recognised kind word (a `kind:`
+// prefix, which the slot then rejects).
+//
+// Slots that accept a name use this to decide between parseRef and a plain
+// consumeAs(SyntaxKindIdent). Routing only genuinely ref-shaped names through
+// parseRef keeps the tree shape of a bare single-ident name exactly as it has
+// always been, which matters most for the action/trigger subject: that is
+// every action line in every existing .craft file, and every accessor that
+// reads it positionally. Requiring the '/' or ':' also keeps the cursor off
+// parseRef's zero-progress path for a bare keyword-as-ident.
+//
+// The colon case is deliberately narrower than parseRef's own kind-prefix
+// branch: only `bc:`/`domain:`/`service:`/`term:` count. An unrecognised
+// `foo: bar` in a subject slot is a typo, not a reference, and keeps
+// reporting the unexpected-token error it always did instead of being
+// silently absorbed into a ref node.
+func (p *Parser) refShapedAhead() bool {
+	first := p.peek()
+	if first.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(first.Type) {
+		return false
+	}
+	next := p.peekAt(1)
+	isKindPrefix := next.Type == lexer.TokenColon && isSlugKind(first.Value)
+	isPathSlash := next.Type == lexer.TokenError && next.Value == "/"
+	if !isKindPrefix && !isPathSlash {
+		return false
+	}
+	return next.Line == first.Line && adjacentTokens(first, next)
+}
+
+// parseNameSlot consumes one name slot: a qualified or kind-prefixed ref via
+// parseRef when the cursor is on a ref shape, else a single ident token. slot
+// names the position for the diagnostic raised when a `kind:` prefix is
+// present, e.g. "an action subject".
+func (p *Parser) parseNameSlot(slot string) []model.Diagnostic {
+	tok := p.peek()
+	if !p.refShapedAhead() {
+		p.consumeAs(SyntaxKindIdent)
+		return nil
+	}
+	if kind := p.parseRef(); kind != "" {
+		return []model.Diagnostic{p.diagKindPrefixInSlot(tok, kind, slot)}
+	}
+	return nil
 }
 
 // adjacentTokens reports whether b begins immediately where a ends, with no

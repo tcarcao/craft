@@ -29,11 +29,16 @@
               "id": "action_2",
               "type": "sync_action",
               "context": "Subscriptions",
-              "targetContext": "bc:re/billing",
-              "ref": "bc:re/billing",
+              "targetContext": "re/billing",
+              "ref": "re/billing",
+              "operation": {
+                "verb": "POST",
+                "payload": "/v1/charges",
+                "text": "POST /v1/charges"
+              },
               "connector": "for",
               "phrase": "a fresh charge attempt (1! \u0026 2!)",
-              "description": "Subscriptions asks bc:re/billing for a fresh charge attempt (1! \u0026 2!)",
+              "description": "Subscriptions asks re/billing for a fresh charge attempt (1! \u0026 2!)",
               "line": 16
             },
             {

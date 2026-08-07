@@ -154,9 +154,7 @@ go build -o /tmp/craft ./cmd/craft
 /tmp/craft lsp --stdio < testdata/lsp/initialize.jsonrpc
 
 # canonical-output dump (useful during Track A debugging)
-/tmp/craft check --parser=v2 --lsp-json path/to/file.craft
-/tmp/craft check --parser=antlr --lsp-json path/to/file.craft
-/tmp/craft diff-parsers path/to/file.craft
+/tmp/craft check --lsp-json path/to/file.craft
 ```
 
 macOS dogfood note: the VSIXs built by CI through S11a are unsigned (Q8 defers signing to S11b). After installing a dogfood VSIX on macOS, run once:

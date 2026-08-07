@@ -86,6 +86,20 @@ func refKindWord(text string) string {
 func slugShapeError(text string) string {
 	idx := strings.IndexByte(text, ':')
 	if idx < 0 {
+		// No `kind:` prefix. A '/' makes this the qualified `<domain>/<name>`
+		// form, which must be exactly two non-empty segments. Without a '/'
+		// the text is a bare short form or a dotted event ref and imposes no
+		// shape at all.
+		//
+		// This branch used to return "" unconditionally, which meant a
+		// slash-shaped name skipped shape validation entirely: "re/" and
+		// "re//billing" were accepted in silence in every ref slot.
+		if strings.ContainsRune(text, '/') {
+			parts := strings.Split(text, "/")
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return `a qualified reference must be exactly two non-empty segments, "<domain>/<name>"`
+			}
+		}
 		return ""
 	}
 	kind := text[:idx]
@@ -183,21 +197,40 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 	for _, uc := range file.UseCases() {
 		for _, sc := range uc.Scenarios() {
 			trigger := sc.Trigger()
-			if trigger.Kind() == "domain_listen" {
-				line := 0
-				if hasLI {
-					if whenTok := sc.When(); whenTok != nil {
-						line, _ = li.LineCol(whenTok.Offset())
-					}
+			triggerLine := 0
+			if hasLI {
+				if whenTok := sc.When(); whenTok != nil {
+					triggerLine, _ = li.LineCol(whenTok.Offset())
 				}
+			}
+
+			// Trigger subject: the actor of an external trigger or the context
+			// of a domain_listen one. Both read the same slot, and since
+			// Task 6b both accept the qualified <domain>/<name> form, so both
+			// need the same shape check. Checking only the domain_listen
+			// branch would miss the malformed cases: a stray '/' swallows the
+			// verb, which re-classifies the trigger as external.
+			subject := trigger.ContextName()
+			if subject == "" {
+				subject = trigger.ActorName()
+			}
+			if subject != "" {
+				col := 0
+				if hasLI {
+					col = trigger.ActorCol(li)
+				}
+				checkSlugRef(uri, subject, triggerLine, col, &diags, &refs)
+			}
+
+			if trigger.Kind() == "domain_listen" {
 				col := 0
 				if hasLI {
 					col = trigger.EventCol(li)
 				}
 				if trigger.EventIsString() {
-					diags = append(diags, deprecatedStringRefDiag(uri, "listens", trigger.EventValue(), line, col))
+					diags = append(diags, deprecatedStringRefDiag(uri, "listens", trigger.EventValue(), triggerLine, col))
 				} else {
-					checkSlugRef(uri, trigger.EventValue(), line, col, &diags, &refs)
+					checkSlugRef(uri, trigger.EventValue(), triggerLine, col, &diags, &refs)
 				}
 			}
 
@@ -205,6 +238,15 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 				line := 0
 				if hasLI {
 					line = action.Line(li)
+				}
+				// The subject slot exists for all four action kinds and, since
+				// Task 6b, accepts a qualified ref in each of them.
+				if subj := action.SubjectName(); subj != "" {
+					col := 0
+					if hasLI {
+						col = action.SubjectCol(li)
+					}
+					checkSlugRef(uri, subj, line, col, &diags, &refs)
 				}
 				switch action.Kind() {
 				case "async_action":
@@ -217,7 +259,9 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 					} else {
 						checkSlugRef(uri, action.EventValue(), line, col, &diags, &refs)
 					}
-				case "sync_action":
+				case "sync_action", "return_action":
+					// return_action's `to <target>` became a ref slot in
+					// Task 6b, so it is validated alongside the asks target.
 					col := 0
 					if hasLI {
 						col = action.TargetCol(li)

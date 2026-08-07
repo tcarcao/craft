@@ -1,5 +1,63 @@
 # Changelog
 
+## [2.16.0] — 2026-08-07
+
+**Why a minor version when this release contains breaking changes.** The breaks are in the DSL, not in the Go API. Everything added to `pkg/craft` here is additive (the `Operation` type, the `OpVerbGET` through `OpVerbQUERY` constants, `ProtocolVerbs()`), so no Go consumer stops compiling. Go's semantic import versioning is therefore satisfied and the module path stays `github.com/tcarcao/craft/v2`. Shipping a `v3.0.0` tag against a `/v2` module path would produce a release nobody can `go get`, and because `proxy.golang.org` caches immutably it could not be retracted afterwards; this repo already hit exactly that at v2.10.1. If you write `.craft` files, read `### Breaking` below as you would for a major release. If you only import the Go package, nothing here affects you.
+
+### Breaking
+- **`kind:` prefixes are rejected in every bounded-context slot.** `Subscriptions asks bc:re/billing for a charge` is now a parse error, `craft/syntax/kind-prefix-in-target`. This covers the `asks` target, the subject of all four action kinds, the `returns` target, and the `when ... listens` trigger context. Write the bare name (`Billing`) or the domain-qualified form (`re/billing`). The slot already implies a bounded context, the same rule `context_map` has always enforced for its endpoints.
+  - Migration is mechanical: strip the prefix. Two files in this repo were affected, both test fixtures.
+- **A line-final bracketed run on an action line is now an operation annotation, not prose.** A `[` that does not close at the end of the line is still swept into the phrase, so only lines that look like they carry an annotation change meaning.
+- **`craft/sema/malformed-slug` now reports shapes it previously ignored.** `re/ billing`, `re//billing`, and three-segment refs like `re/a/b` are errors. Previously slash-shaped names were never shape-checked at all, because the shape checker returned early on any text without a `:`. Files that parsed silently before may now report errors.
+
+### Added
+- **Operation annotations.** Any action may end with a bracketed annotation recording the wire call it corresponds to, which makes a `use_case` readable as an integration contract:
+
+      use_case "Retry a failed charge" {
+        when CRON detects a failed charge
+          Subscriptions asks Billing for a fresh charge attempt  [POST /v1/accounts/{id}/charges]
+          Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+          Billing asks Ledger to record the entry                [GRPC ledger.Postings/Create]
+          Gateway returns to Billing the authorization result    [200 AuthorizationResult]
+          Billing notifies billing.ChargeSucceeded               [TOPIC billing.v1.charge-succeeded]
+          Subscriptions marks the subscription active
+
+  Contents are hybrid: a recognised uppercase protocol verb (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `GRPC`, `TOPIC`, `QUERY`) is parsed as structure, and anything else is kept verbatim as an opaque payload, so `[op1/op2/op3]` and `[legacy-mainframe-txn-44]` are equally valid annotations. See `docs/decisions/action-operation-brackets.md` for the full design.
+  - Surfaces as `Action.Operation` (`{verb, payload, text}`). The field is omitted entirely when absent, so existing golden files are unchanged.
+- **Qualified `<domain>/<name>` references are accepted wherever a bounded context is named**, not only in the `asks` target: action subjects for all four kinds, the `returns` target, and the `when ... listens` trigger context.
+- **`craft/sema/ambiguous-bc` fires for use cases.** A bare bounded-context name owned by two or more domains was previously dropped silently from the dependency graph. It is now an error naming the candidates. It fires at four sites: `sync_action` subject and target, `async_action` subject, and the `domain_listen` trigger context. It does not fire for internal actions or for `returns`, which do not participate in the dependency graph.
+- **`craft/syntax/empty-op-annotation`.** An empty `[]` is an error rather than being silently dropped.
+- **`craft fmt`.** The formatter is now a CLI command, not only an LSP request. `craft fmt <files...>` formats in place; `craft fmt --check <files...>` writes nothing, lists every file that is not already formatted, and exits non-zero, which is the CI gate. Arguments are paths or globs (including `**`) resolved exactly as `craft validate` resolves them; directories are not walked. A file the parser cannot fully place is never rewritten, and is reported as skipped with the diagnostic that blocked it rather than being passed over in silence.
+- **`craft fmt` column-aligns operation annotations** per contiguous run within a scenario. A non-annotated action does not reset the run; a blank line or a new scenario does.
+- **Public API additions in `pkg/craft`**: the `Operation` type alias, the `OpVerbGET` through `OpVerbQUERY` constants, and `ProtocolVerbs()`.
+- **Editor support**: protocol verb completion at the head of an annotation, and distinct semantic-token classification so the annotation recedes from the business prose.
+
+### Fixed
+- **Formatting now guarantees it changes whitespace and nothing else.** Every non-whitespace byte of the input appears in the output, in the same order. The check runs inside `FormatDocument` on every call: if the output would lose, duplicate or reorder any content, the input is returned untouched and a `craft/internal/formatter-content-drift` diagnostic says so. `craft fmt` reports such a file as skipped instead of writing it, and `craft fmt` additionally reparses its own output before touching the disk.
+  - This is the structural fix, not another bug fix. `FormatDocument` rebuilds each declaration from typed accessors, so every construct needs its own branch and a construct without one was dropped in silence. That is how twelve separate defects arose. The guarantee turns the next missed construct into a harmless no-op that reports itself, rather than a file quietly losing content.
+- **`textDocument/formatting` had twelve pre-existing defects, all found while building this release.** Each silently mutated a valid document, and none had test coverage before now. Formatting is now verified over **every** `.craft` file in the repository, not just the hand-written fixtures: whitespace-only, reparse-clean, idempotent, model-preserving and comment-preserving.
+  - Format Document deleted operation annotations outright.
+  - Format Document rewrote typed event refs into the deprecated quoted form, so `Billing notifies billing.ChargeSucceeded` became `notifies "billing.ChargeSucceeded"` and then tripped `craft/lint/deprecated-string-ref`. Present since the typed-ref form was introduced.
+  - Format Document reflowed `returns to <target> <phrase>` such that the target was lost from the reparsed model.
+  - Format Document mangled punctuation in trigger phrases, so `when User creates (1! & 2!)` became `( 1 ! & 2 ! )`.
+  - Format Document corrupted qualified references, rendering `when re/billing listens vas.VasApplied` as `when re / billing listens vas.VasApplied`, which no longer parsed.
+  - Format Document corrupted every `context_map` and `glossary` block: it split qualified endpoints and term nodes (`billing/Invoice` became `billing / Invoice`, and a three-segment `re/billing/Invoice` became `re / billing / Invoice`) and collapsed every statement in the block onto one line. Both make the block unparseable. These are the blocks where qualified refs are the native spelling, so they were the worst hit.
+  - Format Document split a qualified value in any field, so a service's `repo: olxeu/realestate/subscriptions` came back as `olxeu / realestate / subscriptions`. Fixed in the shared renderer rather than per block, so exposure and domain values are covered too.
+  - Format Document deleted every `tags { }` block in a use case, along with the qualified refs inside it.
+  - Format Document deleted every comment in the document. Line and block comments are trivia, and every renderer read the token list that excludes trivia. `internal/visualizer/testdata/vas.craft` lost all 47 of its comments to a single format request.
+  - Format Document deleted a comment on the last line of a file, and truncated a file that was nothing but a comment to zero bytes. Anything after the last real token is folded into a single whitespace token, so those comments carry no comment token kind and no filter on kind could see them.
+  - Format Document deleted a comment written between a field's `:` or `,` and its value, as in `repo: // note` with the value on the next line.
+  - Format Document reported success while doing all of the above. `craft fmt` exited 0 on a file it had just emptied.
+- **Format Document no longer rewrites a document the parser could not fully place.** A construct the parser cannot place reports `craft/syntax/not-yet-implemented`, which is only warning-severity, so it slipped past the formatter's error-only bail-out and the tree got re-rendered anyway, dropping and duplicating text. That bail-out now covers the code.
+- **Format Document no longer panics on an unbalanced `}`.** A stray closing brace produces only a warning, so it reached the indentation logic at depth 0 and crashed with `strings: negative Repeat count`, taking down the request.
+
+### Notes
+- **No generated diagram changes.** No visualizer reads `Action.Operation`, exactly as none read `Action.Ref`. Every generator still renders `Context`, `TargetContext`, `Connector`, and `Phrase` only. The annotation is stored for tooling that consumes the contract; rendering it is a separate decision.
+- The `<phrase>` tail still accepts `! & * / # ? +` unquoted. Only a line-final bracketed run is now reserved.
+- **Known limitation: braces in a phrase disable the annotation on that line.** A balanced `{...}` in an action's phrase and a trailing `[...]` annotation cannot both be recognised on the same line, because the annotation scan and the phrase scan have to agree on where the line ends and the phrase scan stops at the first `}`. `Billing asks Gateway to charge {amount} [POST /pay]` parses with a phrase of `charge {amount` and reports the rest, rather than as an annotated action. Braces **inside** the annotation are fine, which is the case that matters in practice: `[POST /v1/accounts/{id}/charges]` parses correctly. The diagnostic now says which of the two to move.
+- **Formatting canonicalises layout, and preserves everything inside a statement verbatim.** Indentation becomes 2 spaces per level, each statement gets its own line, top-level declarations are separated by a blank line, and a comment gets a line of its own at the indent of what it precedes. Within a statement, nothing is respaced: `A asks B for (1! & 2!)` and `billing   customer_supplier   vas` keep the spacing you wrote. This is why files written with 4-space indent or wrapped `contexts:` continuations are reported by `craft fmt --check`. They are not broken, they are simply not in canonical form.
+- **Known limitation: qualified `<domain>/<name>` references have no hover or go-to-definition.** `internal/sema` resolves bounded contexts by bare name, so `re/billing` resolves to nothing and the editor offers nothing on it. This is awkward now that `craft/sema/ambiguous-bc` tells authors to qualify an ambiguous name: the spelling the tool recommends is the one the tool cannot navigate. Pre-existing for `asks` targets, and now reachable in more slots because qualified refs are accepted in more slots. Diagnostics, parsing, and diagram generation are unaffected; only navigation is. A follow-up will teach the resolver the qualified form.
+
 ## [2.15.2] — 2026-08-05
 
 ### Fixed

@@ -419,7 +419,7 @@ func TestProse_SpecialCharsUnquoted(t *testing.T) {
 	}
 	act := actions[0]
 	// Note: "for" is the sync_action connector word (see ConnectorValue()/
-	// isConnectorWord), which PhraseText() has always excluded — Description()
+	// isConnectorWord), which PhraseText() has always excluded, and SourceText()
 	// re-adds it separately (see TestActionDecl_Description_ConnectorPreservation).
 	// So the phrase here is everything after "for": the special characters.
 	if got := act.PhraseText(); got != "1! & 2! and/maybe *" {
@@ -434,7 +434,7 @@ func TestProse_SpecialCharsUnquoted(t *testing.T) {
 // trailing "// TODO" preceded by whitespace is NOT swept into the action's
 // prose phrase (unlike bare TokenError punctuation, e.g. a lone '/' — see
 // TestProse_SpecialCharsUnquoted): collectPhrase stops at the comment token,
-// so the action's Description() reads "Auth checks x" and the comment
+// so the action's SourceText() reads "Auth checks x" and the comment
 // survives as trivia elsewhere in the tree.
 func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 	src := `use_case "x" {
@@ -463,8 +463,8 @@ func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 	if got := act.PhraseText(); got != "x" {
 		t.Fatalf("phrase = %q, want %q (comment must not be swept into prose)", got, "x")
 	}
-	if got := act.Description(); got != "Auth checks x" {
-		t.Fatalf("description = %q, want %q", got, "Auth checks x")
+	if got := act.SourceText(); got != "Auth checks x" {
+		t.Fatalf("source text = %q, want %q", got, "Auth checks x")
 	}
 	// The "// TODO" comment must still appear as trivia somewhere in the tree.
 	hasComment := false
@@ -484,6 +484,12 @@ func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 // asserts a kind-prefixed slug (bc:re/billing) round-trips exactly through
 // TargetName() — NOT truncated to the kind word "bc", which is what a naive
 // ChildToken(SyntaxKindIdent)/Name() call on the ref node would yield.
+//
+// Since Task 5, a `bc:` prefix in the asks target slot is itself rejected
+// (the slot already implies a bounded context), so this fixture now also
+// carries exactly that one diagnostic. TargetName() must still round-trip
+// the full, untruncated text: Task 5 only adds a diagnostic, it does not
+// change what parseRef consumes.
 func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
 	src := `use_case "x" {
   when Subscriptions listens vas.VasApplied
@@ -491,8 +497,8 @@ func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
     Fulfillment notifies vas.VasFulfilled
 }`
 	gn, _, diags := syntax.Parse(src)
-	if len(diags) != 0 {
-		t.Fatalf("unexpected diagnostics: %v", diags)
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/kind-prefix-in-target" {
+		t.Fatalf("expected exactly one craft/syntax/kind-prefix-in-target diagnostic, got: %v", diags)
 	}
 	root := syntax.Root(gn)
 	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
@@ -886,5 +892,555 @@ func TestServiceAnchors_OpsLevelRemoved(t *testing.T) {
 	}
 	if got := doc.Services[0].CatalogRef; got != "" {
 		t.Errorf("CatalogRef = %q, want %q (removed spelling must not populate the anchor)", got, "")
+	}
+}
+
+func TestOpAnnotation_AllActionForms(t *testing.T) {
+	src := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt [POST /v1/charges]
+    Billing notifies billing.ChargeSucceeded [TOPIC billing.v1.charged]
+    Gateway returns to Billing the authorization result [200 AuthResult]
+    Subscriptions marks the subscription active [op1/op2/op3]
+}`
+	tree := astParse(src)
+	actions := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) != 4 {
+		t.Fatalf("expected 4 actions, got %d", len(actions))
+	}
+	for i, a := range actions {
+		if a.OpAnnotation() == nil {
+			t.Errorf("action %d (%s): expected an op annotation, got none", i, a.Kind())
+		}
+	}
+}
+
+func TestOpAnnotation_Absent(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Error("expected no op annotation")
+	}
+	if got := a.PhraseText(); got != "record the entry" {
+		t.Errorf("PhraseText() = %q, want %q", got, "record the entry")
+	}
+}
+
+// A `[` in prose that does not close at end of line stays prose. This preserves
+// today's sweep-everything phrase behaviour for any line not using the feature.
+func TestOpAnnotation_UnclosedBracketStaysProse(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry [not closed
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Error("an unclosed [ must not open an annotation")
+	}
+	if got := a.PhraseText(); got != "record the entry [not closed" {
+		t.Errorf("PhraseText() = %q, want the bracket swept as prose", got)
+	}
+}
+
+// When the line has more than one `[`, the LAST one whose `]` ends the line
+// opens the annotation; earlier brackets stay prose.
+func TestOpAnnotation_LastBracketWins(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record [batch] entries [POST /v1/entries]
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() == nil {
+		t.Fatal("expected an op annotation")
+	}
+	if got := a.PhraseText(); got != "record [batch] entries" {
+		t.Errorf("PhraseText() = %q, want %q", got, "record [batch] entries")
+	}
+	if got := a.OpText(); got != "POST /v1/entries" {
+		t.Errorf("OpText() = %q, want %q", got, "POST /v1/entries")
+	}
+}
+
+func TestOpAnnotation_RoundTripsExactly(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c  [POST /v1/x?q=1]\n}"
+	g, _, _ := syntax.Parse(src)
+	if got := reassembleGreen(g); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+}
+
+// A `}` inside a templated path payload (brace depth > 0) must not be mistaken
+// for the enclosing block's closing brace. Regression for a reviewer-found bug
+// where opAnnotationStart broke the scan unconditionally on any TokenRBrace,
+// which both defeated annotation detection and, downstream, left the `}` of
+// `{id}` unconsumed so it closed the use_case block early.
+func TestOpAnnotation_TemplatedPathBraces(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    A asks B for c [POST /v1/accounts/{id}/charges]
+}`
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("expected no diagnostics, got %v", diags)
+	}
+	tree := syntax.Root(g)
+	ucs := syntax.AsFile(tree).UseCases()
+	if len(ucs) != 1 {
+		t.Fatalf("expected 1 use_case (the `}` in {id} must not close the block early), got %d", len(ucs))
+	}
+	actions := ucs[0].Scenarios()[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	a := actions[0]
+	if a.OpAnnotation() == nil {
+		t.Fatal("expected an op annotation")
+	}
+	if got := a.OpText(); got != "POST /v1/accounts/{id}/charges" {
+		t.Errorf("OpText() = %q, want %q", got, "POST /v1/accounts/{id}/charges")
+	}
+}
+
+// Multiple and query-string templated payloads exercise the same depth
+// tracking as the single-segment case above.
+func TestOpAnnotation_TemplatedPathBraces_Variants(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want string
+	}{
+		{"two segments", "A asks B for c [POST /v1/{a}/{b}/x]", "POST /v1/{a}/{b}/x"},
+		{"query string", "A asks B for c [GET /v1/products?q={term}]", "GET /v1/products?q={term}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			g, _, diags := syntax.Parse(src)
+			if len(diags) != 0 {
+				t.Fatalf("expected no diagnostics, got %v", diags)
+			}
+			ucs := syntax.AsFile(syntax.Root(g)).UseCases()
+			if len(ucs) != 1 {
+				t.Fatalf("expected 1 use_case, got %d", len(ucs))
+			}
+			actions := ucs[0].Scenarios()[0].Actions()
+			if len(actions) != 1 {
+				t.Fatalf("expected 1 action, got %d", len(actions))
+			}
+			if got := actions[0].OpText(); got != tc.want {
+				t.Errorf("OpText() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A BALANCED `{...}` in the phrase, on a line that also ends in `]`, must not
+// be swallowed by the annotation scan. collectPhrase returns unconditionally
+// at the first `}`, so if opAnnotationStart tracked depth across it the two
+// would disagree about where the line ends: opAnnotationStart returned the `[`
+// index while collectPhrase stopped at the `}`, and parseOpAnnotation then
+// anchored on the `}` and consumed it as the opening bracket. The result was
+// zero diagnostics, an Operation of "[POST /pay", and a formatter that emitted
+// `charge {amount  [[POST /pay]` on a document reporting clean.
+//
+// Braces are therefore only honoured after a `[` has been seen. The phrase
+// brace reverts to the pre-feature behaviour: no annotation, and the
+// not-yet-implemented warning that flags the leftover `[`.
+func TestOpAnnotation_BalancedBraceInPhraseDoesNotOpenAnnotation(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Gateway to charge {amount} [POST /pay]
+}`
+	g, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatal("expected a diagnostic for the unconsumed bracket, got none")
+	}
+	tree := syntax.Root(g)
+	actions := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if op := actions[0].OpAnnotation(); op != nil {
+		t.Errorf("a phrase brace must not open an annotation, got OpText() = %q", actions[0].OpText())
+	}
+	if got := reassembleGreen(g); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+
+	// The message must be actionable. It used to end with "use --parser=antlr
+	// for full support"; that flag was removed along with the ANTLR parser, and
+	// telling someone to pass a flag that does not exist is worse than saying
+	// nothing. This is the case the C3 fix routes here, so it gets specific
+	// advice rather than the generic wording.
+	if strings.Contains(diags[0].Message, "--parser=") {
+		t.Errorf("message names a flag that does not exist: %q", diags[0].Message)
+	}
+	if !strings.Contains(diags[0].Message, "braces") {
+		t.Errorf("message should explain the brace limitation, got %q", diags[0].Message)
+	}
+}
+
+// notifies has no phrase, so a trailing annotation is only recognised when it
+// starts immediately after the event (lookahead index 0). Regression for a
+// reviewer-found bug where a stray token between the event and `[` (like a
+// malformed multi-word event) still satisfied `opAnnotationStart(...) >= 0`,
+// mis-anchoring parseOpAnnotation on the stray token instead of `[`.
+func TestOpAnnotation_NotifiesStrayTokenBeforeBracketStaysUnopened(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    A notifies Order Created [TOPIC t]
+}`
+	tree := astParse(src)
+	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpAnnotation() != nil {
+		t.Errorf("expected no op annotation when a stray token precedes `[`, got OpText() = %q", a.OpText())
+	}
+}
+
+// An empty `[]` annotation is invalid input, not an absent one: it must not be
+// silently swallowed. Regression for a reviewer-found bug where
+// opAnnotationStart treated `[]` as a valid annotation opener (the line ends
+// in `]`) but parseOpAnnotation swept up zero inner tokens, so OpText() came
+// back "" and the annotation vanished from both diagnostics and the model
+// with no trace it was ever typed.
+//
+// This exercises `asks` specifically because parseAsksAction was one of three
+// call sites (with parseReturnsAction and parseAction's internal-action
+// branch) that discarded parseOpAnnotation's returned diagnostics.
+func TestOpAnnotation_EmptyBracketsDiagnostic(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry []
+}`
+	_, _, diags := syntax.Parse(src)
+	var found *model.Diagnostic
+	for i, d := range diags {
+		if d.Code == "craft/syntax/empty-op-annotation" {
+			found = &diags[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("want a craft/syntax/empty-op-annotation diagnostic for `[]`, got %v", diags)
+	}
+	if found.Severity != model.SeverityError {
+		t.Errorf("severity = %v, want SeverityError", found.Severity)
+	}
+}
+
+// TestAsksTarget_RejectsKindPrefix is the Task 5 TDD lock: an asks target
+// slot already implies a bounded context (the same rule context_map's
+// endpoint-kind validation enforces), so a `kind:` prefix there is redundant
+// at best and misleading at worst. Every recognised slug kind word must be
+// rejected.
+func TestAsksTarget_RejectsKindPrefix(t *testing.T) {
+	cases := []string{"bc:re/billing", "domain:re/monetization", "service:billing-api", "term:billing/dunning"}
+	for _, target := range cases {
+		t.Run(target, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    A asks " + target + " for c\n}"
+			_, _, diags := syntax.Parse(src)
+			found := false
+			for _, d := range diags {
+				if d.Code == "craft/syntax/kind-prefix-in-target" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected craft/syntax/kind-prefix-in-target for %q, got %+v", target, diags)
+			}
+		})
+	}
+}
+
+// TestAsksTarget_QualifiedPathStillLegal confirms the rejection in
+// TestAsksTarget_RejectsKindPrefix is scoped to the `kind:` prefix only: the
+// qualified `<domain>/<name>` form and a bare bounded-context name both stay
+// legal, with no error diagnostic and no truncation of TargetName().
+func TestAsksTarget_QualifiedPathStillLegal(t *testing.T) {
+	for _, target := range []string{"re/billing", "Billing"} {
+		t.Run(target, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    A asks " + target + " for c\n}"
+			tree, _, diags := syntax.Parse(src)
+			for _, d := range diags {
+				if d.Severity == "error" {
+					t.Errorf("unexpected error for %q: [%s] %s", target, d.Code, d.Message)
+				}
+			}
+			a := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.TargetName(); got != target {
+				t.Errorf("TargetName() = %q, want %q", got, target)
+			}
+		})
+	}
+}
+
+// --- Task 6b: qualified refs in the subject and trigger-context slots ---
+
+// qualifiedSubjectSrc exercises a qualified `<domain>/<name>` subject in every
+// action kind plus the domain_listen trigger context, with a qualified
+// `returns to` target thrown in. It is shared by the accessor test and the
+// round-trip test below so both cover exactly the same shapes.
+const qualifiedSubjectSrc = `use_case "X" {
+  when re/billing listens vas.VasApplied
+    re/billing asks Ledger to record the entry [POST /v1/entries]
+    re/billing notifies billing.ChargeSucceeded
+    re/subscriptions returns to re/billing charge result
+    re/billing validates invoice format
+}`
+
+// TestQualifiedSubject_AllActionKinds is the Task 6b regression lock. A
+// qualified subject is three flat tokens (re, /, billing) where every action
+// accessor used to assume exactly one, so this asserts not just SubjectName()
+// but PhraseText(), ConnectorValue(), VerbValue() and SourceText(). Those are
+// what the token-index arithmetic breaks if the subject span is not skipped.
+func TestQualifiedSubject_AllActionKinds(t *testing.T) {
+	tree, _, diags := syntax.Parse(qualifiedSubjectSrc)
+	for _, d := range diags {
+		if d.Severity == model.SeverityError {
+			t.Fatalf("unexpected error diagnostic: [%s] %s", d.Code, d.Message)
+		}
+	}
+	sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+
+	trigger := sc.Trigger()
+	if got := trigger.Kind(); got != "domain_listen" {
+		t.Fatalf("trigger kind = %q, want domain_listen", got)
+	}
+	if got := trigger.ContextName(); got != "re/billing" {
+		t.Errorf("ContextName() = %q, want %q", got, "re/billing")
+	}
+	if got := trigger.EventValue(); got != "vas.VasApplied" {
+		t.Errorf("trigger EventValue() = %q, want %q", got, "vas.VasApplied")
+	}
+
+	actions := sc.Actions()
+	if len(actions) != 4 {
+		t.Fatalf("want 4 actions, got %d", len(actions))
+	}
+
+	asks := actions[0]
+	if got := asks.Kind(); got != "sync_action" {
+		t.Fatalf("actions[0] kind = %q, want sync_action", got)
+	}
+	if got := asks.SubjectName(); got != "re/billing" {
+		t.Errorf("asks SubjectName() = %q, want %q", got, "re/billing")
+	}
+	if got := asks.TargetName(); got != "Ledger" {
+		t.Errorf("asks TargetName() = %q, want %q", got, "Ledger")
+	}
+	if got := asks.ConnectorValue(); got != "to" {
+		t.Errorf("asks ConnectorValue() = %q, want %q", got, "to")
+	}
+	if got := asks.PhraseText(); got != "record the entry" {
+		t.Errorf("asks PhraseText() = %q, want %q", got, "record the entry")
+	}
+	if got := asks.OpText(); got != "POST /v1/entries" {
+		t.Errorf("asks OpText() = %q, want %q", got, "POST /v1/entries")
+	}
+	if got := asks.SourceText(); got != "re/billing asks Ledger to record the entry [POST /v1/entries]" {
+		t.Errorf("asks SourceText() = %q", got)
+	}
+
+	notifies := actions[1]
+	if got := notifies.Kind(); got != "async_action" {
+		t.Fatalf("actions[1] kind = %q, want async_action", got)
+	}
+	if got := notifies.SubjectName(); got != "re/billing" {
+		t.Errorf("notifies SubjectName() = %q, want %q", got, "re/billing")
+	}
+	if got := notifies.EventValue(); got != "billing.ChargeSucceeded" {
+		t.Errorf("notifies EventValue() = %q, want %q", got, "billing.ChargeSucceeded")
+	}
+	if got := notifies.SourceText(); got != "re/billing notifies billing.ChargeSucceeded" {
+		t.Errorf("notifies SourceText() = %q", got)
+	}
+
+	returns := actions[2]
+	if got := returns.Kind(); got != "return_action" {
+		t.Fatalf("actions[2] kind = %q, want return_action", got)
+	}
+	if got := returns.SubjectName(); got != "re/subscriptions" {
+		t.Errorf("returns SubjectName() = %q, want %q", got, "re/subscriptions")
+	}
+	if got := returns.TargetName(); got != "re/billing" {
+		t.Errorf("returns TargetName() = %q, want %q", got, "re/billing")
+	}
+	if got := returns.PhraseText(); got != "charge result" {
+		t.Errorf("returns PhraseText() = %q, want %q", got, "charge result")
+	}
+	if got := returns.SourceText(); got != "re/subscriptions returns to re/billing charge result" {
+		t.Errorf("returns SourceText() = %q", got)
+	}
+
+	internal := actions[3]
+	if got := internal.Kind(); got != "internal_action" {
+		t.Fatalf("actions[3] kind = %q, want internal_action", got)
+	}
+	if got := internal.SubjectName(); got != "re/billing" {
+		t.Errorf("internal SubjectName() = %q, want %q", got, "re/billing")
+	}
+	if got := internal.VerbValue(); got != "validates" {
+		t.Errorf("internal VerbValue() = %q, want %q", got, "validates")
+	}
+	if got := internal.ConnectorValue(); got != "" {
+		t.Errorf("internal ConnectorValue() = %q, want empty", got)
+	}
+	if got := internal.PhraseText(); got != "invoice format" {
+		t.Errorf("internal PhraseText() = %q, want %q", got, "invoice format")
+	}
+	if got := internal.SourceText(); got != "re/billing validates invoice format" {
+		t.Errorf("internal SourceText() = %q", got)
+	}
+}
+
+// TestQualifiedSubject_Columns locks the 1-based columns the LSP and sema
+// report for a qualified subject and trigger context: they must point at the
+// first character of the ref, not at some interior segment.
+func TestQualifiedSubject_Columns(t *testing.T) {
+	tree, li, _ := syntax.Parse(qualifiedSubjectSrc)
+	sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+	if got := sc.Trigger().ActorCol(li); got != 8 {
+		t.Errorf("trigger ActorCol() = %d, want 8", got)
+	}
+	actions := sc.Actions()
+	if got := actions[0].SubjectCol(li); got != 5 {
+		t.Errorf("asks SubjectCol() = %d, want 5", got)
+	}
+	if got := actions[0].Line(li); got != 3 {
+		t.Errorf("asks Line() = %d, want 3", got)
+	}
+	if got := actions[2].TargetCol(li); got != 33 {
+		t.Errorf("returns TargetCol() = %d, want 33", got)
+	}
+}
+
+// TestQualifiedSubject_RoundTrip proves the new multi-token subject slot is
+// still lossless: every token reaches the tree via consumeAs, so reassembling
+// the green tree reproduces the source byte for byte.
+func TestQualifiedSubject_RoundTrip(t *testing.T) {
+	g, _, _ := syntax.Parse(qualifiedSubjectSrc)
+	if got := reassembleGreen(g); got != qualifiedSubjectSrc {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", qualifiedSubjectSrc, got)
+	}
+}
+
+// TestQualifiedSubject_RejectsKindPrefix mirrors TestAsksTarget_RejectsKindPrefix
+// for the three slots Task 6b opened up. A `kind:` prefix stays rejected there
+// for the same reason it is rejected in the asks target: the slot already
+// implies a bounded context. The full prefixed text must still survive in the
+// accessor, since the diagnostic is additive and does not change what parseRef
+// consumes.
+func TestQualifiedSubject_RejectsKindPrefix(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want func(syntax.ScenarioDecl) string
+		text string
+	}{
+		{
+			name: "action subject",
+			src:  "use_case \"X\" {\n  when U does x\n    bc:re/billing asks Ledger to record\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].SubjectName() },
+		},
+		{
+			// "domain" lexes as a hard keyword, not TokenIdent, so this row
+			// covers the keyword-as-ident branch of refShapedAhead that the
+			// bc: rows above never reach.
+			name: "action subject with hard-keyword kind word",
+			src:  "use_case \"X\" {\n  when U does x\n    domain:re/billing asks Ledger to record\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].SubjectName() },
+			text: "domain:re/billing",
+		},
+		{
+			name: "trigger context",
+			src:  "use_case \"X\" {\n  when bc:re/billing listens vas.VasApplied\n    A does x\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Trigger().ContextName() },
+		},
+		{
+			name: "returns target",
+			src:  "use_case \"X\" {\n  when U does x\n    A returns to bc:re/billing charge result\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].TargetName() },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, _, diags := syntax.Parse(tc.src)
+			found := false
+			for _, d := range diags {
+				if d.Code == "craft/syntax/kind-prefix-in-target" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected craft/syntax/kind-prefix-in-target, got %+v", diags)
+			}
+			sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+			wantText := tc.text
+			if wantText == "" {
+				wantText = "bc:re/billing"
+			}
+			if got := tc.want(sc); got != wantText {
+				t.Errorf("accessor = %q, want %q (must not be truncated to the kind word)", got, wantText)
+			}
+		})
+	}
+}
+
+// TestQualifiedExternalTriggerActor covers the external trigger form. The
+// trigger subject is consumed before its verb is known, so routing it through
+// parseRef makes a qualified actor parse too; ActorName() and the trigger
+// phrase must both stay correct across the wider subject.
+func TestQualifiedExternalTriggerActor(t *testing.T) {
+	src := "use_case \"X\" {\n  when re/billing creates the invoice\n    A does x\n}"
+	tree, _, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == model.SeverityError {
+			t.Fatalf("unexpected error diagnostic: [%s] %s", d.Code, d.Message)
+		}
+	}
+	trigger := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0].Trigger()
+	if got := trigger.Kind(); got != "external" {
+		t.Fatalf("trigger kind = %q, want external", got)
+	}
+	if got := trigger.ActorName(); got != "re/billing" {
+		t.Errorf("ActorName() = %q, want %q", got, "re/billing")
+	}
+	if got := trigger.PhraseText(); got != "invoice" {
+		t.Errorf("PhraseText() = %q, want %q", got, "invoice")
+	}
+}
+
+// TestBareSubject_StillUnwrapped guards the narrow scope of Task 6b: an
+// ordinary single-ident subject must keep its existing shape and accessor
+// results, since that is every action line in every existing .craft file.
+func TestBareSubject_StillUnwrapped(t *testing.T) {
+	src := "use_case \"X\" {\n  when User creates Account\n    Auth asks DB to check email\n    Auth validates email format\n}"
+	tree, _, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == model.SeverityError {
+			t.Fatalf("unexpected error diagnostic: [%s] %s", d.Code, d.Message)
+		}
+	}
+	sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+	if got := sc.Trigger().ActorName(); got != "User" {
+		t.Errorf("ActorName() = %q, want User", got)
+	}
+	actions := sc.Actions()
+	if got := actions[0].SubjectName(); got != "Auth" {
+		t.Errorf("SubjectName() = %q, want Auth", got)
+	}
+	if got := actions[0].PhraseText(); got != "check email" {
+		t.Errorf("PhraseText() = %q, want %q", got, "check email")
+	}
+	if got := actions[1].VerbValue(); got != "validates" {
+		t.Errorf("VerbValue() = %q, want validates", got)
+	}
+	if got := actions[1].PhraseText(); got != "email format" {
+		t.Errorf("PhraseText() = %q, want %q", got, "email format")
 	}
 }

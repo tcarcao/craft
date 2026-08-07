@@ -216,9 +216,11 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
-			// CompletionProvider advertises ':' as a completion trigger character.
+			// CompletionProvider advertises ':' and '[' as completion trigger
+			// characters. '[' fires protocol-verb completion at an operation
+			// annotation's head position.
 			CompletionProvider: &protocol.CompletionOptions{
-				TriggerCharacters: []string{":"},
+				TriggerCharacters: []string{":", "["},
 			},
 			// ExecuteCommandProvider lists the custom LSP commands we handle.
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
@@ -1853,6 +1855,13 @@ var semanticTokenLegend = []string{
 	"craft-deployment-target",    // 42
 	"craft-domain-list",          // 43
 	"craft-language-value",       // 44
+	// Entries 45-46 classify operation annotations (`[POST /v1/...]`). They use
+	// the LSP-standard type names, not a craft-* custom type: every default
+	// client theme already maps "keyword" and "string" to sane colors, so the
+	// annotation visually recedes from business prose with no client-side
+	// scope configuration, unlike the craft-* types above.
+	"keyword", // 45: the recognised protocol verb (SyntaxKindOpVerb)
+	"string",  // 46: opaque annotation payload words
 }
 
 // semanticLegendIndex maps token type name → legend index for O(1) lookup.
@@ -1977,6 +1986,10 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindComma:          "craft-comma",
 	syntax.SyntaxKindArrow:          "craft-deployment-arrow",
 	syntax.SyntaxKindPercentage:     "craft-percentage",
+	// SyntaxKindOpVerb only ever occurs at the head of an operation annotation,
+	// so it needs no parent-context check here (unlike the opaque payload
+	// idents, which classifyActionIdents handles in Pass 2).
+	syntax.SyntaxKindOpVerb: "keyword",
 }
 
 func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
@@ -2299,18 +2312,20 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			// entity.name.type, connector words like "to" → keyword.operator).
 			phraseWordIdx := s.semanticTokenTypeIndex("craft-phrase-word")
 			if phraseWordIdx >= 0 && trigger.Kind() == "external" {
-				subjectSkipped := false
-				for _, tok := range trigger.Tokens() {
+				// The subject is already handled above, so skip its tokens.
+				// A qualified subject (re/billing) is more than one token, so
+				// take the span from the AST rather than skipping just one.
+				subjectSpan := trigger.SubjectSpan()
+				for i, tok := range trigger.Tokens() {
+					if i < subjectSpan {
+						continue
+					}
 					if tok.Kind() != syntax.SyntaxKindIdent {
 						continue
 					}
 					tokLine, _, tokOk := tokPosVal(tok)
 					if !tokOk {
 						continue
-					}
-					if !subjectSkipped {
-						subjectSkipped = true
-						continue // subject already handled above
 					}
 					val := tok.Text()
 					if len(val) == 0 {
@@ -2398,6 +2413,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 	verbIdx := s.semanticTokenTypeIndex("craft-regular-verb")
 	connIdx := s.semanticTokenTypeIndex("craft-connector-word")
 	phraseIdx := s.semanticTokenTypeIndex("craft-phrase-word")
+	opPayloadIdx := s.semanticTokenTypeIndex("string")
 
 	toks := action.Tokens()
 	var result []semanticToken
@@ -2424,24 +2440,54 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		return l
 	}
 
+	// emitPhraseWord classifies tok as either an ordinary phrase word or, when
+	// tok belongs to a trailing operation annotation, opaque payload text.
+	// Annotation payload tokens can be a bare ident ("charges") or a number
+	// ("200", as in the design doc's own `[200 AuthorizationResult]` example);
+	// both get the same payload type, so the whole annotation reads as one
+	// visually distinct unit rather than half receding and half not. Outside
+	// an annotation, only idents are phrase words: a number in an ordinary
+	// phrase is intentionally left unclassified here, matching the pre-existing
+	// (and out of scope) behavior for SyntaxKindNumber everywhere else in the
+	// grammar, such as arch modifier values. The verb itself (SyntaxKindOpVerb)
+	// and the brackets are not SyntaxKindIdent or SyntaxKindNumber, so they
+	// never reach this function; they are classified in Pass 1
+	// (syntaxKindToCraftToken).
+	emitPhraseWord := func(tok syntax.SyntaxToken) {
+		inAnnotation := false
+		if parent := tok.Parent(); parent != nil && parent.Kind() == syntax.SyntaxKindOpAnnotation {
+			inAnnotation = true
+		}
+		switch {
+		case inAnnotation:
+			emit(tok, opPayloadIdx)
+		case tok.Kind() == syntax.SyntaxKindIdent:
+			emit(tok, phraseIdx)
+		}
+	}
+
 	switch kind {
 	case "internal_action":
-		// toks: [subject, verb, (connector?), phrase...]
-		if len(toks) < 2 {
+		// toks: [subject..., verb, (connector?), phrase...]
+		// The subject may be a multi-token Ref (e.g. "re/billing"), so take the
+		// verb token and the connector position from the AST rather than
+		// assuming the subject is exactly one token wide.
+		verbTok := action.VerbToken()
+		if verbTok == nil {
 			return nil
 		}
-		emit(toks[1], verbIdx) // verb
-		start := 2
+		emit(*verbTok, verbIdx)
+		start := action.SlotEndIndex()
 		// connector is always SyntaxKindIdent for internal_action (parser guarantee)
 		if start < len(toks) && isConnectorWord(toks[start].Text()) && tokLineNum(toks[start]) == actionLine {
 			emit(toks[start], connIdx)
 			start++
 		}
 		for _, tok := range toks[start:] {
-			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
+			if !isPhraseOrPayloadKind(tok.Kind()) || tokLineNum(tok) != actionLine {
 				continue
 			}
-			emit(tok, phraseIdx)
+			emitPhraseWord(tok)
 		}
 
 	case "sync_action":
@@ -2462,10 +2508,10 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		}
 		start := action.PhraseStartIndex()
 		for _, tok := range toks[start:] {
-			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
+			if !isPhraseOrPayloadKind(tok.Kind()) || tokLineNum(tok) != actionLine {
 				continue
 			}
-			emit(tok, phraseIdx)
+			emitPhraseWord(tok)
 		}
 
 	case "return_action":
@@ -2477,27 +2523,35 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		// whether a target is present. Pass 1's kind→type table already
 		// classifies SyntaxKindKwTo as craft-connector-word, so re-emitting
 		// it here would double-emit it, and the real connector word would
-		// never be classified. Return-action targets are always a single
-		// token (never a multi-token slug ref), so walk positionally
-		// instead, mirroring phraseStartIndex's return_action branch in
-		// internal/syntax/ast.go.
-		start := 2
-		if start < len(toks) && toks[start].Kind() == syntax.SyntaxKindKwTo {
-			start += 2 // skip `to target`
-		}
+		// never be classified. ActionDecl.SlotEndIndex gives the index just
+		// past the subject, `returns` and any `to <target>` pair — which is
+		// exactly where that connector word sits — and accounts for a
+		// multi-token Ref subject or target (e.g. "re/billing").
+		start := action.SlotEndIndex()
 		if start < len(toks) && tokLineNum(toks[start]) == actionLine && isConnectorWord(toks[start].Text()) {
 			emit(toks[start], connIdx)
 			start++
 		}
 		for _, tok := range toks[start:] {
-			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
+			if !isPhraseOrPayloadKind(tok.Kind()) || tokLineNum(tok) != actionLine {
 				continue
 			}
-			emit(tok, phraseIdx)
+			emitPhraseWord(tok)
 		}
 	}
 
 	return result
+}
+
+// isPhraseOrPayloadKind reports whether kind is a token kind that
+// emitPhraseWord knows how to classify: an ordinary phrase word
+// (SyntaxKindIdent) or, when inside a trailing operation annotation, either
+// an ident or a number payload token (e.g. "charges" or the "200" in
+// `[200 AuthorizationResult]`). Every other kind (keywords, brackets, strings,
+// punctuation) is already classified elsewhere (Pass 1, or earlier in this
+// function) and must not reach emitPhraseWord a second time.
+func isPhraseOrPayloadKind(kind syntax.SyntaxKind) bool {
+	return kind == syntax.SyntaxKindIdent || kind == syntax.SyntaxKindNumber
 }
 
 // useCaseRefTokenType resolves a use-case body reference name to its semantic

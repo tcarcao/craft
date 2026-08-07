@@ -2537,6 +2537,192 @@ func TestSemanticTokens_SlugTarget(t *testing.T) {
 	}
 }
 
+// TestSemanticTokens_OpAnnotation asserts that a trailing operation annotation
+// is classified distinctly from the surrounding phrase: the protocol verb gets
+// the standard "keyword" semantic token type and the opaque payload word gets
+// the standard "string" type, so both are colored by any default LSP theme
+// without extension-side scope configuration. The brackets keep their existing
+// craft-braces classification, and phrase words outside the annotation are
+// unaffected. It also covers a numeric payload token (no protocol verb, just
+// a status code, as in the design doc's own `[200 AuthorizationResult]`
+// example): SyntaxKindNumber must get the same payload type as an ident
+// payload token when it sits inside an annotation, since a status code left
+// unclassified would defeat the point of the annotation reading as one
+// visually distinct unit.
+func TestSemanticTokens_OpAnnotation(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "OpAnnotation" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions asks Billing for a fresh charge attempt [POST charges]
+	// Line 3:     Subscriptions returns to Billing the authorization result [200 AuthorizationResult]
+	// Line 4: }
+	// col math (0-based), line 2: "    Subscriptions asks Billing for a fresh charge attempt [POST charges]"
+	//   col 50: attempt (len 7), phrase word, unaffected by the annotation → craft-phrase-word (33)
+	//   col 58: [       (len 1), unaffected, still craft-braces (40)
+	//   col 59: POST    (len 4), recognised protocol verb → keyword (45)
+	//   col 64: charges (len 7), opaque payload word → string (46)
+	//   col 71: ]       (len 1), unaffected, still craft-braces (40)
+	// col math (0-based), line 3: "    Subscriptions returns to Billing the authorization result [200 AuthorizationResult]"
+	//   col 62: [                   (len 1),  unaffected, still craft-braces (40)
+	//   col 63: 200                 (len 3),  numeric payload token, no protocol verb here → string (46)
+	//   col 67: AuthorizationResult (len 19), opaque payload word → string (46)
+	//   col 86: ]                   (len 1),  unaffected, still craft-braces (40)
+	opSrc := "use_case \"OpAnnotation\" {\n  when SomeActor does SomeThing\n    Subscriptions asks Billing for a fresh charge attempt [POST charges]\n    Subscriptions returns to Billing the authorization result [200 AuthorizationResult]\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///op_annotation.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(opSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///op_annotation.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for op annotation token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftPhraseWord = 33
+	const craftBraces = 40
+	const opVerbKeyword = 45
+	const opPayloadString = 46
+
+	// "attempt": outside the annotation, unaffected.
+	if tok, ok := byPos[[2]uint32{2, 50}]; !ok {
+		t.Error("attempt not found at line 2 col 50")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("attempt: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+
+	// "[": brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{2, 58}]; !ok {
+		t.Error("[ not found at line 2 col 58")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("[: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+
+	// "POST": the protocol verb, classified as the standard "keyword" type.
+	if tok, ok := byPos[[2]uint32{2, 59}]; !ok {
+		t.Error("POST not found at line 2 col 59")
+	} else if tok.tokenType != opVerbKeyword {
+		t.Errorf("POST: got tokenType %d, want %d (keyword)", tok.tokenType, opVerbKeyword)
+	}
+
+	// "charges": opaque payload word, classified as the standard "string" type,
+	// NOT craft-phrase-word even though it is a bare SyntaxKindIdent token.
+	if tok, ok := byPos[[2]uint32{2, 64}]; !ok {
+		t.Error("charges not found at line 2 col 64")
+	} else if tok.tokenType != opPayloadString {
+		t.Errorf("charges: got tokenType %d, want %d (string), not craft-phrase-word", tok.tokenType, opPayloadString)
+	}
+
+	// "]": brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{2, 71}]; !ok {
+		t.Error("] not found at line 2 col 71")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("]: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+
+	// "[" on line 3: brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{3, 62}]; !ok {
+		t.Error("[ not found at line 3 col 62")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("[: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+
+	// "200": a SyntaxKindNumber payload token with no protocol verb in this
+	// annotation. It must get the payload type, not go unclassified (which is
+	// what a bare `tok.Kind() != SyntaxKindIdent` filter in Pass 2 used to do).
+	if tok, ok := byPos[[2]uint32{3, 63}]; !ok {
+		t.Error("200 not found at line 3 col 63 (numeric payload token emitted no semantic token at all)")
+	} else if tok.tokenType != opPayloadString {
+		t.Errorf("200: got tokenType %d, want %d (string)", tok.tokenType, opPayloadString)
+	}
+
+	// "AuthorizationResult": opaque payload word, same as the "charges" case above.
+	if tok, ok := byPos[[2]uint32{3, 67}]; !ok {
+		t.Error("AuthorizationResult not found at line 3 col 67")
+	} else if tok.tokenType != opPayloadString {
+		t.Errorf("AuthorizationResult: got tokenType %d, want %d (string)", tok.tokenType, opPayloadString)
+	}
+
+	// "]" on line 3: brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{3, 86}]; !ok {
+		t.Error("] not found at line 3 col 86")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("]: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+}
+
 // TestSemanticTokens_ReturnActionConnectorNoTarget is a regression test for a
 // bug where classifyActionIdents' return_action case called
 // ActionDecl.Connector(), which for return_action returns the KwTo
@@ -4338,4 +4524,161 @@ func TestFoldingRanges_UseCaseAndExposure(t *testing.T) {
 		t.Errorf("expected exposure fold [4,7], got: %v", ranges)
 	}
 	cancel()
+}
+
+// TestSemanticTokens_QualifiedSubject is the Task 6b counterpart to
+// TestSemanticTokens_SlugTarget. Once the action subject may itself be a
+// multi-token Ref ("re/billing" flattens to three leaf tokens: re, /,
+// billing), classifyActionIdents can no longer read the verb at token 1 or
+// start the connector/phrase scan at token 2. Both the internal_action and
+// return_action branches walk positionally, so both are covered here: a wrong
+// offset would colour the subject's own segments as phrase words and miss the
+// real verb and connector.
+func TestSemanticTokens_QualifiedSubject(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "QualifiedSubject" {
+	// Line 1:   when re/Billing creates Account
+	//   col 10: Billing   (len 7)  — trigger subject ref segment, NOT craft-phrase-word
+	//   col 26: Account   (len 7)  — phrase word → craft-phrase-word (33)
+	// Line 2:     re/billing validates the invoice
+	//   col 4:  re        (len 2)  — subject ref segment, NOT craft-phrase-word
+	//   col 7:  billing   (len 7)  — subject ref segment, NOT craft-phrase-word
+	//   col 15: validates (len 9)  — verb → craft-regular-verb (27)
+	//   col 25: the       (len 3)  — connector → craft-connector-word (29)
+	//   col 29: invoice   (len 7)  — phrase word → craft-phrase-word (33)
+	// Line 3:     re/billing returns to re/ledger charge result
+	//   col 29: ledger    (len 6)  — target ref segment, NOT craft-phrase-word
+	//   col 36: charge    (len 6)  — phrase word → craft-phrase-word (33)
+	//   col 43: result    (len 6)  — phrase word → craft-phrase-word (33)
+	src := "use_case \"QualifiedSubject\" {\n" +
+		"  when re/Billing creates Account\n" +
+		"    re/billing validates the invoice\n" +
+		"    re/billing returns to re/ledger charge result\n" +
+		"}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///qualified_subject.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(src),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///qualified_subject.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for qualified subject token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftRegularVerb = 27
+	const craftConnectorWord = 29
+	const craftPhraseWord = 33
+
+	notPhrase := []struct {
+		name       string
+		line, char uint32
+	}{
+		{"Billing (trigger subject)", 1, 10},
+		{"re (internal_action subject)", 2, 4},
+		{"billing (internal_action subject)", 2, 7},
+		{"re (return_action subject)", 3, 4},
+		{"billing (return_action subject)", 3, 7},
+		{"ledger (return_action target)", 3, 29},
+	}
+	for _, c := range notPhrase {
+		if tok, ok := byPos[[2]uint32{c.line, c.char}]; ok && tok.tokenType == craftPhraseWord {
+			t.Errorf("%s: got craft-phrase-word, want anything else (it is a ref segment)", c.name)
+		}
+	}
+
+	want := []struct {
+		name       string
+		line, char uint32
+		tokenType  uint32
+	}{
+		{"Account", 1, 26, craftPhraseWord},
+		{"validates", 2, 15, craftRegularVerb},
+		{"the", 2, 25, craftConnectorWord},
+		{"invoice", 2, 29, craftPhraseWord},
+		{"charge", 3, 36, craftPhraseWord},
+		{"result", 3, 43, craftPhraseWord},
+	}
+	for _, c := range want {
+		tok, ok := byPos[[2]uint32{c.line, c.char}]
+		if !ok {
+			t.Errorf("%s not found at line %d col %d", c.name, c.line, c.char)
+			continue
+		}
+		if tok.tokenType != c.tokenType {
+			t.Errorf("%s: got tokenType %d, want %d", c.name, tok.tokenType, c.tokenType)
+		}
+	}
 }

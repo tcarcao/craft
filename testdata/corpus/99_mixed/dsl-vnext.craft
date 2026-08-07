@@ -13,6 +13,6 @@ context_map {
 
 use_case "Renewal with typed refs and flexible prose" {
   when Subscriptions listens vas.VasApplied
-    Subscriptions asks bc:re/billing for a fresh charge attempt (1! & 2!)
+    Subscriptions asks re/billing for a fresh charge attempt (1! & 2!) [POST /v1/charges]
     Subscriptions notifies vas.VasFulfilled  // TODO: confirm subject
 }

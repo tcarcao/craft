@@ -1,7 +1,6 @@
 package syntax
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
@@ -88,6 +87,105 @@ func elementSpan(el SyntaxElement) int {
 		return len(node.Tokens())
 	}
 	return 1
+}
+
+// tokenIndexAt translates a significantElements index into the equivalent
+// index in the node's flat Tokens() slice, by summing the spans of all
+// elements before it. Positional slot accessors below use it because no slot
+// has a fixed token width any more: a target (Task 4) or a subject (Task 6b)
+// written as a ref, e.g. "re/billing" or "bc:re/billing", is a single
+// SyntaxKindRef element covering several leaf tokens. i is clamped to
+// len(elems), so an index past a truncated node yields the end of its tokens
+// rather than panicking.
+func tokenIndexAt(elems []SyntaxElement, i int) int {
+	if i > len(elems) {
+		i = len(elems)
+	}
+	idx := 0
+	for j := 0; j < i; j++ {
+		idx += elementSpan(elems[j])
+	}
+	return idx
+}
+
+// slotFirstToken returns the first leaf token of a positional slot element:
+// the token itself for a leaf, or a SyntaxKindRef node's first token. Returns
+// nil when the element holds no tokens.
+func slotFirstToken(el SyntaxElement) *SyntaxToken {
+	switch v := el.(type) {
+	case SyntaxToken:
+		return &v
+	case SyntaxNode:
+		if toks := v.Tokens(); len(toks) > 0 {
+			return &toks[0]
+		}
+	}
+	return nil
+}
+
+// nameSlotElement returns elems[0] when it holds a name: a plain Ident token
+// for a bare name, or a SyntaxKindRef node for a qualified one (Task 6b).
+// Returns nil otherwise, e.g. for an error-recovery node whose first element
+// is a SyntaxKindError token, or a `when cron "..."` trigger whose first
+// element is the cron keyword.
+func nameSlotElement(elems []SyntaxElement) SyntaxElement {
+	if len(elems) == 0 {
+		return nil
+	}
+	if k := elems[0].Kind(); k != SyntaxKindIdent && k != SyntaxKindRef {
+		return nil
+	}
+	return elems[0]
+}
+
+// rawSourceFrom returns the exact raw source substring of node n starting at
+// leaf-token index start, up to endOffset (exclusive; pass -1 for the end of
+// the node), trimmed. Inter-token whitespace is preserved, so prose with tight
+// punctuation such as `(1! & 2!)` or `and/or` keeps its original spacing
+// instead of being space-joined into `( 1 ! & 2 ! )`.
+//
+// Every renderer that has to reproduce free text goes through this one walk:
+// ActionDecl.PhraseText, ActionDecl.SourceText, TriggerDecl.PhraseText and
+// TriggerDecl.SourceText. They used to carry separate copies, and the copies
+// disagreed about whether spacing mattered.
+func rawSourceFrom(n SyntaxNode, start int, endOffset green.TextSize) string {
+	tokens := n.Tokens()
+	if start < 0 || start >= len(tokens) {
+		return ""
+	}
+	startOffset := tokens[start].Offset()
+	var sb strings.Builder
+	writing := false
+	for _, tok := range n.AllTokens() {
+		if endOffset >= 0 && tok.Offset() >= endOffset {
+			break
+		}
+		if !writing {
+			if tok.Offset() < startOffset {
+				continue
+			}
+			writing = true
+		}
+		sb.WriteString(tok.Text())
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+// refAwareRawText returns an element's text exactly as it appears in source:
+// the reconstructed ref text for a SyntaxKindRef node, or a leaf token's raw
+// Text(). Unlike refAwareText it does NOT unquote a string token, so callers
+// rebuilding source keep the quotes and escapes the author wrote.
+func refAwareRawText(el SyntaxElement) string {
+	switch v := el.(type) {
+	case SyntaxNode:
+		if v.Kind() == SyntaxKindRef {
+			return RefDecl{node: v}.RefText()
+		}
+		return ""
+	case SyntaxToken:
+		return v.Text()
+	}
+	return ""
 }
 
 // refAwareText returns the source text of a significant child element: for a
@@ -1049,6 +1147,106 @@ func (s ServiceDecl) DeploymentTargetTokens() []SyntaxToken {
 // AsUseCaseDecl wraps a SyntaxKindUseCaseDecl node as a typed view.
 func AsUseCaseDecl(n SyntaxNode) UseCaseDecl { return UseCaseDecl{node: n} }
 
+// AsRefDecl wraps a SyntaxKindRef node as a typed view.
+func AsRefDecl(n SyntaxNode) RefDecl { return RefDecl{node: n} }
+
+// NodeSourceText returns a node's exact raw source text, trimmed, with every
+// byte between its first and last token preserved.
+//
+// It is the exported face of the single raw-source walk that ActionDecl,
+// TriggerDecl, EdgeDecl and GlossaryRelationDecl all render through. Callers
+// outside this package that need to reproduce a statement verbatim (the
+// formatter) should use this rather than space-joining Tokens(), which
+// destroys `re/billing` and `(1! & 2!)` alike.
+func NodeSourceText(n SyntaxNode) string { return rawSourceFrom(n, 0, -1) }
+
+// LeadingComments returns, in source order, the text of every comment token
+// that precedes n's first significant token.
+//
+// The parser attaches a comment as leading trivia of whatever it introduces,
+// so a comment written above a `when` line is the first child of that
+// scenario and one above an action is the first child of that action. A
+// renderer that walks only the typed accessors never sees them, which is how
+// Format Document came to delete every comment in a document.
+func LeadingComments(n SyntaxNode) []string {
+	var out []string
+	for el := range n.ChildrenIter() {
+		tok, ok := el.(SyntaxToken)
+		if !ok {
+			break // a child node means the significant content has started
+		}
+		switch tok.Kind() {
+		case SyntaxKindLineComment, SyntaxKindBlockComment, SyntaxKindDocComment:
+			out = append(out, tok.Text())
+		case SyntaxKindWhitespace:
+			// keep scanning
+		default:
+			return out // first significant token ends the leading run
+		}
+	}
+	return out
+}
+
+// TrailingComments returns, in source order, the text of every comment token
+// that is a direct child of n and follows n's last child node.
+//
+// These are the comments the parser could not attach to anything that comes
+// after them, because nothing does: a comment on the last line of a block
+// before its `}`, and a trailing same-line comment on a block's last
+// statement. LeadingComments cannot reach them, so a renderer that relies on
+// leading comments alone still drops these.
+func TrailingComments(n SyntaxNode) []string {
+	var out []string
+	started := false
+	for el := range n.ChildrenIter() {
+		switch c := el.(type) {
+		case SyntaxNode:
+			started = true
+			out = nil // only what follows the LAST child node is trailing
+		case SyntaxToken:
+			// An opening brace also starts the run, so a block whose body is
+			// nothing but a comment does not lose it for want of a child node.
+			if c.Kind() == SyntaxKindLBrace {
+				started = true
+				continue
+			}
+			if !started {
+				continue
+			}
+			switch c.Kind() {
+			case SyntaxKindLineComment, SyntaxKindBlockComment, SyntaxKindDocComment:
+				out = append(out, c.Text())
+			}
+		}
+	}
+	return out
+}
+
+// LeadingComments returns the comments written above this scenario's `when`
+// line. See the package-level LeadingComments.
+func (s ScenarioDecl) LeadingComments() []string { return LeadingComments(s.node) }
+
+// TrailingComments returns the comments that follow this scenario's last
+// action. See the package-level TrailingComments.
+func (s ScenarioDecl) TrailingComments() []string { return TrailingComments(s.node) }
+
+// LeadingComments returns the comments written above the `use_case` keyword.
+func (u UseCaseDecl) LeadingComments() []string { return LeadingComments(u.node) }
+
+// TrailingComments returns the comments that follow this use case's last
+// scenario, before the closing brace.
+func (u UseCaseDecl) TrailingComments() []string { return TrailingComments(u.node) }
+
+// LeadingComments returns the comments written above this action's line.
+// See the package-level LeadingComments.
+func (a ActionDecl) LeadingComments() []string { return LeadingComments(a.node) }
+
+// AsContextMapDecl wraps a SyntaxKindContextMapDecl node as a typed view.
+func AsContextMapDecl(n SyntaxNode) ContextMapDecl { return ContextMapDecl{node: n} }
+
+// AsGlossaryDecl wraps a SyntaxKindGlossaryDecl node as a typed view.
+func AsGlossaryDecl(n SyntaxNode) GlossaryDecl { return GlossaryDecl{node: n} }
+
 // UseCaseDecl is a typed view over a SyntaxKindUseCaseDecl node.
 type UseCaseDecl struct{ node SyntaxNode }
 
@@ -1117,6 +1315,11 @@ func (u UseCaseDecl) TagsBlocks() []TagsBlock {
 
 // TagsBlock is a typed view over a SyntaxKindTagsBlock node: `tags { tag_stmt* }`.
 type TagsBlock struct{ node SyntaxNode }
+
+// Node returns the underlying syntax node, for callers that need to walk the
+// block's children in document order rather than through Tags(). The formatter
+// needs that to keep comments written between tag statements.
+func (b TagsBlock) Node() SyntaxNode { return b.node }
 
 // Keyword returns the `tags` keyword token introducing this block.
 func (b TagsBlock) Keyword() *SyntaxToken { return b.node.ChildToken(SyntaxKindKwTags) }
@@ -1188,8 +1391,37 @@ func (s ScenarioDecl) Actions() []ActionDecl {
 // TriggerDecl is a typed view over a SyntaxKindTrigger node.
 type TriggerDecl struct{ node SyntaxNode }
 
-// Subject returns the subject identifier token of the trigger (actor/domain name).
-func (t TriggerDecl) Subject() *SyntaxToken { return t.node.ChildToken(SyntaxKindIdent) }
+// subjectElement returns the trigger's subject slot: significant element 0,
+// which is a plain Ident token for a bare name or a SyntaxKindRef node for a
+// qualified one (Task 6b, e.g. `when re/billing listens ...`). Returns nil
+// when the trigger has no name subject (event/cron/every forms).
+func (t TriggerDecl) subjectElement() SyntaxElement {
+	return nameSlotElement(significantElements(t.node))
+}
+
+// Subject returns the first token of the trigger subject (actor/domain name).
+// For a qualified subject that is the ref's leading segment, which is where
+// the whole reference starts.
+func (t TriggerDecl) Subject() *SyntaxToken {
+	el := t.subjectElement()
+	if el == nil {
+		return nil
+	}
+	return slotFirstToken(el)
+}
+
+// SubjectSpan returns how many flat tokens the trigger subject occupies in
+// Tokens(): 1 for a bare name, more for a qualified ref ("re/billing" is
+// three). Exported so internal/lsp can skip exactly the subject when colouring
+// the remaining trigger phrase words, instead of skipping one token and
+// mis-colouring the rest of a qualified subject as phrase text.
+func (t TriggerDecl) SubjectSpan() int {
+	elems := significantElements(t.node)
+	if len(elems) == 0 {
+		return 0
+	}
+	return elementSpan(elems[0])
+}
 
 // Tokens returns all syntax tokens in the trigger node (mirrors ActionDecl.Tokens).
 func (t TriggerDecl) Tokens() []SyntaxToken { return t.node.Tokens() }
@@ -1200,54 +1432,60 @@ func (t TriggerDecl) Event() *SyntaxToken { return t.node.ChildToken(SyntaxKindS
 // Kind returns "external", "event", or "domain_listen" based on token structure.
 // Mirrors lowerTrigger classification in lower.go.
 func (t TriggerDecl) Kind() string {
-	tokens := t.node.Tokens()
-	if len(tokens) == 0 {
+	// Read slots as elements, not flat tokens: a qualified subject (Task 6b)
+	// is one Ref element but several tokens, which would push `listens` past
+	// a fixed token index 1.
+	elems := significantElements(t.node)
+	if len(elems) == 0 {
 		return "external"
 	}
-	// event trigger: first token is a string literal
-	if tokens[0].Kind() == SyntaxKindString {
+	// event trigger: first element is a string literal
+	if elems[0].Kind() == SyntaxKindString {
 		return "event"
 	}
-	// domain_listen: second token is `listens`
-	if len(tokens) >= 2 && tokens[1].Kind() == SyntaxKindKwListens {
+	// domain_listen: second element is `listens`
+	if len(elems) >= 2 && elems[1].Kind() == SyntaxKindKwListens {
 		return "domain_listen"
 	}
 	return "external"
 }
 
-// ActorName returns the trigger subject for external triggers (the actor/domain name).
+// ActorName returns the trigger subject for external triggers (the actor/domain
+// name). The subject may be a parseRef-wrapped qualified ref (Task 6b), so
+// refAwareText reads the full "re/billing" rather than its first segment.
 func (t TriggerDecl) ActorName() string {
 	if t.Kind() != "external" {
 		return ""
 	}
-	tok := t.node.ChildToken(SyntaxKindIdent)
-	if tok == nil {
+	el := t.subjectElement()
+	if el == nil {
 		return ""
 	}
-	return tok.Text()
+	return refAwareText(el)
 }
 
-// ActorCol returns the 1-based column of the subject token using li.
+// ActorCol returns the 1-based column of the subject using li.
 // Works for both external and domain_listen triggers.
 func (t TriggerDecl) ActorCol(li green.LineIndex) int {
-	tok := t.node.ChildToken(SyntaxKindIdent)
-	if tok == nil {
+	el := t.subjectElement()
+	if el == nil {
 		return 0
 	}
-	_, col := li.LineCol16(tok.Offset())
+	_, col := li.LineCol16(refAwareOffset(el))
 	return col
 }
 
-// ContextName returns the subject name for domain_listen triggers.
+// ContextName returns the subject name for domain_listen triggers, reading a
+// qualified ref (Task 6b) in full via refAwareText.
 func (t TriggerDecl) ContextName() string {
 	if t.Kind() != "domain_listen" {
 		return ""
 	}
-	tok := t.node.ChildToken(SyntaxKindIdent)
-	if tok == nil {
+	el := t.subjectElement()
+	if el == nil {
 		return ""
 	}
-	return tok.Text()
+	return refAwareText(el)
 }
 
 // EventValue returns the event name (for event and domain_listen triggers).
@@ -1271,16 +1509,11 @@ func (t TriggerDecl) EventValue() string {
 	return ""
 }
 
-// Description returns the human-readable trigger line (without the leading `when`).
-// String tokens' raw Text() already includes both quotes (Bug 8a fix), so no
-// manual quote-wrapping is needed here — that used to double the quotes.
-func (t TriggerDecl) Description() string {
-	tokens := t.node.Tokens()
-	parts := make([]string, 0, len(tokens))
-	for _, tok := range tokens {
-		parts = append(parts, tok.Text())
-	}
-	return strings.Join(parts, " ")
+// rawTextFrom returns the exact raw source substring of this trigger from
+// leaf-token index start to the end of the trigger, trimmed. A trigger line
+// carries no operation annotation, so there is nothing to stop before.
+func (t TriggerDecl) rawTextFrom(start int) string {
+	return rawSourceFrom(t.node, start, -1)
 }
 
 // PhraseText returns the free-text phrase for an "external" trigger (e.g.
@@ -1293,29 +1526,40 @@ func (t TriggerDecl) PhraseText() string {
 		return ""
 	}
 	tokens := t.node.Tokens()
-	if len(tokens) <= 2 {
-		return ""
-	}
-	phraseStart := 2
-	if isConnectorWord(tokens[2].Text()) {
-		phraseStart = 3
-	}
+	// subject, verb — the subject may be a multi-token qualified ref (Task 6b),
+	// so convert from element positions instead of starting at token 2.
+	phraseStart := tokenIndexAt(significantElements(t.node), 2)
 	if phraseStart >= len(tokens) {
 		return ""
 	}
-	startOffset := tokens[phraseStart].Offset()
-	var sb strings.Builder
-	writing := false
-	for _, tok := range t.node.AllTokens() {
-		if !writing {
-			if tok.Offset() < startOffset {
-				continue
-			}
-			writing = true
-		}
-		sb.WriteString(tok.Text())
+	if isConnectorWord(tokens[phraseStart].Text()) {
+		phraseStart++
 	}
-	return strings.TrimSpace(sb.String())
+	return t.rawTextFrom(phraseStart)
+}
+
+// SourceText renders the trigger as canonical .craft source: the exact text the
+// LSP formatter writes after `when `.
+//
+// It mirrors ActionDecl.SourceText. The subject is normalised through the
+// element walk so a qualified ref stays one word, and everything after it is
+// copied raw, so a free-text phrase keeps its original spacing. Rendering the
+// whole line by space-joining leaf tokens instead is what turned
+// `when User creates (1! & 2!)` into `when User creates ( 1 ! & 2 ! )`.
+//
+// This covers every trigger form: the subject slot holds the actor for an
+// external trigger, the context for a domain_listen one, and the `cron` /
+// `every` keyword for the scheduled forms, while an event trigger has only the
+// quoted literal and no tail.
+func (t TriggerDecl) SourceText() string {
+	elems := significantElements(t.node)
+	if len(elems) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(refAwareRawText(elems[0]))
+	appendSpaced(&sb, t.rawTextFrom(tokenIndexAt(elems, 1)))
+	return sb.String()
 }
 
 // EventCol returns the 1-based column of the event token using li.
@@ -1353,8 +1597,28 @@ func (t TriggerDecl) EventIsString() bool {
 // ActionDecl is a typed view over a SyntaxKindAction node.
 type ActionDecl struct{ node SyntaxNode }
 
-// Subject returns the subject identifier token (domain/service name).
-func (a ActionDecl) Subject() *SyntaxToken { return a.node.ChildToken(SyntaxKindIdent) }
+// subjectElement returns the action's subject slot: significant element 0,
+// which is a plain Ident token for a bare subject or a SyntaxKindRef node for
+// a qualified one (Task 6b, e.g. `re/billing asks ...`). Returns nil when the
+// action node has no subject, e.g. an error-recovery node.
+//
+// This must not be read with ChildToken(SyntaxKindIdent): once the subject is
+// wrapped in a Ref it is no longer a direct Ident child, and for an
+// internal_action that call would return the verb instead.
+func (a ActionDecl) subjectElement() SyntaxElement {
+	return nameSlotElement(significantElements(a.node))
+}
+
+// Subject returns the first token of the subject (domain/service name). For a
+// qualified subject that is the ref's leading segment, which is where the
+// whole reference starts.
+func (a ActionDecl) Subject() *SyntaxToken {
+	el := a.subjectElement()
+	if el == nil {
+		return nil
+	}
+	return slotFirstToken(el)
+}
 
 // Verb returns the action verb token (asks/notifies/listens/returns).
 func (a ActionDecl) Verb() *SyntaxToken {
@@ -1365,25 +1629,18 @@ func (a ActionDecl) Verb() *SyntaxToken {
 }
 
 // Connector returns the connector token between verb and phrase, or nil.
-// For sync_action: tokens[3] (after subject, asks, target).
-// For internal_action: tokens[2] (after subject, verb).
+// For sync_action: the token after subject, asks and target.
+// For internal_action: the token after subject and verb.
 // For return_action: the KwTo token (different positional semantics — `to <target>`).
+//
+// Both the subject (Task 6b) and the sync_action target (Task 4) may be
+// multi-token Refs, so the connector is located from element positions via
+// slotEndIndex rather than a fixed token index.
 func (a ActionDecl) Connector() *SyntaxToken {
 	tokens := a.node.Tokens()
 	switch a.Kind() {
-	case "sync_action":
-		// target (tokens index 2) may be a multi-token Ref (Task 4, e.g.
-		// bc:re/billing); locate the connector after its actual span rather
-		// than assuming the target is exactly one flat token.
-		start := 2
-		if elems := significantElements(a.node); len(elems) > 2 {
-			start += elementSpan(elems[2])
-		} else {
-			start++
-		}
-		return connectorAt(tokens, start)
-	case "internal_action":
-		return connectorAt(tokens, 2)
+	case "sync_action", "internal_action":
+		return connectorAt(tokens, slotEndIndex(a))
 	default:
 		return a.node.ChildToken(SyntaxKindKwTo)
 	}
@@ -1408,22 +1665,24 @@ func (a ActionDecl) Kind() string {
 	}
 }
 
-// SubjectName returns the action subject (the "from" party).
+// SubjectName returns the action subject (the "from" party). The subject may
+// be a parseRef-wrapped qualified ref (Task 6b), so refAwareText returns the
+// full "re/billing" rather than truncating to its first segment.
 func (a ActionDecl) SubjectName() string {
-	tok := a.Subject()
-	if tok == nil {
+	el := a.subjectElement()
+	if el == nil {
 		return ""
 	}
-	return tok.Text()
+	return refAwareText(el)
 }
 
-// SubjectCol returns the 1-based column of the subject token using li.
+// SubjectCol returns the 1-based column where the subject starts, using li.
 func (a ActionDecl) SubjectCol(li green.LineIndex) int {
-	tok := a.Subject()
-	if tok == nil {
+	el := a.subjectElement()
+	if el == nil {
 		return 0
 	}
-	_, col := li.LineCol16(tok.Offset())
+	_, col := li.LineCol16(refAwareOffset(el))
 	return col
 }
 
@@ -1437,47 +1696,52 @@ func (a ActionDecl) Line(li green.LineIndex) int {
 	return line
 }
 
-// TargetName returns the target context for sync_action and return_action.
-// For sync_action the target slot may be a parseRef-wrapped ref (Task 4,
-// e.g. bc:re/billing); refAwareText returns the full ref text rather than
-// truncating to a single leaf token.
-func (a ActionDecl) TargetName() string {
+// targetElement returns the action's target slot, or nil when it has none.
+// Both slots may be a parseRef-wrapped ref: the sync_action target since
+// Task 4 (e.g. bc:re/billing), the return_action target since Task 6b.
+//
+// The return_action target is the element right after `to`, which is always
+// element 2 because parseReturnsAction only emits SyntaxKindKwTo there;
+// a later `to` inside the phrase is an ordinary ident.
+func (a ActionDecl) targetElement() SyntaxElement {
+	elems := significantElements(a.node)
+	i := -1
 	switch a.Kind() {
 	case "sync_action":
-		elems := significantElements(a.node)
-		if len(elems) >= 3 && (elems[2].Kind() == SyntaxKindIdent || elems[2].Kind() == SyntaxKindRef) {
-			return refAwareText(elems[2])
-		}
+		i = 2
 	case "return_action":
-		tokens := a.node.Tokens()
-		for i, tok := range tokens {
-			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
-				return tokens[i+1].Text()
-			}
+		if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwTo {
+			i = 3
 		}
 	}
-	return ""
+	if i < 0 || i >= len(elems) {
+		return nil
+	}
+	if k := elems[i].Kind(); k != SyntaxKindIdent && k != SyntaxKindRef {
+		return nil
+	}
+	return elems[i]
 }
 
-// TargetCol returns the 1-based column of the target name token using li.
-func (a ActionDecl) TargetCol(li green.LineIndex) int {
-	switch a.Kind() {
-	case "sync_action":
-		elems := significantElements(a.node)
-		if len(elems) >= 3 && (elems[2].Kind() == SyntaxKindIdent || elems[2].Kind() == SyntaxKindRef) {
-			_, col := li.LineCol16(refAwareOffset(elems[2]))
-			return col
-		}
-	case "return_action":
-		tokens := a.node.Tokens()
-		for i, tok := range tokens {
-			if tok.Kind() == SyntaxKindKwTo && i+1 < len(tokens) {
-				_, col := li.LineCol16(tokens[i+1].Offset())
-				return col
-			}
-		}
+// TargetName returns the target context for sync_action and return_action,
+// reading a multi-token ref in full via refAwareText rather than truncating
+// to a single leaf token.
+func (a ActionDecl) TargetName() string {
+	el := a.targetElement()
+	if el == nil {
+		return ""
 	}
-	return 0
+	return refAwareText(el)
+}
+
+// TargetCol returns the 1-based column where the target starts, using li.
+func (a ActionDecl) TargetCol(li green.LineIndex) int {
+	el := a.targetElement()
+	if el == nil {
+		return 0
+	}
+	_, col := li.LineCol16(refAwareOffset(el))
+	return col
 }
 
 // EventValue returns the event name for async_action (notifies). The event
@@ -1516,18 +1780,35 @@ func (a ActionDecl) EventIsString() bool {
 	return len(elems) >= 3 && elems[2].Kind() == SyntaxKindString
 }
 
+// VerbToken returns the action's verb token: the asks/notifies/returns keyword,
+// or for an internal_action the plain ident verb that follows the subject.
+// Returns nil when the action has no verb at all (a bare subject line).
+//
+// The internal_action verb sits at element 1, not token 1: a qualified subject
+// (Task 6b) spans several tokens.
+func (a ActionDecl) VerbToken() *SyntaxToken {
+	if tok := a.Verb(); tok != nil {
+		return tok
+	}
+	elems := significantElements(a.node)
+	if len(elems) < 2 {
+		return nil
+	}
+	tokens := a.node.Tokens()
+	i := tokenIndexAt(elems, 1)
+	if i >= len(tokens) {
+		return nil
+	}
+	return &tokens[i]
+}
+
 // VerbValue returns the verb text.
 func (a ActionDecl) VerbValue() string {
-	tok := a.Verb()
-	if tok != nil {
-		return tok.Text()
+	tok := a.VerbToken()
+	if tok == nil {
+		return ""
 	}
-	// internal_action: verb is the ident at tokens[1]
-	tokens := a.node.Tokens()
-	if len(tokens) >= 2 {
-		return tokens[1].Text()
-	}
-	return ""
+	return tok.Text()
 }
 
 // ConnectorValue returns the connector word text (e.g. "to", "for"), or empty.
@@ -1539,41 +1820,40 @@ func (a ActionDecl) ConnectorValue() string {
 	return tok.Text()
 }
 
+// slotEndIndex returns the index into a.Tokens() just past the action's
+// structural slots: subject and verb for every kind, plus the target for a
+// sync_action and the `to <target>` pair for a return_action. That is where an
+// optional connector word sits, and where the phrase begins when there is none.
+//
+// Every slot is counted as one element and converted to a token index via
+// tokenIndexAt, because none of them has a fixed token width: the subject
+// (Task 6b) and both targets (Tasks 4 and 6b) may be multi-token Refs.
+func slotEndIndex(a ActionDecl) int {
+	elems := significantElements(a.node)
+	switch a.Kind() {
+	case "sync_action":
+		return tokenIndexAt(elems, 3) // subject, asks, target
+	case "return_action":
+		if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwTo {
+			return tokenIndexAt(elems, 4) // subject, returns, to, target
+		}
+		return tokenIndexAt(elems, 2) // subject, returns
+	default: // internal_action, async_action
+		return tokenIndexAt(elems, 2) // subject, verb
+	}
+}
+
 // phraseStartIndex returns the index into tokens (a.node.Tokens(), i.e.
 // non-trivia tokens) at which the free-text phrase begins for this action's
 // kind, skipping subject/verb/target/connector tokens. Returns len(tokens)
 // for action kinds that have no phrase (async_action).
 func phraseStartIndex(a ActionDecl, tokens []SyntaxToken) int {
-	start := 2
-	switch a.Kind() {
-	case "sync_action":
-		// subject, asks, target — target may be a multi-token Ref (Task 4,
-		// e.g. bc:re/billing), so skip its actual span rather than assuming
-		// exactly one flat token.
-		start = 2
-		if elems := significantElements(a.node); len(elems) > 2 {
-			start += elementSpan(elems[2])
-		} else {
-			start++
-		}
-		if connectorAt(tokens, start) != nil {
-			start++ // skip connector
-		}
-	case "return_action":
-		start = 2
-		if start < len(tokens) && tokens[start].Kind() == SyntaxKindKwTo {
-			start += 2 // skip `to target`
-		}
-		if connectorAt(tokens, start) != nil {
-			start++
-		}
-	case "internal_action":
-		start = 2 // subject, verb
-		if connectorAt(tokens, start) != nil {
-			start++
-		}
-	case "async_action":
+	if a.Kind() == "async_action" {
 		return len(tokens) // no phrase for notifies
+	}
+	start := slotEndIndex(a)
+	if connectorAt(tokens, start) != nil {
+		start++ // skip connector
 	}
 	return start
 }
@@ -1589,82 +1869,190 @@ func phraseStartIndex(a ActionDecl, tokens []SyntaxToken) int {
 // which the parser emits for every gap — see parser.go emitWhitespaceBefore)
 // rather than from a raw offset-based source slice.
 func (a ActionDecl) PhraseText() string {
-	tokens := a.node.Tokens()
-	if len(tokens) == 0 {
-		return ""
+	return a.rawTextFrom(phraseStartIndex(a, a.node.Tokens()))
+}
+
+// rawTextFrom returns the exact raw source substring of this action from
+// leaf-token index start, stopping before any trailing operation annotation,
+// trimmed.
+//
+// PhraseText starts at the phrase; SourceText starts earlier, at the connector
+// or the verb, so it can rebuild the line without re-deriving those words.
+func (a ActionDecl) rawTextFrom(start int) string {
+	// The annotation is a child of the action node, so its tokens are in
+	// AllTokens() and would otherwise be swept into the text.
+	var endOffset green.TextSize = -1
+	if op := a.OpAnnotation(); op != nil {
+		if opToks := op.AllTokens(); len(opToks) > 0 {
+			endOffset = opToks[0].Offset()
+		}
 	}
-	start := phraseStartIndex(a, tokens)
-	if start >= len(tokens) {
-		return ""
+	return rawSourceFrom(a.node, start, endOffset)
+}
+
+// SourceText renders the action as canonical .craft source: the exact line the
+// LSP formatter writes back into the document.
+//
+// This is NOT the same string as model.Action.Description, and must not be
+// confused with it. That one is a display label built by projection.go and
+// rendered as an edge label by the visualizers: it deliberately omits the
+// `[...]` operation annotation, always quotes the async event, and reflows
+// `returns to <target>` into `returns <phrase> to <target>`, all of which read
+// better as prose. SourceText must instead reparse to the same action, so it
+// KEEPS the annotation, quotes an event only when the source quoted it, and
+// preserves the `returns to <target> <phrase>` word order.
+//
+// ActionDecl used to expose a Description() method with the label shape, and
+// the formatter called it. That is how Format Document came to silently delete
+// `[POST /v1/charges]` annotations, downgrade typed event refs to the
+// deprecated quoted-string form, and move a returns target into the phrase.
+// The label now exists only where it is consumed, in projection.go.
+func (a ActionDecl) SourceText() string {
+	body := a.SourceTextWithoutOp()
+	if op := a.OpText(); op != "" {
+		return body + " [" + op + "]"
 	}
-	startOffset := tokens[start].Offset()
+	return body
+}
+
+// SourceTextWithoutOp renders the action exactly as SourceText does but stops
+// before the trailing ` [op]` suffix.
+//
+// The formatter needs the body on its own so it can re-emit the annotation at
+// an alignment column. Asking for it here rather than string-trimming
+// SourceText's output removes a hidden coupling: a trimmer has to spell the
+// suffix the same way this function does, and if either side ever changed that
+// spelling the trim would silently no-op and the formatter would emit the
+// annotation twice.
+func (a ActionDecl) SourceTextWithoutOp() string {
 	var sb strings.Builder
-	writing := false
-	for _, tok := range a.node.AllTokens() {
-		if !writing {
-			if tok.Offset() < startOffset {
-				continue
-			}
-			writing = true
+	sb.WriteString(a.SubjectName())
+	switch a.Kind() {
+	case "async_action":
+		sb.WriteString(" notifies")
+		appendSpaced(&sb, a.eventSourceText())
+	case "sync_action":
+		// appendSpaced rather than a literal trailing space, so a truncated
+		// `A asks` with no target does not render as "A asks ".
+		sb.WriteString(" asks")
+		appendSpaced(&sb, a.TargetName())
+		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
+	case "return_action":
+		sb.WriteString(" returns")
+		if target := a.TargetName(); target != "" {
+			sb.WriteString(" to ")
+			sb.WriteString(target)
+		}
+		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
+	default: // internal_action
+		// The verb sits one token before the slot end, so reading raw from
+		// there carries verb, connector and phrase in their original words.
+		// With no verb at all there is nothing after the subject to emit.
+		if a.VerbValue() != "" {
+			appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)-1))
+		}
+	}
+	return sb.String()
+}
+
+// eventSourceText returns the async_action event exactly as it was written: the
+// raw quoted literal for the legacy string form, so escapes and non-ASCII
+// survive verbatim rather than being re-escaped by a %q round trip, or the
+// full ref text otherwise. EventValue() unquotes, which is right for a label
+// and wrong for source.
+func (a ActionDecl) eventSourceText() string {
+	elems := significantElements(a.node)
+	if len(elems) < 3 {
+		return ""
+	}
+	return refAwareRawText(elems[2])
+}
+
+// appendSpaced appends s to sb preceded by a single space, or does nothing when
+// s is empty, so callers never emit a trailing or doubled space.
+func appendSpaced(sb *strings.Builder, s string) {
+	if s == "" {
+		return
+	}
+	sb.WriteByte(' ')
+	sb.WriteString(s)
+}
+
+// Tokens returns the raw token list for the action node.
+func (a ActionDecl) Tokens() []SyntaxToken { return a.node.Tokens() }
+
+// OpAnnotation returns the action's trailing operation annotation node, or nil
+// when the action has none.
+func (a ActionDecl) OpAnnotation() *SyntaxNode {
+	return a.node.ChildNode(SyntaxKindOpAnnotation)
+}
+
+// OpText returns the annotation body verbatim, e.g. "POST /v1/charges", or ""
+// when the action has no annotation.
+func (a ActionDecl) OpText() string {
+	n := a.OpAnnotation()
+	if n == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, tok := range n.AllTokens() {
+		if tok.Kind() == SyntaxKindLBracket || tok.Kind() == SyntaxKindRBracket {
+			continue
 		}
 		sb.WriteString(tok.Text())
 	}
 	return strings.TrimSpace(sb.String())
 }
 
-// Tokens returns the raw token list for the action node.
-func (a ActionDecl) Tokens() []SyntaxToken { return a.node.Tokens() }
+// OpVerb returns the recognised protocol verb of the action's operation
+// annotation (e.g. "POST", "GRPC"), or "" when the annotation has no recognised
+// verb or the action has no annotation.
+func (a ActionDecl) OpVerb() string {
+	n := a.OpAnnotation()
+	if n == nil {
+		return ""
+	}
+	if tok := n.ChildToken(SyntaxKindOpVerb); tok != nil {
+		return tok.Text()
+	}
+	return ""
+}
+
+// OpPayload returns the annotation body with any recognised protocol verb
+// stripped, e.g. "/v1/charges" for `[POST /v1/charges]` and the whole body for
+// `[op1/op2/op3]`. Returns "" when the action has no annotation.
+func (a ActionDecl) OpPayload() string {
+	n := a.OpAnnotation()
+	if n == nil {
+		return ""
+	}
+	verb := a.OpVerb()
+	if verb == "" {
+		return a.OpText()
+	}
+	return strings.TrimSpace(strings.TrimPrefix(a.OpText(), verb))
+}
 
 // PhraseStartIndex returns the index into a.Tokens() at which the free-text
 // phrase begins, i.e. the same index PhraseText() starts reading from. It
-// accounts for multi-token (Ref) targets (e.g. "bc:re/billing") by skipping
-// their full span rather than assuming a fixed token width. Exported minimally
-// so internal/lsp's classifyActionIdents (semantic-token phrase highlighting)
-// can start at the same token as PhraseText(), instead of duplicating/
-// hardcoding this offset logic and drifting out of sync with it.
+// accounts for multi-token (Ref) subjects and targets (e.g. "re/billing",
+// "bc:re/billing") by skipping their full span rather than assuming a fixed
+// token width. Exported minimally so internal/lsp's classifyActionIdents
+// (semantic-token phrase highlighting) can start at the same token as
+// PhraseText(), instead of duplicating/hardcoding this offset logic and
+// drifting out of sync with it.
 func (a ActionDecl) PhraseStartIndex() int {
 	return phraseStartIndex(a, a.node.Tokens())
 }
 
-// Description returns the human-readable full action line.
-func (a ActionDecl) Description() string {
-	subject := a.SubjectName()
-	verb := a.VerbValue()
-	switch a.Kind() {
-	case "sync_action":
-		target := a.TargetName()
-		connector := a.ConnectorValue()
-		phrase := a.PhraseText()
-		desc := subject + " asks " + target
-		if connector != "" {
-			desc += " " + connector
-		}
-		if phrase != "" {
-			desc += " " + phrase
-		}
-		return desc
-	case "async_action":
-		return fmt.Sprintf("%s notifies %q", subject, a.EventValue())
-	case "return_action":
-		phrase := a.PhraseText()
-		target := a.TargetName()
-		if target != "" {
-			return fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
-		}
-		return fmt.Sprintf("%s returns %s", subject, phrase)
-	default: // internal_action
-		connector := a.ConnectorValue()
-		phrase := a.PhraseText()
-		desc := subject + " " + verb
-		if connector != "" {
-			desc += " " + connector
-		}
-		if phrase != "" {
-			desc += " " + phrase
-		}
-		return desc
-	}
-}
+// SlotEndIndex returns the index into a.Tokens() just past the action's
+// structural slots (subject, verb, and any target), i.e. where an optional
+// connector word may sit. PhraseStartIndex is this index, plus one when a
+// connector is actually present. Exported for the same reason as
+// PhraseStartIndex: internal/lsp classifies the connector word itself for
+// internal_action and return_action, and must locate it from the same
+// element-based arithmetic rather than a fixed token index.
+func (a ActionDecl) SlotEndIndex() int { return slotEndIndex(a) }
 
 // ArchDecl is a typed view over a SyntaxKindArchDecl node.
 type ArchDecl struct{ node SyntaxNode }
@@ -2054,6 +2442,17 @@ func (e EdgeDecl) Verb() string {
 	return tok.Text()
 }
 
+// SourceText returns the edge statement exactly as it was written, including
+// the original spacing inside each endpoint.
+//
+// This goes through rawSourceFrom, the same single walk ActionDecl and
+// TriggerDecl use. Anything that rebuilds the statement by space-joining leaf
+// tokens splits a qualified endpoint into `re / billing`, because the `/` is
+// swept into the ref as its own token. That is exactly the defect the
+// use_case renderers were rewritten to avoid, and there is no reason for a
+// third spelling of the same walk.
+func (e EdgeDecl) SourceText() string { return NodeSourceText(e.node) }
+
 // LeftRef returns the RefDecl view of the left-hand endpoint (for position
 // info via RefDecl.Line/Col), or nil if malformed. See Left() for the text
 // accessor (Task 7).
@@ -2144,6 +2543,12 @@ func (g GlossaryRelationDecl) Verb() string {
 	}
 	return tok.Text()
 }
+
+// SourceText returns the relation statement exactly as it was written. See
+// EdgeDecl.SourceText: a glossary term node is where this matters most,
+// because a three-segment term like `re/billing/Invoice` carries two
+// slashes that a space-joining renderer turns into `re / billing / Invoice`.
+func (g GlossaryRelationDecl) SourceText() string { return NodeSourceText(g.node) }
 
 // LeftRef returns the RefDecl view of the left-hand term reference (for
 // position info via RefDecl.Line/Col), or nil if malformed. See Left() for

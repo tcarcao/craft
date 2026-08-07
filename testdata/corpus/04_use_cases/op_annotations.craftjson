@@ -1,0 +1,176 @@
+{
+  "useCases": [
+    {
+      "name": "Retry a failed charge",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "detects",
+            "phrase": "failed charge",
+            "description": "when CRON detects failed charge"
+          },
+          "actions": [
+            {
+              "id": "action_2",
+              "type": "sync_action",
+              "context": "Subscriptions",
+              "targetContext": "Billing",
+              "ref": "Billing",
+              "operation": {
+                "verb": "POST",
+                "payload": "/v1/accounts/{id}/charges",
+                "text": "POST /v1/accounts/{id}/charges"
+              },
+              "connector": "for",
+              "phrase": "a fresh charge attempt",
+              "description": "Subscriptions asks Billing for a fresh charge attempt",
+              "line": 9
+            },
+            {
+              "id": "action_3",
+              "type": "sync_action",
+              "context": "Billing",
+              "targetContext": "Gateway",
+              "ref": "Gateway",
+              "operation": {
+                "verb": "POST",
+                "payload": "/pay/v2/authorize",
+                "text": "POST /pay/v2/authorize"
+              },
+              "connector": "to",
+              "phrase": "authorize the card",
+              "description": "Billing asks Gateway to authorize the card",
+              "line": 10
+            },
+            {
+              "id": "action_4",
+              "type": "sync_action",
+              "context": "Billing",
+              "targetContext": "Ledger",
+              "ref": "Ledger",
+              "operation": {
+                "verb": "GRPC",
+                "payload": "ledger.Postings/Create",
+                "text": "GRPC ledger.Postings/Create"
+              },
+              "connector": "to",
+              "phrase": "record the entry",
+              "description": "Billing asks Ledger to record the entry",
+              "line": 11
+            },
+            {
+              "id": "action_5",
+              "type": "return_action",
+              "context": "Gateway",
+              "targetContext": "Billing",
+              "operation": {
+                "payload": "200 AuthorizationResult",
+                "text": "200 AuthorizationResult"
+              },
+              "connector": "the",
+              "phrase": "authorization result",
+              "description": "Gateway returns authorization result to Billing",
+              "line": 12
+            },
+            {
+              "id": "action_6",
+              "type": "async_action",
+              "context": "Billing",
+              "event": "billing.ChargeSucceeded",
+              "ref": "billing.ChargeSucceeded",
+              "operation": {
+                "verb": "TOPIC",
+                "payload": "billing.v1.charge-succeeded",
+                "text": "TOPIC billing.v1.charge-succeeded"
+              },
+              "description": "Billing notifies \"billing.ChargeSucceeded\"",
+              "line": 13
+            },
+            {
+              "id": "action_7",
+              "type": "internal_action",
+              "context": "re/subscriptions",
+              "verb": "marks",
+              "connector": "the",
+              "phrase": "subscription active",
+              "description": "re/subscriptions marks the subscription active",
+              "line": 14
+            },
+            {
+              "id": "action_8",
+              "type": "sync_action",
+              "context": "Subscriptions",
+              "targetContext": "Audit",
+              "ref": "Audit",
+              "operation": {
+                "payload": "op1/op2/op3/op4/op5",
+                "text": "op1/op2/op3/op4/op5"
+              },
+              "connector": "to",
+              "phrase": "log the outcome",
+              "description": "Subscriptions asks Audit to log the outcome",
+              "line": 15
+            },
+            {
+              "id": "action_9",
+              "type": "sync_action",
+              "context": "Subscriptions",
+              "targetContext": "Legacy",
+              "ref": "Legacy",
+              "operation": {
+                "payload": "legacy-mainframe-txn-44",
+                "text": "legacy-mainframe-txn-44"
+              },
+              "connector": "for",
+              "phrase": "a reconciliation",
+              "description": "Subscriptions asks Legacy for a reconciliation",
+              "line": 16
+            }
+          ]
+        },
+        {
+          "id": "scenario_10",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "re/billing",
+            "event": "vas.VasApplied",
+            "ref": "vas.VasApplied",
+            "description": "when re/billing listens \"vas.VasApplied\""
+          },
+          "actions": [
+            {
+              "id": "action_11",
+              "type": "sync_action",
+              "context": "re/billing",
+              "targetContext": "Ledger",
+              "ref": "Ledger",
+              "operation": {
+                "verb": "POST",
+                "payload": "/v1/entries",
+                "text": "POST /v1/entries"
+              },
+              "connector": "to",
+              "phrase": "record a duplicate-charge audit entry",
+              "description": "re/billing asks Ledger to record a duplicate-charge audit entry",
+              "line": 19
+            }
+          ]
+        }
+      ],
+      "line": 7
+    }
+  ],
+  "domains": [
+    {
+      "name": "re",
+      "boundedContexts": [
+        "Subscriptions",
+        "Billing",
+        "Ledger"
+      ]
+    }
+  ]
+}
