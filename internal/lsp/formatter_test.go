@@ -839,6 +839,45 @@ func TestContentDrift_RefusesToLoseContent(t *testing.T) {
 	}
 }
 
+// TestFormatDocumentChecked_DriftPathIsReachable pins the one live route into
+// contentDrift, so it stays a tested path rather than a claimed-dead one.
+//
+// The rewrite made the drift check unreachable for any document the parser
+// accepts without diagnostics, which is what the record and the changelog now
+// say. It did not make it unreachable outright, and the difference matters:
+// this document produces ZERO diagnostics, so bailsFormatting lets it through,
+// and the drift check is the only thing standing between it and a formatted
+// output that does not carry the source's bytes.
+//
+// The cause is upstream of the formatter and predates this branch. An
+// unterminated string at end of line yields an Ident whose Text() is `Oops` at
+// the offset of the `"`, with the leftover byte landing in a Whitespace token
+// as `s\n`. The widths still sum, so the tree passes the losslessness check
+// that compares root.Width() against len(src), but concatenating AllTokens()
+// text does not reproduce the source. That is worth fixing where it lives: a
+// token whose Text() differs from the source bytes at its own range breaks the
+// property the whole LSP rests on. Until then this is the behaviour, and it is
+// the safe one: the formatter declines and returns the input untouched.
+func TestFormatDocumentChecked_DriftPathIsReachable(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n"
+
+	if _, _, diags := syntax.Parse(src); len(diags) != 0 {
+		t.Fatalf("fixture no longer reaches the drift path: the parser now reports %+v, "+
+			"so bailsFormatting declines before contentDrift is consulted", diags)
+	}
+
+	got, blocked := FormatDocumentChecked(src)
+	if blocked == nil {
+		t.Fatal("expected the drift check to fire")
+	}
+	if blocked.Code != "craft/internal/formatter-content-drift" {
+		t.Errorf("Code = %q, want the drift code", blocked.Code)
+	}
+	if got != src {
+		t.Errorf("declining must return the input untouched\nwant:\n%s\ngot:\n%s", src, got)
+	}
+}
+
 // assertContentPreserved is the invariant on its own: formatting changes
 // whitespace and nothing else.
 func assertContentPreserved(t *testing.T, in, out string) {

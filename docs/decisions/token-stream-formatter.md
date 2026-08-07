@@ -245,10 +245,31 @@ tokens covered by the strongest assertion:
 Under this design that assertion should be impossible to fail rather than merely observed to
 pass, which is the difference the rewrite buys.
 
-`contentDrift` stays as a runtime guard and should now be unreachable.
+`contentDrift` stays as a runtime guard. It is unreachable for any document the parser accepts
+without diagnostics, and load bearing for those it does not.
 `TestFormatDocument_EveryCraftFileInRepo` (`internal/lsp/formatter_corpus_test.go:154-161`)
 asserts it does not fire for any file in the corpus, so that if the invariant is ever broken it
 surfaces immediately rather than as a silent no-op.
+
+The reachable half is real and is pinned by
+`TestFormatDocumentChecked_DriftPathIsReachable`. An unterminated string at end of line, as in
+
+    use_case "X" {
+      when U does x A notifies "Oops
+    }
+
+produces ZERO diagnostics, so `bailsFormatting` lets it through. The lexer yields an `Ident`
+whose `Text()` is `Oops` at the offset of the `"`, with the leftover byte landing in a
+`Whitespace` token as `s\n`. The widths still sum, so the tree passes the losslessness check
+that compares `root.Width()` against `len(src)`, but concatenating `AllTokens()` text does not
+reproduce the source, and no walk over those tokens can. `contentDrift` catches it and the
+formatter returns the input untouched.
+
+That is a lexer defect upstream of the formatter and predates this branch: a token whose
+`Text()` differs from the source bytes at its own range is a losslessness violation, and every
+consumer of the token stream rests on that property. It is worth fixing where it lives rather
+than here. The formatter's message therefore does not ask for a bug report, since for the only
+known trigger the bug is not the formatter's and the file is a typo.
 
 ## Re-blessing
 

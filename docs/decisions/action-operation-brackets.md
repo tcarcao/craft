@@ -366,4 +366,5 @@ direction deserves its own change.
 Done. See `docs/decisions/token-stream-formatter.md` for the design and its
 commit range: the formatter is now one walk over the lossless token stream, and
 content preservation is structural rather than checked. `contentDrift` stays in
-place as a runtime guard, and should now be unreachable.
+place as a runtime guard: unreachable for any document the parser accepts
+without diagnostics, and still load bearing for those it does not.

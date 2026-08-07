@@ -112,7 +112,11 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 
 	formatted := sb.String()
 	if drift := contentDrift(content, formatted); drift != nil {
-		slog.Error("craft formatter: refusing to format, output would change content",
+		// Warn rather than Error, and without asking for a bug report. The one
+		// shape known to reach here is a user typo (see contentDrift), and
+		// telling someone who left a string unterminated that they have found a
+		// formatter bug sends them to the wrong place.
+		slog.Warn("craft formatter: declining to format, output would not have matched the source",
 			"detail", drift.Message)
 		return content, drift
 	}
@@ -173,13 +177,25 @@ func trailingCommentLines(content string, root syntax.SyntaxNode) []string {
 //
 // It stays even once every known case is fixed, because the branch it protects
 // against is the one nobody has written yet.
+//
+// The token-stream rewrite made it unreachable for any document the parser
+// accepts without diagnostics, and left it load bearing for those it does not.
+// One shape is known to reach it, and it is a typo rather than a formatter
+// bug: an unterminated string at end of line yields an Ident whose Text() is
+// the string's contents at the offset of the opening quote, with the leftover
+// byte landing in a Whitespace token. The widths still sum, so the tree passes
+// the losslessness check, but the token texts no longer reproduce the source
+// and re-rendering from them therefore cannot either. That is a lexer defect
+// upstream of the formatter and predates this branch; the message says nothing
+// about a formatter bug because for the only known trigger it would be wrong.
+// TestFormatDocumentChecked_DriftPathIsReachable pins the route.
 func contentDrift(in, out string) *craft.Diagnostic {
 	if squashWhitespace(in) == squashWhitespace(out) {
 		return nil
 	}
 	return &craft.Diagnostic{
 		Code:     "craft/internal/formatter-content-drift",
-		Message:  "formatting would have changed more than whitespace, so the document was left unchanged; this is a formatter bug, please report the file",
+		Message:  "formatting would have changed more than whitespace, so the document was left unchanged; check the file for an unterminated string or another typo the parser did not flag",
 		Severity: craft.SeverityWarning,
 	}
 }
