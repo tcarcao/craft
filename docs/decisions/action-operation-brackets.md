@@ -180,6 +180,26 @@ contract validation, codegen). Diagram rendering of the annotation is deliberate
 of scope for the first cut. Ship the syntax and the model field, decide rendering
 separately.
 
+### Public API
+
+`pkg/craft` is the stable public Go API and follows semver. Everything a library
+consumer needs to work with an annotation must be reachable there, since
+`internal/model` and `internal/syntax` are not importable from outside the module:
+
+- `craft.Operation = model.Operation`, alongside the existing type aliases. Without it
+  a consumer can read `action.Operation.Verb` but cannot declare a variable, struct
+  field, or parameter of that type.
+- `craft.OpVerbGET` … `craft.OpVerbQUERY` constants, matching the constant-block
+  convention every other closed set in that file already follows (`ActionType*`,
+  `TriggerType*`, `ActorType*`, `ComponentType*`).
+- `craft.ProtocolVerbs() []string`, re-exporting `syntax.ProtocolVerbs` so the set is
+  iterable for validation and for populating UI.
+
+`Operation.Verb` stays a plain `string` rather than a named enum type. The verb set is
+open by design: an unrecognised head word is payload, not an error, and extending the
+set later is additive. A named type would imply a closed set and would make `""` (the
+opaque-payload case) an awkward enum member.
+
 ## Ambiguity resolution for bare targets
 
 `resolveBCRef` (`internal/sema/validate.go:362`) already does scope-first lookup,
