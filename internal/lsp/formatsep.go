@@ -50,7 +50,16 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// through to the newline handling below is what keeps
 	// `contexts:\n  A` wrapped instead of collapsing it onto one line, and
 	// matches the same rule for a comma immediately below.
-	if prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev) && !strings.Contains(gap, "\n") {
+	//
+	// A `}` is excluded, and so is it in the comma rule below. Returning here
+	// for a `}` meant a field separator won against the forced break before a
+	// closing brace, and `services{Foo{contexts:A,}}` came back as
+	// `contexts: A, }` on one line: the block never finished expanding. Only
+	// degenerate input reaches it, since a trailing comma or colon with nothing
+	// after it is a value the author has not written yet, but the brace rule is
+	// meant to be the one thing that always wins on structure.
+	if prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev) &&
+		!strings.Contains(gap, "\n") && curr.Kind() != syntax.SyntaxKindRBrace {
 		return " "
 	}
 	// A comma normally gets one space after it, even if the author wrote
@@ -58,7 +67,8 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// list across lines, that line break is intentional and must survive:
 	// falling through to the newline handling below is what keeps
 	// `contexts: A,\n  B` wrapped instead of collapsing it onto one line.
-	if prev.Kind() == syntax.SyntaxKindComma && !strings.Contains(gap, "\n") {
+	if prev.Kind() == syntax.SyntaxKindComma && !strings.Contains(gap, "\n") &&
+		curr.Kind() != syntax.SyntaxKindRBrace {
 		return " "
 	}
 
@@ -73,7 +83,9 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	//
 	// These three sit below the colon and comma rules above, so a field
 	// separator still wins: those decide the shape of `contexts: A, B` before a
-	// brace ever gets a say.
+	// brace ever gets a say. The one exception is a `}`, which those two rules
+	// exclude explicitly so that the forced break before a closing brace is
+	// never pre-empted by a trailing comma or colon.
 	//
 	// Two of the four are primary: break after `{` (`prev == LBrace`) and break
 	// before `}` (`curr == RBrace`). The other two are their mirrors,

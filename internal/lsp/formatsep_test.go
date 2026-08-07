@@ -159,6 +159,48 @@ func TestSeparatorFor_SeveralStatementsOnOneLineStayThere(t *testing.T) {
 	}
 }
 
+// TestSeparatorFor_TrailingCommaOrColonDoesNotDefeatTheBraceBreak covers the
+// one place a field separator used to beat the forced break before `}`. The
+// colon and comma rules sit above the brace rules and returned before
+// `curr == RBrace` got a say, so `services{Foo{contexts:A,}}` came back as
+// `contexts: A, }` and the block never finished expanding. Only degenerate
+// input reaches it, but the brace rule is meant to be the one thing that always
+// wins on structure.
+func TestSeparatorFor_TrailingCommaOrColonDoesNotDefeatTheBraceBreak(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		src  string
+		idx  int // the index of the trailing `,` or `:`
+	}{
+		{"trailing comma", "services{Foo{contexts:A,}}\n", 7},
+		{"trailing colon", "services{Foo{contexts:}}\n", 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			prev := sepTok(t, tc.src, tc.idx)
+			curr := sepTok(t, tc.src, tc.idx+1) // }
+			if curr.Kind() != syntax.SyntaxKindRBrace {
+				t.Fatalf("fixture drift: token %d is %q, want `}`", tc.idx+1, curr.Text())
+			}
+			if got := separatorFor(&prev, "", curr, 1, false); got != "\n  " {
+				t.Errorf("after %q: got %q, want the forced break before `}`", prev.Text(), got)
+			}
+		})
+	}
+}
+
+// TestFormatDocument_TrailingCommaBeforeBraceStillExpands is the same defect at
+// the document level, which is where it was visible.
+func TestFormatDocument_TrailingCommaBeforeBraceStillExpands(t *testing.T) {
+	got := FormatDocument("services{Foo{contexts:A,}}")
+	want := "services {\n  Foo {\n    contexts: A,\n  }\n}\n"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
 func TestSeparatorFor_NoSpaceBeforeColonOrComma(t *testing.T) {
 	src := "services {\n  S {\n    contexts: A, B\n  }\n}\n"
 	gn, _, _ := syntax.Parse(src)
