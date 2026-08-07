@@ -176,3 +176,60 @@ func TestSplitAnnotation_TrailingCommentStillDisqualifies(t *testing.T) {
 		}
 	}
 }
+
+// TestSplitAnnotation_ContentAfterABlockCommentClose is the unit-level half of
+// the leading-star alignment fix. A line beginning with `*` used to be refused
+// outright as a comment continuation, which also refused the line a block
+// comment CLOSES on, where everything after the `*/` is ordinary content.
+func TestSplitAnnotation_ContentAfterABlockCommentClose(t *testing.T) {
+	cases := []struct{ line, body, ann string }{
+		{"     */ A asks B to b [POST /v1/b]", "     */ A asks B to b", "[POST /v1/b]"},
+		{"       more */ A asks B to b [POST /v1/b]", "       more */ A asks B to b", "[POST /v1/b]"},
+		{"    /* c */ A asks B to b [POST /v1/b]", "    /* c */ A asks B to b", "[POST /v1/b]"},
+		// The comment text before the close may itself hold a bracket or a
+		// `//`; neither belongs to the annotation and neither may cost the
+		// line its alignment.
+		{"     * see [1] */ A asks B to b [POST /v1/b]", "     * see [1] */ A asks B to b", "[POST /v1/b]"},
+		{"     * // see */ A asks B to b [POST /v1/b]", "     * // see */ A asks B to b", "[POST /v1/b]"},
+	}
+	for _, tc := range cases {
+		body, ann, ok := splitAnnotation(tc.line)
+		if !ok {
+			t.Errorf("content after a block-comment close was refused: %q", tc.line)
+			continue
+		}
+		if body != tc.body || ann != tc.ann {
+			t.Errorf("for %q got body %q ann %q, want body %q ann %q", tc.line, body, ann, tc.body, tc.ann)
+		}
+	}
+}
+
+// TestSplitAnnotation_BlockCommentBodyLineStillDisqualifies is the guard on the
+// rule above, and the one that decides whether widening it was safe.
+//
+// What makes a `*/` line ordinary content is the close itself: block comments
+// do not nest, so a `*/` cannot appear on a line the comment is merely passing
+// through. Accept a leading `*` without requiring the close and the pass starts
+// padding whitespace inside comment bodies, which is content corruption rather
+// than a missed alignment.
+//
+// alignAnnotations is normally handed these lines in its interior set and never
+// asks about them at all. This tests the answer anyway: the two guards were
+// written to cancel each other once already, and a guard whose correctness
+// rests on a caller in another file remembering to filter first is exactly that
+// arrangement again.
+func TestSplitAnnotation_BlockCommentBodyLineStillDisqualifies(t *testing.T) {
+	for _, line := range []string{
+		"     * see [1]",
+		"     ** see [1]",
+		"    /* see [1]",
+		// `/*/` opens a comment and does not close it: the `*/` a reader sees
+		// overlaps the opening `/*`.
+		"    /*/ see [1]",
+		"    /// see [1]",
+	} {
+		if _, _, ok := splitAnnotation(line); ok {
+			t.Errorf("a bracket inside an unclosed comment was taken as an annotation: %q", line)
+		}
+	}
+}
