@@ -21,7 +21,7 @@ func FormatDocument(content string) string {
 	}
 	gn, _, diags := syntax.Parse(content)
 	for _, d := range diags {
-		if d.Severity == craft.SeverityError {
+		if bailsFormatting(d) {
 			return content
 		}
 	}
@@ -58,6 +58,20 @@ func FormatDocument(content string) string {
 		sb.WriteByte('\n')
 	}
 	return sb.String()
+}
+
+// bailsFormatting reports whether a syntax diagnostic means the tree is too
+// incomplete to rewrite safely, so FormatDocument must return the input
+// untouched.
+//
+// Errors are the obvious case. `craft/syntax/not-yet-implemented` is included
+// because it is only warning-severity yet says precisely that the parser could
+// not place a construct: the tokens survive in the tree as raw leaves but the
+// structure around them is wrong, and re-rendering from that structure drops
+// or duplicates them. That is how `charge {amount} [POST /pay]` came back as
+// `charge {amount  [ POST / pay ]`.
+func bailsFormatting(d craft.Diagnostic) bool {
+	return d.Severity == craft.SeverityError || d.Code == "craft/syntax/not-yet-implemented"
 }
 
 // formatUseCaseDecl formats a use_case block with canonical indentation:

@@ -449,3 +449,49 @@ func TestFormatDocument_NoAnnotationsUnaffected(t *testing.T) {
 		t.Errorf("annotation-free scenario must be unchanged\nwant: %q\ngot:  %q", src, got)
 	}
 }
+
+// TestFormatDocument_PhraseBraceIsNotReformatted is the round-trip fixture for
+// the phrase-brace regression (C3).
+//
+// `charge {amount} [POST /pay]` used to parse with zero diagnostics, an
+// Operation of "[POST /pay", and format to
+// `charge {amount  [[POST /pay]`, with the `}` deleted and the `[` duplicated,
+// on a document that reported clean, so the formatter's bail-out never engaged.
+//
+// The parser now emits a not-yet-implemented warning for the leftover bracket,
+// and the formatter treats that code as a bail-out signal, so the document is
+// returned byte-identical instead of being rewritten from an incomplete tree.
+func TestFormatDocument_PhraseBraceIsNotReformatted(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    Billing asks Gateway to charge {amount} [POST /pay]\n}\n"
+
+	_, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatal("expected a diagnostic so the formatter has something to bail on")
+	}
+
+	got := formatSource(t, src)
+	if got != src {
+		t.Errorf("a document the parser could not fully place must be left alone\nwant: %q\ngot:  %q", src, got)
+	}
+	if strings.Contains(got, "[[") {
+		t.Errorf("formatter duplicated the opening bracket:\n%s", got)
+	}
+	if !strings.Contains(got, "{amount}") {
+		t.Errorf("formatter dropped the phrase brace:\n%s", got)
+	}
+}
+
+// TestFormatDocument_TemplatedPathStillAligns is the control for the fix
+// above: braces INSIDE an annotation are still tracked, so a templated payload
+// parses cleanly and takes part in alignment as normal.
+func TestFormatDocument_TemplatedPathStillAligns(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c [POST /v1/accounts/{id}/charges]\n}\n"
+	want := "use_case \"X\" {\n  when U does x\n    A asks B for c  [POST /v1/accounts/{id}/charges]\n}\n"
+	got := formatSource(t, src)
+	if got != want {
+		t.Errorf("format mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}

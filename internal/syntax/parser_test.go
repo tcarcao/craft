@@ -1007,6 +1007,73 @@ func TestOpAnnotation_TemplatedPathBraces(t *testing.T) {
 	}
 }
 
+// Multiple and query-string templated payloads exercise the same depth
+// tracking as the single-segment case above.
+func TestOpAnnotation_TemplatedPathBraces_Variants(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want string
+	}{
+		{"two segments", "A asks B for c [POST /v1/{a}/{b}/x]", "POST /v1/{a}/{b}/x"},
+		{"query string", "A asks B for c [GET /v1/products?q={term}]", "GET /v1/products?q={term}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			g, _, diags := syntax.Parse(src)
+			if len(diags) != 0 {
+				t.Fatalf("expected no diagnostics, got %v", diags)
+			}
+			ucs := syntax.AsFile(syntax.Root(g)).UseCases()
+			if len(ucs) != 1 {
+				t.Fatalf("expected 1 use_case, got %d", len(ucs))
+			}
+			actions := ucs[0].Scenarios()[0].Actions()
+			if len(actions) != 1 {
+				t.Fatalf("expected 1 action, got %d", len(actions))
+			}
+			if got := actions[0].OpText(); got != tc.want {
+				t.Errorf("OpText() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A BALANCED `{...}` in the phrase, on a line that also ends in `]`, must not
+// be swallowed by the annotation scan. collectPhrase returns unconditionally
+// at the first `}`, so if opAnnotationStart tracked depth across it the two
+// would disagree about where the line ends: opAnnotationStart returned the `[`
+// index while collectPhrase stopped at the `}`, and parseOpAnnotation then
+// anchored on the `}` and consumed it as the opening bracket. The result was
+// zero diagnostics, an Operation of "[POST /pay", and a formatter that emitted
+// `charge {amount  [[POST /pay]` on a document reporting clean.
+//
+// Braces are therefore only honoured after a `[` has been seen. The phrase
+// brace reverts to the pre-feature behaviour: no annotation, and the
+// not-yet-implemented warning that flags the leftover `[`.
+func TestOpAnnotation_BalancedBraceInPhraseDoesNotOpenAnnotation(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Gateway to charge {amount} [POST /pay]
+}`
+	g, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatal("expected a diagnostic for the unconsumed bracket, got none")
+	}
+	tree := syntax.Root(g)
+	actions := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if op := actions[0].OpAnnotation(); op != nil {
+		t.Errorf("a phrase brace must not open an annotation, got OpText() = %q", actions[0].OpText())
+	}
+	if got := reassembleGreen(g); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
+	}
+}
+
 // notifies has no phrase, so a trailing annotation is only recognised when it
 // starts immediately after the event (lookahead index 0). Regression for a
 // reviewer-found bug where a stray token between the event and `[` (like a

@@ -1231,11 +1231,15 @@ func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 // Requiring the line to end in `]` is what lets an unclosed `[` stay prose, so
 // files that do not use the feature keep today's sweep-everything behaviour.
 //
-// A `}` only terminates the scan at brace depth 0. This lets a templated path
-// payload such as `[POST /v1/accounts/{id}/charges]` keep its `{id}` on the
-// scanned line instead of being mistaken for the enclosing block's closing
-// brace; a genuine block-closing `}` (depth 0, no unmatched `{` before it on
-// this line) still terminates the scan exactly as before.
+// A `}` only terminates the scan at brace depth 0 AND before the first `[`.
+// Braces are only tracked once an opening `[` has been seen, because a
+// templated path payload such as `[POST /v1/accounts/{id}/charges]` is by
+// definition inside the annotation. Restricting depth tracking that way keeps
+// this scan in step with collectPhrase, which returns unconditionally at the
+// first `}`: a balanced `{...}` in the PHRASE (`charge {amount} [POST /pay]`)
+// must terminate both, or the two disagree about where the line ends and
+// parseOpAnnotation mis-anchors on the `}` instead of the `[`. A genuine
+// block-closing `}` still terminates the scan exactly as before.
 func (p *Parser) opAnnotationStart(actionLine int) int {
 	lastLBracket, lastTok := -1, -1
 	depth := 0
@@ -1245,7 +1249,7 @@ func (p *Parser) opAnnotationStart(actionLine int) int {
 			break
 		}
 		if t.Type == lexer.TokenRBrace {
-			if depth == 0 {
+			if depth == 0 || lastLBracket < 0 {
 				break
 			}
 			depth--
