@@ -30,6 +30,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
 	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
 	diags = append(diags, lintContextMapConsistency(perFileTrees, ws, lis)...)
+	diags = append(diags, lintAmbiguousUseCaseRefs(perFileTrees, ws, lis)...)
 	return diags
 }
 
@@ -369,6 +370,67 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 	}
 
 	return deps
+}
+
+// lintAmbiguousUseCaseRefs reports bare bounded-context names in use_case
+// actions that resolve to two or more domains. resolveBCRef already detects
+// this (validate.go:392), but buildDependencyEdges silently drops the ambiguous
+// case, which would let an unresolvable model look clean now that `bc:`
+// prefixes are no longer accepted in the target slot.
+//
+// Only the subject and target of a sync_action are checked. Internal and return
+// actions do not participate in the dependency graph, so an ambiguous name there
+// is not yet actionable.
+func lintAmbiguousUseCaseRefs(
+	perFileTrees map[string]syntax.SyntaxNode,
+	ws WorkspaceSymbols,
+	lis map[string]green.LineIndex,
+) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for uri, tree := range perFileTrees {
+		li := lis[uri]
+		file := syntax.AsFile(tree)
+		for _, uc := range file.UseCases() {
+			for _, sc := range uc.Scenarios() {
+				for _, action := range sc.Actions() {
+					if action.Kind() != "sync_action" {
+						continue
+					}
+					if name := action.TargetName(); name != "" {
+						if _, _, ambiguous := resolveBCRef(ws, "", name); ambiguous {
+							diags = append(diags, ambiguousUseCaseRefDiag(
+								uri, name, action.Line(li), action.TargetCol(li)))
+						}
+					}
+					if name := action.SubjectName(); name != "" {
+						if _, _, ambiguous := resolveBCRef(ws, "", name); ambiguous {
+							diags = append(diags, ambiguousUseCaseRefDiag(
+								uri, name, action.Line(li), action.SubjectCol(li)))
+						}
+					}
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// ambiguousUseCaseRefDiag mirrors the ambiguous-bc branch of endpointDiag
+// (validate.go:734-741) so the code and wording stay identical across the
+// context_map and use_case sites.
+func ambiguousUseCaseRefDiag(uri, ref string, line, col int) model.Diagnostic {
+	startChar := colToLSP(col)
+	return model.Diagnostic{
+		Code: "craft/sema/ambiguous-bc",
+		Message: fmt.Sprintf(
+			"bounded context %q is declared in multiple domains; qualify it as <domain>/%s", ref, ref),
+		Severity:  model.SeverityError,
+		SourceURI: uri,
+		Range: model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: startChar},
+			End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen(ref)},
+		},
+	}
 }
 
 // lintContextMapConsistency cross-checks context_map edges against the
