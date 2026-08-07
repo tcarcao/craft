@@ -1405,14 +1405,22 @@ git commit -m "docs: document operation annotations, add corpus fixture"
 - Modify: `CHANGELOG.md`
 - Modify: `docs/page/language/use-cases.md` (breaking-change callout)
 
-**Version:** `v3.0.0`. This is a **breaking** change: `asks bc:re/billing` no longer parses. Craft's precedent is that DSL breaking changes bump major (v2.0.0 was the `domains:` to `contexts:` rename). Current tag is `v2.15.2`.
+**Version:** `v2.16.0`. Current tag is `v2.15.2`.
+
+This contains a **breaking DSL change** (`asks bc:re/billing` no longer parses), which by Craft's own precedent would bump major: v2.0.0 was the `domains:` to `contexts:` rename. It is nonetheless a minor release, decided during the final review, for a specific reason.
+
+`go.mod` declares `module github.com/tcarcao/craft/v2`. Go's semantic import versioning requires a v2+ module path to end in its major version, so tagging `v3.0.0` against a `/v2` path produces a module nobody can `go get`. This repo already hit exactly that at v2.10.1 (`CHANGELOG.md:148`), and `proxy.golang.org` caches tags immutably, so a bad tag cannot be deleted, only retracted and superseded.
+
+Bumping to `/v3` would have been the semver-honest alternative, but it makes the import path itself a second breaking change for every library consumer. The `pkg/craft` surface on this branch is purely **additive** (`Operation`, `OpVerbGET` through `OpVerbQUERY`, `ProtocolVerbs()`), so no Go consumer breaks and `/v2` remains correct under SIV. The DSL break is real, and is disclosed prominently in the changelog, but it is not a Go API break.
+
+**Do not change the module path.**
 
 - [ ] **Step 1: Write the changelog entry**
 
 Add at the top of `CHANGELOG.md`, below the `# Changelog` heading, matching the existing style (bold lead sentence per bullet, cause-and-consequence prose, a `### Notes` section for consumer impact):
 
 ```markdown
-## [3.0.0] — <release date>
+## [2.16.0] — <release date>
 
 ### Breaking
 - **`kind:` prefixes are no longer accepted in an `asks` target.** `Subscriptions asks bc:re/billing for a charge` is now a parse error (`craft/syntax/kind-prefix-in-target`). Write the bare form `Billing` or the qualified form `re/billing`. The slot already implies a bounded context, which is the same rule `context_map` has always enforced for its endpoints.
@@ -1447,12 +1455,12 @@ Expected: the new section is first, heading levels match the surrounding entries
 
 ```bash
 git add CHANGELOG.md docs/page/language/use-cases.md
-git commit -m "docs: changelog for v3.0.0 operation annotations"
+git commit -m "docs: changelog for v2.16.0 operation annotations"
 ```
 
 ---
 
-### Task 11: Release craft v3.0.0
+### Task 11: Release craft v2.16.0
 
 **Confirm with the user before running Step 3.** Tagging is irreversible: it fires `release.yml` (goreleaser to GitHub Releases plus the `tcarcao/homebrew-craft` tap) and `publish.yml` (multi-arch Docker Hub push) simultaneously. Do not tag on a whim.
 
@@ -1469,15 +1477,21 @@ Expected: PASS, no skips that were previously running
 
 ```bash
 git checkout main
-git merge --no-ff <branch> -m "Merge <branch>: operation annotations and target-slot cleanup (v3.0.0)"
+git merge --no-ff <branch> -m "Merge <branch>: operation annotations and target-slot cleanup (v2.16.0)"
 git push origin main
 ```
 
 - [ ] **Step 3: Tag and push (CONFIRM FIRST)**
 
 ```bash
-git tag -a v3.0.0 -m "v3.0.0: operation annotations, kind: prefixes removed from asks targets"
-git push origin v3.0.0
+git tag -a v2.16.0 -m "v2.16.0: operation annotations, kind: prefixes removed from bounded-context slots"
+git push origin v2.16.0
+```
+
+Sanity-check the module path resolves before announcing anything:
+
+```bash
+GOPROXY=proxy.golang.org go list -m github.com/tcarcao/craft/v2@v2.16.0
 ```
 
 - [ ] **Step 4: Verify the external result, not the workflow conclusion**
@@ -1486,17 +1500,17 @@ A green workflow does not prove anything landed. Check each registry directly. I
 
 ```bash
 # GitHub release assets exist and the checksum matches
-gh release view v3.0.0 --repo tcarcao/craft
-gh release download v3.0.0 --repo tcarcao/craft --pattern '*checksums.txt' --output - | head
+gh release view v2.16.0 --repo tcarcao/craft
+gh release download v2.16.0 --repo tcarcao/craft --pattern '*checksums.txt' --output - | head
 
 # Homebrew tap formula picked up the version
 gh api repos/tcarcao/homebrew-craft/contents/Formula/craft.rb --jq '.content' | base64 -d | grep -n 'version\|url'
 
 # Docker Hub tag exists
-curl -s 'https://hub.docker.com/v2/repositories/tiagocarcao/craft/tags/v3.0.0' | head -c 400
+curl -s 'https://hub.docker.com/v2/repositories/tiagocarcao/craft/tags/v2.16.0' | head -c 400
 ```
 
-Expected: release has binaries for every goreleaser target, the tap formula names 3.0.0, and the Docker tag resolves.
+Expected: release has binaries for every goreleaser target, the tap formula names 2.16.0, and the Docker tag resolves.
 
 - [ ] **Step 5: Smoke-test the published binary**
 
@@ -1506,7 +1520,7 @@ craft --version
 printf 'domain re {\n  Billing\n}\n\nuse_case "X" {\n  when U does x\n    A asks Billing for c [POST /v1/charges]\n}\n' > /tmp/smoke.craft
 craft validate /tmp/smoke.craft
 ```
-Expected: version reports 3.0.0, and the annotation parses with no diagnostics
+Expected: version reports 2.16.0, and the annotation parses with no diagnostics
 
 ---
 
@@ -1524,7 +1538,7 @@ In `../craft-vscode-extension/package.json`:
 
 ```json
   "version": "0.2.3",
-  "lspVersion": "3.0.0",
+  "lspVersion": "2.16.0",
 ```
 
 Do **not** bump `package-lock.json`'s version field. It has been stale since 0.1.10 and is deliberately left alone.
@@ -1546,8 +1560,8 @@ Commit signing is configured (`commit.gpgsign=true`) but the key is unavailable 
 ```bash
 cd ../craft-vscode-extension
 git add package.json CHANGELOG.md
-git commit --no-gpg-sign -m "chore: bump to 0.2.3, lspVersion 3.0.0"
-git tag -a v0.2.3 -m "v0.2.3: craft 3.0.0 with operation annotations"
+git commit --no-gpg-sign -m "chore: bump to 0.2.3, lspVersion 2.16.0"
+git tag -a v0.2.3 -m "v0.2.3: craft 2.16.0 with operation annotations"
 git push origin main v0.2.3
 ```
 
