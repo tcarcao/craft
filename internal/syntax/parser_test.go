@@ -1072,6 +1072,18 @@ func TestOpAnnotation_BalancedBraceInPhraseDoesNotOpenAnnotation(t *testing.T) {
 	if got := reassembleGreen(g); got != src {
 		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 	}
+
+	// The message must be actionable. It used to end with "use --parser=antlr
+	// for full support"; that flag was removed along with the ANTLR parser, and
+	// telling someone to pass a flag that does not exist is worse than saying
+	// nothing. This is the case the C3 fix routes here, so it gets specific
+	// advice rather than the generic wording.
+	if strings.Contains(diags[0].Message, "--parser=") {
+		t.Errorf("message names a flag that does not exist: %q", diags[0].Message)
+	}
+	if !strings.Contains(diags[0].Message, "braces") {
+		t.Errorf("message should explain the brace limitation, got %q", diags[0].Message)
+	}
 }
 
 // notifies has no phrase, so a trailing annotation is only recognised when it

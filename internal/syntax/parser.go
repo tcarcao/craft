@@ -1929,10 +1929,24 @@ func (p *Parser) diagUnterminatedString(tok lexer.Token) model.Diagnostic {
 	}
 }
 
+// diagNotImplemented reports a token the parser could not place.
+//
+// The message used to end with "use --parser=antlr for full support". No such
+// flag exists on any subcommand; the ANTLR parser was removed when parser v2
+// landed, and the text outlived it. Telling someone to pass a flag that does
+// not exist is worse than saying nothing, and the C3 fix routes a real and
+// reachable case here: a `{}` in an action's phrase means a trailing
+// `[...]` annotation on that line cannot be recognised, so its `[` arrives
+// unplaced.
 func (p *Parser) diagNotImplemented(tok lexer.Token) model.Diagnostic {
+	msg := fmt.Sprintf("unexpected %q here; this construct is not part of the Craft grammar and was skipped", tok.Value)
+	if tok.Value == "[" {
+		msg = "a trailing [operation] annotation is not recognised on a line whose phrase contains braces; " +
+			"move the `{...}` out of the phrase, or drop the annotation from this line"
+	}
 	return model.Diagnostic{
 		Code:     "craft/syntax/not-yet-implemented",
-		Message:  fmt.Sprintf("construct starting with %q is not yet supported by parser v2; use --parser=antlr for full support", tok.Value),
+		Message:  msg,
 		Severity: model.SeverityWarning,
 		Range:    tokenRange(tok),
 	}
