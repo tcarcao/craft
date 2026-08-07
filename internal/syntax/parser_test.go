@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lexer"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -1506,17 +1507,60 @@ func TestParse_ConcatEqualsSource(t *testing.T) {
 	}
 }
 
-// Every token's text must equal the source bytes at its own range.
-func TestParse_TokenTextMatchesItsRange(t *testing.T) {
-	src := "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n"
-	gn, _, _ := syntax.Parse(src)
-	for _, tk := range syntax.Root(gn).AllTokens() {
-		r := tk.TextRange()
-		if int(r.End) > len(src) {
-			t.Fatalf("token %v range %v exceeds source length %d", tk.Kind(), r, len(src))
+// Every non-trivia token's range must be a range the LEXER drew.
+//
+// The obvious assertion here, `src[tk.TextRange()] == tk.Text()`, cannot fail.
+// A green token's width is len(Text) by construction and a red token's offset
+// is the running sum of the widths before it, so once concat(Text) == src holds
+// the ranges tile the source and slicing one back out returns the text it was
+// derived from. The test that used to stand here restated the invariant that
+// checkTreeText already panics on, one function earlier, and would have gone
+// green on any tree the parser could actually build.
+//
+// The lexer's Offset and End are the independent quantity: they come from
+// byteOffsets, computed by ranging the source, not from any text length in the
+// tree. So the property worth pinning is that the two agree about where the
+// tokens are. That can fail without concat(Text) == src failing: a parser that
+// swallowed `does x` into one whitespace token, or that split a string literal
+// in two, still reproduces the source exactly while disagreeing with the
+// scanner about what the tokens ARE.
+//
+// The check is one-directional on purpose. A lexer token may legitimately be
+// absent from the tree as a real token: an error-recovery route can re-emit
+// bytes it could not place as Whitespace, which is what keeps losslessness
+// holding even where the kind is wrong. What must never happen is the reverse,
+// a real token in the tree whose boundaries no lexer token has.
+func TestParse_TokenRangesAgreeWithTheLexer(t *testing.T) {
+	sources := map[string]string{
+		"declarations":     "domain re { Billing }\n\nactor user Alice\n",
+		"use_case":         "use_case \"X\" {\n  when U does x\n    A asks B to y  [POST /v1/c]\n}\n",
+		"comments":         "// lead\ndomain re { Billing }\n/* a\n   b */\n/// doc\n",
+		"strings":          "use_case \"X\" {\n  when U does x A notifies \"Done\"\n}\n",
+		"unterminated str": "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n",
+		"non-ascii":        "domain ré { Billîng }\n// ünicode ✓\n",
+	}
+	for name, src := range sources {
+		byLexer := map[[2]int]bool{}
+		for _, lt := range lexer.New(src).All() {
+			if lt.Type == lexer.TokenEOF {
+				continue
+			}
+			byLexer[[2]int{lt.Offset, lt.End}] = true
 		}
-		if got := src[r.Start:r.End]; got != tk.Text() {
-			t.Errorf("token %v: Text()=%q but source at range is %q", tk.Kind(), tk.Text(), got)
+
+		gn, _, _ := syntax.Parse(src)
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			if tk.Kind() == syntax.SyntaxKindWhitespace || tk.Kind() == syntax.SyntaxKindEOF {
+				continue
+			}
+			r := tk.TextRange()
+			if int(r.End) > len(src) {
+				t.Fatalf("%s: token %v range %v exceeds source length %d", name, tk.Kind(), r, len(src))
+			}
+			if !byLexer[[2]int{int(r.Start), int(r.End)}] {
+				t.Errorf("%s: token %v at [%d,%d) %q is not a range the lexer drew",
+					name, tk.Kind(), r.Start, r.End, tk.Text())
+			}
 		}
 	}
 }
