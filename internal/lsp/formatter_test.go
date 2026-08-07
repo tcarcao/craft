@@ -632,6 +632,35 @@ func TestFormatDocument_CommentsSurvive(t *testing.T) {
 	}
 }
 
+// TestFormatDocument_CommentInternalSpacingSurvives pins a gap in the corpus
+// guard's content-preservation assertion, found during task 5's review of
+// this branch: squashWhitespace strips whitespace unconditionally, including
+// whitespace inside a comment's own text, so a pass that collapsed
+// "// hello  world" to "// hello world" would not be caught by content
+// preservation, the way it would have been caught by the kind/text-based
+// commentTexts check that assertion replaced.
+//
+// Nothing today produces that shape: writeTokens emits every token's Text()
+// verbatim, and alignAnnotations only ever rewrites the run of spaces before
+// a trailing `[...]` annotation, explicitly excluding any line that starts
+// with `//`, `/*`, or `*` from that pass (formatalign.go). This test is the
+// tripwire for the day that stops being true, not a check for a bug that
+// exists now.
+func TestFormatDocument_CommentInternalSpacingSurvives(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"line comment", "use_case \"X\" {\n  when U does x\n    A notifies a.B // hello  world\n}\n"},
+		{"block comment", "/* hello  world */\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
 // TestFormatDocument_TagsBlockSurvives covers a third instance of the same
 // class, found by the corpus guard rather than by review: a tags { } block is
 // a child of the use case and not of any scenario, so formatUseCaseDecl walked

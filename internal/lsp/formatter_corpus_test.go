@@ -169,7 +169,11 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 			// 0. THE invariant: formatting changes whitespace and nothing
 			// else. This one assertion subsumes the whole class and would
 			// have caught every formatter defect found on this branch, so it
-			// runs first and the rest are corroboration.
+			// runs first and the rest are corroboration. It is whitespace-blind
+			// in one specific way worth knowing: squashWhitespace strips
+			// whitespace inside a token's own text too, so it cannot see a
+			// change to the spacing INSIDE a single comment (see
+			// TestFormatDocument_CommentInternalSpacingSurvives).
 			if squashWhitespace(src) != squashWhitespace(got) {
 				t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", src, got)
 				return
