@@ -1,7 +1,8 @@
 # Token-Stream Formatter
 
-**Status:** Accepted, not yet implemented
+**Status:** Implemented
 **Date:** 2026-08-07
+**Commits:** `d5b8d91..e73297f`
 **Supersedes:** the follow-up recorded in `docs/decisions/action-operation-brackets.md` under
 "Follow-up: the formatter is reconstructive, and should not be"
 
@@ -57,23 +58,102 @@ The lever is already in place:
 - comments are real tokens emitted in stream (`parser.go:1742`)
 - so for any token, the preceding whitespace token's text says whether it began a new line
 
-That last point is what makes trailing comments recoverable exactly, which the current design
+That last point is what makes trailing comments recoverable exactly, which the old design
 could not do safely.
+
+## The whitespace pipeline
+
+Token text is never rewritten. Everything below decides only the whitespace around it, in this
+order. Read the whole list before changing any entry: both defects found in the final review were
+a change to one stage that nobody checked against the next.
+
+1. `separatorFor` (`formatsep.go`) decides the whitespace before one token, from the previous
+   token, the author's `gap`, and a depth. Consumed by `writeTokens`, once per token.
+2. The brace and scenario rules inside `writeTokens` (`formatter.go`) decide the depth and the
+   scenario blank line that step 1 is handed. Consumed by step 1 only.
+3. `rootGapSeparator` (`formatter.go`) does step 1's job between root-level children, where
+   there is no enclosing node. Consumed by the root loop only.
+4. The root loop's closing newline (`formatter.go`) makes the document end in exactly one. It
+   must ask what has already been written: an unterminated block comment's token text ends in
+   the file's own final newline, so writing one unconditionally grew the file on every format.
+5. `alignAnnotations` (`formatalign.go`) rewrites the run of spaces before a `[`, over the text
+   steps 1 to 3 produced. It is line oriented and therefore blind to token boundaries, so
+   `writeTokens` hands it both answers it cannot work out for itself: the set of lines a
+   multi-line token runs off the end of, and the byte offset per line just past the last comment
+   token ending on it. There is one source of truth for where a comment stops, and it is the
+   walker. Nothing in this step reads the shape of a line to decide what part of it is comment.
+   It used to, by pattern-matching leading `//`, `/*` and `*`, and each alignment defect on this
+   pass was a spelling those patterns missed. See
+   [lossless-token-text.md](lossless-token-text.md).
 
 ## Architecture
 
 One walker over `root.AllTokens()`. It replaces `formatUseCaseDecl`, `formatContextMapDecl`,
-`formatGlossaryDecl`, `formatDecl`, `writeBlockStatements`, `writeRefWithComments`,
-`trailingCommentLines`, and `significantTokens`.
+`formatGlossaryDecl`, `formatDecl`, `writeBlockStatements`, `writeRefWithComments`, and
+`significantTokens`.
 
-The walker holds three pieces of state: brace depth, whether the previous emitted token ended
-a line, and whether a blank line is pending. Nothing else.
+`trailingCommentLines` was not among them: it stayed, for the reason given under "What gets
+deleted" below. It has since been deleted, once the parser stopped folding trailing comments
+into a whitespace token. See [lossless-token-text.md](lossless-token-text.md).
+
+The walker (`writeTokens`, `internal/lsp/formatter.go:260-403`) holds five pieces of state:
+brace depth, scenario depth, the raw whitespace text accumulated since the last emitted token
+(`gap`), the previous token emitted, and whether that previous token opened the current
+scenario. There is no discrete "line just ended" or "blank line pending" boolean: `separatorFor`
+derives both directly from the newline count in `gap` (`internal/lsp/formatsep.go:122-134`).
+Scenario depth is not optional bookkeeping; the Scenarios section just below depends on it
+entirely.
 
 ### Indentation
 
-From brace depth. `{` increments after emitting, `}` decrements before emitting. Two spaces
-per level. This is purely lexical and is already how `tokenSeparator` derives indentation
-today.
+Two spaces per level, from a depth counter with two sources.
+
+**Braces.** `{` increments after emitting, `}` decrements before emitting.
+
+**Scenarios.** Brace depth alone is not enough. A `use_case` body nests without braces:
+
+    use_case "X" {          brace depth 1
+      when U does x         a scenario opens here, with no brace
+        A asks B for c      but its actions sit one level deeper
+
+An earlier draft of this record claimed indentation was "purely lexical, already how
+`tokenSeparator` derives it". That was wrong, and it blocked the first attempt at this work.
+`tokenSeparator` derived line structure from node parentage, not from braces, which is
+precisely why it could reproduce the 2/4 shape and a naive brace counter cannot.
+
+So a `when` at brace depth 1 opens a scenario scope, and lines until the next `when` at that
+depth or the enclosing `}` sit one level deeper. This stays token-driven: `when` is
+`SyntaxKindKwWhen`, and the walker already special-cases it for the blank-line rule.
+
+### Block boundaries
+
+A `{` forces a line break after it and a `}` forces one before, whatever the author wrote.
+This is the one place besides the scenario blank line where the formatter adds vertical space
+rather than preserving it, and it is what lets it expand a minified declaration:
+
+    service Foo{contexts: A}
+
+becomes
+
+    service Foo {
+      contexts: A
+    }
+
+Preserving author line breaks applies *within* a statement. Block boundaries are structure,
+not authorial line-breaking, and a formatter that leaves every minified brace untouched is not
+doing its job.
+
+Expansion stops at the brace. Several statements crammed onto one line, such as
+`user Alice system Bot`, stay exactly as the author wrote them. A brace is a token the walker
+can see and act on; the gap between two statements on the same line is indistinguishable from
+the gap inside one, so there is no signal here to expand on. Deriving a statement boundary
+structurally from the tree instead of from the author's own newlines was tried, and it produced
+source that no longer parsed, because it split an action's event ref from its `[op]` annotation
+across the manufactured line. The author's newlines are the only statement-boundary signal this
+design has, so where the author wrote none, the walker adds none. This is an accepted limit, not
+a defect: see `internal/lsp/formatsep.go:85-91` and
+`TestSeparatorFor_SeveralStatementsOnOneLineStayThere`
+(`internal/lsp/formatsep_test.go:153`).
 
 ### Line breaks and blank lines
 
@@ -88,11 +168,12 @@ wrapped across lines stays wrapped:
     contexts: Authentication,
       Profile
 
-The current formatter joins these, which is why several corpus fixtures report as unformatted.
-Preserving them is what a token-stream walker does naturally, since a newline in the source is
-just a whitespace token containing `\n`, and it is the more faithful behaviour. It is listed
-here as a fifth deliberate change rather than left implicit, because it is a behaviour change
-that was not among the four approved quirks.
+The previous formatter joined these, which is why several corpus fixtures reported as
+unformatted before this rewrite. Preserving them is what a token-stream walker does naturally,
+since a newline in the source is just a whitespace token containing `\n`, and it is the more
+faithful behaviour. It is the fifth row in the Behaviour changes table below rather than left
+implicit, because it is a behaviour change that was not among the four quirks approved before
+implementation started.
 
 `when` is `SyntaxKindKwWhen`, so the scenario rule is a token-kind test plus a depth test, not
 a tree query.
@@ -104,24 +185,50 @@ column as `max(rune width of the line before the annotation) + 2`, and rewrites 
 of spaces before each `[`. A non-annotated action does not break a run; a blank line or a new
 scenario does.
 
-This pass never touches token text, so it cannot affect content. Keeping it separate from the
-walker is deliberate: it is the one decision that needs to see whole lines rather than a token
-at a time.
+Keeping it separate from the walker is deliberate: it is the one decision that needs to see
+whole lines rather than a token at a time.
+
+That separation is also its one hazard, and the claim originally made here, that the pass
+never touches token text so cannot affect content, was false as written. A multi-line block
+comment is ONE token carrying newlines, so splitting the output into lines hands this pass the
+comment's interior lines with nothing to distinguish them from real ones. An interior line
+ending in `]` looked exactly like an annotated action, so it was padded to the run's column,
+which rewrote whitespace inside comment text. Nothing caught it: `contentDrift` is
+whitespace-blind, the output is still idempotent, and the corpus model comparison excludes
+comment trivia.
+
+The fix is at the emit site, not a better heuristic. `writeTokens` returns the set of written
+line indices that fall INSIDE a token rather than between two of them, and `alignAnnotations`
+skips those lines for both the column computation and the rewrite. Tracking `/* */` nesting in
+the alignment pass would have worked, but it would put a heuristic where the walker has the
+exact answer, which is the same trade this branch already refused once. With the set in place
+the pass really does only rewrite whitespace between two tokens, which is what makes it unable
+to affect content.
+
+The set is expressed in terms of tokens rather than of comments. Only comments produce a
+multi-line token today, but the invariant is that whitespace BETWEEN tokens is the only thing
+any pass may touch, and that holds whatever kind of token grows a newline next.
 
 ## Behaviour changes
 
-Four current behaviours change. Each is a quirk rather than a decision, and each was approved
-explicitly.
+Six behaviours change. The first four rows below were approved explicitly before implementation
+started. The fifth, author line breaks inside a value, surfaced during implementation and was
+approved as an additional deliberate change. The sixth, minified declarations, follows the same
+brace-versus-statement-boundary reasoning already given under Block boundaries above: a brace is
+a token the walker can act on, a statement boundary shared with another statement on one line is
+not. All six are quirk fixes rather than style decisions.
 
-| | Current | After |
+| | Before | After |
 |---|---|---|
 | Trailing comment | preserved but moved to its own line above | stays on its line |
 | Ref-adjacent comment | splits the field across two lines | field stays on one line, comment follows |
 | Interior multi-space | preserved in actions, collapsed in triggers | collapsed everywhere |
 | Blank lines | as described above, but implicit | as described above, stated and tested |
+| Author line breaks in a value | joined onto one line | preserved, so `contexts: A,\n  B` stays wrapped |
+| Minified declarations | stayed on one line | `{`/`}` force a break, so `service Foo{contexts: A}` expands; several statements on one line still don't split (see Block boundaries) |
 
-The trailing-comment move exists because the current design cannot tell reliably where a line
-ends, and placing a comment wrongly could comment out real content. The token stream removes
+The trailing-comment move existed because the old design could not tell reliably where a line
+ended, and placing a comment wrongly could comment out real content. The token stream removes
 that uncertainty, so the reason for the move goes away.
 
 ## What gets deleted
@@ -132,7 +239,22 @@ Roughly 300 of `internal/lsp/formatter.go`'s 626 lines:
 - `formatDecl`, `tokenSeparator`, `isNextColon`, `isSiblingToken`
 - `writeBlockStatements`, `writeRefWithComments`, `writeCommentLines`
 - `significantTokens`, `isCommentKind`
-- `trailingCommentLines`, including the EOF-trivia branch that is currently dead code
+
+**`trailingCommentLines` stays.** *(Superseded. It was deleted in the follow-up work recorded in
+[lossless-token-text.md](lossless-token-text.md); the reasoning below was correct at the time and
+is kept because it shows why the fix had to happen in the parser.)*
+
+An earlier draft listed it for deletion on the belief that end-of-file comments are ordinary
+tokens the walker would pick up. They were not: the parser folded everything past the last real
+token into a single `SyntaxKindWhitespace` token, so the bytes survived in the tree but no token
+carried a comment kind. That is exactly why a file ending in a comment lost it, and a
+comment-only file was truncated to zero bytes, before v2.16.0 fixed both. Deleting the function
+at that point would have reintroduced both defects. It reached the text through the trivia rather
+than through the kind, which was the only way to recover it.
+
+The conclusion held; the premise was the bug. Once `peek()`'s skipping of comment tokens was
+identified as the reason trailing comments were never consumed, tokenizing them made the function
+dead rather than load-bearing, and it was deleted with no replacement.
 
 `writeAlignedActions` survives in spirit as the alignment post-pass.
 
@@ -157,21 +279,46 @@ tokens covered by the strongest assertion:
 Under this design that assertion should be impossible to fail rather than merely observed to
 pass, which is the difference the rewrite buys.
 
-`contentDrift` stays as a runtime guard and should become unreachable. Add a test asserting it
-does not fire for any file in the corpus, so that if the invariant is ever broken it surfaces
-immediately rather than as a silent no-op.
+`contentDrift` stays as a runtime guard, and is now unreachable from any input at all.
+`TestFormatDocument_EveryCraftFileInRepo` (`internal/lsp/formatter_corpus_test.go:154-161`)
+asserts it does not fire for any file in the corpus, so that if the invariant is ever broken it
+surfaces immediately rather than as a silent no-op.
+
+This section originally documented a reachable half. An unterminated string at end of line, as in
+
+    use_case "X" {
+      when U does x A notifies "Oops
+    }
+
+produces ZERO diagnostics, so `bailsFormatting` let it through, and the lexer yielded a token
+whose `Text()` was `Oops` at the offset of the `"`, with the leftover byte landing in a
+`Whitespace` token. The widths still summed, so the tree passed a losslessness check that
+compared `root.Width()` against `len(src)`, but concatenating `AllTokens()` text did not
+reproduce the source, and no walk over those tokens could.
+
+That was a parser defect upstream of the formatter, and it has since been fixed where it lives:
+see [lossless-token-text.md](lossless-token-text.md). Token text is now a slice of the source at
+every emit site, and `checkTreeText` asserts that concatenating the tokens reproduces the file.
+The fixture above now parses, formats, and returns byte-identical with its opening quote intact.
+
+So `contentDrift` no longer defends against parser bugs; the parser defends against those itself.
+What it still defends against is a bug in the formatter's own walker dropping, duplicating, or
+reordering a token, which no upstream invariant can rule out. That makes it belt-and-braces
+rather than load bearing. Because no real input reaches it, it is covered by
+`TestContentDrift_RefusesToLoseContent`, which unit-tests the function directly across all four
+cases: whitespace-only change, dropped content, duplicated content, and reordered content.
 
 ## Re-blessing
 
-The three quirk fixes change output for some fixtures. Each diff is reviewed individually
+The six behaviour changes above change output for some fixtures. Each diff is reviewed individually
 rather than accepted wholesale, and any fixture with a `.craftjson` pairing has its golden
 re-verified, since a golden change would mean model drift rather than whitespace drift and is
 a defect.
 
-`craft fmt --check` currently reports 36 of 68 corpus files, all non-canonical fixture shapes
-that are deliberate parser test surface with zero formatter defects among them. This work does
-not aim to make `--check` clean; that is a separate fixture decision and is explicitly out of
-scope here.
+`craft fmt --check` reports 28 of the 60 files under `testdata/corpus` as unformatted, all
+non-canonical fixture shapes that are deliberate parser test surface with zero formatter defects
+among them. This work does not aim to make `--check` clean; that is a separate fixture decision
+and is explicitly out of scope here.
 
 ## Risks
 
@@ -188,3 +335,51 @@ that bail-out stays in front of the walker.
 - making `craft fmt --check` clean on the corpus
 - changing indent width, or any style decision not listed under Behaviour changes
 - LSP navigation for qualified names, which is tracked separately
+
+## Known limitations, found during review and since fixed
+
+This section originally recorded three limitations that this branch deliberately did not fix.
+All three have since been fixed. The design record for that work is
+[lossless-token-text.md](lossless-token-text.md); this section is kept rather than deleted so
+the reasoning stays legible.
+
+Two of the three turned out not to be formatter limitations at all. They were parser defects
+that the formatter had grown workarounds for, which is why they resisted being fixed here.
+
+**A comment closing on a line that also carries an annotation lost alignment on that line.**
+`writeTokens` marked every emitted line after a token's first as interior to it, so when a
+multi-line comment's `*/` shared a line with a following annotated action, that whole physical
+line was excluded from the alignment run.
+
+Fixed in two places, which is the point worth carrying forward. Narrowing the interior set to
+"every line the token runs off the END of", releasing the last line and claiming the first, was
+necessary and not sufficient: `splitAnnotation`, the set's only consumer, independently refused
+any line whose first non-space character was `*`, which is exactly what the idiomatic
+`*`-per-line comment style produces on its closing line. The two rules cancelled, and the fix
+read as complete because the test fixture chosen used the bare `*/` style that only the first
+rule governs. `splitAnnotation` was widened to disqualify such a line only when the comment does
+not close on it, and to search for the annotation after the `*/`. Both closing styles aligned. The
+narrowed interior set also fixed a defect in the other direction, where a comment opened partway
+along a line of content left its body text being padded as though it were an action.
+
+That widening has since been superseded: `splitAnnotation` no longer reads the line at all, and is
+told where comment text stops by `writeTokens`. Adding one more pattern to a textual scan is what
+this whole record argues against, and the second time the same defect shape appeared it was clear
+enough. See [lossless-token-text.md](lossless-token-text.md).
+
+**`trailingCommentLines` stripped interior indentation.** A comment after the last declaration
+went through `trailingCommentLines` rather than the walker, and that function trimmed each line.
+The root cause was in the parser: `peek()` skips comment tokens, so at end of file the main loop
+exited with trailing comments unconsumed and they were swept into a single `Whitespace` token.
+No token-walking consumer could see them, which is the only reason the scraping path existed.
+Fixed by tokenizing trailing trivia; `trailingCommentLines` was then deleted rather than
+repaired, and the indentation strip went with it.
+
+**The parser could emit a token whose text did not match its own source range.** For an
+unterminated string at end of line it yielded a token whose `Text()` was the string body while
+the leftover byte landed in a Whitespace token. Widths still summed, so `root.Width() == len(src)`
+passed. The deeper reason that check could never catch this: token length was *derived from token
+text*, so a wrong text produced a length wrong by exactly the same amount. Width equality was not
+merely a weak test of this property, it was structurally incapable of testing it. Fixed by
+recording each token's byte end in the lexer, slicing token text from source at every emit site,
+and replacing the width check with `checkTreeText`.

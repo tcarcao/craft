@@ -464,3 +464,120 @@ func TestComment_SlashInProseSurvives(t *testing.T) {
 		})
 	}
 }
+
+// Every token's [Offset,End) must stay in bounds, not overlap the previous
+// token, and slice out the token's own source text. Gaps between one token's
+// End and the next token's Offset are legitimate (whitespace the lexer
+// skips), so this does NOT assert exact tiling of the source.
+//
+// For most kinds src[Offset:End] equals tok.Value exactly, so an End that is
+// off by even one byte fails the comparison. The two exceptions are
+// TokenString, whose Value is the unescaped body while the slice is the
+// verbatim source text including quotes and escapes, and the TokenError
+// produced by an unterminated string, whose Value is the partial content
+// while the slice also includes the opening quote. Both exceptions are
+// checked against a literal written out by hand (stringLiterals /
+// errorLiterals below) rather than derived from Value, so a truncated End
+// cannot hide behind an expectation shaped the same way as the bug.
+//
+// The source list also exercises every kind whose End computation has a
+// distinct code path: digits/numbers, a percentage, a digit-prefixed
+// identifier, the arrow (the only multi-rune token() call site, whose End is
+// derived from a formula rather than an observed position), a doc comment,
+// and multi-byte UTF-8 (accented letters and a non-Latin script) in both
+// identifiers and string literals, since every site converts rune indices to
+// byte offsets via offsetAt and a missing conversion only surfaces there.
+func TestToken_EndSlicesSource(t *testing.T) {
+	sources := []string{
+		"domain re {\n  Billing\n}\n",
+		"// lead\ndomain re { Billing }\n",
+		"/* block */ domain re { Billing }\n",
+		"use_case \"X\" {\n  when U does x A notifies \"Hello world\"\n}\n",
+		"use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n", // unterminated
+		"domain re { Billing }  [POST /v1/charges]\n",
+		"services { S { contexts: A, B\n language: golang } }\n",
+		"@#$\n", // lexer error tokens
+		"",
+		"count 42 items\n",        // TokenNumber
+		"limit 90%\n",             // TokenPercentage
+		"retry 30s\n",             // digit-prefixed identifier (lexer.go scanNumber's ident branch)
+		"deploy -> release\n",     // TokenArrow: the only multi-rune token() call site
+		"/// doc comment\n",       // TokenDocComment
+		"actor user café\n",       // accented-letter identifier
+		"actor user 名前\n",         // non-Latin-script identifier
+		"use_case \"café\" { }\n", // accented letters inside a string literal
+		"use_case \"名前\" { }\n",   // non-Latin script inside a string literal
+	}
+
+	// Hand-written expectations for the two kinds whose slice legitimately
+	// differs from Value. Keyed by Value so the same entry covers a value
+	// appearing in more than one source.
+	stringLiterals := map[string]string{
+		"X":           `"X"`,
+		"Hello world": `"Hello world"`,
+		"café":        `"café"`,
+		"名前":          `"名前"`,
+	}
+	errorLiterals := map[string]string{
+		"Oops": `"Oops`, // unterminated string: slice includes the opening quote, Value does not
+	}
+
+	for _, src := range sources {
+		toks := lexer.New(src).All()
+		prevEnd := 0
+		for _, tok := range toks {
+			if tok.Type == lexer.TokenEOF {
+				continue
+			}
+			if tok.Offset < prevEnd {
+				t.Fatalf("src=%q token %v overlaps previous: Offset=%d prevEnd=%d",
+					src, tok.Type, tok.Offset, prevEnd)
+			}
+			if tok.End < tok.Offset || tok.End > len(src) {
+				t.Fatalf("src=%q token %v has bad range [%d,%d) len=%d",
+					src, tok.Type, tok.Offset, tok.End, len(src))
+			}
+			prevEnd = tok.End
+
+			slice := src[tok.Offset:tok.End]
+			switch tok.Type {
+			case lexer.TokenString:
+				want, ok := stringLiterals[tok.Value]
+				if !ok {
+					t.Fatalf("src=%q: TokenString value %q has no hand-written expectation in stringLiterals; add one", src, tok.Value)
+				}
+				if slice != want {
+					t.Errorf("src=%q TokenString: slice %q, want hand-written %q", src, slice, want)
+				}
+			case lexer.TokenError:
+				if want, ok := errorLiterals[tok.Value]; ok {
+					if slice != want {
+						t.Errorf("src=%q TokenError: slice %q, want hand-written %q", src, slice, want)
+					}
+				} else if slice != tok.Value {
+					// An ordinary single-character error token (e.g. from "@#$")
+					// follows the general rule: no quotes or escapes involved.
+					t.Errorf("src=%q TokenError: slice %q != Value %q", src, slice, tok.Value)
+				}
+			default:
+				if slice != tok.Value {
+					t.Errorf("src=%q token %v: slice %q != Value %q", src, tok.Type, slice, tok.Value)
+				}
+			}
+		}
+	}
+}
+
+// The raw slice must be non-empty for every non-EOF token: a zero-width
+// token would let a construct vanish from the tree without changing widths.
+func TestToken_EndIsNonEmpty(t *testing.T) {
+	toks := lexer.New("use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n").All()
+	for _, tok := range toks {
+		if tok.Type == lexer.TokenEOF {
+			continue
+		}
+		if tok.End <= tok.Offset {
+			t.Fatalf("token %v is zero-width at offset %d", tok.Type, tok.Offset)
+		}
+	}
+}

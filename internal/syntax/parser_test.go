@@ -1,14 +1,48 @@
 package syntax_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lexer"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
+
+// Every .craft file in the repository must round-trip through the tree.
+func TestParse_ConcatEqualsSource_AllRepoFiles(t *testing.T) {
+	var files []string
+	for _, root := range []string{"../../testdata", "../../examples", "../../docs"} {
+		filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && strings.HasSuffix(p, ".craft") {
+				files = append(files, p)
+			}
+			return nil
+		})
+	}
+	if len(files) < 90 {
+		t.Fatalf("expected to find at least 90 .craft files, found %d", len(files))
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		src := string(b)
+		gn, _, _ := syntax.Parse(src)
+		var sb strings.Builder
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			sb.WriteString(tk.Text())
+		}
+		if sb.String() != src {
+			t.Errorf("%s: tree does not reproduce source", f)
+		}
+	}
+}
 
 func parseRoot(t *testing.T, src string) syntax.SyntaxNode {
 	t.Helper()
@@ -1442,5 +1476,121 @@ func TestBareSubject_StillUnwrapped(t *testing.T) {
 	}
 	if got := actions[1].PhraseText(); got != "email format" {
 		t.Errorf("PhraseText() = %q, want %q", got, "email format")
+	}
+}
+
+// Rowan's actual invariant: concatenating the tokens reproduces the source.
+// Width equality is a checksum that cannot catch a token lying about its text.
+func TestParse_ConcatEqualsSource(t *testing.T) {
+	sources := map[string]string{
+		"normal":           "domain re {\n  Billing\n}\n",
+		"string":           "use_case \"X\" {\n  when U does x A notifies \"Hello\"\n}\n",
+		"escaped string":   "use_case \"X\" {\n  when U does x A notifies \"a\\\"b\"\n}\n",
+		"unterminated":     "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n",
+		"leading comment":  "// lead\ndomain re { Billing }\n",
+		"trailing comment": "domain re { Billing }\n// trail\n",
+		"comment only":     "// just this\n",
+		"block comment":    "/* a\n   b */\ndomain re { Billing }\n",
+		"annotation":       "use_case \"X\" {\n  when U does x A asks B to y  [POST /v1/c]\n}\n",
+		"lexer error":      "@#$\n",
+		"empty":            "",
+	}
+	for name, src := range sources {
+		gn, _, _ := syntax.Parse(src)
+		var sb strings.Builder
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			sb.WriteString(tk.Text())
+		}
+		if sb.String() != src {
+			t.Errorf("%s: concat != src\n got: %q\nwant: %q", name, sb.String(), src)
+		}
+	}
+}
+
+// Every non-trivia token's range must be a range the LEXER drew.
+//
+// The obvious assertion here, `src[tk.TextRange()] == tk.Text()`, cannot fail.
+// A green token's width is len(Text) by construction and a red token's offset
+// is the running sum of the widths before it, so once concat(Text) == src holds
+// the ranges tile the source and slicing one back out returns the text it was
+// derived from. The test that used to stand here restated the invariant that
+// checkTreeText already panics on, one function earlier, and would have gone
+// green on any tree the parser could actually build.
+//
+// The lexer's Offset and End are the independent quantity: they come from
+// byteOffsets, computed by ranging the source, not from any text length in the
+// tree. So the property worth pinning is that the two agree about where the
+// tokens are. That can fail without concat(Text) == src failing: a parser that
+// swallowed `does x` into one whitespace token, or that split a string literal
+// in two, still reproduces the source exactly while disagreeing with the
+// scanner about what the tokens ARE.
+//
+// The check is one-directional on purpose. A lexer token may legitimately be
+// absent from the tree as a real token: an error-recovery route can re-emit
+// bytes it could not place as Whitespace, which is what keeps losslessness
+// holding even where the kind is wrong. What must never happen is the reverse,
+// a real token in the tree whose boundaries no lexer token has.
+func TestParse_TokenRangesAgreeWithTheLexer(t *testing.T) {
+	sources := map[string]string{
+		"declarations":     "domain re { Billing }\n\nactor user Alice\n",
+		"use_case":         "use_case \"X\" {\n  when U does x\n    A asks B to y  [POST /v1/c]\n}\n",
+		"comments":         "// lead\ndomain re { Billing }\n/* a\n   b */\n/// doc\n",
+		"strings":          "use_case \"X\" {\n  when U does x A notifies \"Done\"\n}\n",
+		"unterminated str": "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n",
+		"non-ascii":        "domain ré { Billîng }\n// ünicode ✓\n",
+	}
+	for name, src := range sources {
+		byLexer := map[[2]int]bool{}
+		for _, lt := range lexer.New(src).All() {
+			if lt.Type == lexer.TokenEOF {
+				continue
+			}
+			byLexer[[2]int{lt.Offset, lt.End}] = true
+		}
+
+		gn, _, _ := syntax.Parse(src)
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			if tk.Kind() == syntax.SyntaxKindWhitespace || tk.Kind() == syntax.SyntaxKindEOF {
+				continue
+			}
+			r := tk.TextRange()
+			if int(r.End) > len(src) {
+				t.Fatalf("%s: token %v range %v exceeds source length %d", name, tk.Kind(), r, len(src))
+			}
+			if !byLexer[[2]int{int(r.Start), int(r.End)}] {
+				t.Errorf("%s: token %v at [%d,%d) %q is not a range the lexer drew",
+					name, tk.Kind(), r.Start, r.End, tk.Text())
+			}
+		}
+	}
+}
+
+// Comments after the last declaration must be comment tokens, not folded
+// into a trailing whitespace blob. The formatter walks tokens, so a comment
+// hidden inside whitespace cannot be formatted like every other comment.
+func TestParse_TrailingCommentsAreTokens(t *testing.T) {
+	cases := map[string]string{
+		"trailing line":  "domain re { Billing }\n// trail\n",
+		"comment only":   "// just this\n",
+		"trailing block": "domain re { Billing }\n/* trail */\n",
+		"two trailing":   "domain re { Billing }\n// one\n// two\n",
+		"trailing doc":   "domain re { Billing }\n/// doc\n",
+	}
+	for name, src := range cases {
+		gn, _, _ := syntax.Parse(src)
+		comments := 0
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			switch tk.Kind() {
+			case syntax.SyntaxKindLineComment, syntax.SyntaxKindBlockComment, syntax.SyntaxKindDocComment:
+				comments++
+			case syntax.SyntaxKindWhitespace:
+				if strings.Contains(tk.Text(), "//") || strings.Contains(tk.Text(), "/*") {
+					t.Errorf("%s: comment folded into whitespace token %q", name, tk.Text())
+				}
+			}
+		}
+		if comments == 0 {
+			t.Errorf("%s: expected at least one comment token, got none", name)
+		}
 	}
 }

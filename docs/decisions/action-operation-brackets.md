@@ -363,21 +363,8 @@ direction deserves its own change.
 
 ## Follow-up: the formatter is reconstructive, and should not be
 
-`FormatDocument` rebuilds each declaration from typed accessors, so every construct
-needs its own branch and any construct without one is dropped in silence. Eight
-defects of exactly that shape were found while shipping this feature: deleted
-annotations, requoted event refs, a lost `returns` target, mangled trigger
-punctuation, split qualified refs, collapsed `context_map` and `glossary` statements,
-a deleted `tags` block, and every comment in the document.
-
-The green tree is lossless (`root.Width() == len(src)` is asserted), so a formatter
-driven from the full token stream, emitting every token verbatim and choosing only the
-whitespace between them, would make "formatting changes whitespace and nothing else"
-true by construction instead of by a check. That is the right shape and it is not a
-small change: annotation column alignment, scenario blank lines and block indentation
-all currently come from the node structure rather than from the token stream.
-
-Until then, `contentDrift` in `internal/lsp/formatter.go` enforces the invariant at
-the exit: if the output would change any non-whitespace byte, the input is returned
-untouched and a diagnostic says so. That converts every future missed construct from
-silent data loss into a visible no-op.
+Done. See `docs/decisions/token-stream-formatter.md` for the design and its
+commit range: the formatter is now one walk over the lossless token stream, and
+content preservation is structural rather than checked. `contentDrift` stays in
+place as a runtime guard: unreachable for any document the parser accepts
+without diagnostics, and still load bearing for those it does not.

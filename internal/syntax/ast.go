@@ -209,7 +209,7 @@ func refAwareText(el SyntaxElement) string {
 
 // stringAwareText returns a leaf token's semantic content: for a
 // SyntaxKindString token, tok.Text() is the exact raw source text
-// including both quotes (Bug 8a fix — see tokenText in parser.go), so this
+// including both quotes (Bug 8a fix — see rawText in parser.go), so this
 // strips the surrounding quotes and resolves escape sequences to recover
 // the same unescaped value lexer.Token.Value held. For any other kind,
 // Text() is already the semantic value (no quotes involved), so it is

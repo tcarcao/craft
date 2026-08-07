@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // TokenType identifies the kind of a scanned token.
@@ -116,15 +117,7 @@ var keywords = map[string]TokenType{
 type Token struct {
 	Type  TokenType
 	Value string
-	// Raw carries the exact raw source text for the token, when it differs
-	// from Value. Only populated for TokenString: Value is the unescaped
-	// string CONTENT without the surrounding quotes (kept for content
-	// consumers), while Raw is the verbatim source slice including both
-	// quotes and any escape sequences as written — used to build a
-	// byte-for-byte lossless green tree. Empty for token types where Value
-	// already equals the raw source text.
-	Raw  string
-	Line int // 1-based
+	Line  int // 1-based
 	// Column is 1-based and counts RUNES within the line, not bytes — the
 	// lexer scans []rune. Use it for line-relative comparisons (adjacency,
 	// same-line checks) and for diagnostic positions. Never add it to a byte
@@ -135,6 +128,12 @@ type Token struct {
 	// the start of the source. This is the authoritative position for building
 	// the green tree, whose widths must sum to len(src) exactly.
 	Offset int
+	// End is the 0-based BYTE offset one past the token's last byte, so that
+	// src[Offset:End] is the token's verbatim source text for every token
+	// kind, including malformed ones. The green tree slices this rather than
+	// deriving length from token text: deriving it meant a wrong text produced
+	// a consistently wrong length, which no width check could detect.
+	End int
 }
 
 func (t Token) String() string {
@@ -273,7 +272,7 @@ func (l *Lexer) scanLineComment() Token {
 	for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 		l.advance()
 	}
-	return Token{Type: TokenLineComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+	return Token{Type: TokenLineComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 }
 
 // scanDocComment scans a /// doc comment and returns it as a TokenDocComment.
@@ -286,7 +285,7 @@ func (l *Lexer) scanDocComment() Token {
 	for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 		l.advance()
 	}
-	return Token{Type: TokenDocComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+	return Token{Type: TokenDocComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 }
 
 // scanBlockComment scans a /* ... */ block comment and returns it as a token.
@@ -306,7 +305,7 @@ func (l *Lexer) scanBlockComment() Token {
 		}
 		l.advance()
 	}
-	return Token{Type: TokenBlockComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+	return Token{Type: TokenBlockComment, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 }
 
 // scanString scans a double-quoted string literal. Supported escape sequences:
@@ -315,7 +314,7 @@ func (l *Lexer) scanBlockComment() Token {
 func (l *Lexer) scanString() Token {
 	startLine := l.line
 	startCol := l.col
-	rawStart := l.pos // position of the opening `"`, for the Raw source slice
+	rawStart := l.pos // position of the opening `"`, for Offset/End
 	l.advance()       // consume opening "
 	var val []rune
 	closed := false
@@ -363,9 +362,9 @@ func (l *Lexer) scanString() Token {
 	if !closed {
 		// val contains partial content up to the newline (no quotes).
 		// Callers that compute a Range must add +1 for the opening `"`.
-		return Token{Type: TokenError, Value: string(val), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart)}
+		return Token{Type: TokenError, Value: string(val), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart), End: l.offsetAt(l.pos)}
 	}
-	return Token{Type: TokenString, Value: string(val), Raw: string(l.src[rawStart:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart)}
+	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart), End: l.offsetAt(l.pos)}
 }
 
 func (l *Lexer) scanIdent() Token {
@@ -383,7 +382,7 @@ func (l *Lexer) scanIdent() Token {
 		// the token Type to detect keywords; Value retains source spelling
 		// so identifiers like "User" aren't lowercased when used as names.
 	}
-	return Token{Type: tt, Value: val, Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+	return Token{Type: tt, Value: val, Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 }
 
 func (l *Lexer) scanNumber() Token {
@@ -404,7 +403,7 @@ func (l *Lexer) scanNumber() Token {
 	// If followed by '%', emit as percentage (e.g. 90%)
 	if l.pos < len(l.src) && l.src[l.pos] == '%' {
 		l.advance()
-		return Token{Type: TokenPercentage, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+		return Token{Type: TokenPercentage, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 	}
 	// If followed by a letter/underscore (e.g. 30s, 1ms), scan as identifier for
 	// backward compatibility with alphanumeric modifier values.
@@ -412,9 +411,9 @@ func (l *Lexer) scanNumber() Token {
 		for l.pos < len(l.src) && isIdentContinue(l.src[l.pos]) {
 			l.advance()
 		}
-		return Token{Type: TokenIdent, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+		return Token{Type: TokenIdent, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 	}
-	return Token{Type: TokenNumber, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start)}
+	return Token{Type: TokenNumber, Value: string(l.src[start:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(start), End: l.offsetAt(l.pos)}
 }
 
 func (l *Lexer) consume(tt TokenType) Token {
@@ -423,8 +422,16 @@ func (l *Lexer) consume(tt TokenType) Token {
 	return tok
 }
 
+// token builds a Token starting at the current position, before any
+// advance() calls that consume it. Every caller of token() goes on to call
+// advance() exactly once per rune already present in val (consume() advances
+// once for its single-rune val; the "->" arrow site advances twice for its
+// two-rune val; the zero-rune EOF val advances zero times), so the token's
+// end is always l.pos plus that many runes, converted to a byte offset
+// before those advances happen.
 func (l *Lexer) token(tt TokenType, val string) Token {
-	return Token{Type: tt, Value: val, Line: l.line, Column: l.col, Offset: l.offsetAt(l.pos)}
+	end := l.offsetAt(l.pos + utf8.RuneCountInString(val))
+	return Token{Type: tt, Value: val, Line: l.line, Column: l.col, Offset: l.offsetAt(l.pos), End: end}
 }
 
 func (l *Lexer) advance() {

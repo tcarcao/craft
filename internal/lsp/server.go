@@ -1592,7 +1592,7 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 	// declNewText is the replacement text for the DECLARATION site only.
 	// nameTok.Text() (oldName, used below for the edit range width) is the
 	// raw source text: for a QUOTED declaration name (SyntaxKindString) it
-	// includes both surrounding quotes (Bug 8a — see tokenText in
+	// includes both surrounding quotes (Bug 8a — see rawText in
 	// parser.go), so the declaration-site range already spans the full
 	// quoted token. newName from the client is the plain (unquoted) new
 	// name, so it must be re-quoted and escaped before replacing that

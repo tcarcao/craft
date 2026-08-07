@@ -15,6 +15,8 @@ package syntax
 
 import (
 	"fmt"
+	"strings"
+	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/lexer"
@@ -38,29 +40,59 @@ func Parse(src string) (*green.GreenNode, green.LineIndex, []model.Diagnostic) {
 	l := lexer.New(src)
 	p := &Parser{tokens: l.All(), src: src}
 	root, diags := p.parseFile()
-	diags = append(diags, checkTreeWidth(root, len(src))...)
+	diags = append(diags, checkTreeText(root, src)...)
 	return root, li, diags
 }
 
-// checkTreeWidth asserts the losslessness invariant: the green tree's total
-// width must equal the source length. Red-tree offsets are accumulated green
-// widths, so drift here puts token offsets past EOF and silently misplaces
-// every position derived from the tree — highlighting, hovers, diagnostics.
+// checkTreeText asserts rowan's invariant: concatenating the tree's tokens
+// reproduces the source exactly. This supersedes a width-sum check, which
+// could not detect a token whose text diverged from its source range because
+// the token's length was derived from that same wrong text.
 //
-// This should never fire. It is here because when it did fire (rune columns
-// fed to a byte-based Offset), the symptom was a slice-bounds panic several
-// layers away with nothing pointing back at the parser.
-func checkTreeWidth(root *green.GreenNode, srcLen int) []model.Diagnostic {
-	if root == nil || int(root.Width()) == srcLen {
+// This panics rather than returning a diagnostic. Token text is a slice of
+// the source and error recovery wraps tokens in an ErrorNode rather than
+// dropping them, so no input can reach here: a failure is a parser bug.
+//
+// Only a parser bug can get here: token text is a slice of the source and
+// error recovery wraps tokens rather than dropping them, so no input can
+// violate this. Fail hard under test so CI cannot miss it, but degrade to a
+// diagnostic in production: syntax.Parse is reached from pkg/craft, which is
+// a public library API, and panicking there would crash a consumer.
+func checkTreeText(root *green.GreenNode, src string) []model.Diagnostic {
+	if root == nil {
 		return nil
 	}
+	var sb strings.Builder
+	sb.Grow(len(src))
+	collectGreenText(root, &sb)
+	if sb.String() == src {
+		return nil
+	}
+	msg := fmt.Sprintf(
+		"internal parser error: syntax tree does not reproduce its source (tree %d bytes, source %d bytes); positions in this file may be wrong",
+		sb.Len(), len(src))
+	if testing.Testing() {
+		panic(msg)
+	}
 	return []model.Diagnostic{{
-		Code: "craft/internal/tree-width-mismatch",
-		Message: fmt.Sprintf(
-			"internal parser error: syntax tree spans %d bytes but the source is %d; positions in this file may be wrong",
-			root.Width(), srcLen),
+		Code:     "craft/internal/tree-text-mismatch",
+		Message:  msg,
 		Severity: model.SeverityError,
 	}}
+}
+
+// collectGreenText walks the green tree in document order, appending every
+// leaf token's text to sb. Internal nodes carry no text of their own; only
+// tokens do.
+func collectGreenText(n *green.GreenNode, sb *strings.Builder) {
+	for _, c := range n.Children {
+		switch e := c.(type) {
+		case *green.GreenToken:
+			sb.WriteString(e.Text)
+		case *green.GreenNode:
+			collectGreenText(e, sb)
+		}
+	}
 }
 
 // --- main parse loop ---
@@ -107,6 +139,12 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 			p.resyncToTopLevel()
 		}
 	}
+
+	// Trailing comments are trivia like any other: peek() skips comment
+	// tokens, so at EOF the main loop leaves them unconsumed. Emit them as
+	// comment tokens before sweeping the rest, or they land inside one
+	// whitespace blob and no token-walking consumer can see them.
+	p.attachTrivia()
 
 	// Capture trailing whitespace/newlines after the last token.
 	if int(p.prevEnd) < len(p.src) {
@@ -1714,21 +1752,19 @@ func (p *Parser) updatePrevEnd(tok lexer.Token) {
 	if tok.Type == lexer.TokenEOF {
 		return
 	}
-	p.prevEnd = green.TextSize(tok.Offset + len(tokenText(tok)))
+	p.prevEnd = green.TextSize(tok.End)
 }
 
-// tokenText returns the exact raw source text for tok, for green-tree Text
-// emission. For most token types this is tok.Value. TokenString is the
-// exception: Value is the unescaped string CONTENT without surrounding
-// quotes (kept as-is for content consumers — see EventValue()/Title()/etc.),
-// while Raw carries the verbatim source slice including both quotes and any
-// escape sequences. Using Value there would silently drop the quotes and
-// corrupt the round-trip (Bug 1); Raw is what makes the green tree lossless.
-func tokenText(tok lexer.Token) string {
-	if tok.Type == lexer.TokenString && tok.Raw != "" {
-		return tok.Raw
+// rawText returns the token's verbatim source text. Token text in the green
+// tree is always a slice of the source: this is what makes
+// concat(AllTokens) == src true by construction rather than by convention.
+// Never build token text from tok.Value or tok.Raw, which carry the token's
+// interpreted content and diverge from source for strings and error tokens.
+func (p *Parser) rawText(tok lexer.Token) string {
+	if tok.Offset < 0 || tok.End > len(p.src) || tok.End < tok.Offset {
+		return tok.Value // defensive: malformed range, should be unreachable
 	}
-	return tok.Value
+	return p.src[tok.Offset:tok.End]
 }
 
 // attachTrivia emits any line/block comment tokens at p.pos into the current
@@ -1739,17 +1775,17 @@ func (p *Parser) attachTrivia() {
 		switch tok.Type {
 		case lexer.TokenLineComment:
 			p.emitWhitespaceBefore(tok)
-			p.builder.Token(SyntaxKindLineComment, tok.Value)
+			p.builder.Token(SyntaxKindLineComment, p.rawText(tok))
 			p.updatePrevEnd(tok)
 			p.pos++
 		case lexer.TokenBlockComment:
 			p.emitWhitespaceBefore(tok)
-			p.builder.Token(SyntaxKindBlockComment, tok.Value)
+			p.builder.Token(SyntaxKindBlockComment, p.rawText(tok))
 			p.updatePrevEnd(tok)
 			p.pos++
 		case lexer.TokenDocComment:
 			p.emitWhitespaceBefore(tok)
-			p.builder.Token(SyntaxKindDocComment, tok.Value)
+			p.builder.Token(SyntaxKindDocComment, p.rawText(tok))
 			p.updatePrevEnd(tok)
 			p.pos++
 		default:
@@ -1768,7 +1804,7 @@ func (p *Parser) consume() lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tokenText(tok))
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), p.rawText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -1783,7 +1819,7 @@ func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(kind, tokenText(tok))
+	p.builder.Token(kind, p.rawText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -2510,9 +2546,9 @@ func isSlugKind(s string) bool {
 // parseIdentList parses a comma-separated ident list, emitting tokens into the
 // current builder scope. A TokenString entry (a quoted name, e.g.
 // `contexts: "Some Name"`) is emitted as SyntaxKindString, not
-// SyntaxKindIdent — consumeAs always stores the raw source text regardless
-// of the kind passed in (tokenText returns tok.Raw for TokenString either
-// way, so this does not affect Token.Value/Raw or round-trip output), but
+// SyntaxKindIdent — consumeAs always stores the raw source slice regardless
+// of the kind passed in (rawText slices the source the same way no matter
+// which kind is passed, so this does not affect round-trip output), but
 // content-read call sites (stringAwareText and friends) dispatch on Kind()
 // to decide whether to unquote. Mislabeling a quoted entry as Ident would
 // make them silently skip unquoting and leak raw quotes into content.
