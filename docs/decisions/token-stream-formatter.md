@@ -71,9 +71,42 @@ a line, and whether a blank line is pending. Nothing else.
 
 ### Indentation
 
-From brace depth. `{` increments after emitting, `}` decrements before emitting. Two spaces
-per level. This is purely lexical and is already how `tokenSeparator` derives indentation
-today.
+Two spaces per level, from a depth counter with two sources.
+
+**Braces.** `{` increments after emitting, `}` decrements before emitting.
+
+**Scenarios.** Brace depth alone is not enough. A `use_case` body nests without braces:
+
+    use_case "X" {          brace depth 1
+      when U does x         a scenario opens here, with no brace
+        A asks B for c      but its actions sit one level deeper
+
+An earlier draft of this record claimed indentation was "purely lexical, already how
+`tokenSeparator` derives it". That was wrong, and it blocked the first attempt at this work.
+`tokenSeparator` derived line structure from node parentage, not from braces, which is
+precisely why it could reproduce the 2/4 shape and a naive brace counter cannot.
+
+So a `when` at brace depth 1 opens a scenario scope, and lines until the next `when` at that
+depth or the enclosing `}` sit one level deeper. This stays token-driven: `when` is
+`SyntaxKindKwWhen`, and the walker already special-cases it for the blank-line rule.
+
+### Block boundaries
+
+A `{` forces a line break after it and a `}` forces one before, whatever the author wrote.
+This is the one place besides the scenario blank line where the formatter adds vertical space
+rather than preserving it, and it is what lets it expand a minified declaration:
+
+    service Foo{contexts: A}
+
+becomes
+
+    service Foo {
+      contexts: A
+    }
+
+Preserving author line breaks applies *within* a statement. Block boundaries are structure,
+not authorial line-breaking, and a formatter that cannot expand minified input is not doing
+its job.
 
 ### Line breaks and blank lines
 
@@ -132,7 +165,14 @@ Roughly 300 of `internal/lsp/formatter.go`'s 626 lines:
 - `formatDecl`, `tokenSeparator`, `isNextColon`, `isSiblingToken`
 - `writeBlockStatements`, `writeRefWithComments`, `writeCommentLines`
 - `significantTokens`, `isCommentKind`
-- `trailingCommentLines`, including the EOF-trivia branch that is currently dead code
+
+**`trailingCommentLines` stays.** An earlier draft listed it for deletion on the belief that
+end-of-file comments are ordinary tokens the walker would pick up. They are not: the parser
+folds everything past the last real token into a single `SyntaxKindWhitespace` token, so the
+bytes survive in the tree but no token carries a comment kind. That is exactly why a file
+ending in a comment lost it, and a comment-only file was truncated to zero bytes, before
+v2.16.0 fixed both. Deleting the function reintroduces those two defects. It reaches the text
+through the trivia rather than through the kind, which is the only way to recover it.
 
 `writeAlignedActions` survives in spirit as the alignment post-pass.
 

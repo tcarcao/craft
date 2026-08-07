@@ -950,3 +950,300 @@ git commit -m "docs: record the token-stream formatter"
 - **Making `craft fmt --check` clean on the corpus.** 36 of 68 files report as unformatted, all non-canonical fixture shapes that are deliberate parser test surface, with zero formatter defects among them. Whether to re-canonicalise those fixtures is a separate decision. Note this rewrite may reduce the count on its own, since preserving author line breaks means fewer files differ from their formatted form; report the new number but do not chase it.
 - **`arch` block formatting.** Still preserved verbatim by slicing source. Free-form component chains are out of scope.
 - **Style changes** not among the five listed: indent width, comment reflowing, list wrapping.
+
+---
+
+## Replan after Task 3 was blocked
+
+Task 3's first attempt reported BLOCKED without re-blessing anything, which was correct: four
+classes of difference appeared and none matched the five approved behaviour changes. All four
+were defects in this plan, not in the implementation. The original Tasks 3 and 4 are replaced
+by Tasks 3a and 3b below.
+
+**What was wrong, and the ruling on each:**
+
+1. **`trailingCommentLines` is not dead code.** The plan listed it for deletion, claiming
+   end-of-file comments are ordinary tokens. They are not: the parser folds everything past
+   the last real token into one `SyntaxKindWhitespace` token. Deleting it reintroduces the
+   comment-only-file truncation that v2.16.0 fixed. **Keep it.**
+
+2. **Brace depth cannot express `use_case` indentation.** A scenario body has no braces, so
+   `when` at 2 and its actions at 4 are unreachable from a brace counter. **Ruling: keep the
+   2/4 nesting.** A `when` at brace depth 1 opens a scenario scope; lines until the next
+   `when` at that depth or the enclosing `}` sit one level deeper.
+
+3. **Minified declarations no longer expand.** Gap-driven separators mean no newline in, no
+   newline out, so `service Foo{contexts: A}` stayed on one line. **Ruling: expand.** A `{`
+   forces a line break after it and a `}` forces one before, whatever the author wrote.
+
+4. **Sequencing.** Task 3 required a green suite while alignment did not land until Task 4.
+   **Merged**: alignment is part of Task 3b.
+
+---
+
+### Task 3a: Scenario depth and block boundaries
+
+**Files:**
+- Modify: `internal/lsp/formatsep.go`
+- Modify: `internal/lsp/formatter.go` (`writeTokens` only)
+- Test: `internal/lsp/formatsep_test.go`, `internal/lsp/formatter_test.go`
+
+**Interfaces:**
+- Consumes: `separatorFor`, `indentFor`, `writeTokens` as they stand
+- Produces: the same signatures, with two added rules. `writeTokens` gains scenario-depth state.
+
+Still not wired into `FormatDocumentChecked`. Task 3b does that.
+
+- [ ] **Step 1: Add the block-boundary rules to `separatorFor`**
+
+A `{` forces a newline after it; a `}` forces one before. Place these after the colon and
+comma rules and before the gap-driven switch, so they override whatever the author wrote:
+
+```go
+	// A block boundary is structure, not authorial line breaking. Forcing the
+	// break here is what expands a minified `service Foo{contexts: A}`.
+	if prev.Kind() == syntax.SyntaxKindLBrace {
+		return "\n" + indentFor(depth)
+	}
+	if curr.Kind() == syntax.SyntaxKindRBrace {
+		return "\n" + indentFor(depth)
+	}
+```
+
+Note the caller dedents before placing `}`, so `depth` is already the closing brace's own
+level when this fires.
+
+- [ ] **Step 2: Test the block-boundary rules**
+
+```go
+func TestSeparatorFor_LBraceForcesNewlineAfter(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	gn, _, _ := syntax.Parse(src)
+	toks := syntax.Root(gn).AllTokens()
+	for i := 1; i < len(toks); i++ {
+		if toks[i-1].Kind() != syntax.SyntaxKindLBrace {
+			continue
+		}
+		if got := separatorFor(&toks[i-1], "", toks[i], 1); got != "\n  " {
+			t.Errorf("after {: got %q, want a newline plus indent", got)
+		}
+		return
+	}
+	t.Fatal("no LBrace found")
+}
+
+func TestSeparatorFor_RBraceForcesNewlineBefore(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	gn, _, _ := syntax.Parse(src)
+	toks := syntax.Root(gn).AllTokens()
+	for i := 1; i < len(toks); i++ {
+		if toks[i].Kind() != syntax.SyntaxKindRBrace {
+			continue
+		}
+		if got := separatorFor(&toks[i-1], "", toks[i], 0); got != "\n" {
+			t.Errorf("before }: got %q, want a newline at depth 0", got)
+		}
+		return
+	}
+	t.Fatal("no RBrace found")
+}
+```
+
+- [ ] **Step 3: Add scenario depth to `writeTokens`**
+
+A `when` at brace depth 1 opens a scenario. Its lines sit one level deeper, until the next
+`when` at that depth or the enclosing `}`. Track it as a separate counter added to the brace
+depth when computing the effective indent:
+
+```go
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
+	braceDepth := 0
+	scenarioDepth := 0
+	gap := ""
+	var prev *syntax.SyntaxToken
+
+	for _, tok := range node.AllTokens() {
+		if tok.Kind() == syntax.SyntaxKindWhitespace {
+			gap += tok.Text()
+			continue
+		}
+
+		// A `when` closes any previous scenario and opens its own, so it sits at
+		// the block's own level while the lines after it sit one deeper.
+		if tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1 {
+			scenarioDepth = 0
+		}
+
+		if tok.Kind() == syntax.SyntaxKindRBrace {
+			scenarioDepth = 0
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		}
+
+		sb.WriteString(separatorFor(prev, gap, tok, braceDepth+scenarioDepth))
+		sb.WriteString(tok.Text())
+
+		if tok.Kind() == syntax.SyntaxKindLBrace {
+			braceDepth++
+		}
+
+		// Everything after the trigger line belongs to the scenario body. The
+		// trigger's own tokens are still on the `when` line, so the bump takes
+		// effect at the next line break rather than immediately.
+		if tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1 {
+			scenarioDepth = 1
+		}
+
+		cur := tok
+		prev = &cur
+		gap = ""
+	}
+}
+```
+
+If that shape does not produce `when` at 2 and actions at 4, adjust the placement of the
+`scenarioDepth` assignments rather than abandoning the approach, and say what you changed.
+The requirement is the output, not this exact code.
+
+- [ ] **Step 4: Test the nesting**
+
+```go
+func TestWriteTokens_ScenarioBodyIndentsDeeper(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n\n  when V does y\n    D asks E for f\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	got := sb.String()
+	for _, want := range []string{"\n  when U does x", "\n    A asks B for c", "\n  when V does y", "\n    D asks E for f"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestWriteTokens_ExpandsMinifiedDeclaration(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	got := sb.String()
+	if !strings.Contains(got, "Foo {\n  contexts: A\n}") {
+		t.Errorf("minified declaration did not expand:\n%q", got)
+	}
+}
+```
+
+- [ ] **Step 5: Verify and commit**
+
+```bash
+go test ./internal/lsp/ -run 'TestSeparatorFor|TestWriteTokens' -v
+go test ./... -count=1
+git diff --cached | grep '^+' | grep '—'
+git add internal/lsp/formatsep.go internal/lsp/formatsep_test.go internal/lsp/formatter.go internal/lsp/formatter_test.go
+git commit -m "feat(fmt): add scenario depth and block-boundary breaks"
+```
+
+Expected: all `TestWriteTokens_*` and `TestSeparatorFor_*` pass, full suite green at 1010 or
+higher. `writeTokens` is still unwired, so no existing formatter behaviour changes.
+
+---
+
+### Task 3b: Wire in, align, delete, re-bless
+
+**Files:**
+- Modify: `internal/lsp/formatter.go`
+- Create: `internal/lsp/formatalign.go`, `internal/lsp/formatalign_test.go`
+- Modify: `internal/lsp/formatter_test.go`
+
+This is the original Task 3 with the original Task 4 folded in, and with
+`trailingCommentLines` removed from the deletion list.
+
+- [ ] **Step 1: Build the alignment post-pass**
+
+Create `internal/lsp/formatalign.go` and `internal/lsp/formatalign_test.go` exactly as the
+original Task 4 specifies (see "Task 4: Move alignment to a post-pass" above, Steps 1 to 4).
+Its `alignAnnotations(s string) string` and `splitAnnotation(line string)` are unchanged by
+this replan.
+
+- [ ] **Step 2: Replace the dispatch**
+
+In `FormatDocumentChecked`, replace the `switch node.Kind()` block with:
+
+```go
+		switch node.Kind() {
+		case syntax.SyntaxKindArchDecl:
+			// Preserve original formatting: arch component chains use free-form
+			// indentation that the formatter does not rewrite. writeTokens would
+			// re-derive their indentation from brace depth, so arch must not
+			// reach it.
+			r := node.TextRange()
+			sb.WriteString(strings.TrimSpace(content[r.Start:r.End]))
+		default:
+			writeTokens(&sb, node)
+		}
+```
+
+Leave the `trailingCommentLines` call and the root-level comment branch exactly as they are.
+
+- [ ] **Step 3: Apply alignment before the drift check**
+
+```go
+	formatted := alignAnnotations(sb.String())
+	if drift := contentDrift(content, formatted); drift != nil {
+```
+
+- [ ] **Step 4: Delete the dead code**
+
+Delete from `internal/lsp/formatter.go`: `formatUseCaseDecl`, `formatContextMapDecl`,
+`formatGlossaryDecl`, `formatDecl`, `tokenSeparator`, `isNextColon`, `isSiblingToken`,
+`writeBlockStatements`, `writeRefWithComments`, `writeCommentLines`, `significantTokens`,
+and `writeAlignedActions`.
+
+**Keep** `trailingCommentLines`, `isCommentKind` if `trailingCommentLines` uses it,
+`contentDrift`, `squashWhitespace`, and `bailsFormatting`.
+
+- [ ] **Step 5: Re-bless, one reviewed diff at a time**
+
+For each failing byte-identity case, confirm the difference is one of the five approved
+changes before touching the fixture:
+
+1. a trailing comment stayed on its line rather than moving above it
+2. a ref-adjacent comment no longer splits its field across two lines
+3. interior multi-space collapsed on a trigger line as it already does on an action line
+4. blank-line handling
+5. an author line break inside a value was preserved rather than joined
+
+A minified declaration expanding, or a use_case keeping 2/4 nesting, is not a difference at
+all now: both should match the existing fixtures. If either differs, that is a bug in Task 3a,
+not a fixture to re-bless.
+
+**If a difference is none of the five, stop and report it.** Say which of the five each
+re-blessed fixture was.
+
+- [ ] **Step 6: Verify the invariants**
+
+```bash
+go test ./internal/parser_diff/ ./pkg/craft/ -count=1
+rtk proxy git status --short
+go test ./internal/lsp/ -run TestFormatDocumentCorpus -count=1 -v 2>&1 | rtk proxy grep -i drift
+go test ./... -count=1
+```
+
+Expected: goldens pass with no `.craftjson` modified; `contentDrift` fires for no corpus file;
+full suite green.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add internal/lsp/
+git commit -m "refactor(fmt): route declarations through the token walker"
+```
