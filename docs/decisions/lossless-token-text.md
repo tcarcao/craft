@@ -70,13 +70,30 @@ constructs token text from anything but the source.
 
 Its severity is split by build context, and the reason is worth stating because it is where craft
 diverges from rust-analyzer. After the emit-site change a violation can only indicate a craft bug,
-never bad input, so under test it panics: loud, unmissable, and impossible for CI to skip.
-It does not panic in production, because `syntax.Parse` is reached from `pkg/craft/parse.go`,
-which is craft's *public library API*. A panic there crashes the consumer's process, not ours.
-rust-analyzer can assert freely because it is only ever an LSP, where the worst case is one
-degraded request; craft is both an LSP and an embedded library, so it does not get that freedom.
-The LSP itself is shielded either way by the per-handler recovery at `internal/lsp/middleware.go`.
-`testing.Testing()` selects between the two.
+never bad input, so in a test binary it panics: loud, unmissable, and impossible for CI to skip.
+In a normal build it returns a diagnostic instead, because `syntax.Parse` is reached from
+`pkg/craft/parse.go`, which is craft's *public library API*, and a panic there crashes the
+consumer's process rather than ours. rust-analyzer can assert freely because it is only ever an
+LSP, where the worst case is one degraded request; craft is both an LSP and an embedded library,
+so it does not get that freedom. The LSP itself is shielded either way by the per-handler recovery
+at `internal/lsp/middleware.go`.
+
+`testing.Testing()` selects between the two, and it is worth being exact about what it selects on,
+because it is not what it looks like. The go command sets it at link time for **every** `go test`
+binary, not only craft's own. A downstream module that imports `pkg/craft` and runs `go test ./...`
+therefore takes the panicking branch. The split is by build kind, not by ownership. That is
+defensible and is the behaviour we want, on the same reasoning as above: in a test run a panic
+surfaces the defect, where a diagnostic returned into someone's assertion would be swallowed. But
+"it does not panic in a consumer's process" is only true of a consumer's *released* binary, and
+the record used to say it without that qualification.
+
+The known cost is a dependency-surface change: `internal/syntax` imports `testing` from non-test
+code, so `go list -deps ./pkg/craft` now includes `testing`, `flag` and `runtime/pprof`, and
+`cmd/craft` links them. Importing `testing` from a library is a long-standing Go smell for exactly
+this reason. No functional harm was found (flag registration moved to `testing.Init()` long ago),
+and the alternative, a package variable defaulting to `testing.Testing()` that craft's own test
+setup can override, would remove the import and make both branches reachable from tests. That is the
+follow-up if the surface ever becomes a problem; it is not one today.
 
 **Trailing trivia is tokenized.** The trivia loop runs after the last declaration, so a comment
 at end of file becomes a `LineComment`/`BlockComment` token like every other comment.
@@ -84,9 +101,24 @@ at end of file becomes a `LineComment`/`BlockComment` token like every other com
 the same path as the rest, and the indentation strip disappears with the function.
 
 **Alignment tracks real token ends.** `writeTokens` marked every emitted line after a token's
-first as interior to it. That is an approximation of "inside a multi-line token", and it is
-wrong for the last line, which the token shares with whatever follows. Tracking the token's
-actual end column makes a token that ends mid-line stop claiming the rest of that line.
+first as interior to it. That is an approximation of "inside a multi-line token", and it is wrong
+in both directions. It over-claimed the token's last line, which the token shares with whatever
+follows its close, so an annotated action written after a `*/` was excluded from alignment. And it
+under-claimed the token's first line, which the token runs off the end of, so a comment opened
+partway along a line left its body text looking like an alignable action.
+
+The rule that replaced it is "the token's text runs to the end of this line", which marks the
+token's first line and every line in between, and only ever releases the last. An annotation is by
+definition the end of its line, so a line the token runs off the end of can never carry one, and
+excluding it can only ever remove a false positive.
+
+That was necessary but not sufficient. `splitAnnotation`, the only consumer of the set, held an
+independent rule of its own: any line whose first non-space character was `*` is a comment
+continuation. It vetoed exactly the line the interior change had just released, so for the
+idiomatic `*`-per-line comment style the two rules cancelled and nothing changed. It now
+disqualifies such a line only when the comment does not CLOSE on it, and searches for the
+annotation after the `*/`. Block comments do not nest, so a `*/` cannot occur on a line a comment
+is merely passing through; that is what makes the widening safe rather than lucky.
 
 ## Consequences
 

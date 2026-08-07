@@ -61,6 +61,27 @@ The lever is already in place:
 That last point is what makes trailing comments recoverable exactly, which the old design
 could not do safely.
 
+## The whitespace pipeline
+
+Token text is never rewritten. Everything below decides only the whitespace around it, in this
+order. Read the whole list before changing any entry: both defects found in the final review were
+a change to one stage that nobody checked against the next.
+
+1. `separatorFor` (`formatsep.go`) decides the whitespace before one token, from the previous
+   token, the author's `gap`, and a depth. Consumed by `writeTokens`, once per token.
+2. The brace and scenario rules inside `writeTokens` (`formatter.go`) decide the depth and the
+   scenario blank line that step 1 is handed. Consumed by step 1 only.
+3. `rootGapSeparator` (`formatter.go`) does step 1's job between root-level children, where
+   there is no enclosing node. Consumed by the root loop only.
+4. The root loop's closing newline (`formatter.go`) makes the document end in exactly one. It
+   must ask what has already been written: an unterminated block comment's token text ends in
+   the file's own final newline, so writing one unconditionally grew the file on every format.
+5. `alignAnnotations` (`formatalign.go`) rewrites the run of spaces before a `[`, over the text
+   steps 1 to 3 produced. It is line oriented and therefore blind to token boundaries, so
+   `writeTokens` hands it the set of lines a multi-line token runs off the end of, and
+   `splitAnnotation` decides per line which part of it is comment. Those two must agree: they
+   are in different files and each independently vetoes the other.
+
 ## Architecture
 
 One walker over `root.AllTokens()`. It replaces `formatUseCaseDecl`, `formatContextMapDecl`,
@@ -324,8 +345,18 @@ that the formatter had grown workarounds for, which is why they resisted being f
 **A comment closing on a line that also carries an annotation lost alignment on that line.**
 `writeTokens` marked every emitted line after a token's first as interior to it, so when a
 multi-line comment's `*/` shared a line with a following annotated action, that whole physical
-line was excluded from the alignment run. Fixed by marking only the lines strictly between a
-token's first and last: a token that ends mid-line no longer claims the rest of that line.
+line was excluded from the alignment run.
+
+Fixed in two places, which is the point worth carrying forward. Narrowing the interior set to
+"every line the token runs off the END of", releasing the last line and claiming the first, was
+necessary and not sufficient: `splitAnnotation`, the set's only consumer, independently refused
+any line whose first non-space character was `*`, which is exactly what the idiomatic
+`*`-per-line comment style produces on its closing line. The two rules cancelled, and the fix
+read as complete because the test fixture chosen used the bare `*/` style that only the first
+rule governs. `splitAnnotation` now disqualifies such a line only when the comment does not close
+on it, and searches for the annotation after the `*/`. Both closing styles align. The narrowed
+interior set also fixed a defect in the other direction, where a comment opened partway along a
+line of content left its body text being padded as though it were an action.
 
 **`trailingCommentLines` stripped interior indentation.** A comment after the last declaration
 went through `trailingCommentLines` rather than the walker, and that function trimmed each line.
