@@ -1,7 +1,8 @@
 # Token-Stream Formatter
 
-**Status:** Accepted, not yet implemented
+**Status:** Implemented
 **Date:** 2026-08-07
+**Commits:** `d5b8d91..HEAD` (`e73297f` at merge time)
 **Supersedes:** the follow-up recorded in `docs/decisions/action-operation-brackets.md` under
 "Follow-up: the formatter is reconstructive, and should not be"
 
