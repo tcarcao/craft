@@ -256,9 +256,11 @@ than the instance."
 **Interfaces:**
 - Consumes: the guarantee from Task 2.
 
-**Context:** `checkTreeWidth` compares `root.Width()` to `len(src)` and emits a diagnostic on mismatch. After Task 2 the stronger property holds, so assert the stronger property. Per the design record this is a hard failure, not a diagnostic: because token text is now a source slice and recovery wraps rather than drops, a malformed `.craft` file cannot trigger it. Only a craft bug can.
+**Context:** `checkTreeWidth` compares `root.Width()` to `len(src)` and emits a diagnostic on mismatch. After Task 2 the stronger property holds, so assert the stronger property.
 
-"Hard failure" means panic. The LSP must not crash the editor on a malformed file, so the panic can only be reached by a genuine internal inconsistency — which is exactly the guarantee Task 2 provides. Do not add a recover(); if this fires, it is a bug that must be fixed, not tolerated.
+**Severity policy, and why it is split.** A violation can only be caused by a craft bug, never by input: token text is a source slice and recovery wraps rather than drops. So under test it must be a hard failure, loud and unmissable. In production it must not be, because `syntax.Parse` is reached from `pkg/craft/parse.go`, which is craft's *public library API*. A panic there crashes the consumer's program, not ours. rust-analyzer can panic freely because it is only ever an LSP; craft is both an LSP and an embedded library, so it does not get that freedom. The LSP itself is shielded either way by the per-handler recovery at `internal/lsp/middleware.go:16`, but a library consumer has no such shield.
+
+Use `testing.Testing()` (Go 1.21+, and go.mod declares 1.25) to split the two: panic in test binaries, return a diagnostic otherwise. Do not use a build tag, and do not add a `recover()`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -315,22 +317,36 @@ Expected: PASS if Tasks 1-2 are correct. If it fails, the named file is a real d
 // This panics rather than returning a diagnostic. Token text is a slice of
 // the source and error recovery wraps tokens in an ErrorNode rather than
 // dropping them, so no input can reach here: a failure is a parser bug.
-func checkTreeText(root *green.GreenNode, src string) {
+func checkTreeText(root *green.GreenNode, src string) []model.Diagnostic {
 	if root == nil {
-		return
+		return nil
 	}
 	var sb strings.Builder
 	sb.Grow(len(src))
 	collectGreenText(root, &sb)
-	if sb.String() != src {
-		panic(fmt.Sprintf(
-			"internal parser error: syntax tree does not reproduce its source (tree %d bytes, source %d bytes)",
-			sb.Len(), len(src)))
+	if sb.String() == src {
+		return nil
 	}
+	msg := fmt.Sprintf(
+		"internal parser error: syntax tree does not reproduce its source (tree %d bytes, source %d bytes); positions in this file may be wrong",
+		sb.Len(), len(src))
+	// Only a parser bug can get here: token text is a slice of the source and
+	// error recovery wraps tokens rather than dropping them, so no input can
+	// violate this. Fail hard under test so CI cannot miss it, but degrade to a
+	// diagnostic in production: syntax.Parse is reached from pkg/craft, which is
+	// a public library API, and panicking there would crash a consumer.
+	if testing.Testing() {
+		panic(msg)
+	}
+	return []model.Diagnostic{{
+		Code:     "craft/internal/tree-text-mismatch",
+		Message:  msg,
+		Severity: model.SeverityError,
+	}}
 }
 ```
 
-Write `collectGreenText` to walk the green tree appending every token's text, or reuse an existing traversal if one already does this. Update the call site at line 41: it no longer contributes to `diags`.
+Write `collectGreenText` to walk the green tree appending every token's text, or reuse an existing traversal if one already does this. Keep the call site at line 41 contributing to `diags`, same shape as `checkTreeWidth` today.
 
 - [ ] **Step 4: Verify the whole suite**
 
