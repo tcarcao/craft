@@ -189,29 +189,50 @@ func TestFormatDocument_QualifiedRefRoundTrip(t *testing.T) {
 	}
 }
 
-// actionShape is the semantic content of one action line, used to prove that
+// scenarioShape is the semantic content of one scenario, used to prove that
 // formatting preserves meaning and not merely that the output parses.
+//
+// The trigger is compared as well as the actions. An earlier version of this
+// helper collected only actions, which is why the guard stayed green while the
+// formatter was space-joining trigger phrases and turning "(1! & 2!)" into
+// "( 1 ! & 2 ! )".
+type scenarioShape struct {
+	trigger triggerShape
+	actions []actionShape
+}
+
+type triggerShape struct {
+	kind, actor, context, event, phrase string
+	eventQuoted                         bool
+}
+
 type actionShape struct {
 	kind, subject, target, event, connector, phrase, op string
 	eventQuoted                                         bool
 }
 
-func shapesOf(t *testing.T, src string) []actionShape {
+func shapesOf(t *testing.T, src string) []scenarioShape {
 	t.Helper()
 	g, _, diags := syntax.Parse(src)
 	for _, d := range diags {
 		t.Fatalf("fixture does not parse: [%s] %s\nsrc:\n%s", d.Code, d.Message, src)
 	}
-	var out []actionShape
+	var out []scenarioShape
 	for _, uc := range syntax.AsFile(syntax.Root(g)).UseCases() {
 		for _, sc := range uc.Scenarios() {
+			tr := sc.Trigger()
+			shape := scenarioShape{trigger: triggerShape{
+				kind: tr.Kind(), actor: tr.ActorName(), context: tr.ContextName(),
+				event: tr.EventValue(), phrase: tr.PhraseText(), eventQuoted: tr.EventIsString(),
+			}}
 			for _, a := range sc.Actions() {
-				out = append(out, actionShape{
+				shape.actions = append(shape.actions, actionShape{
 					kind: a.Kind(), subject: a.SubjectName(), target: a.TargetName(),
 					event: a.EventValue(), connector: a.ConnectorValue(),
 					phrase: a.PhraseText(), op: a.OpText(), eventQuoted: a.EventIsString(),
 				})
 			}
+			out = append(out, shape)
 		}
 	}
 	return out
@@ -255,6 +276,14 @@ func TestFormatDocument_UseCaseRoundTrip(t *testing.T) {
 		{"cron trigger", "use_case \"X\" {\n  when cron \"0 * * * *\"\n    A does x\n}\n"},
 		{"periodic trigger", "use_case \"X\" {\n  when every \"1h\"\n    A does x\n}\n"},
 		{"legacy quoted listens event", "use_case \"X\" {\n  when Billing listens \"Charged\"\n    A does x\n}\n"},
+		// Trigger phrases carry free text, so they must survive punctuation
+		// that a space-joined token walk would pull apart. Without these the
+		// fixture set is all punctuation-free and cannot fail on the trigger
+		// side at all.
+		{"trigger phrase with tight punctuation", "use_case \"X\" {\n  when User creates (1! & 2!)\n    A does x\n}\n"},
+		{"trigger phrase with slash", "use_case \"X\" {\n  when User does and/or something\n    A does x\n}\n"},
+		{"trigger phrase with comma", "use_case \"X\" {\n  when User creates Account, quickly\n    A does x\n}\n"},
+		{"trigger phrase with qualified actor and punctuation", "use_case \"X\" {\n  when re/billing creates (1! & 2!)\n    A does x\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

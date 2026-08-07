@@ -1,7 +1,6 @@
 package syntax
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
@@ -137,6 +136,56 @@ func nameSlotElement(elems []SyntaxElement) SyntaxElement {
 		return nil
 	}
 	return elems[0]
+}
+
+// rawSourceFrom returns the exact raw source substring of node n starting at
+// leaf-token index start, up to endOffset (exclusive; pass -1 for the end of
+// the node), trimmed. Inter-token whitespace is preserved, so prose with tight
+// punctuation such as `(1! & 2!)` or `and/or` keeps its original spacing
+// instead of being space-joined into `( 1 ! & 2 ! )`.
+//
+// Every renderer that has to reproduce free text goes through this one walk:
+// ActionDecl.PhraseText, ActionDecl.SourceText, TriggerDecl.PhraseText and
+// TriggerDecl.SourceText. They used to carry separate copies, and the copies
+// disagreed about whether spacing mattered.
+func rawSourceFrom(n SyntaxNode, start int, endOffset green.TextSize) string {
+	tokens := n.Tokens()
+	if start < 0 || start >= len(tokens) {
+		return ""
+	}
+	startOffset := tokens[start].Offset()
+	var sb strings.Builder
+	writing := false
+	for _, tok := range n.AllTokens() {
+		if endOffset >= 0 && tok.Offset() >= endOffset {
+			break
+		}
+		if !writing {
+			if tok.Offset() < startOffset {
+				continue
+			}
+			writing = true
+		}
+		sb.WriteString(tok.Text())
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+// refAwareRawText returns an element's text exactly as it appears in source:
+// the reconstructed ref text for a SyntaxKindRef node, or a leaf token's raw
+// Text(). Unlike refAwareText it does NOT unquote a string token, so callers
+// rebuilding source keep the quotes and escapes the author wrote.
+func refAwareRawText(el SyntaxElement) string {
+	switch v := el.(type) {
+	case SyntaxNode:
+		if v.Kind() == SyntaxKindRef {
+			return RefDecl{node: v}.RefText()
+		}
+		return ""
+	case SyntaxToken:
+		return v.Text()
+	}
+	return ""
 }
 
 // refAwareText returns the source text of a significant child element: for a
@@ -1355,35 +1404,11 @@ func (t TriggerDecl) EventValue() string {
 	return ""
 }
 
-// Description returns the human-readable trigger line (without the leading `when`).
-// String tokens' raw Text() already includes both quotes (Bug 8a fix), so no
-// manual quote-wrapping is needed here — that used to double the quotes.
-//
-// This walks significant ELEMENTS, not flat tokens. A space-joined token walk
-// is a one-token-per-slot assumption in disguise: a SyntaxKindRef slot such as
-// a qualified subject (Task 6b) or a ref-wrapped listens event (Task 4)
-// flattens into several leaf tokens, so joining them with spaces emitted
-// "re / billing". The LSP formatter rebuilds trigger lines from this string,
-// so that turned a valid document into one that no longer parsed. A ref
-// contributes its reconstructed text as a single part; every other shape
-// contributes its leaf tokens individually, exactly as before.
-func (t TriggerDecl) Description() string {
-	var parts []string
-	for _, el := range significantElements(t.node) {
-		switch v := el.(type) {
-		case SyntaxNode:
-			if v.Kind() == SyntaxKindRef {
-				parts = append(parts, RefDecl{node: v}.RefText())
-				continue
-			}
-			for _, tok := range v.Tokens() {
-				parts = append(parts, tok.Text())
-			}
-		case SyntaxToken:
-			parts = append(parts, v.Text())
-		}
-	}
-	return strings.Join(parts, " ")
+// rawTextFrom returns the exact raw source substring of this trigger from
+// leaf-token index start to the end of the trigger, trimmed. A trigger line
+// carries no operation annotation, so there is nothing to stop before.
+func (t TriggerDecl) rawTextFrom(start int) string {
+	return rawSourceFrom(t.node, start, -1)
 }
 
 // PhraseText returns the free-text phrase for an "external" trigger (e.g.
@@ -1405,22 +1430,31 @@ func (t TriggerDecl) PhraseText() string {
 	if isConnectorWord(tokens[phraseStart].Text()) {
 		phraseStart++
 	}
-	if phraseStart >= len(tokens) {
+	return t.rawTextFrom(phraseStart)
+}
+
+// SourceText renders the trigger as canonical .craft source: the exact text the
+// LSP formatter writes after `when `.
+//
+// It mirrors ActionDecl.SourceText. The subject is normalised through the
+// element walk so a qualified ref stays one word, and everything after it is
+// copied raw, so a free-text phrase keeps its original spacing. Rendering the
+// whole line by space-joining leaf tokens instead is what turned
+// `when User creates (1! & 2!)` into `when User creates ( 1 ! & 2 ! )`.
+//
+// This covers every trigger form: the subject slot holds the actor for an
+// external trigger, the context for a domain_listen one, and the `cron` /
+// `every` keyword for the scheduled forms, while an event trigger has only the
+// quoted literal and no tail.
+func (t TriggerDecl) SourceText() string {
+	elems := significantElements(t.node)
+	if len(elems) == 0 {
 		return ""
 	}
-	startOffset := tokens[phraseStart].Offset()
 	var sb strings.Builder
-	writing := false
-	for _, tok := range t.node.AllTokens() {
-		if !writing {
-			if tok.Offset() < startOffset {
-				continue
-			}
-			writing = true
-		}
-		sb.WriteString(tok.Text())
-	}
-	return strings.TrimSpace(sb.String())
+	sb.WriteString(refAwareRawText(elems[0]))
+	appendSpaced(&sb, t.rawTextFrom(tokenIndexAt(elems, 1)))
+	return sb.String()
 }
 
 // EventCol returns the 1-based column of the event token using li.
@@ -1734,74 +1768,52 @@ func (a ActionDecl) PhraseText() string {
 }
 
 // rawTextFrom returns the exact raw source substring of this action from
-// token index start up to (but excluding) any trailing operation annotation,
-// trimmed. Inter-token whitespace is preserved, so tight punctuation such as
-// `(1! & 2!)` keeps its original spacing instead of being space-joined.
+// leaf-token index start, stopping before any trailing operation annotation,
+// trimmed.
 //
 // PhraseText starts at the phrase; SourceText starts earlier, at the connector
 // or the verb, so it can rebuild the line without re-deriving those words.
 func (a ActionDecl) rawTextFrom(start int) string {
-	tokens := a.node.Tokens()
-	if start < 0 || start >= len(tokens) {
-		return ""
-	}
-	startOffset := tokens[start].Offset()
-	// An operation annotation is a child of the action node, so its tokens are in
-	// AllTokens() and would otherwise be appended to the phrase. Stop before it.
+	// The annotation is a child of the action node, so its tokens are in
+	// AllTokens() and would otherwise be swept into the text.
 	var endOffset green.TextSize = -1
 	if op := a.OpAnnotation(); op != nil {
 		if opToks := op.AllTokens(); len(opToks) > 0 {
 			endOffset = opToks[0].Offset()
 		}
 	}
-	var sb strings.Builder
-	writing := false
-	for _, tok := range a.node.AllTokens() {
-		if endOffset >= 0 && tok.Offset() >= endOffset {
-			break
-		}
-		if !writing {
-			if tok.Offset() < startOffset {
-				continue
-			}
-			writing = true
-		}
-		sb.WriteString(tok.Text())
-	}
-	return strings.TrimSpace(sb.String())
+	return rawSourceFrom(a.node, start, endOffset)
 }
 
 // SourceText renders the action as canonical .craft source: the exact line the
 // LSP formatter writes back into the document.
 //
-// This is deliberately NOT Description(). The two have opposed contracts and
-// one method cannot satisfy both:
+// This is NOT the same string as model.Action.Description, and must not be
+// confused with it. That one is a display label built by projection.go and
+// rendered as an edge label by the visualizers: it deliberately omits the
+// `[...]` operation annotation, always quotes the async event, and reflows
+// `returns to <target>` into `returns <phrase> to <target>`, all of which read
+// better as prose. SourceText must instead reparse to the same action, so it
+// KEEPS the annotation, quotes an event only when the source quoted it, and
+// preserves the `returns to <target> <phrase>` word order.
 //
-//   - Description() is a display label. Its shape is mirrored by
-//     projection.go into model.Action.Description, which the visualizers render
-//     as an edge label, and Task 6 decided a label must NOT leak the `[...]`
-//     operation annotation (see TestActionDecl_Description_ExcludesAnnotation).
-//     It also always quotes the async event and reflows `returns to <target>`
-//     into `returns <phrase> to <target>`, both of which read better as prose.
-//   - SourceText() must reparse to the same action. It therefore KEEPS the
-//     annotation, quotes an event only when the source quoted it, and preserves
-//     the `returns to <target> <phrase>` word order.
-//
-// The formatter used to call Description(), which is how Format Document came
-// to silently delete `[POST /v1/charges]` annotations, downgrade typed event
-// refs to the deprecated quoted-string form, and move a returns target into the
-// phrase. Anything rendering source belongs here; anything rendering a label
-// belongs in Description.
+// ActionDecl used to expose a Description() method with the label shape, and
+// the formatter called it. That is how Format Document came to silently delete
+// `[POST /v1/charges]` annotations, downgrade typed event refs to the
+// deprecated quoted-string form, and move a returns target into the phrase.
+// The label now exists only where it is consumed, in projection.go.
 func (a ActionDecl) SourceText() string {
 	var sb strings.Builder
 	sb.WriteString(a.SubjectName())
 	switch a.Kind() {
 	case "async_action":
-		sb.WriteString(" notifies ")
-		sb.WriteString(a.eventSourceText())
+		sb.WriteString(" notifies")
+		appendSpaced(&sb, a.eventSourceText())
 	case "sync_action":
-		sb.WriteString(" asks ")
-		sb.WriteString(a.TargetName())
+		// appendSpaced rather than a literal trailing space, so a truncated
+		// `A asks` with no target does not render as "A asks ".
+		sb.WriteString(" asks")
+		appendSpaced(&sb, a.TargetName())
 		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
 	case "return_action":
 		sb.WriteString(" returns")
@@ -1836,10 +1848,7 @@ func (a ActionDecl) eventSourceText() string {
 	if len(elems) < 3 {
 		return ""
 	}
-	if tok, ok := elems[2].(SyntaxToken); ok {
-		return tok.Text()
-	}
-	return refAwareText(elems[2])
+	return refAwareRawText(elems[2])
 }
 
 // appendSpaced appends s to sb preceded by a single space, or does nothing when
@@ -1927,46 +1936,6 @@ func (a ActionDecl) PhraseStartIndex() int {
 // internal_action and return_action, and must locate it from the same
 // element-based arithmetic rather than a fixed token index.
 func (a ActionDecl) SlotEndIndex() int { return slotEndIndex(a) }
-
-// Description returns the human-readable full action line.
-func (a ActionDecl) Description() string {
-	subject := a.SubjectName()
-	verb := a.VerbValue()
-	switch a.Kind() {
-	case "sync_action":
-		target := a.TargetName()
-		connector := a.ConnectorValue()
-		phrase := a.PhraseText()
-		desc := subject + " asks " + target
-		if connector != "" {
-			desc += " " + connector
-		}
-		if phrase != "" {
-			desc += " " + phrase
-		}
-		return desc
-	case "async_action":
-		return fmt.Sprintf("%s notifies %q", subject, a.EventValue())
-	case "return_action":
-		phrase := a.PhraseText()
-		target := a.TargetName()
-		if target != "" {
-			return fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
-		}
-		return fmt.Sprintf("%s returns %s", subject, phrase)
-	default: // internal_action
-		connector := a.ConnectorValue()
-		phrase := a.PhraseText()
-		desc := subject + " " + verb
-		if connector != "" {
-			desc += " " + connector
-		}
-		if phrase != "" {
-			desc += " " + phrase
-		}
-		return desc
-	}
-}
 
 // ArchDecl is a typed view over a SyntaxKindArchDecl node.
 type ArchDecl struct{ node SyntaxNode }

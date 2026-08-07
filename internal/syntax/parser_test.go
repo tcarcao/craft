@@ -419,7 +419,7 @@ func TestProse_SpecialCharsUnquoted(t *testing.T) {
 	}
 	act := actions[0]
 	// Note: "for" is the sync_action connector word (see ConnectorValue()/
-	// isConnectorWord), which PhraseText() has always excluded — Description()
+	// isConnectorWord), which PhraseText() has always excluded, and SourceText()
 	// re-adds it separately (see TestActionDecl_Description_ConnectorPreservation).
 	// So the phrase here is everything after "for": the special characters.
 	if got := act.PhraseText(); got != "1! & 2! and/maybe *" {
@@ -434,7 +434,7 @@ func TestProse_SpecialCharsUnquoted(t *testing.T) {
 // trailing "// TODO" preceded by whitespace is NOT swept into the action's
 // prose phrase (unlike bare TokenError punctuation, e.g. a lone '/' — see
 // TestProse_SpecialCharsUnquoted): collectPhrase stops at the comment token,
-// so the action's Description() reads "Auth checks x" and the comment
+// so the action's SourceText() reads "Auth checks x" and the comment
 // survives as trivia elsewhere in the tree.
 func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 	src := `use_case "x" {
@@ -463,8 +463,8 @@ func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 	if got := act.PhraseText(); got != "x" {
 		t.Fatalf("phrase = %q, want %q (comment must not be swept into prose)", got, "x")
 	}
-	if got := act.Description(); got != "Auth checks x" {
-		t.Fatalf("description = %q, want %q", got, "Auth checks x")
+	if got := act.SourceText(); got != "Auth checks x" {
+		t.Fatalf("source text = %q, want %q", got, "Auth checks x")
 	}
 	// The "// TODO" comment must still appear as trivia somewhere in the tree.
 	hasComment := false
@@ -1117,9 +1117,8 @@ const qualifiedSubjectSrc = `use_case "X" {
 // TestQualifiedSubject_AllActionKinds is the Task 6b regression lock. A
 // qualified subject is three flat tokens (re, /, billing) where every action
 // accessor used to assume exactly one, so this asserts not just SubjectName()
-// but PhraseText(), ConnectorValue(), VerbValue() and Description() — those
-// are what the token-index arithmetic breaks if the subject span is not
-// skipped.
+// but PhraseText(), ConnectorValue(), VerbValue() and SourceText(). Those are
+// what the token-index arithmetic breaks if the subject span is not skipped.
 func TestQualifiedSubject_AllActionKinds(t *testing.T) {
 	tree, _, diags := syntax.Parse(qualifiedSubjectSrc)
 	for _, d := range diags {
@@ -1164,8 +1163,8 @@ func TestQualifiedSubject_AllActionKinds(t *testing.T) {
 	if got := asks.OpText(); got != "POST /v1/entries" {
 		t.Errorf("asks OpText() = %q, want %q", got, "POST /v1/entries")
 	}
-	if got := asks.Description(); got != "re/billing asks Ledger to record the entry" {
-		t.Errorf("asks Description() = %q", got)
+	if got := asks.SourceText(); got != "re/billing asks Ledger to record the entry [POST /v1/entries]" {
+		t.Errorf("asks SourceText() = %q", got)
 	}
 
 	notifies := actions[1]
@@ -1178,8 +1177,8 @@ func TestQualifiedSubject_AllActionKinds(t *testing.T) {
 	if got := notifies.EventValue(); got != "billing.ChargeSucceeded" {
 		t.Errorf("notifies EventValue() = %q, want %q", got, "billing.ChargeSucceeded")
 	}
-	if got := notifies.Description(); got != `re/billing notifies "billing.ChargeSucceeded"` {
-		t.Errorf("notifies Description() = %q", got)
+	if got := notifies.SourceText(); got != "re/billing notifies billing.ChargeSucceeded" {
+		t.Errorf("notifies SourceText() = %q", got)
 	}
 
 	returns := actions[2]
@@ -1195,8 +1194,8 @@ func TestQualifiedSubject_AllActionKinds(t *testing.T) {
 	if got := returns.PhraseText(); got != "charge result" {
 		t.Errorf("returns PhraseText() = %q, want %q", got, "charge result")
 	}
-	if got := returns.Description(); got != "re/subscriptions returns charge result to re/billing" {
-		t.Errorf("returns Description() = %q", got)
+	if got := returns.SourceText(); got != "re/subscriptions returns to re/billing charge result" {
+		t.Errorf("returns SourceText() = %q", got)
 	}
 
 	internal := actions[3]
@@ -1215,8 +1214,8 @@ func TestQualifiedSubject_AllActionKinds(t *testing.T) {
 	if got := internal.PhraseText(); got != "invoice format" {
 		t.Errorf("internal PhraseText() = %q, want %q", got, "invoice format")
 	}
-	if got := internal.Description(); got != "re/billing validates invoice format" {
-		t.Errorf("internal Description() = %q", got)
+	if got := internal.SourceText(); got != "re/billing validates invoice format" {
+		t.Errorf("internal SourceText() = %q", got)
 	}
 }
 

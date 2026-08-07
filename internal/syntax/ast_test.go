@@ -840,9 +840,9 @@ func TestTriggerDecl_KeywordSubjectName(t *testing.T) {
 	}
 }
 
-// TestActionDecl_Description_ConnectorPreservation verifies that connector words
-// stored as SyntaxKindIdent (a, an, the, etc.) are preserved in Description().
-func TestActionDecl_Description_ConnectorPreservation(t *testing.T) {
+// TestActionDecl_SourceText_ConnectorPreservation verifies that connector words
+// stored as SyntaxKindIdent (a, an, the, etc.) survive the source renderer.
+func TestActionDecl_SourceText_ConnectorPreservation(t *testing.T) {
 	cases := []struct {
 		src  string
 		want string
@@ -877,16 +877,16 @@ func TestActionDecl_Description_ConnectorPreservation(t *testing.T) {
 		if len(actions) == 0 {
 			t.Fatalf("no actions: %q", tc.src)
 		}
-		got := actions[0].Description()
+		got := actions[0].SourceText()
 		if got != tc.want {
-			t.Errorf("Description() = %q, want %q", got, tc.want)
+			t.Errorf("SourceText() = %q, want %q", got, tc.want)
 		}
 	}
 }
 
-// TestTriggerDecl_Description verifies Description() reconstructs the trigger
+// TestTriggerDecl_SourceText verifies SourceText() reconstructs the trigger
 // text correctly, including quoted event strings.
-func TestTriggerDecl_Description(t *testing.T) {
+func TestTriggerDecl_SourceText(t *testing.T) {
 	cases := []struct {
 		src  string
 		want string
@@ -903,9 +903,9 @@ func TestTriggerDecl_Description(t *testing.T) {
 		if len(ucs) == 0 {
 			t.Fatalf("no use cases: %q", tc.src)
 		}
-		got := ucs[0].Scenarios()[0].Trigger().Description()
+		got := ucs[0].Scenarios()[0].Trigger().SourceText()
 		if got != tc.want {
-			t.Errorf("src=%q: Description() = %q, want %q", tc.src, got, tc.want)
+			t.Errorf("src=%q: SourceText() = %q, want %q", tc.src, got, tc.want)
 		}
 	}
 }
@@ -976,22 +976,12 @@ func TestActionDecl_OpAccessors_NoAnnotation(t *testing.T) {
 	}
 }
 
-// The description string must not leak the annotation, since it is what the
-// visualizers render as the edge label.
-func TestActionDecl_Description_ExcludesAnnotation(t *testing.T) {
-	src := "use_case \"X\" {\n  when U does x\n    A asks B for a fresh charge [POST /v1/charges]\n}"
-	a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
-	if got := a.Description(); got != "A asks B for a fresh charge" {
-		t.Errorf("Description() = %q, want %q", got, "A asks B for a fresh charge")
-	}
-}
-
 // TestActionDecl_SourceText pins the source-faithful renderer directly, so the
 // contract holds even if the LSP formatter stops being its only caller.
 //
-// It is the counterpart to TestActionDecl_Description_ExcludesAnnotation: that
-// test pins the display label, which must NOT carry the annotation. These two
-// tests together are the record of why the two methods exist.
+// Its counterpart is TestProject_UseCase_DescriptionExcludesAnnotation in
+// projection_uc_test.go, which pins the opposite property on the display label.
+// The two together are the record of why source and label are separate.
 func TestActionDecl_SourceText(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1019,6 +1009,20 @@ func TestActionDecl_SourceText(t *testing.T) {
 				t.Errorf("SourceText() = %q, want %q", got, tc.line)
 			}
 		})
+	}
+}
+
+// TestActionDecl_SourceText_TruncatedLine checks the renderer emits no trailing
+// space when a slot it would normally fill is missing. The input is already
+// broken, but a formatter that appends invisible whitespace makes a broken file
+// noisier to diff than it needs to be.
+func TestActionDecl_SourceText_TruncatedLine(t *testing.T) {
+	for _, line := range []string{"A asks", "A notifies", "A returns", "A"} {
+		src := "use_case \"X\" {\n  when U does x\n    " + line + "\n}"
+		a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+		if got := a.SourceText(); got != line {
+			t.Errorf("SourceText() = %q, want %q (no trailing space)", got, line)
+		}
 	}
 }
 

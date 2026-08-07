@@ -151,3 +151,30 @@ func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
 		t.Errorf("expected nil Operation for `[]`, got %+v", action.Operation)
 	}
 }
+
+// TestProject_UseCase_DescriptionExcludesAnnotation pins the display-label
+// contract at the layer that actually produces and ships it.
+//
+// model.Action.Description is what the visualizers render as an edge label, so
+// it must not leak the trailing `[...]` operation annotation; the annotation
+// travels separately in model.Action.Operation for consumers that want it.
+// This assertion used to live on ActionDecl.Description(), a method with no
+// production callers, so it pinned a copy of the shape rather than the shape
+// that shipped. ActionDecl.SourceText is the deliberate opposite and is pinned
+// by TestActionDecl_SourceText.
+func TestProject_UseCase_DescriptionExcludesAnnotation(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for a fresh charge [POST /v1/charges]\n}"
+	g, li, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected parse diagnostics: %v", diags)
+	}
+	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	action := doc.UseCases[0].Scenarios[0].Actions[0]
+	if got := action.Description; got != "A asks B for a fresh charge" {
+		t.Errorf("Description = %q, want %q (the annotation must not leak into the label)",
+			got, "A asks B for a fresh charge")
+	}
+	if action.Operation == nil || action.Operation.Text != "POST /v1/charges" {
+		t.Errorf("annotation must still travel in Operation, got %+v", action.Operation)
+	}
+}

@@ -78,14 +78,12 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 		if i > 0 {
 			sb.WriteByte('\n') // blank line between scenarios
 		}
-		// Trigger and action use differently named renderers on purpose. An
-		// action's Description() is a display label that deliberately drops the
-		// trailing `[...]` annotation and requotes the event, so writing it back
-		// into the document would delete the user's source; SourceText() is the
-		// source-faithful form. A trigger line has no annotation and no such
-		// label/source split, so Description() is already source-faithful there.
+		// Both renderers are the source-faithful ones. Anything that rebuilds
+		// a line by space-joining leaf tokens silently rewrites the user's
+		// file: it splits a qualified ref into "re / billing" and pulls a
+		// phrase like "(1! & 2!)" apart into "( 1 ! & 2 ! )".
 		sb.WriteString("  when ")
-		sb.WriteString(sc.Trigger().Description())
+		sb.WriteString(sc.Trigger().SourceText())
 		sb.WriteByte('\n')
 		for _, action := range sc.Actions() {
 			sb.WriteString("    ")
