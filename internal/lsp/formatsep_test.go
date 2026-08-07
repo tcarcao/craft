@@ -29,7 +29,7 @@ func sepTok(t *testing.T, src string, idx int) syntax.SyntaxToken {
 
 func TestSeparatorFor_FirstTokenHasNoSeparator(t *testing.T) {
 	curr := sepTok(t, "domain re {\n  Billing\n}\n", 0)
-	if got := separatorFor(nil, "", curr, 0); got != "" {
+	if got := separatorFor(nil, "", curr, 0, false); got != "" {
 		t.Errorf("separatorFor(nil, ...) = %q, want empty", got)
 	}
 }
@@ -38,7 +38,7 @@ func TestSeparatorFor_GapWithNewlineBreaksTheLine(t *testing.T) {
 	src := "domain re {\n  Billing\n}\n"
 	prev := sepTok(t, src, 2) // {
 	curr := sepTok(t, src, 3) // Billing
-	if got := separatorFor(&prev, "\n  ", curr, 1); got != "\n  " {
+	if got := separatorFor(&prev, "\n  ", curr, 1, false); got != "\n  " {
 		t.Errorf("got %q, want %q", got, "\n  ")
 	}
 }
@@ -52,7 +52,7 @@ func TestSeparatorFor_BlankLineRunCollapsesToOne(t *testing.T) {
 	src := "domain re {\n  Billing\n\n\n\n  Invoicing\n}\n"
 	prev := sepTok(t, src, 3)
 	curr := sepTok(t, src, 4)
-	if got := separatorFor(&prev, "\n\n\n\n", curr, 1); got != "\n\n  " {
+	if got := separatorFor(&prev, "\n\n\n\n", curr, 1, false); got != "\n\n  " {
 		t.Errorf("got %q, want one blank line then indent", got)
 	}
 }
@@ -61,7 +61,7 @@ func TestSeparatorFor_SameLineRunOfSpacesCollapsesToOne(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x\n}\n"
 	prev := sepTok(t, src, 4)
 	curr := sepTok(t, src, 5)
-	if got := separatorFor(&prev, "     ", curr, 2); got != " " {
+	if got := separatorFor(&prev, "     ", curr, 2, false); got != " " {
 		t.Errorf("got %q, want a single space", got)
 	}
 }
@@ -86,7 +86,7 @@ func TestSeparatorFor_AdjacentTokensStayAdjacent(t *testing.T) {
 	if !found {
 		t.Fatal("no / token found in a qualified ref")
 	}
-	if got := separatorFor(&prev, "", curr, 2); got != "" {
+	if got := separatorFor(&prev, "", curr, 2, false); got != "" {
 		t.Errorf("got %q, want empty so re/billing stays joined", got)
 	}
 }
@@ -99,7 +99,7 @@ func TestSeparatorFor_OneSpaceBeforeAnOpeningBrace(t *testing.T) {
 	src := "service Foo{contexts: A}\n"
 	prev := sepTok(t, src, 1) // Foo
 	curr := sepTok(t, src, 2) // {
-	if got := separatorFor(&prev, "", curr, 0); got != " " {
+	if got := separatorFor(&prev, "", curr, 0, false); got != " " {
 		t.Errorf("got %q, want a single space so `service Foo{` becomes `service Foo {`", got)
 	}
 }
@@ -111,7 +111,7 @@ func TestSeparatorFor_AuthorBraceOnItsOwnLineSurvives(t *testing.T) {
 	src := "service Foo\n{\n  contexts: A\n}\n"
 	prev := sepTok(t, src, 1) // Foo
 	curr := sepTok(t, src, 2) // {
-	if got := separatorFor(&prev, "\n", curr, 0); got != "\n" {
+	if got := separatorFor(&prev, "\n", curr, 0, false); got != "\n" {
 		t.Errorf("got %q, want the author's line break preserved", got)
 	}
 }
@@ -124,7 +124,7 @@ func TestSeparatorFor_NewLineAfterAClosingBrace(t *testing.T) {
 	src := "domains{Auth{Login}Commerce{Cart}}\n"
 	prev := sepTok(t, src, 5) // } closing Auth
 	curr := sepTok(t, src, 6) // Commerce
-	if got := separatorFor(&prev, "", curr, 1); got != "\n  " {
+	if got := separatorFor(&prev, "", curr, 1, false); got != "\n  " {
 		t.Errorf("got %q, want a newline and one level of indent", got)
 	}
 }
@@ -135,7 +135,7 @@ func TestSeparatorFor_BlankLineAfterAClosingBraceSurvives(t *testing.T) {
 	src := "domains {\n  Auth {\n    Login\n  }\n\n  Commerce {\n    Cart\n  }\n}\n"
 	prev := sepTok(t, src, 5) // } closing Auth
 	curr := sepTok(t, src, 6) // Commerce
-	if got := separatorFor(&prev, "\n\n  ", curr, 1); got != "\n\n  " {
+	if got := separatorFor(&prev, "\n\n  ", curr, 1, false); got != "\n\n  " {
 		t.Errorf("got %q, want the author's blank line preserved", got)
 	}
 }
@@ -154,7 +154,7 @@ func TestSeparatorFor_SeveralStatementsOnOneLineStayThere(t *testing.T) {
 	src := "actors{user Alice system Bot}\n"
 	prev := sepTok(t, src, 3) // Alice
 	curr := sepTok(t, src, 4) // system
-	if got := separatorFor(&prev, " ", curr, 1); got != " " {
+	if got := separatorFor(&prev, " ", curr, 1, false); got != " " {
 		t.Errorf("got %q, want a single space: statement boundaries are not inferred", got)
 	}
 }
@@ -169,7 +169,7 @@ func TestSeparatorFor_NoSpaceBeforeColonOrComma(t *testing.T) {
 				continue
 			}
 			prev := toks[i-1]
-			if got := separatorFor(&prev, " ", toks[i], 2); got != "" {
+			if got := separatorFor(&prev, " ", toks[i], 2, false); got != "" {
 				t.Errorf("before %q: got %q, want empty", want, got)
 			}
 			break
@@ -194,7 +194,7 @@ func TestSeparatorFor_FieldColonGetsOneSpaceAfter(t *testing.T) {
 				break
 			}
 		}
-		if got := separatorFor(&toks[i], "", next, 2); got != " " {
+		if got := separatorFor(&toks[i], "", next, 2, false); got != " " {
 			t.Errorf("after a field colon: got %q, want one space", got)
 		}
 		return
@@ -225,14 +225,22 @@ func TestSeparatorFor_ScenarioAlwaysGetsABlankLine(t *testing.T) {
 		t.Fatal("expected two when tokens")
 	}
 
+	// Both are scenario starts as far as the walker is concerned. The first is
+	// held back by prev being `{`, not by startsScenario.
 	prevOfFirst := prevSignificant(toks, firstWhen)
-	if got := separatorFor(prevOfFirst, "\n  ", toks[firstWhen], 1); got != "\n  " {
+	if got := separatorFor(prevOfFirst, "\n  ", toks[firstWhen], 1, true); got != "\n  " {
 		t.Errorf("first when: got %q, want a plain newline (it opens the body)", got)
 	}
 
 	prevOfSecond := prevSignificant(toks, secondWhen)
-	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1); got != "\n\n  " {
+	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1, true); got != "\n\n  " {
 		t.Errorf("second when: got %q, want a blank line before the scenario", got)
+	}
+
+	// A `when` whose leading comment already opened the scenario asks for no
+	// second blank line, which is what startsScenario=false expresses.
+	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1, false); got != "\n  " {
+		t.Errorf("when after its own leading comment: got %q, want a plain newline", got)
 	}
 }
 
@@ -284,7 +292,7 @@ func TestSeparatorFor_RefColonStaysTight(t *testing.T) {
 	}
 
 	// The ref colon must NOT get a space after it, so adjacent tokens stay joined
-	if got := separatorFor(&toks[refColonIdx], "", nextTok, 1); got != "" {
+	if got := separatorFor(&toks[refColonIdx], "", nextTok, 1, false); got != "" {
 		t.Errorf("after ref colon: got %q, want empty so bc:billing stays joined", got)
 	}
 }
@@ -311,7 +319,7 @@ func TestSeparatorFor_LBraceForcesNewlineAfter(t *testing.T) {
 		if toks[i-1].Kind() != syntax.SyntaxKindLBrace {
 			continue
 		}
-		if got := separatorFor(&toks[i-1], "", toks[i], 1); got != "\n  " {
+		if got := separatorFor(&toks[i-1], "", toks[i], 1, false); got != "\n  " {
 			t.Errorf("after {: got %q, want a newline plus indent", got)
 		}
 		return
@@ -329,7 +337,7 @@ func TestSeparatorFor_RBraceForcesNewlineBefore(t *testing.T) {
 		if toks[i].Kind() != syntax.SyntaxKindRBrace {
 			continue
 		}
-		if got := separatorFor(&toks[i-1], "", toks[i], 0); got != "\n" {
+		if got := separatorFor(&toks[i-1], "", toks[i], 0, false); got != "\n" {
 			t.Errorf("before }: got %q, want a newline at depth 0", got)
 		}
 		return

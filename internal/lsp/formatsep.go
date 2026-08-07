@@ -28,7 +28,11 @@ func indentFor(depth int) string {
 // re-deriving line structure from the tree is what preserves author line breaks,
 // and it is also what keeps a qualified ref joined: `re/billing` has no gaps, so
 // every separator inside it is empty and the parts concatenate.
-func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int) string {
+// startsScenario is the walker's answer to "does a new scenario begin at this
+// token". It cannot be derived here: the token that opens a scenario may be a
+// comment rather than the `when`, and telling those apart needs lookahead to
+// the comment's owner, which separatorFor never sees.
+func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool) string {
 	if prev == nil {
 		return ""
 	}
@@ -97,9 +101,9 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 
 	// A scenario always gets a blank line before it, even if the author wrote
 	// none. This is the one place the formatter adds vertical space rather than
-	// preserving it, and it matches what the previous formatter did. `when` at
-	// the very start of a use_case body is not a new scenario, and prev being
-	// `{` is how that case is recognised.
+	// preserving it, and it matches what the previous formatter did. The first
+	// scenario in a use_case body is not preceded by one, and prev being `{` is
+	// how that case is recognised.
 	//
 	// This sits ABOVE the `prev == RBrace` rule below, and the order is load
 	// bearing. A `tags { }` block followed immediately by a `when` puts a `}`
@@ -107,7 +111,7 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// `}when` got a plain newline on the first pass and the blank line only on
 	// the second, once the newline was in the gap, so formatting was not
 	// idempotent for that shape.
-	if curr.Kind() == syntax.SyntaxKindKwWhen && depth == 1 && prev.Kind() != syntax.SyntaxKindLBrace {
+	if startsScenario && depth == 1 && prev.Kind() != syntax.SyntaxKindLBrace {
 		return "\n\n" + indentFor(depth)
 	}
 

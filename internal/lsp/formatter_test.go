@@ -620,11 +620,7 @@ func TestFormatDocument_CommentsSurvive(t *testing.T) {
 		{"above a top-level block", "// leading\nservices {\n  A {\n    contexts: X\n  }\n}\n"},
 		{"inside a nested block", "services {\n  // about A\n  A {\n    // about contexts\n    contexts: X\n  }\n}\n"},
 		{"above a use_case", "// this is a comment\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
-		// The blank line the formatter puts before every scenario lands after a
-		// leading comment rather than before it, because the comment is just the
-		// token preceding the `when`. Canonical form therefore carries the blank
-		// line here.
-		{"above a scenario", "use_case \"X\" {\n  // first flow\n\n  when U does x\n    A asks B for c\n}\n"},
+		{"above a scenario", "use_case \"X\" {\n  // first flow\n  when U does x\n    A asks B for c\n}\n"},
 		{"above an action", "use_case \"X\" {\n  when U does x\n    // why this call\n    A asks B for c\n}\n"},
 		{"after the last action", "use_case \"X\" {\n  when U does x\n    A asks B for c\n    // TODO: confirm subject\n}\n"},
 		{"doc comment", "/// documented\nactor user Alice\n"},
@@ -1023,4 +1019,69 @@ func TestFormatDocument_SeveralStatementsOnOneLineRoundTrip(t *testing.T) {
 		t.Errorf("the crammed statements should be left as written:\n%s", got)
 	}
 	assertContentPreserved(t, src, got)
+}
+
+// TestFormatDocument_CommentAboveANonFirstScenario pins the lookahead that
+// decides which scenario a comment belongs to.
+//
+// A comment is not a `when` and not a `}`, so it does not close the scenario
+// body above it on its own. Without the lookahead it inherited that body's
+// depth and was written at 4-space action indent instead of 2-space scenario
+// indent, and the blank line the formatter puts before every scenario landed
+// between the comment and its own `when` rather than above the pair. The
+// comment then read as documenting the scenario it followed rather than the one
+// it introduces.
+//
+// The shape is not hypothetical: testdata/corpus/99_mixed/simple.craft has it.
+func TestFormatDocument_CommentAboveANonFirstScenario(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{
+			"one comment",
+			"use_case \"X\" {\n  when A does x\n    P does y\n\n  // second flow\n  when B does z\n    Q does w\n}\n",
+		},
+		{
+			// Every comment in the run looks past the others to the same
+			// `when`, so the whole run attaches to that scenario and only the
+			// first of them takes the blank line.
+			"a run of comments",
+			"use_case \"X\" {\n  when A does x\n    P does y\n\n  // a\n  // b\n  when B does z\n    Q does w\n}\n",
+		},
+		{
+			"block comment",
+			"use_case \"X\" {\n  when A does x\n    P does y\n\n  /* second flow */\n  when B does z\n    Q does w\n}\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_ScenarioBlankLineMovesAboveTheComment covers the half of
+// the rule the canonical fixtures above cannot show: when the author wrote no
+// blank line at all, the formatter still adds one, and it goes above the
+// comment rather than between the comment and its `when`.
+func TestFormatDocument_ScenarioBlankLineMovesAboveTheComment(t *testing.T) {
+	src := "use_case \"X\" {\n  when A does x\n    P does y\n  // note\n  when B does z\n    Q does w\n}\n"
+	got := formatSource(t, src)
+	if !strings.Contains(got, "    P does y\n\n  // note\n  when B does z") {
+		t.Errorf("the scenario blank line should sit above the comment:\n%s", got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("not a fixed point\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+	assertContentPreserved(t, src, got)
+}
+
+// TestFormatDocument_TrailingCommentKeepsActionIndent is the boundary of the
+// lookahead, asserted so the rule is not read as "every comment moves". A
+// comment at the end of a scenario body has a `}` after it, not a `when`, so it
+// belongs to the body it closes and keeps action indent.
+func TestFormatDocument_TrailingCommentKeepsActionIndent(t *testing.T) {
+	src := "use_case \"X\" {\n  when A does x\n    P does y\n    // done here\n}\n"
+	assertFormatIsFaithful(t, src)
 }

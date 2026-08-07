@@ -235,8 +235,10 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 	scenarioDepth := 0
 	gap := ""
 	var prev *syntax.SyntaxToken
+	prevLedScenario := false
 
-	for _, tok := range node.AllTokens() {
+	toks := node.AllTokens()
+	for i, tok := range toks {
 		if tok.Kind() == syntax.SyntaxKindEOF {
 			continue
 		}
@@ -245,12 +247,26 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 			continue
 		}
 
+		// A comment directly above a `when` documents the scenario below it,
+		// not the one above it, so it belongs to the coming scenario and has to
+		// close the open one just as the `when` itself does. Without this the
+		// comment kept the previous scenario's body depth, so it was written at
+		// action indent instead of scenario indent, and the blank line landed
+		// between the comment and its `when` rather than above the pair.
+		//
+		// This needs lookahead, which is why the walker answers it rather than
+		// separatorFor: a comment's owner is the next real token, and
+		// separatorFor only ever sees one token at a time.
+		leadsScenario := isCommentKind(tok.Kind()) && braceDepth == 1 && nextRealTokenIsWhen(toks, i)
+
 		// A `when` at the use_case's own brace depth closes any scenario body
-		// that was open (it, and the enclosing `}` below, are the only two
-		// things that end one) and sits at that same level itself; only the
-		// lines after it are indented deeper. Resetting before the separator
-		// is computed is what keeps the `when` line at depth 1 instead of 2.
-		if tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1 {
+		// that was open (it, the leading comment above, and the enclosing `}`
+		// below are the only things that end one) and sits at that same level
+		// itself; only the lines after it are indented deeper. Resetting before
+		// the separator is computed is what keeps the `when` line at depth 1
+		// instead of 2.
+		startsWhen := tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1
+		if startsWhen || leadsScenario {
 			scenarioDepth = 0
 		}
 
@@ -263,7 +279,12 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 			}
 		}
 
-		sb.WriteString(separatorFor(prev, gap, tok, braceDepth+scenarioDepth))
+		// The scenario's blank line goes above the whole run, so only the first
+		// token of it asks for one. A `when` whose comment already opened the
+		// scenario must not ask for a second.
+		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario
+
+		sb.WriteString(separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario))
 		sb.WriteString(tok.Text())
 
 		if tok.Kind() == syntax.SyntaxKindLBrace {
@@ -282,5 +303,23 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 		cur := tok
 		prev = &cur
 		gap = ""
+		prevLedScenario = leadsScenario
 	}
+}
+
+// nextRealTokenIsWhen reports whether the first token after i that carries
+// meaning, skipping whitespace and any further comments, is a `when`.
+//
+// Skipping comments is what makes a run of them work: every comment in
+// `// a`, `// b`, `when ...` sees the same `when` and the whole run attaches to
+// that scenario, rather than only the last one.
+func nextRealTokenIsWhen(toks []syntax.SyntaxToken, i int) bool {
+	for j := i + 1; j < len(toks); j++ {
+		k := toks[j].Kind()
+		if k == syntax.SyntaxKindWhitespace || k == syntax.SyntaxKindEOF || isCommentKind(k) {
+			continue
+		}
+		return k == syntax.SyntaxKindKwWhen
+	}
+	return false
 }
