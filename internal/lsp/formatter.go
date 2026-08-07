@@ -106,7 +106,18 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 		}
 	}
 
-	if !first {
+	// The document ends in exactly one newline. Most declarations end on a
+	// token that carries none, so one is added here. An unterminated block
+	// comment is the exception: the lexer slices it to EOF, so its own text
+	// already ends in the file's final newline, and it reaches this loop as a
+	// root-level comment token written verbatim. Adding a second newline made
+	// formatting non-idempotent, and under format-on-save the file grew a
+	// blank line on every keystroke-triggered save, without bound.
+	//
+	// Asking what was already written, rather than trimming the token, is what
+	// keeps this stage on the right side of the token-text-is-sacred rule: a
+	// pass that rewrites token text is the hazard this whole design removes.
+	if !first && !strings.HasSuffix(sb.String(), "\n") {
 		sb.WriteByte('\n')
 	}
 
@@ -213,10 +224,16 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // what a token means.
 //
 // It returns the set of written line indices that fall INSIDE a token rather
-// than between two of them, which is the lines of a multi-line token strictly
-// between its first and last. The last line is deliberately excluded: it is
-// shared with whatever follows the token on that same physical line, so it is
-// not claimed by the token. Only alignAnnotations needs this, and only because
+// than between two of them: every line a multi-line token spans EXCEPT its
+// last. The rule is "the token's text runs to the end of this line". That is
+// true of the token's first line (the token starts partway along it and then
+// runs on past the newline) and of every line in between, and false only of
+// the last, which the token stops partway along and shares with whatever
+// follows the close. Since an annotation is by definition the end of its line,
+// a line the token runs off the end of can never carry one, so excluding it
+// only ever removes a false positive.
+//
+// Only alignAnnotations needs this, and only because
 // it is line oriented: a multi-line block comment is one token carrying
 // newlines, so a pass that splits the output into lines cannot tell that
 // pass's interior lines apart from real ones and will happily rewrite the
@@ -300,18 +317,23 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 
 		line += strings.Count(sep, "\n")
 		if n := strings.Count(tok.Text(), "\n"); n > 0 {
-			// Only the lines strictly between the token's first and last
-			// emitted line are interior. The last line (line+n) is the
-			// token's own last line, which it shares with whatever follows
-			// it on that same physical line, so it must stay eligible for
-			// alignment rather than being claimed by the token.
-			if n > 1 {
-				if interior == nil {
-					interior = make(map[int]bool, n-1)
-				}
-				for k := 1; k < n; k++ {
-					interior[line+k] = true
-				}
+			// Every line this token runs off the end of is interior: its own
+			// first line (line) and each line in between. Only the last line
+			// (line+n) is excluded, because the token stops partway along it
+			// and shares it with whatever follows the close, which must stay
+			// eligible for alignment rather than being claimed by the token.
+			//
+			// Claiming the first line matters as much as releasing the last.
+			// A comment opened mid-line, as in `A asks B to c /* note [1]`,
+			// leaves a line whose visible tail is comment body but which shows
+			// the alignment pass nothing to say so, and the pass padded that
+			// `[1]` out to the surrounding column: whitespace rewritten inside
+			// a comment. The token's own extent is the only reliable answer.
+			if interior == nil {
+				interior = make(map[int]bool, n)
+			}
+			for k := 0; k < n; k++ {
+				interior[line+k] = true
 			}
 			line += n
 		}

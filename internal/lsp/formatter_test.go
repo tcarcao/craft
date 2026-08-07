@@ -461,6 +461,95 @@ func TestFormatDocument_AlignsAfterMultilineCommentClose(t *testing.T) {
 			t.Errorf("formatted output does not parse cleanly: %+v\ngot:\n%s", diags, got)
 		}
 	})
+
+	// The sub-test above closes the comment with a bare `*/`. The idiomatic
+	// style keeps a `*` at the head of every continuation line, so the closing
+	// line reads `*/ A asks ...`, and releasing the line from the interior set
+	// was not enough for it: splitAnnotation independently refused any line
+	// whose first non-space character was `*`, on the reasoning that it was a
+	// comment continuation. Two rules in different files, each defensible on
+	// its own, that cancelled. This is the shape real code has, so it is the
+	// shape that decides whether the fix is worth anything.
+	t.Run("close is written in the leading-star style", func(t *testing.T) {
+		src := "use_case \"X\" {\n" +
+			"  when U does x\n" +
+			"    /* note\n" +
+			"     */ A asks B to b  [POST /v1/b]\n" +
+			"    A asks B to aaaaaaaaaaaa  [POST /v1/a]\n" +
+			"}\n"
+		got := FormatDocument(src)
+
+		var cols []int
+		for _, line := range strings.Split(got, "\n") {
+			if i := strings.Index(line, "[POST"); i >= 0 {
+				cols = append(cols, i)
+			}
+		}
+		if len(cols) != 2 {
+			t.Fatalf("expected 2 annotations, found %d in:\n%s", len(cols), got)
+		}
+		if cols[0] != cols[1] {
+			t.Errorf("annotations not aligned: columns %d and %d in:\n%s", cols[0], cols[1], got)
+		}
+		if again := FormatDocument(got); again != got {
+			t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+		}
+	})
+
+	// The protection half of the rule above, at the level where it can be got
+	// wrong. Widening splitAnnotation to accept a line beginning `*` is only
+	// safe because the line must also CLOSE the comment: a `*/` cannot occur on
+	// a line that is genuinely inside a comment body, because it would have
+	// ended the comment there. Drop that condition and the pass starts padding
+	// comment text.
+	//
+	// Both fixtures are lines a block comment passes through, and the second is
+	// the case that no longer has the interior set behind it either: the
+	// comment opens PARTWAY along a line of real content, so the line does not
+	// look like a comment at all until you know where the token starts.
+	t.Run("a bracketed line the comment merely passes through is left alone", func(t *testing.T) {
+		cases := []struct{ name, src, verbatim string }{
+			{
+				"leading-star body line",
+				"use_case \"X\" {\n" +
+					"  when U does x\n" +
+					"    A asks B to aaaaaaaaaaaaaaaaaaaa  [POST /v1/a]\n" +
+					"    /* note\n" +
+					"     * see [1]\n" +
+					"     */ A asks B to bbbbbbbbbbbbbbbbbbbb  [POST /v1/b]\n" +
+					"}\n",
+				"     * see [1]",
+			},
+			{
+				"comment opened partway along a line of content",
+				"use_case \"X\" {\n" +
+					"  when U does x\n" +
+					"    A asks B to c /* see [1]\n" +
+					"     */\n" +
+					"    A asks B to aaaaaaaaaaaaaaaaaaaa  [POST /v1/a]\n" +
+					"}\n",
+				"    A asks B to c /* see [1]",
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				got := FormatDocument(tc.src)
+				found := false
+				for _, line := range strings.Split(got, "\n") {
+					if line == tc.verbatim {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("comment body must not be rewritten by alignment; wanted line %q verbatim in:\n%s", tc.verbatim, got)
+				}
+				if again := FormatDocument(got); again != got {
+					t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+				}
+			})
+		}
+	})
 }
 
 // TestFormatDocument_AlignmentIsIdempotent formats an already-aligned document
@@ -1294,7 +1383,7 @@ func TestFormatDocument_TrailingCommentIndentation(t *testing.T) {
 // TestFormatDocument_ConsecutiveTrailingComments is the direct regression test
 // for Task 5's Job 2: consecutive comment-kind root children must derive
 // their separator from the author's actual whitespace, not a forced blank
-// line. Both directions matter — no blank line stays as none, and a blank
+// line. Both directions matter: no blank line stays as none, and a blank
 // line the author wrote survives.
 func TestFormatDocument_ConsecutiveTrailingComments(t *testing.T) {
 	cases := []struct{ name, src string }{
@@ -1305,6 +1394,49 @@ func TestFormatDocument_ConsecutiveTrailingComments(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_UnterminatedBlockCommentIsAFixedPoint locks the one shape
+// whose token text already ends in a newline.
+//
+// The lexer slices an unterminated block comment to EOF, so the token carries
+// the file's final newline inside its own text, and since the parser started
+// tokenising trailing comments that token reaches the root loop, which wrote it
+// verbatim and then appended the document's closing newline on top. Each format
+// added one more blank line than the last, so under format-on-save a file with
+// an unclosed `/*` in it grew without bound.
+//
+// Idempotence, not a fixed expected string, is the property under test: what
+// the right output looks like here is a matter of taste, but "the second format
+// changes nothing" is the guarantee the record states unconditionally and the
+// one the editor relies on. Two cases start without a trailing newline, so
+// their first format legitimately adds one; only from there on must they
+// settle.
+func TestFormatDocument_UnterminatedBlockCommentIsAFixedPoint(t *testing.T) {
+	cases := []struct{ name, src string }{
+		{"only content", "/* unterminated\n"},
+		{"after a declaration", "domain re { Billing }\n/* unterminated\n"},
+		{"containing blank lines", "/* unterminated\n\nstill inside\n"},
+		{"no trailing newline at all", "domain re { Billing }\n/* unterminated"},
+		{"whole file is just the opener", "/*"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			once := FormatDocument(tc.src)
+			twice := FormatDocument(once)
+			if twice != once {
+				t.Fatalf("format is not idempotent\nfirst:  %q\nsecond: %q", once, twice)
+			}
+			// One extra pass is not idle. The defect this pins added a byte per
+			// pass, so stopping at two would have caught it, but a variant that
+			// only settles after three would pass a two-pass check while still
+			// not being a fixed point.
+			if thrice := FormatDocument(twice); thrice != twice {
+				t.Errorf("format settled at pass 2 but moved again at pass 3\nsecond: %q\nthird:  %q", twice, thrice)
+			}
+			assertContentPreserved(t, tc.src, once)
 		})
 	}
 }
