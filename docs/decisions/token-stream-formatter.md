@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 **Date:** 2026-08-07
-**Commits:** `d5b8d91..HEAD` (`e73297f` at merge time)
+**Commits:** `d5b8d91..e73297f`
 **Supersedes:** the follow-up recorded in `docs/decisions/action-operation-brackets.md` under
 "Follow-up: the formatter is reconstructive, and should not be"
 
@@ -58,17 +58,25 @@ The lever is already in place:
 - comments are real tokens emitted in stream (`parser.go:1742`)
 - so for any token, the preceding whitespace token's text says whether it began a new line
 
-That last point is what makes trailing comments recoverable exactly, which the current design
+That last point is what makes trailing comments recoverable exactly, which the old design
 could not do safely.
 
 ## Architecture
 
 One walker over `root.AllTokens()`. It replaces `formatUseCaseDecl`, `formatContextMapDecl`,
-`formatGlossaryDecl`, `formatDecl`, `writeBlockStatements`, `writeRefWithComments`,
-`trailingCommentLines`, and `significantTokens`.
+`formatGlossaryDecl`, `formatDecl`, `writeBlockStatements`, `writeRefWithComments`, and
+`significantTokens`.
 
-The walker holds three pieces of state: brace depth, whether the previous emitted token ended
-a line, and whether a blank line is pending. Nothing else.
+`trailingCommentLines` is not among them: it stays, and does not go away, for the reason given
+under "What gets deleted" below.
+
+The walker (`writeTokens`, `internal/lsp/formatter.go:233-317`) holds five pieces of state:
+brace depth, scenario depth, the raw whitespace text accumulated since the last emitted token
+(`gap`), the previous token emitted, and whether that previous token opened the current
+scenario. There is no discrete "line just ended" or "blank line pending" boolean: `separatorFor`
+derives both directly from the newline count in `gap` (`internal/lsp/formatsep.go:122-134`).
+Scenario depth is not optional bookkeeping; the Scenarios section just below depends on it
+entirely.
 
 ### Indentation
 
@@ -106,8 +114,20 @@ becomes
     }
 
 Preserving author line breaks applies *within* a statement. Block boundaries are structure,
-not authorial line-breaking, and a formatter that cannot expand minified input is not doing
-its job.
+not authorial line-breaking, and a formatter that leaves every minified brace untouched is not
+doing its job.
+
+Expansion stops at the brace. Several statements crammed onto one line, such as
+`user Alice system Bot`, stay exactly as the author wrote them. A brace is a token the walker
+can see and act on; the gap between two statements on the same line is indistinguishable from
+the gap inside one, so there is no signal here to expand on. Deriving a statement boundary
+structurally from the tree instead of from the author's own newlines was tried, and it produced
+source that no longer parsed, because it split an action's event ref from its `[op]` annotation
+across the manufactured line. The author's newlines are the only statement-boundary signal this
+design has, so where the author wrote none, the walker adds none. This is an accepted limit, not
+a defect: see `internal/lsp/formatsep.go:85-91` and
+`TestSeparatorFor_SeveralStatementsOnOneLineStayThere`
+(`internal/lsp/formatsep_test.go:153`).
 
 ### Line breaks and blank lines
 
@@ -122,11 +142,13 @@ wrapped across lines stays wrapped:
     contexts: Authentication,
       Profile
 
-The current formatter joins these, which is why several corpus fixtures report as unformatted.
-Preserving them is what a token-stream walker does naturally, since a newline in the source is
-just a whitespace token containing `\n`, and it is the more faithful behaviour. It is listed
-here as a fifth deliberate change rather than left implicit, because it is a behaviour change
-that was not among the four approved quirks.
+The previous formatter joined these, which is why several corpus fixtures reported as
+unformatted before this rewrite. Preserving them is what a token-stream walker does naturally,
+since a newline in the source is just a whitespace token containing `\n`, and it is the more
+faithful behaviour. It is the fifth row in the Behaviour changes table below rather than left
+implicit, because it is a behaviour change that was not among the four quirks approved before
+implementation started. (A sixth was added later still; see Behaviour changes and the Replan
+section below.)
 
 `when` is `SyntaxKindKwWhen`, so the scenario rule is a token-kind test plus a depth test, not
 a tree query.
@@ -144,18 +166,23 @@ at a time.
 
 ## Behaviour changes
 
-Four current behaviours change. Each is a quirk rather than a decision, and each was approved
-explicitly.
+Six behaviours change, added to this record in three waves. The first four rows below were
+approved explicitly before implementation started. Author line breaks inside a value (row five)
+surfaced during the first implementation pass and was approved as a fifth deliberate change.
+Minified declarations (row six) were ruled on separately when Task 3 was blocked and the plan
+amended (see Replan section below). All six are quirk fixes rather than style decisions.
 
-| | Current | After |
+| | Before | After |
 |---|---|---|
 | Trailing comment | preserved but moved to its own line above | stays on its line |
 | Ref-adjacent comment | splits the field across two lines | field stays on one line, comment follows |
 | Interior multi-space | preserved in actions, collapsed in triggers | collapsed everywhere |
 | Blank lines | as described above, but implicit | as described above, stated and tested |
+| Author line breaks in a value | joined onto one line | preserved, so `contexts: A,\n  B` stays wrapped |
+| Minified declarations | stayed on one line | `{`/`}` force a break, so `service Foo{contexts: A}` expands; several statements on one line still don't split (see Block boundaries) |
 
-The trailing-comment move exists because the current design cannot tell reliably where a line
-ends, and placing a comment wrongly could comment out real content. The token stream removes
+The trailing-comment move existed because the old design could not tell reliably where a line
+ended, and placing a comment wrongly could comment out real content. The token stream removes
 that uncertainty, so the reason for the move goes away.
 
 ## What gets deleted
@@ -198,13 +225,14 @@ tokens covered by the strongest assertion:
 Under this design that assertion should be impossible to fail rather than merely observed to
 pass, which is the difference the rewrite buys.
 
-`contentDrift` stays as a runtime guard and should become unreachable. Add a test asserting it
-does not fire for any file in the corpus, so that if the invariant is ever broken it surfaces
-immediately rather than as a silent no-op.
+`contentDrift` stays as a runtime guard and should now be unreachable.
+`TestFormatDocument_EveryCraftFileInRepo` (`internal/lsp/formatter_corpus_test.go:154-161`)
+asserts it does not fire for any file in the corpus, so that if the invariant is ever broken it
+surfaces immediately rather than as a silent no-op.
 
 ## Re-blessing
 
-The three quirk fixes change output for some fixtures. Each diff is reviewed individually
+The six behaviour changes above change output for some fixtures. Each diff is reviewed individually
 rather than accepted wholesale, and any fixture with a `.craftjson` pairing has its golden
 re-verified, since a golden change would mean model drift rather than whitespace drift and is
 a defect.
