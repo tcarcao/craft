@@ -167,7 +167,7 @@ Inventory updates stock levels
 <domain> <verb> [connector] <phrase>
 ```
 
-The subject also accepts a qualified `<domain>/<name>` reference: `re/billing validates the event`. A `kind:` prefix is not accepted. Unlike the other three action kinds, an ambiguous bare subject here is not checked: `craft/sema/ambiguous-bc` does not fire for an internal action (see [Diagnostics](#diagnostics) below).
+The subject also accepts a qualified `<domain>/<name>` reference: `re/billing validates the event`. A `kind:` prefix is not accepted. Only `asks` and `notifies` subjects are checked for ambiguity: `craft/sema/ambiguous-bc` does not fire for an internal action's subject (see [Diagnostics](#diagnostics) below).
 
 **Use when:** A domain does something internally without calling other domains.
 
