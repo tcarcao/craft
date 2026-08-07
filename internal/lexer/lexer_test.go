@@ -464,3 +464,51 @@ func TestComment_SlashInProseSurvives(t *testing.T) {
 		})
 	}
 }
+
+// Every token's [Offset,End) must slice its own source text, and tokens
+// plus the gaps between them must tile the source exactly.
+func TestToken_EndSlicesSource(t *testing.T) {
+	sources := []string{
+		"domain re {\n  Billing\n}\n",
+		"// lead\ndomain re { Billing }\n",
+		"/* block */ domain re { Billing }\n",
+		"use_case \"X\" {\n  when U does x A notifies \"Hello world\"\n}\n",
+		"use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n", // unterminated
+		"domain re { Billing }  [POST /v1/charges]\n",
+		"services { S { contexts: A, B\n language: golang } }\n",
+		"@#$\n", // lexer error tokens
+		"",
+	}
+	for _, src := range sources {
+		toks := lexer.New(src).All()
+		prevEnd := 0
+		for _, tok := range toks {
+			if tok.Type == lexer.TokenEOF {
+				continue
+			}
+			if tok.Offset < prevEnd {
+				t.Fatalf("src=%q token %v overlaps previous: Offset=%d prevEnd=%d",
+					src, tok.Type, tok.Offset, prevEnd)
+			}
+			if tok.End < tok.Offset || tok.End > len(src) {
+				t.Fatalf("src=%q token %v has bad range [%d,%d) len=%d",
+					src, tok.Type, tok.Offset, tok.End, len(src))
+			}
+			prevEnd = tok.End
+		}
+	}
+}
+
+// The raw slice must be non-empty for every non-EOF token: a zero-width
+// token would let a construct vanish from the tree without changing widths.
+func TestToken_EndIsNonEmpty(t *testing.T) {
+	toks := lexer.New("use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n").All()
+	for _, tok := range toks {
+		if tok.Type == lexer.TokenEOF {
+			continue
+		}
+		if tok.End <= tok.Offset {
+			t.Fatalf("token %v is zero-width at offset %d", tok.Type, tok.Offset)
+		}
+	}
+}
