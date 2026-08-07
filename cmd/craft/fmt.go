@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tcarcao/craft/v2/internal/lsp"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 func fmtCmd() *cobra.Command {
@@ -95,6 +96,22 @@ func runFmt(files []string, check bool, out, errOut io.Writer) int {
 			continue
 		}
 
+		// Never write text that has not been read back. FormatDocument already
+		// refuses to return output that changes anything but whitespace, and
+		// this reparse is the second lock on the same door: an in-place bulk
+		// rewriter shipping to Homebrew is the wrong place to trust a single
+		// check. A file that would come back broken is left exactly as it was.
+		if _, diags, err := craft.Parse(file, []byte(formatted)); err != nil {
+			fmt.Fprintf(errOut, "%s: skipped, formatted output could not be reparsed: %v\n", file, err)
+			failed = true
+			continue
+		} else if bad := firstError(diags); bad != nil {
+			fmt.Fprintf(errOut, "%s: skipped, formatting would have broken the file: %s [%s]\n",
+				file, bad.Message, bad.Code)
+			failed = true
+			continue
+		}
+
 		if check {
 			fmt.Fprintf(out, "%s\n", file)
 			failed = true
@@ -112,4 +129,14 @@ func runFmt(files []string, check bool, out, errOut io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// firstError returns the first error-severity diagnostic, or nil.
+func firstError(diags []craft.Diagnostic) *craft.Diagnostic {
+	for i := range diags {
+		if diags[i].Severity == craft.SeverityError {
+			return &diags[i]
+		}
+	}
+	return nil
 }

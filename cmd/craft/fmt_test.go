@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,4 +225,80 @@ func TestFmtCmd_IsRegistered(t *testing.T) {
 		}
 	}
 	t.Error("fmt is not registered on the root command")
+}
+
+// TestRunFmt_TrailingCommentIsNotDeleted is the shape the coordinator measured
+// on the built binary: a file ending in a comment went from 43 bytes to 24,
+// with the comment gone and exit 0. Content loss with a success exit code is
+// the worst failure an in-place bulk rewriter can have.
+func TestRunFmt_TrailingCommentIsNotDeleted(t *testing.T) {
+	const src = "actor user Alice\n\n// trailing note\n"
+	f := writeCraft(t, t.TempDir(), "a.craft", src)
+
+	var out, errOut bytes.Buffer
+	if code := runFmt([]string{f}, false, &out, &errOut); code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr: %s", code, errOut.String())
+	}
+	got, _ := os.ReadFile(f)
+	if !strings.Contains(string(got), "// trailing note") {
+		t.Errorf("the trailing comment was deleted:\n%q", got)
+	}
+	if len(got) < len(src) {
+		t.Errorf("file shrank from %d to %d bytes:\n%q", len(src), len(got), got)
+	}
+}
+
+// TestRunFmt_CommentOnlyFileIsNotTruncated covers the second measured case: an
+// 18-byte comment-only file was rewritten to 0 bytes, exit 0.
+func TestRunFmt_CommentOnlyFileIsNotTruncated(t *testing.T) {
+	const src = "// only a comment\n"
+	f := writeCraft(t, t.TempDir(), "b.craft", src)
+
+	var out, errOut bytes.Buffer
+	if code := runFmt([]string{f}, false, &out, &errOut); code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr: %s", code, errOut.String())
+	}
+	got, _ := os.ReadFile(f)
+	if len(got) == 0 {
+		t.Fatal("file was truncated to zero bytes")
+	}
+	if string(got) != src {
+		t.Errorf("comment-only file must round-trip\nwant: %q\ngot:  %q", src, got)
+	}
+}
+
+// TestRunFmt_NeverWritesUnverifiedOutput asserts the belt-and-braces reparse:
+// whatever the formatter returns is read back before it reaches the disk. The
+// formatter's own content-drift check should mean this never fires, which is
+// exactly why it needs its own test rather than waiting for a bug to exercise
+// it. Every corpus file must survive a full format-and-reparse round trip.
+func TestRunFmt_NeverWritesUnverifiedOutput(t *testing.T) {
+	dir := t.TempDir()
+	matches, err := filepath.Glob(filepath.Join("..", "..", "testdata", "corpus", "*", "*.craft"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("no corpus files found: %v", err)
+	}
+
+	copied := make([]string, 0, len(matches))
+	for i, src := range matches {
+		raw, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatalf("reading %s: %v", src, err)
+		}
+		copied = append(copied, writeCraft(t, dir, fmt.Sprintf("f%03d.craft", i), string(raw)))
+	}
+
+	var out, errOut bytes.Buffer
+	runFmt(copied, false, &out, &errOut)
+	if strings.Contains(errOut.String(), "would have broken the file") {
+		t.Errorf("formatter produced output that does not reparse:\n%s", errOut.String())
+	}
+
+	// Whatever was written must itself be a fixed point.
+	out.Reset()
+	errOut.Reset()
+	if code := runFmt(copied, true, &out, &errOut); code != 0 {
+		t.Errorf("formatted corpus is not a fixed point under --check\nstdout: %s\nstderr: %s",
+			out.String(), errOut.String())
+	}
 }
