@@ -2440,17 +2440,30 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		return l
 	}
 
-	// emitPhraseWord emits tok as an ordinary phrase word, unless it belongs to
-	// a trailing operation annotation, in which case it is opaque payload text
-	// and gets the distinct annotation-payload type instead. The verb itself
-	// (SyntaxKindOpVerb) and the brackets are not SyntaxKindIdent, so they never
-	// reach this function; they are classified in Pass 1 (syntaxKindToCraftToken).
+	// emitPhraseWord classifies tok as either an ordinary phrase word or, when
+	// tok belongs to a trailing operation annotation, opaque payload text.
+	// Annotation payload tokens can be a bare ident ("charges") or a number
+	// ("200", as in the design doc's own `[200 AuthorizationResult]` example);
+	// both get the same payload type, so the whole annotation reads as one
+	// visually distinct unit rather than half receding and half not. Outside
+	// an annotation, only idents are phrase words: a number in an ordinary
+	// phrase is intentionally left unclassified here, matching the pre-existing
+	// (and out of scope) behavior for SyntaxKindNumber everywhere else in the
+	// grammar, such as arch modifier values. The verb itself (SyntaxKindOpVerb)
+	// and the brackets are not SyntaxKindIdent or SyntaxKindNumber, so they
+	// never reach this function; they are classified in Pass 1
+	// (syntaxKindToCraftToken).
 	emitPhraseWord := func(tok syntax.SyntaxToken) {
+		inAnnotation := false
 		if parent := tok.Parent(); parent != nil && parent.Kind() == syntax.SyntaxKindOpAnnotation {
-			emit(tok, opPayloadIdx)
-			return
+			inAnnotation = true
 		}
-		emit(tok, phraseIdx)
+		switch {
+		case inAnnotation:
+			emit(tok, opPayloadIdx)
+		case tok.Kind() == syntax.SyntaxKindIdent:
+			emit(tok, phraseIdx)
+		}
 	}
 
 	switch kind {
@@ -2471,7 +2484,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			start++
 		}
 		for _, tok := range toks[start:] {
-			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
+			if !isPhraseOrPayloadKind(tok.Kind()) || tokLineNum(tok) != actionLine {
 				continue
 			}
 			emitPhraseWord(tok)
@@ -2495,7 +2508,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		}
 		start := action.PhraseStartIndex()
 		for _, tok := range toks[start:] {
-			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
+			if !isPhraseOrPayloadKind(tok.Kind()) || tokLineNum(tok) != actionLine {
 				continue
 			}
 			emitPhraseWord(tok)
@@ -2520,7 +2533,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			start++
 		}
 		for _, tok := range toks[start:] {
-			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
+			if !isPhraseOrPayloadKind(tok.Kind()) || tokLineNum(tok) != actionLine {
 				continue
 			}
 			emitPhraseWord(tok)
@@ -2528,6 +2541,17 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 	}
 
 	return result
+}
+
+// isPhraseOrPayloadKind reports whether kind is a token kind that
+// emitPhraseWord knows how to classify: an ordinary phrase word
+// (SyntaxKindIdent) or, when inside a trailing operation annotation, either
+// an ident or a number payload token (e.g. "charges" or the "200" in
+// `[200 AuthorizationResult]`). Every other kind (keywords, brackets, strings,
+// punctuation) is already classified elsewhere (Pass 1, or earlier in this
+// function) and must not reach emitPhraseWord a second time.
+func isPhraseOrPayloadKind(kind syntax.SyntaxKind) bool {
+	return kind == syntax.SyntaxKindIdent || kind == syntax.SyntaxKindNumber
 }
 
 // useCaseRefTokenType resolves a use-case body reference name to its semantic

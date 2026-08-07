@@ -2543,7 +2543,12 @@ func TestSemanticTokens_SlugTarget(t *testing.T) {
 // the standard "string" type, so both are colored by any default LSP theme
 // without extension-side scope configuration. The brackets keep their existing
 // craft-braces classification, and phrase words outside the annotation are
-// unaffected.
+// unaffected. It also covers a numeric payload token (no protocol verb, just
+// a status code, as in the design doc's own `[200 AuthorizationResult]`
+// example): SyntaxKindNumber must get the same payload type as an ident
+// payload token when it sits inside an annotation, since a status code left
+// unclassified would defeat the point of the annotation reading as one
+// visually distinct unit.
 func TestSemanticTokens_OpAnnotation(t *testing.T) {
 	serverIn, testOut := io.Pipe()
 	testIn, serverOut := io.Pipe()
@@ -2573,14 +2578,20 @@ func TestSemanticTokens_OpAnnotation(t *testing.T) {
 	// Line 0: use_case "OpAnnotation" {
 	// Line 1:   when SomeActor does SomeThing
 	// Line 2:     Subscriptions asks Billing for a fresh charge attempt [POST charges]
-	// Line 3: }
-	// col math (0-based): "    Subscriptions asks Billing for a fresh charge attempt [POST charges]"
+	// Line 3:     Subscriptions returns to Billing the authorization result [200 AuthorizationResult]
+	// Line 4: }
+	// col math (0-based), line 2: "    Subscriptions asks Billing for a fresh charge attempt [POST charges]"
 	//   col 50: attempt (len 7), phrase word, unaffected by the annotation → craft-phrase-word (33)
 	//   col 58: [       (len 1), unaffected, still craft-braces (40)
 	//   col 59: POST    (len 4), recognised protocol verb → keyword (45)
 	//   col 64: charges (len 7), opaque payload word → string (46)
 	//   col 71: ]       (len 1), unaffected, still craft-braces (40)
-	opSrc := "use_case \"OpAnnotation\" {\n  when SomeActor does SomeThing\n    Subscriptions asks Billing for a fresh charge attempt [POST charges]\n}"
+	// col math (0-based), line 3: "    Subscriptions returns to Billing the authorization result [200 AuthorizationResult]"
+	//   col 62: [                   (len 1),  unaffected, still craft-braces (40)
+	//   col 63: 200                 (len 3),  numeric payload token, no protocol verb here → string (46)
+	//   col 67: AuthorizationResult (len 19), opaque payload word → string (46)
+	//   col 86: ]                   (len 1),  unaffected, still craft-braces (40)
+	opSrc := "use_case \"OpAnnotation\" {\n  when SomeActor does SomeThing\n    Subscriptions asks Billing for a fresh charge attempt [POST charges]\n    Subscriptions returns to Billing the authorization result [200 AuthorizationResult]\n}"
 	id++
 	if err := writeMsg(testOut, lspMsg{
 		JSONRPC: "2.0", Method: "textDocument/didOpen",
@@ -2677,6 +2688,36 @@ func TestSemanticTokens_OpAnnotation(t *testing.T) {
 	// "]": brackets keep their existing craft-braces classification.
 	if tok, ok := byPos[[2]uint32{2, 71}]; !ok {
 		t.Error("] not found at line 2 col 71")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("]: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+
+	// "[" on line 3: brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{3, 62}]; !ok {
+		t.Error("[ not found at line 3 col 62")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("[: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+
+	// "200": a SyntaxKindNumber payload token with no protocol verb in this
+	// annotation. It must get the payload type, not go unclassified (which is
+	// what a bare `tok.Kind() != SyntaxKindIdent` filter in Pass 2 used to do).
+	if tok, ok := byPos[[2]uint32{3, 63}]; !ok {
+		t.Error("200 not found at line 3 col 63 (numeric payload token emitted no semantic token at all)")
+	} else if tok.tokenType != opPayloadString {
+		t.Errorf("200: got tokenType %d, want %d (string)", tok.tokenType, opPayloadString)
+	}
+
+	// "AuthorizationResult": opaque payload word, same as the "charges" case above.
+	if tok, ok := byPos[[2]uint32{3, 67}]; !ok {
+		t.Error("AuthorizationResult not found at line 3 col 67")
+	} else if tok.tokenType != opPayloadString {
+		t.Errorf("AuthorizationResult: got tokenType %d, want %d (string)", tok.tokenType, opPayloadString)
+	}
+
+	// "]" on line 3: brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{3, 86}]; !ok {
+		t.Error("] not found at line 3 col 86")
 	} else if tok.tokenType != craftBraces {
 		t.Errorf("]: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
 	}
