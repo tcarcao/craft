@@ -884,3 +884,45 @@ func TestWriteTokens_WrappedColonAndCommaStayInSync(t *testing.T) {
 		t.Errorf("wrapped contexts list did not round-trip byte-for-byte:\nwant %q\ngot  %q", want, got)
 	}
 }
+
+// TestWriteTokens_ScenarioBodyIndentsDeeper pins scenario depth: a `when` at
+// brace depth 1 sits at the use_case's own level, but the lines after it,
+// until the next `when` at that depth or the enclosing `}`, sit one level
+// deeper. A brace-depth-only indent would put both at the same level.
+func TestWriteTokens_ScenarioBodyIndentsDeeper(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n\n  when V does y\n    D asks E for f\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	got := sb.String()
+	for _, want := range []string{"\n  when U does x", "\n    A asks B for c", "\n  when V does y", "\n    D asks E for f"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+// TestWriteTokens_ExpandsMinifiedDeclaration pins the block-boundary rule at
+// the writeTokens level: a minified declaration must expand onto multiple
+// lines even though the author left no gaps to drive it. The rule forces a
+// break after `{` and before `}`; it says nothing about the gap before `{`
+// itself, so `Foo{` (an empty, adjacent gap) stays adjacent, consistent with
+// the general empty-gap-preserved rule that also keeps `re/billing` joined.
+func TestWriteTokens_ExpandsMinifiedDeclaration(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	got := sb.String()
+	if !strings.Contains(got, "Foo{\n  contexts: A\n}") {
+		t.Errorf("minified declaration did not expand:\n%q", got)
+	}
+}

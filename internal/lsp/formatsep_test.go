@@ -43,8 +43,13 @@ func TestSeparatorFor_GapWithNewlineBreaksTheLine(t *testing.T) {
 	}
 }
 
+// The two identifiers (not the closing brace) are the ones exercised here:
+// `}` is now a block boundary in its own right and always forces a plain
+// newline before it regardless of blank lines in the gap, so testing the
+// generic collapse-to-one-blank-line behaviour has to use a pair that isn't
+// a block boundary.
 func TestSeparatorFor_BlankLineRunCollapsesToOne(t *testing.T) {
-	src := "domain re {\n  Billing\n}\n"
+	src := "domain re {\n  Billing\n\n\n\n  Invoicing\n}\n"
 	prev := sepTok(t, src, 3)
 	curr := sepTok(t, src, 4)
 	if got := separatorFor(&prev, "\n\n\n\n", curr, 1); got != "\n\n  " {
@@ -225,4 +230,41 @@ func TestIndentFor(t *testing.T) {
 	if got := indentFor(-1); got != "" {
 		t.Errorf("indentFor(-1) = %q, want empty (must not panic)", got)
 	}
+}
+
+// TestSeparatorFor_LBraceForcesNewlineAfter pins the block-boundary rule: a
+// `{` forces a break after it whatever the author wrote, which is what
+// expands a minified declaration instead of leaving it gap-driven.
+func TestSeparatorFor_LBraceForcesNewlineAfter(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	gn, _, _ := syntax.Parse(src)
+	toks := syntax.Root(gn).AllTokens()
+	for i := 1; i < len(toks); i++ {
+		if toks[i-1].Kind() != syntax.SyntaxKindLBrace {
+			continue
+		}
+		if got := separatorFor(&toks[i-1], "", toks[i], 1); got != "\n  " {
+			t.Errorf("after {: got %q, want a newline plus indent", got)
+		}
+		return
+	}
+	t.Fatal("no LBrace found")
+}
+
+// TestSeparatorFor_RBraceForcesNewlineBefore pins the matching close-brace
+// rule: a `}` forces a break before it whatever the author wrote.
+func TestSeparatorFor_RBraceForcesNewlineBefore(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	gn, _, _ := syntax.Parse(src)
+	toks := syntax.Root(gn).AllTokens()
+	for i := 1; i < len(toks); i++ {
+		if toks[i].Kind() != syntax.SyntaxKindRBrace {
+			continue
+		}
+		if got := separatorFor(&toks[i-1], "", toks[i], 0); got != "\n" {
+			t.Errorf("before }: got %q, want a newline at depth 0", got)
+		}
+		return
+	}
+	t.Fatal("no RBrace found")
 }

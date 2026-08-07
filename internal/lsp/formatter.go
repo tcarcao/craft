@@ -424,7 +424,8 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // formatter has never seen still round-trips, because nothing here inspects
 // what a token means.
 func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
-	depth := 0
+	braceDepth := 0
+	scenarioDepth := 0
 	gap := ""
 	var prev *syntax.SyntaxToken
 
@@ -437,16 +438,38 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 			continue
 		}
 
-		// `}` closes its block, so it dedents before it is placed.
-		if tok.Kind() == syntax.SyntaxKindRBrace && depth > 0 {
-			depth--
+		// A `when` at the use_case's own brace depth closes any scenario body
+		// that was open (it, and the enclosing `}` below, are the only two
+		// things that end one) and sits at that same level itself; only the
+		// lines after it are indented deeper. Resetting before the separator
+		// is computed is what keeps the `when` line at depth 1 instead of 2.
+		if tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1 {
+			scenarioDepth = 0
 		}
 
-		sb.WriteString(separatorFor(prev, gap, tok, depth))
+		// `}` closes its block, so it dedents before it is placed, and closes
+		// any open scenario along with it.
+		if tok.Kind() == syntax.SyntaxKindRBrace {
+			scenarioDepth = 0
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		}
+
+		sb.WriteString(separatorFor(prev, gap, tok, braceDepth+scenarioDepth))
 		sb.WriteString(tok.Text())
 
 		if tok.Kind() == syntax.SyntaxKindLBrace {
-			depth++
+			braceDepth++
+		}
+
+		// The `when` line itself stays at the block's own level; only the
+		// lines after it (up to the next `when` at this depth, or the
+		// enclosing `}`) are one level deeper. Bumping after the `when`
+		// token has already been written is what keeps the bump from
+		// applying to the `when` line itself.
+		if tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1 {
+			scenarioDepth = 1
 		}
 
 		cur := tok

@@ -58,6 +58,15 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		return " "
 	}
 
+	// A block boundary is structure, not authorial line breaking. Forcing the
+	// break here is what expands a minified `service Foo{contexts: A}`.
+	if prev.Kind() == syntax.SyntaxKindLBrace {
+		return "\n" + indentFor(depth)
+	}
+	if curr.Kind() == syntax.SyntaxKindRBrace {
+		return "\n" + indentFor(depth)
+	}
+
 	newlines := strings.Count(gap, "\n")
 
 	// A scenario always gets a blank line before it, even if the author wrote
