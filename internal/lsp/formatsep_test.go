@@ -6,10 +6,11 @@ import (
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
-// tok builds a bare token of the given kind and text for separator tests.
+// sepTok builds a token of the given kind and text for separator tests by
+// parsing source and extracting the non-whitespace token at index idx.
 // separatorFor only reads Kind(), Text() and Parent(), and a token built by
-// the parser carries a real parent, so these cases cover everything except the
-// ref-colon rule, which has its own parse-backed test below.
+// the parser carries a real parent, so this covers all cases including the
+// ref-colon rule (which depends on the parsed Parent() context).
 func sepTok(t *testing.T, src string, idx int) syntax.SyntaxToken {
 	t.Helper()
 	gn, _, _ := syntax.Parse(src)
@@ -172,6 +173,47 @@ func prevSignificant(toks []syntax.SyntaxToken, i int) *syntax.SyntaxToken {
 		return &t
 	}
 	return nil
+}
+
+// TestSeparatorFor_RefColonStaysTight covers the rule that distinguishes
+// `bc:re/billing`, where the colon is inside a Ref node and must not get a
+// space, from `contexts: A`, where it is a field separator and must.
+func TestSeparatorFor_RefColonStaysTight(t *testing.T) {
+	// A kind-prefixed ref in a glossary term node, exercising the real parent
+	// context that isRefColon checks.
+	src := "glossary {\n  bc:billing/Invoice same_as subscriptions/Invoice\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	toks := syntax.Root(gn).AllTokens()
+
+	// Find the colon inside the ref (bc:billing).
+	var refColonIdx int = -1
+	for i := 0; i < len(toks); i++ {
+		if toks[i].Kind() != syntax.SyntaxKindColon {
+			continue
+		}
+		// The colon inside bc:billing will have Parent().Kind() == SyntaxKindRef
+		if toks[i].Parent() != nil && toks[i].Parent().Kind() == syntax.SyntaxKindRef {
+			refColonIdx = i
+			break
+		}
+	}
+	if refColonIdx < 0 {
+		t.Fatal("no ref colon found in bc:ref")
+	}
+
+	// Find the next non-whitespace token after the ref colon
+	var nextTok syntax.SyntaxToken
+	for i := refColonIdx + 1; i < len(toks); i++ {
+		if toks[i].Kind() != syntax.SyntaxKindWhitespace {
+			nextTok = toks[i]
+			break
+		}
+	}
+
+	// The ref colon must NOT get a space after it, so adjacent tokens stay joined
+	if got := separatorFor(&toks[refColonIdx], "", nextTok, 1); got != "" {
+		t.Errorf("after ref colon: got %q, want empty so bc:billing stays joined", got)
+	}
 }
 
 func TestIndentFor(t *testing.T) {
