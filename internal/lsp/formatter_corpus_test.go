@@ -13,53 +13,102 @@ import (
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
-// craftFileRoots are every directory in the repository holding .craft files,
-// relative to this package. The formatter is now a CLI command that rewrites
-// files in bulk, so its blast radius is every file a user might point it at,
-// not the handful of hand-written fixtures elsewhere in this file.
-var craftFileRoots = []string{
-	"../../testdata/corpus",
-	"../../testdata/broken",
-	"../../examples",
-	"../visualizer/testdata",
+// repoRoot is this package's path to the top of the repository.
+const repoRoot = "../.."
+
+// skippedDirs are directories with no Craft sources of ours in them.
+var skippedDirs = map[string]bool{
+	".git":         true,
+	".worktrees":   true,
+	"node_modules": true,
+	"vendor":       true,
 }
 
+// allCraftFiles walks the whole repository for .craft files.
+//
+// It walks rather than listing known directories on purpose. A hardcoded root
+// list silently stops covering a directory the moment someone adds one, and it
+// already had: cmd/server/test_actors.craft was outside the list, so the guard
+// was checking 95 of the repository's 96 files and nobody could tell.
 func allCraftFiles(t *testing.T) []string {
 	t.Helper()
 	var files []string
-	for _, root := range craftFileRoots {
-		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() && strings.HasSuffix(path, ".craft") {
-				files = append(files, path)
+	err := filepath.Walk(repoRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if skippedDirs[info.Name()] {
+				return filepath.SkipDir
 			}
 			return nil
-		})
-		if err != nil {
-			t.Fatalf("walking %s: %v", root, err)
 		}
+		if strings.HasSuffix(path, ".craft") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", repoRoot, err)
 	}
 	if len(files) == 0 {
-		t.Fatal("found no .craft files; the roots are wrong and this test is asserting nothing")
+		t.Fatal("found no .craft files; the walk is wrong and this test is asserting nothing")
 	}
 	sort.Strings(files)
 	return files
 }
 
-// commentTexts returns every comment token in src, in source order.
+// commentTexts returns every comment in src, in source order, read out of the
+// TEXT rather than out of token kinds.
+//
+// Reading kinds is what let a deleted comment go unreported. The parser folds
+// everything after the last real token into a single Whitespace token, so a
+// comment on the final line of a file has no token carrying a comment kind:
+// this function used to return nothing for it, before and after formatting
+// alike, and dutifully reported no drift on a file whose comment had just been
+// deleted. A guard that reads the same broken signal as the code it guards
+// cannot fail.
 func commentTexts(t *testing.T, src string) []string {
 	t.Helper()
-	g, _, _ := syntax.Parse(src)
 	var out []string
-	for _, tok := range syntax.Root(g).AllTokens() {
-		if isCommentKind(tok.Kind()) {
-			out = append(out, tok.Text())
+	for i := 0; i < len(src); {
+		switch {
+		case src[i] == '"':
+			// Skip a string literal, so a `//` inside one is not a comment.
+			i++
+			for i < len(src) && src[i] != '"' {
+				if src[i] == '\\' && i+1 < len(src) {
+					i++
+				}
+				i++
+			}
+			i++
+		case strings.HasPrefix(src[i:], "//"):
+			end := strings.IndexByte(src[i:], '\n')
+			if end < 0 {
+				out = append(out, strings.TrimSpace(src[i:]))
+				return out
+			}
+			out = append(out, strings.TrimSpace(src[i:i+end]))
+			i += end
+		case strings.HasPrefix(src[i:], "/*"):
+			end := strings.Index(src[i+2:], "*/")
+			if end < 0 {
+				out = append(out, normalizeSpace(src[i:]))
+				return out
+			}
+			out = append(out, normalizeSpace(src[i:i+2+end+2]))
+			i += 2 + end + 2
+		default:
+			i++
 		}
 	}
 	return out
 }
+
+// normalizeSpace collapses whitespace runs so a multi-line block comment
+// compares equal after re-indentation.
+func normalizeSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // modelOf returns the canonical CraftDoc for src with every position-bearing
 // field removed, as a generic JSON tree.
@@ -150,6 +199,15 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 				if got != src {
 					t.Fatalf("a file the formatter declined to format must come back byte-identical\nblocked by: [%s] %s", blocked.Code, blocked.Message)
 				}
+				return
+			}
+
+			// 0. THE invariant: formatting changes whitespace and nothing
+			// else. This one assertion subsumes the whole class and would
+			// have caught every formatter defect found on this branch, so it
+			// runs first and the rest are corroboration.
+			if squashWhitespace(src) != squashWhitespace(got) {
+				t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", src, got)
 				return
 			}
 
