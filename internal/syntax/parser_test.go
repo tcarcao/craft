@@ -1017,3 +1017,33 @@ func TestOpAnnotation_NotifiesStrayTokenBeforeBracketStaysUnopened(t *testing.T)
 		t.Errorf("expected no op annotation when a stray token precedes `[`, got OpText() = %q", a.OpText())
 	}
 }
+
+// An empty `[]` annotation is invalid input, not an absent one: it must not be
+// silently swallowed. Regression for a reviewer-found bug where
+// opAnnotationStart treated `[]` as a valid annotation opener (the line ends
+// in `]`) but parseOpAnnotation swept up zero inner tokens, so OpText() came
+// back "" and the annotation vanished from both diagnostics and the model
+// with no trace it was ever typed.
+//
+// This exercises `asks` specifically because parseAsksAction was one of three
+// call sites (with parseReturnsAction and parseAction's internal-action
+// branch) that discarded parseOpAnnotation's returned diagnostics.
+func TestOpAnnotation_EmptyBracketsDiagnostic(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry []
+}`
+	_, _, diags := syntax.Parse(src)
+	var found *model.Diagnostic
+	for i, d := range diags {
+		if d.Code == "craft/syntax/empty-op-annotation" {
+			found = &diags[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("want a craft/syntax/empty-op-annotation diagnostic for `[]`, got %v", diags)
+	}
+	if found.Severity != model.SeverityError {
+		t.Errorf("severity = %v, want SeverityError", found.Severity)
+	}
+}

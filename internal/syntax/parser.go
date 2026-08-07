@@ -1075,7 +1075,8 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 	switch verb {
 	case "asks":
 		p.consumeAs(SyntaxKindKwAsks)
-		p.parseAsksAction(actionLine)
+		d := p.parseAsksAction(actionLine)
+		diags = append(diags, d...)
 		p.builder.FinishNode()
 		return diags
 	case "notifies":
@@ -1086,7 +1087,8 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		return diags
 	case "returns":
 		p.consumeAs(SyntaxKindKwReturns)
-		p.parseReturnsAction(actionLine)
+		d := p.parseReturnsAction(actionLine)
+		diags = append(diags, d...)
 		p.builder.FinishNode()
 		return diags
 	default:
@@ -1100,7 +1102,7 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		start := p.opAnnotationStart(actionLine)
 		p.collectPhrase(actionLine, start)
 		if start >= 0 {
-			p.parseOpAnnotation()
+			diags = append(diags, p.parseOpAnnotation()...)
 		}
 		p.builder.FinishNode()
 		return diags
@@ -1109,7 +1111,8 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 
 // parseAsksAction parses: <target> to|for <phrase>
 // The `asks` keyword token has already been consumed by parseAction.
-func (p *Parser) parseAsksAction(line int) {
+func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
+	var diags []model.Diagnostic
 	targetTok := p.peek()
 	if targetTok.Type == lexer.TokenIdent {
 		p.parseRef()
@@ -1130,8 +1133,9 @@ func (p *Parser) parseAsksAction(line int) {
 	start := p.opAnnotationStart(line)
 	p.collectPhrase(line, start)
 	if start >= 0 {
-		p.parseOpAnnotation()
+		diags = append(diags, p.parseOpAnnotation()...)
 	}
+	return diags
 }
 
 // parseNotifiesAction parses the "<event>" or event-ident after `notifies`.
@@ -1159,7 +1163,8 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 }
 
 // parseReturnsAction parses [to <target>] [connector_word] <phrase> after `returns`.
-func (p *Parser) parseReturnsAction(line int) {
+func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
+	var diags []model.Diagnostic
 	// Check for optional `to <target>`
 	if p.peek().Type == lexer.TokenIdent && p.peek().Value == "to" {
 		p.consumeAs(SyntaxKindKwTo)
@@ -1178,8 +1183,9 @@ func (p *Parser) parseReturnsAction(line int) {
 	start := p.opAnnotationStart(line)
 	p.collectPhrase(line, start)
 	if start >= 0 {
-		p.parseOpAnnotation()
+		diags = append(diags, p.parseOpAnnotation()...)
 	}
+	return diags
 }
 
 // opAnnotationStart scans ahead over the remainder of actionLine and returns the
@@ -1239,7 +1245,12 @@ func (p *Parser) opAnnotationStart(actionLine int) int {
 func (p *Parser) parseOpAnnotation() []model.Diagnostic {
 	var diags []model.Diagnostic
 	p.builder.StartNode(SyntaxKindOpAnnotation)
-	p.consumeAs(SyntaxKindLBracket)
+	lbTok := p.consumeAs(SyntaxKindLBracket)
+
+	if rbTok := p.peek(); rbTok.Type == lexer.TokenRBracket {
+		// Empty `[]` annotation: the body is missing, not empty-but-valid.
+		diags = append(diags, p.diagEmptyOpAnnotation(lbTok, rbTok))
+	}
 
 	if t := p.peek(); (t.Type == lexer.TokenIdent || isAnyKeywordAsIdent(t.Type)) && isProtocolVerb(t.Value) {
 		p.consumeAs(SyntaxKindOpVerb)
@@ -1816,6 +1827,20 @@ func (p *Parser) diagUnexpected(tok lexer.Token, expected string) model.Diagnost
 		Message:  fmt.Sprintf("unexpected %q, expected %s", tok.Value, expected),
 		Severity: model.SeverityError,
 		Range:    tokenRange(tok),
+	}
+}
+
+// diagEmptyOpAnnotation produces a craft/syntax/empty-op-annotation diagnostic
+// for a `[]` operation annotation whose body is missing. lb and rb are the
+// bracket tokens; the range spans from `[` through `]`.
+func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
+	r := tokenRange(lb)
+	r.End = tokenRange(rb).End
+	return model.Diagnostic{
+		Code:     "craft/syntax/empty-op-annotation",
+		Message:  "empty operation annotation `[]`; expected a verb and/or payload, e.g. [POST /v1/charges]",
+		Severity: model.SeverityError,
+		Range:    r,
 	}
 }
 

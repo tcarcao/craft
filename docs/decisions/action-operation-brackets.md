@@ -129,6 +129,13 @@ components. The bracket convention is established in the language, not new.
 **Corpus safety.** Zero of the 450 `asks` lines in the repo contain `[`. Reclaiming the
 character costs nothing in practice.
 
+**Empty annotation.** `A asks B for c []` satisfies the boundary rule (the line ends in
+`]`), so it parses as an annotation with an empty body. That is a user error, not an
+empty-but-valid operation, and it emits `craft/syntax/empty-op-annotation`. The model
+records no `Operation` for it. Without the diagnostic the `[]` would vanish from both
+the phrase and the model with no signal, which is the one outcome worse than either
+alternative.
+
 **Why brackets and not a sigil.** `POST /v1/charges` contains a space. A sigil form
 such as `@POST /v1/charges` gives the parser no signal for where the payload ends,
 because the prose tail is free text. Brackets are self-terminating, so the payload can

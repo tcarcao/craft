@@ -123,3 +123,31 @@ func TestProject_ActionOperation_OmittedWhenAbsent(t *testing.T) {
 		t.Errorf("absent annotation must not emit an operation key, got %s", b)
 	}
 }
+
+// An empty `[]` annotation is invalid input, not empty-but-valid input: it
+// must produce a diagnostic and must not populate Operation. The projection
+// predicate keying off OpText() == "" already treats `[]` the same as no
+// annotation at all, which is correct here — the diagnostic is what tells the
+// user their `[]` was rejected rather than silently accepted.
+func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Ledger to record the entry []
+}`
+	g, li, diags := syntax.Parse(src)
+	found := false
+	for _, d := range diags {
+		if d.Code == "craft/syntax/empty-op-annotation" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("want a craft/syntax/empty-op-annotation diagnostic, got %v", diags)
+	}
+
+	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	action := doc.UseCases[0].Scenarios[0].Actions[0]
+	if action.Operation != nil {
+		t.Errorf("expected nil Operation for `[]`, got %+v", action.Operation)
+	}
+}

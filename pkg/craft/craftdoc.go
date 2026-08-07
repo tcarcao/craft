@@ -27,6 +27,7 @@ type (
 	TriggerType        = model.TriggerType
 	Action             = model.Action
 	ActionType         = model.ActionType
+	Operation          = model.Operation
 	Interaction        = model.Interaction
 	Domain             = model.Domain
 	Actor              = model.Actor

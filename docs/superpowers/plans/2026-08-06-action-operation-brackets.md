@@ -1431,6 +1431,7 @@ Add at the top of `CHANGELOG.md`, below the `# Changelog` heading, matching the 
   - `craft fmt` column-aligns annotations per contiguous run of annotated lines.
   - Completion offers the protocol verbs after `[`.
 - **`craft/sema/ambiguous-bc` now fires for use-case action subjects and targets.** A bare bounded-context name owned by two or more domains was previously dropped silently from the dependency graph. It is now an error naming the candidates, fixable by writing `<domain>/<name>`.
+- **`craft/syntax/empty-op-annotation`.** An empty annotation (`A asks B for c []`) is an error rather than being silently dropped.
 
 ### Notes
 - **No generated diagram changes.** No visualizer reads `Action.Operation`, exactly as none read `Action.Ref`. Every generator still renders `Context`, `TargetContext`, `Connector`, and `Phrase` only. The annotation is stored for tooling that consumes the contract; rendering it is a separate decision.
