@@ -218,7 +218,13 @@ The bracket is optional; lines without one are unaffected. Its contents are **hy
 
 An empty annotation, `Subscriptions asks Billing for a fresh charge attempt []`, is a `craft/syntax/empty-op-annotation` error, not a silently dropped bracket.
 
-**Formatting.** `craft fmt` column-aligns operation annotations, one column per contiguous run of annotated lines within a scenario. A non-annotated action inside a run does not reset it. A blank line or a new scenario does. Alignment is cosmetic; the grammar itself stays whitespace-insensitive.
+**Formatting.** `craft fmt <files...>` formats in place and column-aligns operation annotations, one column per contiguous run of annotated lines within a scenario. A non-annotated action inside a run does not reset it. A blank line or a new scenario does. Alignment is cosmetic; the grammar itself stays whitespace-insensitive.
+
+`craft fmt --check <files...>` writes nothing, lists every file that is not already formatted, and exits non-zero, which is the shape a CI gate wants. Arguments are paths or glob patterns including `**`; directories are not walked, so pass `'**/*.craft'` to cover a tree. A file the parser cannot fully place is never rewritten, and is reported as skipped with the diagnostic that blocked it.
+
+::: warning Known limitation
+Formatting is verified safe for `use_case` bodies only. `context_map` and `glossary` blocks still go through a generic renderer that splits a qualified `billing/Invoice` into `billing / Invoice` and loses the line breaks between relations, producing output that no longer parses. Do not run `craft fmt` over files containing those blocks until this is fixed.
+:::
 
 **Go library API.** `pkg/craft`, the stable public Go API, exposes the annotation as `craft.Operation` (`Verb`, `Payload`, `Text` fields), the recognised verbs as the `craft.OpVerbGET` through `craft.OpVerbQUERY` constants, and `craft.ProtocolVerbs()` returning the same set as a `[]string`.
 
