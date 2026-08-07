@@ -58,58 +58,6 @@ func allCraftFiles(t *testing.T) []string {
 	return files
 }
 
-// commentTexts returns every comment in src, in source order, read out of the
-// TEXT rather than out of token kinds.
-//
-// Reading kinds is what let a deleted comment go unreported. The parser folds
-// everything after the last real token into a single Whitespace token, so a
-// comment on the final line of a file has no token carrying a comment kind:
-// this function used to return nothing for it, before and after formatting
-// alike, and dutifully reported no drift on a file whose comment had just been
-// deleted. A guard that reads the same broken signal as the code it guards
-// cannot fail.
-func commentTexts(t *testing.T, src string) []string {
-	t.Helper()
-	var out []string
-	for i := 0; i < len(src); {
-		switch {
-		case src[i] == '"':
-			// Skip a string literal, so a `//` inside one is not a comment.
-			i++
-			for i < len(src) && src[i] != '"' {
-				if src[i] == '\\' && i+1 < len(src) {
-					i++
-				}
-				i++
-			}
-			i++
-		case strings.HasPrefix(src[i:], "//"):
-			end := strings.IndexByte(src[i:], '\n')
-			if end < 0 {
-				out = append(out, strings.TrimSpace(src[i:]))
-				return out
-			}
-			out = append(out, strings.TrimSpace(src[i:i+end]))
-			i += end
-		case strings.HasPrefix(src[i:], "/*"):
-			end := strings.Index(src[i+2:], "*/")
-			if end < 0 {
-				out = append(out, normalizeSpace(src[i:]))
-				return out
-			}
-			out = append(out, normalizeSpace(src[i:i+2+end+2]))
-			i += 2 + end + 2
-		default:
-			i++
-		}
-	}
-	return out
-}
-
-// normalizeSpace collapses whitespace runs so a multi-line block comment
-// compares equal after re-indentation.
-func normalizeSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
-
 // modelOf returns the canonical CraftDoc for src with every position-bearing
 // field removed, as a generic JSON tree.
 //
@@ -173,6 +121,15 @@ func stripPositions(v any) any {
 //
 // Every .craft file in the repository is now checked for four properties:
 //
+//  0. formatting changes whitespace and nothing else, checked byte-for-byte
+//     with all whitespace stripped from both sides. This is the one that
+//     catches a lost comment: comments are non-whitespace content, so a
+//     dropped one shows up here without needing a comment-shaped assertion of
+//     its own, and it cannot be fooled by how a comment happens to be
+//     tokenised (a trailing comment with nothing after it carries no comment
+//     kind at all, since the parser folds it into the final whitespace token,
+//     which is exactly what let it go unreported under an earlier version of
+//     this guard that compared comments by filtering on token kind)
 //  1. the output reparses with zero error diagnostics
 //  2. formatting is idempotent, which is byte-identity on already-formatted
 //     input and the strongest form of it that can hold over a corpus whose
@@ -180,8 +137,6 @@ func stripPositions(v any) any {
 //     wrapped `contexts:` continuations) to exercise the parser
 //  3. the canonical model is unchanged, which is what catches a renderer that
 //     rewrites meaning rather than spelling
-//  4. no comment is lost, which no model comparison can catch because comments
-//     are trivia and never reach the model
 //
 // A file the parser cannot fully place is not formatted at all, and is
 // asserted to come back byte-identical.
@@ -238,14 +193,6 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 			before, after := modelOf(t, file, src), modelOf(t, file, got)
 			if !reflect.DeepEqual(before, after) {
 				t.Errorf("formatting changed the canonical model\noutput:\n%s", got)
-			}
-
-			// 4. every comment survives
-			wantComments := commentTexts(t, src)
-			haveComments := commentTexts(t, got)
-			if !reflect.DeepEqual(wantComments, haveComments) {
-				t.Errorf("comments were lost or reordered\nwant %d: %q\nhave %d: %q",
-					len(wantComments), wantComments, len(haveComments), haveComments)
 			}
 		})
 	}

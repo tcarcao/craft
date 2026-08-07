@@ -652,7 +652,11 @@ func TestFormatDocument_TagsBlockSurvives(t *testing.T) {
 
 // assertFormatIsFaithful asserts the four properties that define a safe
 // formatter, on a fixture already written in canonical form: byte-identical
-// output, a clean reparse, idempotence, and no comment lost.
+// output, a clean reparse, idempotence, and content preservation. Content
+// preservation is what catches a lost comment: it compares every
+// non-whitespace byte rather than filtering tokens by kind, so it cannot miss
+// a comment that the parser tokenised as trivia rather than as a comment kind
+// (a trailing comment with nothing after it, for instance).
 func assertFormatIsFaithful(t *testing.T, src string) {
 	t.Helper()
 	got := formatSource(t, src)
@@ -664,10 +668,6 @@ func assertFormatIsFaithful(t *testing.T, src string) {
 	}
 	if again := formatSource(t, got); again != got {
 		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
-	}
-	wantComments, haveComments := commentTexts(t, src), commentTexts(t, got)
-	if !reflect.DeepEqual(wantComments, haveComments) {
-		t.Errorf("comments lost\nwant: %q\nhave: %q", wantComments, haveComments)
 	}
 	assertContentPreserved(t, src, got)
 }
