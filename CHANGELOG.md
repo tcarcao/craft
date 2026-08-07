@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [2.17.0] — 2026-08-07
+
+**Why a minor version.** Nothing in `pkg/craft` changed: the Go API is byte-identical to v2.16.0, so no consumer stops compiling and the module path stays `github.com/tcarcao/craft/v2`. What changed is behaviour reachable through it. The formatter produces different output for some documents, and the parser now carries malformed source faithfully instead of quietly repairing it, so an unterminated string keeps its opening quote. If you format `.craft` files or depend on the parse of a file that does not parse cleanly, read `### Changed` and `### Fixed`.
 
 ### Changed
 - **Trailing comments stay on their line.** A comment after an action, such as `Billing notifies billing.ChargeSucceeded  // retried once already`, used to be lifted onto its own line above the action it followed. The formatter now walks the token stream directly, so it can tell exactly where a line ends and no longer needs to move a trailing comment to stay safe.
