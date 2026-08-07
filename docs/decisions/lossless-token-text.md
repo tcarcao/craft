@@ -88,8 +88,9 @@ surfaces the defect, where a diagnostic returned into someone's assertion would 
 the record used to say it without that qualification.
 
 The known cost is a dependency-surface change: `internal/syntax` imports `testing` from non-test
-code, so `go list -deps ./pkg/craft` now includes `testing`, `flag` and `runtime/pprof`, and
-`cmd/craft` links them. Importing `testing` from a library is a long-standing Go smell for exactly
+code, so `go list -deps ./pkg/craft` now includes `testing` and `flag`, and `cmd/craft` links them.
+(An earlier draft of this paragraph also listed `runtime/pprof`; measured on go1.26.3 it is not
+pulled in.) Importing `testing` from a library is a long-standing Go smell for exactly
 this reason. No functional harm was found (flag registration moved to `testing.Init()` long ago),
 and the alternative, a package variable defaulting to `testing.Testing()` that craft's own test
 setup can override, would remove the import and make both branches reachable from tests. That is the
@@ -112,6 +113,11 @@ token's first line and every line in between, and only ever releases the last. A
 definition the end of its line, so a line the token runs off the end of can never carry one, and
 excluding it can only ever remove a false positive.
 
+That reasoning is sound for the interior set, but it does not make the alignment pass as a whole
+total, and an earlier draft of this section said "total" without that qualification. The released
+line is then handed to `splitAnnotation`, which still scans it textually, and two shapes are
+recorded as known limitations below.
+
 That was necessary but not sufficient. `splitAnnotation`, the only consumer of the set, held an
 independent rule of its own: any line whose first non-space character was `*` is a comment
 continuation. It vetoed exactly the line the interior change had just released, so for the
@@ -119,6 +125,35 @@ idiomatic `*`-per-line comment style the two rules cancelled and nothing changed
 disqualifies such a line only when the comment does not CLOSE on it, and searches for the
 annotation after the `*/`. Block comments do not nest, so a `*/` cannot occur on a line a comment
 is merely passing through; that is what makes the widening safe rather than lucky.
+
+## Known limitations of the alignment pass
+
+Found in the re-review of the fix wave, adjudicated as cosmetic and deliberately not fixed here.
+Neither alters content: both are a missed or overwide alignment on a line that also carries a
+block comment, and both are idempotent.
+
+**A comment closing on a line that begins with a word loses alignment.**
+`formatalign.go:130-150` leaves `from` at zero when the closing line does not start with `*`, so
+the `//` scan runs over comment text. `see // here */ A asks B to c [GET /x]` misses alignment
+while the `*`-led spelling of the same comment aligns. It is the same asymmetry Important 2 fixed,
+one shape further out.
+
+**The alignment column is measured over comment text.** `formatalign.go:47-51` measures the whole
+line, so `/* http://a [9] */ A asks ...` pushes its siblings out by roughly twenty columns. This
+became reachable only because the fix admitted these lines into alignment runs at all; before it,
+the line was excluded and the question never arose.
+
+Both are worth fixing when the alignment pass is next touched. The pass is line oriented and
+re-derives comment structure textually, which is the root of both: the walker already knows where
+every comment token starts and ends, and handing that down rather than re-deriving it would remove
+the class.
+
+**A whitespace-only file never reaches a fixed point.** Formatting alternates between the empty
+string and a single newline: `""` becomes `"\n"`, which becomes `""`, and so on. This predates
+this work and is byte-for-byte unchanged by it, verified by measuring both sides. It is broader
+than a note in the review suggested: every whitespace-only input collapses to `""` on the first
+pass and then oscillates, not only the two shapes named there. No file in the corpus is
+whitespace-only, and a document with any content at all is a fixed point.
 
 ## Consequences
 
