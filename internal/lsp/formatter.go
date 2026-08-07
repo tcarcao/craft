@@ -93,8 +93,8 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			// by blank lines, and top-level declarations are always joined by
 			// one, so no run could ever have spanned two declarations anyway.
 			var decl strings.Builder
-			writeTokens(&decl, node)
-			sb.WriteString(alignAnnotations(decl.String()))
+			interior := writeTokens(&decl, node)
+			sb.WriteString(alignAnnotations(decl.String(), interior))
 		}
 	}
 
@@ -230,12 +230,29 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // makes. There are deliberately no per-construct branches: a construct the
 // formatter has never seen still round-trips, because nothing here inspects
 // what a token means.
-func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
+//
+// It returns the set of written line indices that fall INSIDE a token rather
+// than between two of them, which is every line of a multi-line token after its
+// first. Only alignAnnotations needs this, and only because it is line
+// oriented: a multi-line block comment is one token carrying newlines, so a
+// pass that splits the output into lines cannot tell that pass's interior lines
+// apart from real ones and will happily rewrite the whitespace in them. The
+// walker is the one place that knows, exactly and without heuristics, where a
+// token's text starts and stops, so it is the place that answers.
+//
+// Today only comments produce a multi-line token, but the set is kept in terms
+// of tokens rather than of comments: the invariant the formatter rests on is
+// that whitespace BETWEEN tokens is the only thing any pass may touch, and that
+// holds whatever kind of token grows a newline next.
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 	braceDepth := 0
 	scenarioDepth := 0
 	gap := ""
 	var prev *syntax.SyntaxToken
 	prevLedScenario := false
+
+	line := 0
+	var interior map[int]bool
 
 	toks := node.AllTokens()
 	for i, tok := range toks {
@@ -293,8 +310,20 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 		// scenario must not ask for a second.
 		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario
 
-		sb.WriteString(separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario))
+		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario)
+		sb.WriteString(sep)
 		sb.WriteString(tok.Text())
+
+		line += strings.Count(sep, "\n")
+		if n := strings.Count(tok.Text(), "\n"); n > 0 {
+			if interior == nil {
+				interior = make(map[int]bool, n)
+			}
+			for k := 1; k <= n; k++ {
+				interior[line+k] = true
+			}
+			line += n
+		}
 
 		if tok.Kind() == syntax.SyntaxKindLBrace {
 			braceDepth++
@@ -314,6 +343,8 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 		gap = ""
 		prevLedScenario = leadsScenario
 	}
+
+	return interior
 }
 
 // nextRealTokenIsWhen reports whether the first token after i that carries

@@ -653,6 +653,20 @@ func TestFormatDocument_CommentInternalSpacingSurvives(t *testing.T) {
 	}{
 		{"line comment", "use_case \"X\" {\n  when U does x\n    A notifies a.B // hello  world\n}\n"},
 		{"block comment", "/* hello  world */\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
+		// A multi-line block comment is ONE token carrying newlines, so the
+		// alignment pass, which works on lines, sees its interior lines with no
+		// idea they are inside a token. An interior line that ends in `]` is the
+		// shape that made the pass rewrite comment text: it looked exactly like
+		// an annotated action, so it was padded out to the run's column and
+		// dragged the real annotation's column with it.
+		{"multi-line block comment with a bracketed interior line",
+			"use_case \"X\" {\n" +
+				"  when U does x\n" +
+				"    /* note\n" +
+				"       thing [1]\n" +
+				"       end */\n" +
+				"    A asks B for c  [POST /v1/x]\n" +
+				"}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

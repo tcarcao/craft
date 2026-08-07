@@ -9,13 +9,29 @@ import (
 //
 // It runs over the formatter's output rather than over the tree, because
 // alignment is the one decision that needs to see whole lines. It only ever
-// rewrites the run of spaces before a `[`, so it cannot change content.
+// rewrites the run of spaces before a `[`, and never on a line it was told to
+// leave alone, so it cannot change content.
+//
+// interior is the set of line indices that fall inside a single token's text,
+// which writeTokens records as it emits. A line-oriented pass cannot see token
+// boundaries: a multi-line block comment is ONE token carrying newlines, so
+// splitting the document into lines hands this pass the comment's interior
+// lines with nothing to distinguish them from real ones. An interior line
+// ending in `]` therefore looked exactly like an annotated action, and got
+// padded to the run's column, which rewrote whitespace inside a comment.
+// Deriving the answer here instead, by tracking `/* */` nesting, would put a
+// heuristic where the emit site has the exact answer.
+//
+// Lines in interior take no part in the pass at all: they neither start a run,
+// nor end one, nor get rewritten. Treating them as invisible rather than as
+// unannotated is what keeps a blank line inside a block comment from splitting
+// an alignment run that the comment merely sits in the middle of.
 //
 // A run is a stretch of consecutive lines that carry an annotation, plus any
 // unannotated lines between them. A blank line ends a run. That matches the
 // worked examples in docs/decisions/action-operation-brackets.md, where an
 // unannotated action keeps the column rather than splitting it.
-func alignAnnotations(s string) string {
+func alignAnnotations(s string, interior map[int]bool) string {
 	lines := strings.Split(s, "\n")
 
 	runStart := -1
@@ -25,6 +41,9 @@ func alignAnnotations(s string) string {
 		}
 		col := 0
 		for i := runStart; i < end; i++ {
+			if interior[i] {
+				continue
+			}
 			if body, _, ok := splitAnnotation(lines[i]); ok {
 				if w := utf8.RuneCountInString(body); w+2 > col {
 					col = w + 2
@@ -32,6 +51,9 @@ func alignAnnotations(s string) string {
 			}
 		}
 		for i := runStart; i < end; i++ {
+			if interior[i] {
+				continue
+			}
 			body, ann, ok := splitAnnotation(lines[i])
 			if !ok {
 				continue
@@ -46,6 +68,9 @@ func alignAnnotations(s string) string {
 	}
 
 	for i, line := range lines {
+		if interior[i] {
+			continue
+		}
 		if strings.TrimSpace(line) == "" {
 			flush(i)
 			continue
@@ -73,6 +98,11 @@ func alignAnnotations(s string) string {
 // width. writeAlignedActions, which this pass replaced, excluded comment lines
 // from the column for exactly that reason, and dropping the exclusion would
 // have been a silent regression.
+//
+// The tests below only reach the line a comment BEGINS on, which is all a
+// single line of text can answer for. A comment that continues onto further
+// lines leaves those lines with no visible mark of what they are, so they are
+// excluded upstream instead, by the interior set alignAnnotations is given.
 func splitAnnotation(line string) (body, ann string, ok bool) {
 	trimmed := strings.TrimRight(line, " \t")
 	if !strings.HasSuffix(trimmed, "]") {

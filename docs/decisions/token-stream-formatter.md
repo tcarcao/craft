@@ -159,9 +159,29 @@ column as `max(rune width of the line before the annotation) + 2`, and rewrites 
 of spaces before each `[`. A non-annotated action does not break a run; a blank line or a new
 scenario does.
 
-This pass never touches token text, so it cannot affect content. Keeping it separate from the
-walker is deliberate: it is the one decision that needs to see whole lines rather than a token
-at a time.
+Keeping it separate from the walker is deliberate: it is the one decision that needs to see
+whole lines rather than a token at a time.
+
+That separation is also its one hazard, and the claim originally made here, that the pass
+never touches token text so cannot affect content, was false as written. A multi-line block
+comment is ONE token carrying newlines, so splitting the output into lines hands this pass the
+comment's interior lines with nothing to distinguish them from real ones. An interior line
+ending in `]` looked exactly like an annotated action, so it was padded to the run's column,
+which rewrote whitespace inside comment text. Nothing caught it: `contentDrift` is
+whitespace-blind, the output is still idempotent, and the corpus model comparison excludes
+comment trivia.
+
+The fix is at the emit site, not a better heuristic. `writeTokens` returns the set of written
+line indices that fall INSIDE a token rather than between two of them, and `alignAnnotations`
+skips those lines for both the column computation and the rewrite. Tracking `/* */` nesting in
+the alignment pass would have worked, but it would put a heuristic where the walker has the
+exact answer, which is the same trade this branch already refused once. With the set in place
+the pass really does only rewrite whitespace between two tokens, which is what makes it unable
+to affect content.
+
+The set is expressed in terms of tokens rather than of comments. Only comments produce a
+multi-line token today, but the invariant is that whitespace BETWEEN tokens is the only thing
+any pass may touch, and that holds whatever kind of token grows a newline next.
 
 ## Behaviour changes
 
