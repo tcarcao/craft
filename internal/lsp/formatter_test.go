@@ -647,6 +647,7 @@ func assertFormatIsFaithful(t *testing.T, src string) {
 	if !reflect.DeepEqual(wantComments, haveComments) {
 		t.Errorf("comments lost\nwant: %q\nhave: %q", wantComments, haveComments)
 	}
+	assertContentPreserved(t, src, got)
 }
 
 // TestFormatDocument_CommentOnlyBlockBodies covers the degenerate shape the
@@ -665,5 +666,112 @@ func TestFormatDocument_CommentOnlyBlockBodies(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assertFormatIsFaithful(t, tc.src)
 		})
+	}
+}
+
+// TestFormatDocument_TrailingCommentsSurvive covers the positions the parser
+// never gives a comment token kind to. Everything after the last real token is
+// folded into a single Whitespace token, so a comment with nothing after it is
+// present in the text and invisible to any filter on token kind. Measured
+// before the fix: a file ending in a comment went 43 bytes to 24, and a
+// comment-only file went 18 bytes to 0, both with exit 0.
+func TestFormatDocument_TrailingCommentsSurvive(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"file ends in a comment", "actor user Alice\n\n// trailing note\n"},
+		{"comment only", "// only a comment\n"},
+		{"several trailing comments", "actor user Alice\n\n// a\n// b\n"},
+		{"block comment at eof", "actor user Alice\n\n/* note */\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_TrailingCommentWithoutFinalNewline is the shape the
+// UTF-16 twin fixture uses, and the one the content-drift check caught first.
+func TestFormatDocument_TrailingCommentWithoutFinalNewline(t *testing.T) {
+	src := "actors {\n\t\tuser Bob\n}\n// fim café"
+	got := formatSource(t, src)
+	if !strings.Contains(got, "// fim café") {
+		t.Errorf("trailing comment was dropped:\n%s", got)
+	}
+	assertContentPreserved(t, src, got)
+}
+
+// TestFormatDocument_RefAdjacentCommentsSurvive covers a comment the parser
+// attached inside a Ref node. The atomic-ref branch runs before the comment
+// branch and rendered the ref through RefText, which reads the trivia-free
+// token list, so the comment was swallowed by the very fix that stopped
+// `re/billing` being split.
+func TestFormatDocument_RefAdjacentCommentsSurvive(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"comment before a field value", "services {\n  A {\n    repo: // note\n      olxeu/realestate\n  }\n}\n"},
+		{"comment inside a list", "services {\n  A {\n    contexts: X, // why\n      Y\n  }\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestSquashWhitespace pins the comparison the invariant is built on.
+func TestSquashWhitespace(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"re/billing", "re / billing", true},
+		{"a b c", "a\n  b\tc\n", true},
+		{"", "\n", true},
+		{"a b", "a", false},
+		{"a b", "b a", false},
+		{"[POST /pay]", "[[POST /pay]", false},
+	}
+	for _, tc := range cases {
+		if got := squashWhitespace(tc.a) == squashWhitespace(tc.b); got != tc.want {
+			t.Errorf("squashWhitespace(%q) == squashWhitespace(%q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// TestContentDrift_RefusesToLoseContent proves the safety net does what it is
+// there for, without needing a live formatter bug to demonstrate it. This is
+// the piece that protects against the construct nobody has written a branch
+// for yet, so it needs its own test rather than only being exercised by
+// whatever happens to be broken today.
+func TestContentDrift_RefusesToLoseContent(t *testing.T) {
+	if d := contentDrift("actor user Alice\n", "actor  user\n  Alice\n"); d != nil {
+		t.Errorf("pure whitespace change must be allowed, got %+v", d)
+	}
+	d := contentDrift("actor user Alice\n// note\n", "actor user Alice\n")
+	if d == nil {
+		t.Fatal("dropping a comment must be refused")
+	}
+	if d.Code != "craft/internal/formatter-content-drift" {
+		t.Errorf("Code = %q, want the drift code so the refusal is discoverable", d.Code)
+	}
+	if d := contentDrift("a\n", "a a\n"); d == nil {
+		t.Error("duplicating content must be refused")
+	}
+	if d := contentDrift("a b\n", "b a\n"); d == nil {
+		t.Error("reordering content must be refused")
+	}
+}
+
+// assertContentPreserved is the invariant on its own: formatting changes
+// whitespace and nothing else.
+func assertContentPreserved(t *testing.T, in, out string) {
+	t.Helper()
+	if squashWhitespace(in) != squashWhitespace(out) {
+		t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", in, out)
 	}
 }

@@ -1,7 +1,9 @@
 package lsp
 
 import (
+	"log/slog"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -52,6 +54,11 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			// A comment with no declaration after it to attach to, such as one
 			// on the last line of the file, is a direct child of the root.
 			// Skipping every non-node child is how those were dropped.
+			// Note this only fires for a comment the parser tokenised at root
+			// level. A comment with nothing after it never gets that far: the
+			// parser dumps everything past the last real token into a single
+			// Whitespace token, so the text is there but the kind is not.
+			// trailingCommentLines below is what recovers those.
 			if tok, isTok := el.(syntax.SyntaxToken); isTok && isCommentKind(tok.Kind()) {
 				if !first {
 					sb.WriteString("\n\n")
@@ -84,10 +91,105 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 		}
 	}
 
+	if tail := trailingCommentLines(content, root); len(tail) > 0 {
+		if !first {
+			sb.WriteString("\n\n")
+		}
+		first = false
+		sb.WriteString(strings.Join(tail, "\n"))
+	}
+
 	if !first {
 		sb.WriteByte('\n')
 	}
-	return sb.String(), nil
+
+	formatted := sb.String()
+	if drift := contentDrift(content, formatted); drift != nil {
+		slog.Error("craft formatter: refusing to format, output would change content",
+			"detail", drift.Message)
+		return content, drift
+	}
+	return formatted, nil
+}
+
+// trailingCommentLines returns the comment lines that sit after the last real
+// token in the document, one per line and stripped of indentation.
+//
+// A comment with a declaration after it is tokenised as trivia and attached to
+// that declaration, so every renderer can find it. A comment with NOTHING
+// after it never gets that treatment: the parser dumps the whole remainder of
+// the source into one SyntaxKindWhitespace token, so the bytes survive in the
+// tree (losslessness holds) but no token carries a comment kind. Filtering on
+// kind therefore finds nothing, which is how a file ending in a comment lost
+// it, and how a file that is nothing BUT a comment was truncated to zero
+// bytes.
+//
+// Reaching the text through the trivia rather than through the kind is the
+// fix. Nothing in this tail can be anything other than a comment or blank
+// space: real content there would have produced a diagnostic, and the
+// formatter would have declined to run at all.
+func trailingCommentLines(content string, root syntax.SyntaxNode) []string {
+	end := 0
+	for _, tok := range root.AllTokens() {
+		if tok.Kind() == syntax.SyntaxKindWhitespace || tok.Kind() == syntax.SyntaxKindEOF {
+			continue
+		}
+		if e := int(tok.Offset()) + len(tok.Text()); e > end {
+			end = e
+		}
+	}
+	if end >= len(content) {
+		return nil
+	}
+
+	var out []string
+	for _, line := range strings.Split(content[end:], "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+// contentDrift enforces the formatter's contract: formatting changes
+// whitespace and nothing else. It returns nil when every non-whitespace byte
+// of in appears in out in the same order, and otherwise the diagnostic
+// explaining the refusal.
+//
+// This is a structural guarantee, not another bug fix. FormatDocument
+// reconstructs each declaration from typed accessors, so every construct needs
+// its own branch and any construct without one is dropped in silence. Eight
+// defects of exactly that shape were found on this branch, the last of them a
+// comment position nobody had thought of. Adding branches makes that design
+// less unsafe, never safe. This check makes the failure mode harmless instead:
+// a construct with no branch turns a silent deletion into a no-op that says so.
+//
+// It stays even once every known case is fixed, because the branch it protects
+// against is the one nobody has written yet.
+func contentDrift(in, out string) *craft.Diagnostic {
+	if squashWhitespace(in) == squashWhitespace(out) {
+		return nil
+	}
+	return &craft.Diagnostic{
+		Code:     "craft/internal/formatter-content-drift",
+		Message:  "formatting would have changed more than whitespace, so the document was left unchanged; this is a formatter bug, please report the file",
+		Severity: craft.SeverityWarning,
+	}
+}
+
+// squashWhitespace returns s with every whitespace character removed, so two
+// strings compare equal exactly when they carry the same content bytes in the
+// same order.
+func squashWhitespace(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s))
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		sb.WriteRune(r)
+	}
+	return sb.String()
 }
 
 // bailsFormatting reports whether a syntax diagnostic means the tree is too
@@ -334,6 +436,39 @@ func significantTokens(node syntax.SyntaxNode) []syntax.SyntaxToken {
 	return out
 }
 
+// writeRefWithComments writes a reference as one atom, with no separator
+// between its parts so `olxeu/realestate` stays glued, while keeping any
+// comment the parser attached inside it.
+//
+// A comment can land inside a Ref node whenever the author wrote it between
+// the field's `:` or `,` and the value, as in `repo: // note` with the value
+// on the next line. RefText() reads Tokens(), which excludes trivia, so the
+// atomic-ref path silently ate those comments; and because the atomic path
+// runs before the comment branch in formatDecl, the generic handling never got
+// a chance either.
+//
+// The comment keeps its position relative to the value rather than being moved
+// after it. Order is part of the contract, and moving it would trip the
+// content-drift check for good reason: a reader cannot tell which of two
+// values a relocated comment refers to. A line comment runs to end of line, so
+// the value that follows it has to go on the next line or the comment would
+// swallow it.
+func writeRefWithComments(sb *strings.Builder, ref syntax.SyntaxNode, indentDepth int) {
+	var parts []syntax.SyntaxToken
+	for _, tok := range ref.AllTokens() {
+		if tok.Kind() != syntax.SyntaxKindWhitespace {
+			parts = append(parts, tok)
+		}
+	}
+	for i, tok := range parts {
+		sb.WriteString(tok.Text())
+		if isCommentKind(tok.Kind()) && i < len(parts)-1 {
+			sb.WriteByte('\n')
+			sb.WriteString(strings.Repeat("  ", indentDepth))
+		}
+	}
+}
+
 // formatDecl formats a single top-level declaration into sb.
 func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 	tokens := significantTokens(node)
@@ -367,7 +502,7 @@ func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 			sep := tokenSeparator(tokens, i, depth, needsNewline)
 			needsNewline = false
 			sb.WriteString(sep)
-			sb.WriteString(syntax.AsRefDecl(*parent).RefText())
+			writeRefWithComments(sb, *parent, depth+1)
 			continue
 		}
 
