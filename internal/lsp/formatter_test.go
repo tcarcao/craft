@@ -385,6 +385,84 @@ func TestFormatDocument_AlignsOpAnnotations(t *testing.T) {
 	}
 }
 
+// TestFormatDocument_AlignsAfterMultilineCommentClose covers both directions
+// of the interior-line bookkeeping writeTokens hands to alignAnnotations.
+//
+// A multi-line block comment is one token carrying newlines. writeTokens
+// used to mark every emitted line after the token's first as interior,
+// which over-claims the token's LAST line: that line is shared with
+// whatever follows the closing `*/`, so when an annotated action sits on
+// the same line as the close, the over-claim excluded the whole line from
+// alignment and the action kept whatever spacing the author wrote.
+//
+// "close shares a line with a following action" is the case that must now
+// align. "line strictly between the comment's open and close" is the case
+// that must stay excluded, or alignment would rewrite comment text.
+func TestFormatDocument_AlignsAfterMultilineCommentClose(t *testing.T) {
+	t.Run("close shares a line with a following action", func(t *testing.T) {
+		src := "use_case \"X\" {\n" +
+			"  when U does x\n" +
+			"    A asks B to aaa  [POST /v1/a]\n" +
+			"    /* note\n" +
+			"       more */ A asks B to b  [POST /v1/b]\n" +
+			"}\n"
+		got := FormatDocument(src)
+
+		// The two annotations must start at the same column.
+		var cols []int
+		for _, line := range strings.Split(got, "\n") {
+			if i := strings.Index(line, "[POST"); i >= 0 {
+				cols = append(cols, i)
+			}
+		}
+		if len(cols) != 2 {
+			t.Fatalf("expected 2 annotations, found %d in:\n%s", len(cols), got)
+		}
+		if cols[0] != cols[1] {
+			t.Errorf("annotations not aligned: columns %d and %d in:\n%s", cols[0], cols[1], got)
+		}
+	})
+
+	// A line genuinely inside the comment, strictly between its open and
+	// close lines, must stay excluded from alignment: it is comment text,
+	// not an alignable action, however much it looks like one. The two real
+	// actions have long bodies on purpose, so that if the interior line were
+	// wrongly folded into the run, its own short body would visibly get
+	// padded out to their column instead of keeping the 2 spaces the author
+	// wrote: a test where the interior line's authored padding already
+	// happens to match the recomputed column would pass whether or not the
+	// exclusion works.
+	t.Run("line strictly between open and close stays excluded", func(t *testing.T) {
+		const interiorLine = "       x  [POST /v1/mid]"
+		src := "use_case \"X\" {\n" +
+			"  when U does x\n" +
+			"    A asks B to aaaaaaaaaaaaaaaaaaaa  [POST /v1/a]\n" +
+			"    /* note\n" +
+			interiorLine + "\n" +
+			"       more */ A asks B to bbbbbbbbbbbbbbbbbbbb  [POST /v1/b]\n" +
+			"}\n"
+		got := FormatDocument(src)
+
+		found := false
+		for _, line := range strings.Split(got, "\n") {
+			if line == interiorLine {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("comment body must not be rewritten by alignment; wanted line %q verbatim in:\n%s", interiorLine, got)
+		}
+
+		if again := FormatDocument(got); again != got {
+			t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+		}
+		if _, _, diags := syntax.Parse(got); len(diags) != 0 {
+			t.Errorf("formatted output does not parse cleanly: %+v\ngot:\n%s", diags, got)
+		}
+	})
+}
+
 // TestFormatDocument_AlignmentIsIdempotent formats an already-aligned document
 // a second time and requires no further change: alignment must be a fixed
 // point, not a moving target on repeated saves.

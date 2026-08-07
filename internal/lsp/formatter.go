@@ -213,13 +213,16 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // what a token means.
 //
 // It returns the set of written line indices that fall INSIDE a token rather
-// than between two of them, which is every line of a multi-line token after its
-// first. Only alignAnnotations needs this, and only because it is line
-// oriented: a multi-line block comment is one token carrying newlines, so a
-// pass that splits the output into lines cannot tell that pass's interior lines
-// apart from real ones and will happily rewrite the whitespace in them. The
-// walker is the one place that knows, exactly and without heuristics, where a
-// token's text starts and stops, so it is the place that answers.
+// than between two of them, which is the lines of a multi-line token strictly
+// between its first and last. The last line is deliberately excluded: it is
+// shared with whatever follows the token on that same physical line, so it is
+// not claimed by the token. Only alignAnnotations needs this, and only because
+// it is line oriented: a multi-line block comment is one token carrying
+// newlines, so a pass that splits the output into lines cannot tell that
+// pass's interior lines apart from real ones and will happily rewrite the
+// whitespace in them. The walker is the one place that knows, exactly and
+// without heuristics, where a token's text starts and stops, so it is the
+// place that answers.
 //
 // Today only comments produce a multi-line token, but the set is kept in terms
 // of tokens rather than of comments: the invariant the formatter rests on is
@@ -297,11 +300,18 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 
 		line += strings.Count(sep, "\n")
 		if n := strings.Count(tok.Text(), "\n"); n > 0 {
-			if interior == nil {
-				interior = make(map[int]bool, n)
-			}
-			for k := 1; k <= n; k++ {
-				interior[line+k] = true
+			// Only the lines strictly between the token's first and last
+			// emitted line are interior. The last line (line+n) is the
+			// token's own last line, which it shares with whatever follows
+			// it on that same physical line, so it must stay eligible for
+			// alignment rather than being claimed by the token.
+			if n > 1 {
+				if interior == nil {
+					interior = make(map[int]bool, n-1)
+				}
+				for k := 1; k < n; k++ {
+					interior[line+k] = true
+				}
 			}
 			line += n
 		}
