@@ -118,18 +118,19 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 // trailing padding.
 func writeAlignedActions(sb *strings.Builder, actions []syntax.ActionDecl) {
 	type actionLine struct {
-		body string // SourceText with the " [op]" suffix stripped
+		body string // the action rendered without its " [op]" suffix
 		op   string // annotation body without brackets, "" when none
 	}
 
 	lines := make([]actionLine, len(actions))
 	col := 0
 	for i, action := range actions {
-		full := action.SourceText()
+		// SourceTextWithoutOp rather than trimming the suffix off SourceText:
+		// a trim has to spell " ["+op+"]" exactly as SourceText builds it, and
+		// a no-op trim would emit the annotation twice.
+		body := action.SourceTextWithoutOp()
 		op := action.OpText()
-		body := full
 		if op != "" {
-			body = strings.TrimSuffix(full, " ["+op+"]")
 			if l := utf8.RuneCountInString(body); l+2 > col {
 				col = l + 2
 			}

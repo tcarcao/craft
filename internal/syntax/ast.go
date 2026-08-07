@@ -1803,6 +1803,23 @@ func (a ActionDecl) rawTextFrom(start int) string {
 // deprecated quoted-string form, and move a returns target into the phrase.
 // The label now exists only where it is consumed, in projection.go.
 func (a ActionDecl) SourceText() string {
+	body := a.SourceTextWithoutOp()
+	if op := a.OpText(); op != "" {
+		return body + " [" + op + "]"
+	}
+	return body
+}
+
+// SourceTextWithoutOp renders the action exactly as SourceText does but stops
+// before the trailing ` [op]` suffix.
+//
+// The formatter needs the body on its own so it can re-emit the annotation at
+// an alignment column. Asking for it here rather than string-trimming
+// SourceText's output removes a hidden coupling: a trimmer has to spell the
+// suffix the same way this function does, and if either side ever changed that
+// spelling the trim would silently no-op and the formatter would emit the
+// annotation twice.
+func (a ActionDecl) SourceTextWithoutOp() string {
 	var sb strings.Builder
 	sb.WriteString(a.SubjectName())
 	switch a.Kind() {
@@ -1829,11 +1846,6 @@ func (a ActionDecl) SourceText() string {
 		if a.VerbValue() != "" {
 			appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)-1))
 		}
-	}
-	if op := a.OpText(); op != "" {
-		sb.WriteString(" [")
-		sb.WriteString(op)
-		sb.WriteString("]")
 	}
 	return sb.String()
 }

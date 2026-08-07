@@ -1012,6 +1012,43 @@ func TestActionDecl_SourceText(t *testing.T) {
 	}
 }
 
+// TestActionDecl_SourceTextWithoutOp pins the contract the formatter's
+// alignment pass relies on: the body accessor is exactly SourceText minus the
+// trailing ` [op]`, and the two stay in step by construction rather than by
+// the formatter re-spelling the suffix to trim it off. If they ever drift, a
+// trim-based formatter would silently no-op and emit the annotation twice.
+func TestActionDecl_SourceTextWithoutOp(t *testing.T) {
+	cases := []struct {
+		name     string
+		line     string
+		wantBody string
+	}{
+		{"sync with annotation", "Auth asks DB to check email [POST /v1/check]", "Auth asks DB to check email"},
+		{"async with annotation", "Billing notifies billing.ChargeSucceeded [GRPC Pay]", "Billing notifies billing.ChargeSucceeded"},
+		{"return with annotation", "Auth returns to User charge result [200 Result]", "Auth returns to User charge result"},
+		{"internal with annotation", "Auth validates email format [op1/op2]", "Auth validates email format"},
+		{"templated payload", "A asks B for c [POST /v1/accounts/{id}/charges]", "A asks B for c"},
+		{"bracket in phrase too", "A asks B to record [batch] entries [POST /v1/entries]", "A asks B to record [batch] entries"},
+		{"no annotation", "Auth asks DB to check email", "Auth asks DB to check email"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    " + tc.line + "\n}"
+			a := syntax.AsFile(astParse(src)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.SourceTextWithoutOp(); got != tc.wantBody {
+				t.Errorf("SourceTextWithoutOp() = %q, want %q", got, tc.wantBody)
+			}
+			want := tc.wantBody
+			if op := a.OpText(); op != "" {
+				want += " [" + op + "]"
+			}
+			if got := a.SourceText(); got != want {
+				t.Errorf("SourceText() = %q, want %q (body + suffix must agree)", got, want)
+			}
+		})
+	}
+}
+
 // TestActionDecl_SourceText_TruncatedLine checks the renderer emits no trailing
 // space when a slot it would normally fill is missing. The input is already
 // broken, but a formatter that appends invisible whitespace makes a broken file
