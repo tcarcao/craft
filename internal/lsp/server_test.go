@@ -2537,6 +2537,151 @@ func TestSemanticTokens_SlugTarget(t *testing.T) {
 	}
 }
 
+// TestSemanticTokens_OpAnnotation asserts that a trailing operation annotation
+// is classified distinctly from the surrounding phrase: the protocol verb gets
+// the standard "keyword" semantic token type and the opaque payload word gets
+// the standard "string" type, so both are colored by any default LSP theme
+// without extension-side scope configuration. The brackets keep their existing
+// craft-braces classification, and phrase words outside the annotation are
+// unaffected.
+func TestSemanticTokens_OpAnnotation(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "OpAnnotation" {
+	// Line 1:   when SomeActor does SomeThing
+	// Line 2:     Subscriptions asks Billing for a fresh charge attempt [POST charges]
+	// Line 3: }
+	// col math (0-based): "    Subscriptions asks Billing for a fresh charge attempt [POST charges]"
+	//   col 50: attempt (len 7), phrase word, unaffected by the annotation → craft-phrase-word (33)
+	//   col 58: [       (len 1), unaffected, still craft-braces (40)
+	//   col 59: POST    (len 4), recognised protocol verb → keyword (45)
+	//   col 64: charges (len 7), opaque payload word → string (46)
+	//   col 71: ]       (len 1), unaffected, still craft-braces (40)
+	opSrc := "use_case \"OpAnnotation\" {\n  when SomeActor does SomeThing\n    Subscriptions asks Billing for a fresh charge attempt [POST charges]\n}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///op_annotation.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(opSrc),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///op_annotation.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for op annotation token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftPhraseWord = 33
+	const craftBraces = 40
+	const opVerbKeyword = 45
+	const opPayloadString = 46
+
+	// "attempt": outside the annotation, unaffected.
+	if tok, ok := byPos[[2]uint32{2, 50}]; !ok {
+		t.Error("attempt not found at line 2 col 50")
+	} else if tok.tokenType != craftPhraseWord {
+		t.Errorf("attempt: got tokenType %d, want %d (craft-phrase-word)", tok.tokenType, craftPhraseWord)
+	}
+
+	// "[": brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{2, 58}]; !ok {
+		t.Error("[ not found at line 2 col 58")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("[: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+
+	// "POST": the protocol verb, classified as the standard "keyword" type.
+	if tok, ok := byPos[[2]uint32{2, 59}]; !ok {
+		t.Error("POST not found at line 2 col 59")
+	} else if tok.tokenType != opVerbKeyword {
+		t.Errorf("POST: got tokenType %d, want %d (keyword)", tok.tokenType, opVerbKeyword)
+	}
+
+	// "charges": opaque payload word, classified as the standard "string" type,
+	// NOT craft-phrase-word even though it is a bare SyntaxKindIdent token.
+	if tok, ok := byPos[[2]uint32{2, 64}]; !ok {
+		t.Error("charges not found at line 2 col 64")
+	} else if tok.tokenType != opPayloadString {
+		t.Errorf("charges: got tokenType %d, want %d (string), not craft-phrase-word", tok.tokenType, opPayloadString)
+	}
+
+	// "]": brackets keep their existing craft-braces classification.
+	if tok, ok := byPos[[2]uint32{2, 71}]; !ok {
+		t.Error("] not found at line 2 col 71")
+	} else if tok.tokenType != craftBraces {
+		t.Errorf("]: got tokenType %d, want %d (craft-braces)", tok.tokenType, craftBraces)
+	}
+}
+
 // TestSemanticTokens_ReturnActionConnectorNoTarget is a regression test for a
 // bug where classifyActionIdents' return_action case called
 // ActionDecl.Connector(), which for return_action returns the KwTo

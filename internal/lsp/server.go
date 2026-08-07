@@ -216,9 +216,11 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
-			// CompletionProvider advertises ':' as a completion trigger character.
+			// CompletionProvider advertises ':' and '[' as completion trigger
+			// characters. '[' fires protocol-verb completion at an operation
+			// annotation's head position.
 			CompletionProvider: &protocol.CompletionOptions{
-				TriggerCharacters: []string{":"},
+				TriggerCharacters: []string{":", "["},
 			},
 			// ExecuteCommandProvider lists the custom LSP commands we handle.
 			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
@@ -1853,6 +1855,13 @@ var semanticTokenLegend = []string{
 	"craft-deployment-target",    // 42
 	"craft-domain-list",          // 43
 	"craft-language-value",       // 44
+	// Entries 45-46 classify operation annotations (`[POST /v1/...]`). They use
+	// the LSP-standard type names, not a craft-* custom type: every default
+	// client theme already maps "keyword" and "string" to sane colors, so the
+	// annotation visually recedes from business prose with no client-side
+	// scope configuration, unlike the craft-* types above.
+	"keyword", // 45: the recognised protocol verb (SyntaxKindOpVerb)
+	"string",  // 46: opaque annotation payload words
 }
 
 // semanticLegendIndex maps token type name → legend index for O(1) lookup.
@@ -1977,6 +1986,10 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindComma:          "craft-comma",
 	syntax.SyntaxKindArrow:          "craft-deployment-arrow",
 	syntax.SyntaxKindPercentage:     "craft-percentage",
+	// SyntaxKindOpVerb only ever occurs at the head of an operation annotation,
+	// so it needs no parent-context check here (unlike the opaque payload
+	// idents, which classifyActionIdents handles in Pass 2).
+	syntax.SyntaxKindOpVerb: "keyword",
 }
 
 func (s *Server) SemanticTokensFull(_ context.Context, params *protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
@@ -2398,6 +2411,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 	verbIdx := s.semanticTokenTypeIndex("craft-regular-verb")
 	connIdx := s.semanticTokenTypeIndex("craft-connector-word")
 	phraseIdx := s.semanticTokenTypeIndex("craft-phrase-word")
+	opPayloadIdx := s.semanticTokenTypeIndex("string")
 
 	toks := action.Tokens()
 	var result []semanticToken
@@ -2424,6 +2438,19 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		return l
 	}
 
+	// emitPhraseWord emits tok as an ordinary phrase word, unless it belongs to
+	// a trailing operation annotation, in which case it is opaque payload text
+	// and gets the distinct annotation-payload type instead. The verb itself
+	// (SyntaxKindOpVerb) and the brackets are not SyntaxKindIdent, so they never
+	// reach this function; they are classified in Pass 1 (syntaxKindToCraftToken).
+	emitPhraseWord := func(tok syntax.SyntaxToken) {
+		if parent := tok.Parent(); parent != nil && parent.Kind() == syntax.SyntaxKindOpAnnotation {
+			emit(tok, opPayloadIdx)
+			return
+		}
+		emit(tok, phraseIdx)
+	}
+
 	switch kind {
 	case "internal_action":
 		// toks: [subject, verb, (connector?), phrase...]
@@ -2441,7 +2468,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue
 			}
-			emit(tok, phraseIdx)
+			emitPhraseWord(tok)
 		}
 
 	case "sync_action":
@@ -2465,7 +2492,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue
 			}
-			emit(tok, phraseIdx)
+			emitPhraseWord(tok)
 		}
 
 	case "return_action":
@@ -2493,7 +2520,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			if tok.Kind() != syntax.SyntaxKindIdent || tokLineNum(tok) != actionLine {
 				continue
 			}
-			emit(tok, phraseIdx)
+			emitPhraseWord(tok)
 		}
 	}
 

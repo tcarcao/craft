@@ -21,7 +21,8 @@ const (
 	ctxActorsBlock
 	ctxUseCaseTop
 	ctxUseCaseAction
-	ctxUseCaseActionVerb // cursor after `asks` or `returns` — suggest domain/service names
+	ctxUseCaseActionVerb // cursor after `asks` or `returns`: suggest domain/service names
+	ctxOpAnnotationVerb  // cursor at an operation annotation's head: suggest protocol verbs
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -78,6 +79,60 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 	return ""
 }
 
+// findEnclosingOpAnnotation searches n's subtree for a SyntaxKindOpAnnotation
+// node whose bracket interior (the span strictly between its `[` and `]`)
+// contains offset. Returns nil when offset is not inside any annotation's
+// brackets (including when the annotation has no closing `]` at all, since an
+// unclosed `[` never parses into a SyntaxKindOpAnnotation node in the first
+// place; it stays part of the phrase, matching the parser's existing
+// same-line-close requirement for annotation recognition).
+func findEnclosingOpAnnotation(n syntax.SyntaxNode, offset green.TextSize) *syntax.SyntaxNode {
+	for _, el := range n.Children() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		if node.Kind() == syntax.SyntaxKindOpAnnotation {
+			lb := node.ChildToken(syntax.SyntaxKindLBracket)
+			rb := node.ChildToken(syntax.SyntaxKindRBracket)
+			if lb != nil && rb != nil {
+				lo, hi := lb.TextRange().End, rb.TextRange().Start
+				if offset >= lo && offset <= hi {
+					result := node
+					return &result
+				}
+			}
+		}
+		if found := findEnclosingOpAnnotation(node, offset); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// isOpAnnotationHead reports whether cursorOffset sits at the head position of
+// an operation annotation: strictly between its `[` and `]`, with no verb or
+// payload token typed yet before the cursor. This is the only position where
+// suggesting a protocol verb is useful: once a verb or any payload token
+// exists, the payload is opaque and Craft has nothing more to offer.
+func isOpAnnotationHead(root syntax.SyntaxNode, cursorOffset green.TextSize) bool {
+	ann := findEnclosingOpAnnotation(root, cursorOffset)
+	if ann == nil {
+		return false
+	}
+	for _, el := range ann.Children() {
+		switch el.Kind() {
+		case syntax.SyntaxKindLBracket, syntax.SyntaxKindRBracket,
+			syntax.SyntaxKindWhitespace, syntax.SyntaxKindLineComment, syntax.SyntaxKindBlockComment:
+			continue
+		}
+		if el.TextRange().Start < cursorOffset {
+			return false
+		}
+	}
+	return true
+}
+
 // detectContext determines what kind of completion to offer based on where
 // the cursor sits in the grammar. It uses the syntax tree to find the nearest
 // enclosing keyword, and checks the current line for field-value patterns
@@ -86,6 +141,15 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 	// cursorCol is a UTF-16 column, so slice the line by the byte offset it
 	// maps to — not by the column itself, which would cut mid-rune.
 	cursorOffset := li.OffsetFromUTF16(cursorLine+1, cursorCol)
+
+	// Tree-based operation-annotation detection takes priority over the
+	// enclosing-keyword/regex logic below: the head-of-annotation position can
+	// occur deep inside an action line, which the regex checks further down
+	// don't parse for.
+	if isOpAnnotationHead(root, cursorOffset) {
+		return ctxOpAnnotationVerb
+	}
+
 	lineStart := li.OffsetFromUTF16(cursorLine+1, 0)
 	linePrefix := li.Src()[lineStart:cursorOffset]
 
@@ -218,6 +282,8 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return whenKeywordCompletion()
 	case ctxUseCaseActionVerb:
 		return domainAndServiceSymbolCompletions(ws)
+	case ctxOpAnnotationVerb:
+		return protocolVerbCompletions()
 	case ctxUseCaseAction:
 		return allSymbolCompletions(ws)
 	case ctxExposeField:
@@ -349,6 +415,22 @@ func domainAndServiceSymbolCompletions(ws *workspace.Workspace) *protocol.Comple
 				Kind:   protocol.CompletionItemKindModule,
 				Detail: "bounded context (domain: " + domName + ")",
 			})
+		}
+	}
+	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
+
+// protocolVerbCompletions returns the recognised operation-annotation protocol
+// verbs (GET, POST, GRPC, TOPIC, ...) as keyword completion items. Offered only
+// at an operation annotation's head position; see isOpAnnotationHead.
+func protocolVerbCompletions() *protocol.CompletionList {
+	verbs := syntax.ProtocolVerbs()
+	items := make([]protocol.CompletionItem, len(verbs))
+	for i, v := range verbs {
+		items[i] = protocol.CompletionItem{
+			Label:  v,
+			Kind:   protocol.CompletionItemKindKeyword,
+			Detail: "operation annotation protocol verb",
 		}
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}

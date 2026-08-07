@@ -409,3 +409,36 @@ func TestCompletion_AfterAsksVerb_ReturnsDomainAndServiceOnly(t *testing.T) {
 		t.Errorf("actor 'Actor' should NOT appear in action-verb completions, got labels: %v", labels)
 	}
 }
+
+func TestCompletion_OpAnnotationHead_ReturnsProtocolVerbs(t *testing.T) {
+	w := workspace.New(nil)
+	// use_case file: line 2 is "    Auth asks Billing for a fresh charge attempt []"
+	// cursor at character 50, immediately after the `[`.
+	w.Open("file:///uc.craft", "use_case \"Register User\" {\n  when Actor creates Account\n    Auth asks Billing for a fresh charge attempt []\n}\n")
+
+	params := &protocol.CompletionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: "file:///uc.craft"},
+			Position:     protocol.Position{Line: 2, Character: 50},
+		},
+	}
+
+	result := lsp.ExportedBuildCompletions(w, "file:///uc.craft", params)
+	if result == nil {
+		t.Fatal("expected completion list, got nil")
+	}
+
+	labels := make(map[string]bool)
+	for _, item := range result.Items {
+		labels[item.Label] = true
+	}
+
+	for _, verb := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "GRPC", "TOPIC", "QUERY"} {
+		if !labels[verb] {
+			t.Errorf("expected protocol verb %q in operation annotation completions, got labels: %v", verb, labels)
+		}
+	}
+	if labels["Billing"] {
+		t.Errorf("bounded context/service names should NOT appear in operation annotation completions, got labels: %v", labels)
+	}
+}

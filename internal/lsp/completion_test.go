@@ -110,6 +110,18 @@ func TestDetectContext(t *testing.T) {
 			line: 2, col: 14,
 			want: ctxServiceLang,
 		},
+		{
+			name: "operation annotation head - immediately after [",
+			src:  "use_case \"X\" {\n  when U does x\n    A asks B for c []\n}",
+			line: 2, col: 20,
+			want: ctxOpAnnotationVerb,
+		},
+		{
+			name: "operation annotation - after a verb, not head",
+			src:  "use_case \"X\" {\n  when U does x\n    A asks B for c [POST ]\n}",
+			line: 2, col: 24,
+			want: ctxUseCaseAction,
+		},
 	}
 
 	for _, tc := range tests {
