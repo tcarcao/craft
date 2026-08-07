@@ -92,11 +92,20 @@ func splitAnnotation(line string) (body, ann string, ok bool) {
 	}
 
 	// A `[` sitting inside a trailing comment is comment text, not an
-	// annotation, as in `A asks B for c // see [1]`. Only a `//` BEFORE the
-	// bracket disqualifies it, so a path inside a real annotation such as
-	// `[GET http://x/y]` is unaffected.
-	if i := strings.Index(trimmed, "//"); i >= 0 && i < open {
-		return "", "", false
+	// annotation, as in `A asks B for c // see [1]`.
+	//
+	// Only a `//` that actually opens a comment counts: one at the start of the
+	// line or following whitespace. Testing the whole prefix for `//` was too
+	// blunt, because the `//` in a URL follows a `:`, so
+	// `A asks B for http://x/y [POST /v1/x]` lost its alignment. A `//` after
+	// the bracket is inside the annotation and never reached here.
+	for i := 0; i+1 < open; i++ {
+		if trimmed[i] != '/' || trimmed[i+1] != '/' {
+			continue
+		}
+		if i == 0 || trimmed[i-1] == ' ' || trimmed[i-1] == '\t' {
+			return "", "", false
+		}
 	}
 	body = strings.TrimRight(trimmed[:open], " \t")
 	if body == "" {

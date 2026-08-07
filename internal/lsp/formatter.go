@@ -257,7 +257,16 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
 		// This needs lookahead, which is why the walker answers it rather than
 		// separatorFor: a comment's owner is the next real token, and
 		// separatorFor only ever sees one token at a time.
-		leadsScenario := isCommentKind(tok.Kind()) && braceDepth == 1 && nextRealTokenIsWhen(toks, i)
+		//
+		// The comment must also start its own line. A TRAILING comment belongs
+		// to the action it sits on, however close the next `when` is: without
+		// that clause `P does y  // note` had its comment lifted off the action,
+		// re-indented from action level to scenario level and given a blank
+		// line, which is the same comment re-indentation this lookahead exists
+		// to remove.
+		startsOwnLine := prev == nil || strings.Contains(gap, "\n")
+		leadsScenario := isCommentKind(tok.Kind()) && braceDepth == 1 &&
+			startsOwnLine && nextRealTokenIsWhen(toks, i)
 
 		// A `when` at the use_case's own brace depth closes any scenario body
 		// that was open (it, the leading comment above, and the enclosing `}`

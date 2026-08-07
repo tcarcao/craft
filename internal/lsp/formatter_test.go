@@ -1085,3 +1085,20 @@ func TestFormatDocument_TrailingCommentKeepsActionIndent(t *testing.T) {
 	src := "use_case \"X\" {\n  when A does x\n    P does y\n    // done here\n}\n"
 	assertFormatIsFaithful(t, src)
 }
+
+// TestFormatDocument_TrailingCommentBeforeAScenarioStaysPut is the boundary the
+// scenario lookahead needs on its other side.
+//
+// The lookahead asks "is the next real token a `when`", which a trailing
+// comment also satisfies. Without also requiring the comment to start its own
+// line, `P does y  // note` had its comment lifted off the action onto a line
+// of its own, re-indented from action level to scenario level and given a blank
+// line. That is a comment re-indentation plus a line move, the same class the
+// lookahead was added to remove.
+//
+// No file in the repo has this shape, which is why the corpus guard stays green
+// either way. It is asserted here instead.
+func TestFormatDocument_TrailingCommentBeforeAScenarioStaysPut(t *testing.T) {
+	src := "use_case \"X\" {\n  when A does x\n    P does y // note\n\n  when B does z\n    Q does w\n}\n"
+	assertFormatIsFaithful(t, src)
+}

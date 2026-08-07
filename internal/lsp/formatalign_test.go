@@ -124,3 +124,31 @@ func TestAlignAnnotations_PathInsideAnAnnotationStillAligns(t *testing.T) {
 		t.Errorf("annotations should share a column, got %v:\n%s", cols, got)
 	}
 }
+
+// TestSplitAnnotation_UrlInTheBodyDoesNotDisqualify covers the over-reach in
+// the trailing-comment guard. The `//` in a URL follows a `:` rather than
+// whitespace, so it does not open a comment and must not cost the line its
+// alignment.
+func TestSplitAnnotation_UrlInTheBodyDoesNotDisqualify(t *testing.T) {
+	body, ann, ok := splitAnnotation("    A asks B for http://x/y [POST /v1/x]")
+	if !ok {
+		t.Fatalf("a real annotation was disqualified by a URL in the body")
+	}
+	if body != "    A asks B for http://x/y" || ann != "[POST /v1/x]" {
+		t.Errorf("got body %q ann %q", body, ann)
+	}
+}
+
+// TestSplitAnnotation_TrailingCommentStillDisqualifies is the other half: a
+// `//` that does open a comment still wins.
+func TestSplitAnnotation_TrailingCommentStillDisqualifies(t *testing.T) {
+	for _, line := range []string{
+		"    A asks B for c // see [1]",
+		"    A asks B for c\t// see [1]",
+		"    // see [1]",
+	} {
+		if _, _, ok := splitAnnotation(line); ok {
+			t.Errorf("a bracket inside a comment was taken as an annotation: %q", line)
+		}
+	}
+}
