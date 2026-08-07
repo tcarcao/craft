@@ -16,13 +16,29 @@ import (
 //   - use_case blocks formatted with 2-space when / 4-space actions / blank line between scenarios
 //   - arch blocks preserved verbatim (free-form component chain syntax)
 func FormatDocument(content string) string {
+	out, _ := FormatDocumentChecked(content)
+	return out
+}
+
+// FormatDocumentChecked is FormatDocument plus the reason it declined to
+// format.
+//
+// FormatDocument returns its input unchanged when the parse produced a
+// diagnostic too severe to re-render from, which a caller holding only the
+// returned string cannot tell apart from "already formatted". `craft fmt`
+// needs that distinction: silently leaving a broken file untouched, or
+// reporting it as clean under --check, is worse than saying it was skipped.
+//
+// The second result is nil when the document was formatted, and otherwise the
+// diagnostic that blocked it.
+func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 	if content == "" {
-		return "\n"
+		return "\n", nil
 	}
 	gn, _, diags := syntax.Parse(content)
 	for _, d := range diags {
 		if bailsFormatting(d) {
-			return content
+			return content, &d
 		}
 	}
 	root := syntax.Root(gn)
@@ -57,7 +73,7 @@ func FormatDocument(content string) string {
 	if !first {
 		sb.WriteByte('\n')
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 // bailsFormatting reports whether a syntax diagnostic means the tree is too
