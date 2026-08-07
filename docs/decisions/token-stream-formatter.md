@@ -147,8 +147,7 @@ unformatted before this rewrite. Preserving them is what a token-stream walker d
 since a newline in the source is just a whitespace token containing `\n`, and it is the more
 faithful behaviour. It is the fifth row in the Behaviour changes table below rather than left
 implicit, because it is a behaviour change that was not among the four quirks approved before
-implementation started. (A sixth was added later still; see Behaviour changes and the Replan
-section below.)
+implementation started.
 
 `when` is `SyntaxKindKwWhen`, so the scenario rule is a token-kind test plus a depth test, not
 a tree query.
@@ -166,11 +165,12 @@ at a time.
 
 ## Behaviour changes
 
-Six behaviours change, added to this record in three waves. The first four rows below were
-approved explicitly before implementation started. Author line breaks inside a value (row five)
-surfaced during the first implementation pass and was approved as a fifth deliberate change.
-Minified declarations (row six) were ruled on separately when Task 3 was blocked and the plan
-amended (see Replan section below). All six are quirk fixes rather than style decisions.
+Six behaviours change. The first four rows below were approved explicitly before implementation
+started. The fifth, author line breaks inside a value, surfaced during implementation and was
+approved as an additional deliberate change. The sixth, minified declarations, follows the same
+brace-versus-statement-boundary reasoning already given under Block boundaries above: a brace is
+a token the walker can act on, a statement boundary shared with another statement on one line is
+not. All six are quirk fixes rather than style decisions.
 
 | | Before | After |
 |---|---|---|
@@ -237,10 +237,10 @@ rather than accepted wholesale, and any fixture with a `.craftjson` pairing has 
 re-verified, since a golden change would mean model drift rather than whitespace drift and is
 a defect.
 
-`craft fmt --check` currently reports 36 of 68 corpus files, all non-canonical fixture shapes
-that are deliberate parser test surface with zero formatter defects among them. This work does
-not aim to make `--check` clean; that is a separate fixture decision and is explicitly out of
-scope here.
+`craft fmt --check` reports 28 of the 60 files under `testdata/corpus` as unformatted, all
+non-canonical fixture shapes that are deliberate parser test surface with zero formatter defects
+among them. This work does not aim to make `--check` clean; that is a separate fixture decision
+and is explicitly out of scope here.
 
 ## Risks
 
