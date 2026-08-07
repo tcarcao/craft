@@ -1714,21 +1714,19 @@ func (p *Parser) updatePrevEnd(tok lexer.Token) {
 	if tok.Type == lexer.TokenEOF {
 		return
 	}
-	p.prevEnd = green.TextSize(tok.Offset + len(tokenText(tok)))
+	p.prevEnd = green.TextSize(tok.End)
 }
 
-// tokenText returns the exact raw source text for tok, for green-tree Text
-// emission. For most token types this is tok.Value. TokenString is the
-// exception: Value is the unescaped string CONTENT without surrounding
-// quotes (kept as-is for content consumers — see EventValue()/Title()/etc.),
-// while Raw carries the verbatim source slice including both quotes and any
-// escape sequences. Using Value there would silently drop the quotes and
-// corrupt the round-trip (Bug 1); Raw is what makes the green tree lossless.
-func tokenText(tok lexer.Token) string {
-	if tok.Type == lexer.TokenString && tok.Raw != "" {
-		return tok.Raw
+// rawText returns the token's verbatim source text. Token text in the green
+// tree is always a slice of the source: this is what makes
+// concat(AllTokens) == src true by construction rather than by convention.
+// Never build token text from tok.Value or tok.Raw, which carry the token's
+// interpreted content and diverge from source for strings and error tokens.
+func (p *Parser) rawText(tok lexer.Token) string {
+	if tok.Offset < 0 || tok.End > len(p.src) || tok.End < tok.Offset {
+		return tok.Value // defensive: malformed range, should be unreachable
 	}
-	return tok.Value
+	return p.src[tok.Offset:tok.End]
 }
 
 // attachTrivia emits any line/block comment tokens at p.pos into the current
@@ -1739,17 +1737,17 @@ func (p *Parser) attachTrivia() {
 		switch tok.Type {
 		case lexer.TokenLineComment:
 			p.emitWhitespaceBefore(tok)
-			p.builder.Token(SyntaxKindLineComment, tok.Value)
+			p.builder.Token(SyntaxKindLineComment, p.rawText(tok))
 			p.updatePrevEnd(tok)
 			p.pos++
 		case lexer.TokenBlockComment:
 			p.emitWhitespaceBefore(tok)
-			p.builder.Token(SyntaxKindBlockComment, tok.Value)
+			p.builder.Token(SyntaxKindBlockComment, p.rawText(tok))
 			p.updatePrevEnd(tok)
 			p.pos++
 		case lexer.TokenDocComment:
 			p.emitWhitespaceBefore(tok)
-			p.builder.Token(SyntaxKindDocComment, tok.Value)
+			p.builder.Token(SyntaxKindDocComment, p.rawText(tok))
 			p.updatePrevEnd(tok)
 			p.pos++
 		default:
@@ -1768,7 +1766,7 @@ func (p *Parser) consume() lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(lexerKindToSyntaxKind(tok.Type), tokenText(tok))
+	p.builder.Token(lexerKindToSyntaxKind(tok.Type), p.rawText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -1783,7 +1781,7 @@ func (p *Parser) consumeAs(kind SyntaxKind) lexer.Token {
 	tok := p.tokens[p.pos]
 	p.pos++
 	p.emitWhitespaceBefore(tok)
-	p.builder.Token(kind, tokenText(tok))
+	p.builder.Token(kind, p.rawText(tok))
 	p.updatePrevEnd(tok)
 	return tok
 }
@@ -2510,9 +2508,9 @@ func isSlugKind(s string) bool {
 // parseIdentList parses a comma-separated ident list, emitting tokens into the
 // current builder scope. A TokenString entry (a quoted name, e.g.
 // `contexts: "Some Name"`) is emitted as SyntaxKindString, not
-// SyntaxKindIdent — consumeAs always stores the raw source text regardless
-// of the kind passed in (tokenText returns tok.Raw for TokenString either
-// way, so this does not affect Token.Value/Raw or round-trip output), but
+// SyntaxKindIdent — consumeAs always stores the raw source slice regardless
+// of the kind passed in (rawText slices the source the same way no matter
+// which kind is passed, so this does not affect round-trip output), but
 // content-read call sites (stringAwareText and friends) dispatch on Kind()
 // to decide whether to unquote. Mislabeling a quoted entry as Ident would
 // make them silently skip unquoting and leak raw quotes into content.

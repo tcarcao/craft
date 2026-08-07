@@ -117,15 +117,7 @@ var keywords = map[string]TokenType{
 type Token struct {
 	Type  TokenType
 	Value string
-	// Raw carries the exact raw source text for the token, when it differs
-	// from Value. Only populated for TokenString: Value is the unescaped
-	// string CONTENT without the surrounding quotes (kept for content
-	// consumers), while Raw is the verbatim source slice including both
-	// quotes and any escape sequences as written — used to build a
-	// byte-for-byte lossless green tree. Empty for token types where Value
-	// already equals the raw source text.
-	Raw  string
-	Line int // 1-based
+	Line  int // 1-based
 	// Column is 1-based and counts RUNES within the line, not bytes — the
 	// lexer scans []rune. Use it for line-relative comparisons (adjacency,
 	// same-line checks) and for diagnostic positions. Never add it to a byte
@@ -322,7 +314,7 @@ func (l *Lexer) scanBlockComment() Token {
 func (l *Lexer) scanString() Token {
 	startLine := l.line
 	startCol := l.col
-	rawStart := l.pos // position of the opening `"`, for the Raw source slice
+	rawStart := l.pos // position of the opening `"`, for Offset/End
 	l.advance()       // consume opening "
 	var val []rune
 	closed := false
@@ -372,7 +364,7 @@ func (l *Lexer) scanString() Token {
 		// Callers that compute a Range must add +1 for the opening `"`.
 		return Token{Type: TokenError, Value: string(val), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart), End: l.offsetAt(l.pos)}
 	}
-	return Token{Type: TokenString, Value: string(val), Raw: string(l.src[rawStart:l.pos]), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart), End: l.offsetAt(l.pos)}
+	return Token{Type: TokenString, Value: string(val), Line: startLine, Column: startCol, Offset: l.offsetAt(rawStart), End: l.offsetAt(l.pos)}
 }
 
 func (l *Lexer) scanIdent() Token {

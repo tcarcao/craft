@@ -1444,3 +1444,46 @@ func TestBareSubject_StillUnwrapped(t *testing.T) {
 		t.Errorf("PhraseText() = %q, want %q", got, "email format")
 	}
 }
+
+// Rowan's actual invariant: concatenating the tokens reproduces the source.
+// Width equality is a checksum that cannot catch a token lying about its text.
+func TestParse_ConcatEqualsSource(t *testing.T) {
+	sources := map[string]string{
+		"normal":           "domain re {\n  Billing\n}\n",
+		"string":           "use_case \"X\" {\n  when U does x A notifies \"Hello\"\n}\n",
+		"escaped string":   "use_case \"X\" {\n  when U does x A notifies \"a\\\"b\"\n}\n",
+		"unterminated":     "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n",
+		"leading comment":  "// lead\ndomain re { Billing }\n",
+		"trailing comment": "domain re { Billing }\n// trail\n",
+		"comment only":     "// just this\n",
+		"block comment":    "/* a\n   b */\ndomain re { Billing }\n",
+		"annotation":       "use_case \"X\" {\n  when U does x A asks B to y  [POST /v1/c]\n}\n",
+		"lexer error":      "@#$\n",
+		"empty":            "",
+	}
+	for name, src := range sources {
+		gn, _, _ := syntax.Parse(src)
+		var sb strings.Builder
+		for _, tk := range syntax.Root(gn).AllTokens() {
+			sb.WriteString(tk.Text())
+		}
+		if sb.String() != src {
+			t.Errorf("%s: concat != src\n got: %q\nwant: %q", name, sb.String(), src)
+		}
+	}
+}
+
+// Every token's text must equal the source bytes at its own range.
+func TestParse_TokenTextMatchesItsRange(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	for _, tk := range syntax.Root(gn).AllTokens() {
+		r := tk.TextRange()
+		if int(r.End) > len(src) {
+			t.Fatalf("token %v range %v exceeds source length %d", tk.Kind(), r, len(src))
+		}
+		if got := src[r.Start:r.End]; got != tk.Text() {
+			t.Errorf("token %v: Text()=%q but source at range is %q", tk.Kind(), tk.Text(), got)
+		}
+	}
+}
