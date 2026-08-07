@@ -839,42 +839,39 @@ func TestContentDrift_RefusesToLoseContent(t *testing.T) {
 	}
 }
 
-// TestFormatDocumentChecked_DriftPathIsReachable pins the one live route into
-// contentDrift, so it stays a tested path rather than a claimed-dead one.
+// contentDrift used to have exactly one route reachable from real input: an
+// unterminated string at end of line produced a token whose Text() did not
+// reproduce its own source bytes (the parser emitted an Ident of `Oops` at
+// the offset of the opening `"`, with the leftover byte landing in a
+// Whitespace token), so concatenating AllTokens() text lost the quote even
+// though the tree's widths still summed to len(src). Task 2 fixed that at
+// its source: every token's text is now sliced from src[Offset:End], so this
+// fixture parses with zero diagnostics and formats without drift.
 //
-// The rewrite made the drift check unreachable for any document the parser
-// accepts without diagnostics, which is what the record and the changelog now
-// say. It did not make it unreachable outright, and the difference matters:
-// this document produces ZERO diagnostics, so bailsFormatting lets it through,
-// and the drift check is the only thing standing between it and a formatted
-// output that does not carry the source's bytes.
-//
-// The cause is upstream of the formatter and predates this branch. An
-// unterminated string at end of line yields an Ident whose Text() is `Oops` at
-// the offset of the `"`, with the leftover byte landing in a Whitespace token
-// as `s\n`. The widths still sum, so the tree passes the losslessness check
-// that compares root.Width() against len(src), but concatenating AllTokens()
-// text does not reproduce the source. That is worth fixing where it lives: a
-// token whose Text() differs from the source bytes at its own range breaks the
-// property the whole LSP rests on. Until then this is the behaviour, and it is
-// the safe one: the formatter declines and returns the input untouched.
-func TestFormatDocumentChecked_DriftPathIsReachable(t *testing.T) {
+// contentDrift is not dead code even so. It now defends against a different
+// class of bug: a formatter-walker branch that skips or duplicates a token
+// while reconstructing a declaration from typed accessors, not a
+// parser/lexer bug that hands the walker bad text to begin with. No known
+// real input reaches it anymore, so TestContentDrift_RefusesToLoseContent
+// exercises it directly with inputs that differ only in whitespace (nil) and
+// inputs that genuinely differ in content (the drift code). The test below
+// only pins that the former trigger no longer fires.
+func TestFormatDocumentChecked_UnterminatedStringFixtureNoLongerDrifts(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n"
 
 	if _, _, diags := syntax.Parse(src); len(diags) != 0 {
-		t.Fatalf("fixture no longer reaches the drift path: the parser now reports %+v, "+
-			"so bailsFormatting declines before contentDrift is consulted", diags)
+		t.Fatalf("fixture no longer parses cleanly: %+v", diags)
 	}
 
 	got, blocked := FormatDocumentChecked(src)
-	if blocked == nil {
-		t.Fatal("expected the drift check to fire")
-	}
-	if blocked.Code != "craft/internal/formatter-content-drift" {
-		t.Errorf("Code = %q, want the drift code", blocked.Code)
+	if blocked != nil {
+		t.Fatalf("expected no drift, got %+v", blocked)
 	}
 	if got != src {
-		t.Errorf("declining must return the input untouched\nwant:\n%s\ngot:\n%s", src, got)
+		t.Errorf("expected byte-identical output\nwant:\n%s\ngot:\n%s", src, got)
+	}
+	if !strings.Contains(got, `"Oops`) {
+		t.Errorf("opening quote of the unterminated string must survive intact\ngot:\n%s", got)
 	}
 }
 
