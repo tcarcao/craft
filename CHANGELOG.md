@@ -1,5 +1,46 @@
 # Changelog
 
+## [3.0.0] — 2026-08-07
+
+### Breaking
+- **`kind:` prefixes are rejected in every bounded-context slot.** `Subscriptions asks bc:re/billing for a charge` is now a parse error, `craft/syntax/kind-prefix-in-target`. This covers the `asks` target, the subject of all four action kinds, the `returns` target, and the `when ... listens` trigger context. Write the bare name (`Billing`) or the domain-qualified form (`re/billing`). The slot already implies a bounded context, the same rule `context_map` has always enforced for its endpoints.
+  - Migration is mechanical: strip the prefix. Two files in this repo were affected, both test fixtures.
+- **A line-final bracketed run on an action line is now an operation annotation, not prose.** A `[` that does not close at the end of the line is still swept into the phrase, so only lines that look like they carry an annotation change meaning.
+- **`craft/sema/malformed-slug` now reports shapes it previously ignored.** `re/ billing`, `re//billing`, and three-segment refs like `re/a/b` are errors. Previously slash-shaped names were never shape-checked at all, because the shape checker returned early on any text without a `:`. Files that parsed silently before may now report errors.
+
+### Added
+- **Operation annotations.** Any action may end with a bracketed annotation recording the wire call it corresponds to, which makes a `use_case` readable as an integration contract:
+
+      use_case "Retry a failed charge" {
+        when CRON detects a failed charge
+          Subscriptions asks Billing for a fresh charge attempt  [POST /v1/accounts/{id}/charges]
+          Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+          Billing asks Ledger to record the entry                [GRPC ledger.Postings/Create]
+          Gateway returns to Billing the authorization result    [200 AuthorizationResult]
+          Billing notifies billing.ChargeSucceeded               [TOPIC billing.v1.charge-succeeded]
+          Subscriptions marks the subscription active
+
+  Contents are hybrid: a recognised uppercase protocol verb (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `GRPC`, `TOPIC`, `QUERY`) is parsed as structure, and anything else is kept verbatim as an opaque payload, so `[op1/op2/op3]` and `[legacy-mainframe-txn-44]` are equally valid annotations. See `docs/decisions/action-operation-brackets.md` for the full design.
+  - Surfaces as `Action.Operation` (`{verb, payload, text}`). The field is omitted entirely when absent, so existing golden files are unchanged.
+- **Qualified `<domain>/<name>` references are accepted wherever a bounded context is named**, not only in the `asks` target: action subjects for all four kinds, the `returns` target, and the `when ... listens` trigger context.
+- **`craft/sema/ambiguous-bc` fires for use cases.** A bare bounded-context name owned by two or more domains was previously dropped silently from the dependency graph. It is now an error naming the candidates. It fires at four sites: `sync_action` subject and target, `async_action` subject, and the `domain_listen` trigger context. It does not fire for internal actions or for `returns`, which do not participate in the dependency graph.
+- **`craft/syntax/empty-op-annotation`.** An empty `[]` is an error rather than being silently dropped.
+- **`craft fmt` column-aligns operation annotations** per contiguous run within a scenario. A non-annotated action does not reset the run; a blank line or a new scenario does.
+- **Public API additions in `pkg/craft`**: the `Operation` type alias, the `OpVerbGET` through `OpVerbQUERY` constants, and `ProtocolVerbs()`.
+- **Editor support**: protocol verb completion at the head of an annotation, and distinct semantic-token classification so the annotation recedes from the business prose.
+
+### Fixed
+- **`textDocument/formatting` had five pre-existing defects, all found while building this release.** Each silently mutated a valid document, and none had test coverage before now. Formatting is now verified byte-identical, reparse-clean, idempotent, and model-preserving across all four action kinds and all trigger forms.
+  - Format Document deleted operation annotations outright.
+  - Format Document rewrote typed event refs into the deprecated quoted form, so `Billing notifies billing.ChargeSucceeded` became `notifies "billing.ChargeSucceeded"` and then tripped `craft/lint/deprecated-string-ref`. Present since the typed-ref form was introduced.
+  - Format Document reflowed `returns to <target> <phrase>` such that the target was lost from the reparsed model.
+  - Format Document mangled punctuation in trigger phrases, so `when User creates (1! & 2!)` became `( 1 ! & 2 ! )`.
+  - Format Document corrupted qualified references, rendering `when re/billing listens vas.VasApplied` as `when re / billing listens vas.VasApplied`, which no longer parsed.
+
+### Notes
+- **No generated diagram changes.** No visualizer reads `Action.Operation`, exactly as none read `Action.Ref`. Every generator still renders `Context`, `TargetContext`, `Connector`, and `Phrase` only. The annotation is stored for tooling that consumes the contract; rendering it is a separate decision.
+- The `<phrase>` tail still accepts `! & * / # ? +` unquoted. Only a line-final bracketed run is now reserved.
+
 ## [2.15.2] — 2026-08-05
 
 ### Fixed
