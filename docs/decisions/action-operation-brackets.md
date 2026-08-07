@@ -331,4 +331,53 @@ Recorded because each was seriously considered and each failure mode is informat
 - Sema: verb recognized, verb unrecognized and opaque, `craft/sema/ambiguous-bc` fires
   on a genuinely ambiguous bare target, `kind:` prefix in target rejected with a fix-it
 - Corpus: new fixture exercising all protocol verbs plus an opaque payload
-- Formatter: alignment idempotent, `craft fmt --check` clean on the corpus
+- Formatter: alignment idempotent, and the whole-repository guard
+  (`internal/lsp/formatter_corpus_test.go`) green over every `.craft` file
+
+  This originally read "`craft fmt --check` clean on the corpus". That goal was
+  never met and should not have been listed as if it were. `--check` reports 36 of
+  68 corpus and example files, every one of them because the fixture is written in a
+  non-canonical shape (4-space indent, a wrapped `contexts:` continuation, no
+  trailing newline) rather than because the formatter does anything wrong to it.
+  Those shapes are deliberate parser test surface, so canonicalising the corpus to
+  turn the gate green would cost coverage to buy nothing. The guard test asserts what
+  actually matters, on every file: formatting changes whitespace and nothing else.
+
+## Known limitation: braces in a phrase disable the annotation on that line
+
+A balanced `{...}` in an action's phrase and a trailing `[...]` annotation on the same
+line cannot both be recognised. The annotation scan and the phrase scan have to agree
+on where the line ends, and the phrase scan stops at the first `}`:
+
+    Billing asks Gateway to charge {amount} [POST /pay]
+
+parses as a phrase of `charge {amount` with the rest reported by
+`craft/syntax/not-yet-implemented`, rather than as an annotated action. Braces INSIDE
+the annotation are fine, which is the case that matters for templated paths:
+`[POST /v1/accounts/{id}/charges]` parses correctly.
+
+Lifting this needs depth tracking in `collectPhrase` to match `opAnnotationStart`.
+Recorded rather than fixed because the two scans disagreeing is precisely how the
+silent-data-loss bug in this feature happened, and making them agree in the other
+direction deserves its own change.
+
+## Follow-up: the formatter is reconstructive, and should not be
+
+`FormatDocument` rebuilds each declaration from typed accessors, so every construct
+needs its own branch and any construct without one is dropped in silence. Eight
+defects of exactly that shape were found while shipping this feature: deleted
+annotations, requoted event refs, a lost `returns` target, mangled trigger
+punctuation, split qualified refs, collapsed `context_map` and `glossary` statements,
+a deleted `tags` block, and every comment in the document.
+
+The green tree is lossless (`root.Width() == len(src)` is asserted), so a formatter
+driven from the full token stream, emitting every token verbatim and choosing only the
+whitespace between them, would make "formatting changes whitespace and nothing else"
+true by construction instead of by a check. That is the right shape and it is not a
+small change: annotation column alignment, scenario blank lines and block indentation
+all currently come from the node structure rather than from the token stream.
+
+Until then, `contentDrift` in `internal/lsp/formatter.go` enforces the invariant at
+the exit: if the output would change any non-whitespace byte, the input is returned
+untouched and a diagnostic says so. That converts every future missed construct from
+silent data loss into a visible no-op.

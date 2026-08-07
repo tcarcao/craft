@@ -218,6 +218,18 @@ The bracket is optional; lines without one are unaffected. Its contents are **hy
 
 An empty annotation, `Subscriptions asks Billing for a fresh charge attempt []`, is a `craft/syntax/empty-op-annotation` error, not a silently dropped bracket.
 
+::: warning Braces in a phrase disable the annotation on that line
+A balanced `{...}` in the phrase and a trailing annotation cannot both appear on one line:
+
+```craft
+Billing asks Gateway to charge {amount} [POST /pay]
+```
+
+parses with a phrase of `charge {amount` and reports the rest, rather than as an annotated action. The annotation scan and the phrase scan have to agree on where the line ends, and the phrase scan stops at the first `}`. Move the `{...}` out of the phrase, or drop the annotation from that line.
+
+Braces **inside** the annotation are unaffected, which is the case that matters for templated paths: `[POST /v1/accounts/{id}/charges]` and `[GET /v1/products?q={term}]` both parse correctly.
+:::
+
 **Formatting.** `craft fmt <files...>` formats in place and column-aligns operation annotations, one column per contiguous run of annotated lines within a scenario. A non-annotated action inside a run does not reset it. A blank line or a new scenario does. Alignment is cosmetic; the grammar itself stays whitespace-insensitive.
 
 `craft fmt --check <files...>` writes nothing, lists every file that is not already formatted, and exits non-zero, which is the shape a CI gate wants. Arguments are paths or glob patterns including `**`; directories are not walked, so pass `'**/*.craft'` to cover a tree. A file the parser cannot fully place is never rewritten, and is reported as skipped with the diagnostic that blocked it.
