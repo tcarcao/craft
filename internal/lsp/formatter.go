@@ -416,6 +416,45 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 		k == syntax.SyntaxKindDocComment
 }
 
+// writeTokens renders one top-level declaration by walking its token stream.
+//
+// Every non-whitespace token is written verbatim, exactly once, in document
+// order. The only decision is the separator before each, which separatorFor
+// makes. There are deliberately no per-construct branches: a construct the
+// formatter has never seen still round-trips, because nothing here inspects
+// what a token means.
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) {
+	depth := 0
+	gap := ""
+	var prev *syntax.SyntaxToken
+
+	for _, tok := range node.AllTokens() {
+		if tok.Kind() == syntax.SyntaxKindEOF {
+			continue
+		}
+		if tok.Kind() == syntax.SyntaxKindWhitespace {
+			gap += tok.Text()
+			continue
+		}
+
+		// `}` closes its block, so it dedents before it is placed.
+		if tok.Kind() == syntax.SyntaxKindRBrace && depth > 0 {
+			depth--
+		}
+
+		sb.WriteString(separatorFor(prev, gap, tok, depth))
+		sb.WriteString(tok.Text())
+
+		if tok.Kind() == syntax.SyntaxKindLBrace {
+			depth++
+		}
+
+		cur := tok
+		prev = &cur
+		gap = ""
+	}
+}
+
 // significantTokens returns a node's leaf tokens with whitespace dropped but
 // comments kept.
 //

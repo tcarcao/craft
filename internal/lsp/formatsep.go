@@ -45,7 +45,12 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	if prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev) {
 		return " "
 	}
-	if prev.Kind() == syntax.SyntaxKindComma {
+	// A comma normally gets one space after it, even if the author wrote
+	// none, so `A,B` normalises to `A, B`. But when the author wrapped the
+	// list across lines, that line break is intentional and must survive:
+	// falling through to the newline handling below is what keeps
+	// `contexts: A,\n  B` wrapped instead of collapsing it onto one line.
+	if prev.Kind() == syntax.SyntaxKindComma && !strings.Contains(gap, "\n") {
 		return " "
 	}
 

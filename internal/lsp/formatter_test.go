@@ -775,3 +775,80 @@ func assertContentPreserved(t *testing.T, in, out string) {
 		t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", in, out)
 	}
 }
+
+// TestWriteTokens_PreservesEveryNonWhitespaceToken is the invariant this whole
+// rewrite exists to make structural: the walker emits every non-whitespace
+// token verbatim, exactly once, in order.
+func TestWriteTokens_PreservesEveryNonWhitespaceToken(t *testing.T) {
+	srcs := []string{
+		"domain re {\n  Billing\n}\n",
+		"services {\n  S {\n    contexts: A, B\n    repo: olxeu/realestate/subs\n  }\n}\n",
+		"context_map {\n  re/billing customer_supplier re/vas\n}\n",
+		"glossary re {\n  billing/Invoice same_as subs/Invoice\n}\n",
+		"use_case \"X\" {\n  when U does x\n    A asks re/b for c  [POST /v1/x]\n}\n",
+	}
+	for _, src := range srcs {
+		gn, _, _ := syntax.Parse(src)
+		root := syntax.Root(gn)
+
+		var want []string
+		for _, tk := range root.AllTokens() {
+			if tk.Kind() == syntax.SyntaxKindWhitespace || tk.Kind() == syntax.SyntaxKindEOF {
+				continue
+			}
+			want = append(want, tk.Text())
+		}
+
+		var sb strings.Builder
+		for el := range root.ChildrenIter() {
+			if node, ok := el.(syntax.SyntaxNode); ok {
+				writeTokens(&sb, node)
+			}
+		}
+
+		var got []string
+		outGn, _, _ := syntax.Parse(sb.String())
+		for _, tk := range syntax.Root(outGn).AllTokens() {
+			if tk.Kind() == syntax.SyntaxKindWhitespace || tk.Kind() == syntax.SyntaxKindEOF {
+				continue
+			}
+			got = append(got, tk.Text())
+		}
+
+		if !reflect.DeepEqual(want, got) {
+			t.Errorf("token stream changed for %q\nwant %v\ngot  %v", src, want, got)
+		}
+	}
+}
+
+// TestWriteTokens_KeepsAuthorLineBreaks pins the fifth behaviour change: a
+// value the author wrapped across lines stays wrapped.
+func TestWriteTokens_KeepsAuthorLineBreaks(t *testing.T) {
+	src := "services {\n  S {\n    contexts: A,\n      B\n  }\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	if !strings.Contains(sb.String(), "A,\n") {
+		t.Errorf("author line break inside contexts was joined:\n%s", sb.String())
+	}
+}
+
+// TestWriteTokens_KeepsTrailingCommentsInPlace pins the first behaviour change.
+func TestWriteTokens_KeepsTrailingCommentsInPlace(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A notifies a.B  // note\n}\n"
+	gn, _, _ := syntax.Parse(src)
+	var sb strings.Builder
+	for el := range syntax.Root(gn).ChildrenIter() {
+		if node, ok := el.(syntax.SyntaxNode); ok {
+			writeTokens(&sb, node)
+		}
+	}
+	out := sb.String()
+	if !strings.Contains(out, "a.B  // note") && !strings.Contains(out, "a.B // note") {
+		t.Errorf("trailing comment did not stay on its line:\n%s", out)
+	}
+}
