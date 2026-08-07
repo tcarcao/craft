@@ -298,3 +298,26 @@ that bail-out stays in front of the walker.
 - making `craft fmt --check` clean on the corpus
 - changing indent width, or any style decision not listed under Behaviour changes
 - LSP navigation for qualified names, which is tracked separately
+
+## Known limitations, found during review and deliberately not fixed here
+
+**A comment closing on a line that also carries an annotation loses alignment on that line.**
+`writeTokens` marks every emitted line after a token's first as interior to it, so when a
+multi-line comment's `*/` shares a line with a following annotated action, that whole physical
+line is excluded from the alignment run. The annotation keeps whatever spacing the author
+wrote while its siblings align to a column. No content is altered and the result is
+idempotent, so this is a missed alignment rather than a correctness problem. No file in the
+repository has the shape.
+
+**`trailingCommentLines` strips interior indentation.** A comment after the last declaration
+goes through `trailingCommentLines` rather than the walker, and that function trims each line,
+so `   note [1]` comes back as `note [1]`. This predates the rewrite and is untouched by it.
+It is the one remaining path that renders a comment without going through the token walk.
+
+**The lexer can emit a token whose text does not match its own source range.** For an
+unterminated string at end of line it yields an Ident whose `Text()` is the string body while
+the leftover byte lands in a Whitespace token. Widths still sum, so `root.Width() == len(src)`
+passes, which makes that assertion weaker than it reads: it proves the tree spans the source,
+not that concatenating token text reproduces it. This is upstream of the formatter and affects
+every consumer that rebuilds text from tokens. It is why `contentDrift` remains reachable and
+therefore load-bearing.
