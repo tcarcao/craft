@@ -523,3 +523,147 @@ func TestFormatDecl_StrayTopLevelRBraceDoesNotPanic(t *testing.T) {
 	}()
 	formatSource(t, src)
 }
+
+// TestFormatDocument_ContextMapRoundTrip is the context_map half of the I1
+// fix. Before it, formatDecl space-joined every token, so `re/billing` came
+// back as `re / billing` and two edges collapsed onto one line, and the result
+// did not parse.
+func TestFormatDocument_ContextMapRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"bare endpoints", "context_map re {\n  billing customer_supplier vas\n  billing anticorruption_layer subscriptions\n  billing partnership vas\n}\n"},
+		{"qualified endpoints", "context_map {\n  re/billing separate_ways legacy/reporting\n}\n"},
+		{"empty block", "context_map {\n}\n"},
+		{"comment between edges", "context_map re {\n  // upstream first\n  billing customer_supplier vas\n  billing partnership subscriptions\n}\n"},
+		{"comment above block", "// strategic view\ncontext_map re {\n  billing partnership vas\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_GlossaryRoundTrip is the glossary half. A three-segment
+// term node carries two slashes, so it was the worst hit.
+func TestFormatDocument_GlossaryRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"two-segment terms", "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n  billing/dunning contrasts subscriptions/dunning\n}\n"},
+		{"three-segment terms", "glossary {\n  re/billing/Invoice distinct_from legacy/reporting/Invoice\n}\n"},
+		{"comment between relations", "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n  // the dunning pair is not the same concept\n  billing/dunning contrasts subscriptions/dunning\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_QualifiedFieldValuesSurvive covers the instance of the
+// same defect that nobody had reported: a service field value is a ref too, so
+// `repo: olxeu/realestate/subscriptions` was space-joined into
+// `olxeu / realestate / subscriptions`, which does not parse. Fixing it in
+// formatDecl rather than per block covers exposure and domain values too.
+func TestFormatDocument_QualifiedFieldValuesSurvive(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"service repo", "services {\n  SubscriptionsApi {\n    contexts: Subscriptions\n    catalog_ref: subscriptions-api\n    repo: olxeu/realestate/subscriptions\n  }\n}\n"},
+		{"service contexts list", "services {\n  A {\n    contexts: X, Y\n    data-stores: db1, db2\n    language: golang\n  }\n}\n"},
+		{"exposure fields", "exposure api {\n  to: Business_User\n  through: gateway\n}\n"},
+		{"domain bounded contexts", "domain re {\n  billing\n  vas\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_CommentsSurvive covers the defect the corpus guard
+// surfaced: Tokens() excludes line and block comments because they are trivia,
+// so every renderer built on it silently deleted them. internal/visualizer/
+// testdata/vas.craft lost all 47 of its comments.
+func TestFormatDocument_CommentsSurvive(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"above a top-level block", "// leading\nservices {\n  A {\n    contexts: X\n  }\n}\n"},
+		{"inside a nested block", "services {\n  // about A\n  A {\n    // about contexts\n    contexts: X\n  }\n}\n"},
+		{"above a use_case", "// this is a comment\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
+		{"above a scenario", "use_case \"X\" {\n  // first flow\n  when U does x\n    A asks B for c\n}\n"},
+		{"above an action", "use_case \"X\" {\n  when U does x\n    // why this call\n    A asks B for c\n}\n"},
+		{"after the last action", "use_case \"X\" {\n  when U does x\n    A asks B for c\n    // TODO: confirm subject\n}\n"},
+		{"doc comment", "/// documented\nactor user Alice\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}
+
+// TestFormatDocument_TagsBlockSurvives covers a third instance of the same
+// class, found by the corpus guard rather than by review: a tags { } block is
+// a child of the use case and not of any scenario, so formatUseCaseDecl walked
+// straight past it and the whole block was deleted.
+func TestFormatDocument_TagsBlockSurvives(t *testing.T) {
+	src := "use_case \"Renewal\" {\n" +
+		"  tags {\n" +
+		"    journey: re/renewal-flow\n" +
+		"    owner: \"team billing\"\n" +
+		"    tier: gold\n" +
+		"  }\n" +
+		"\n" +
+		"  when Customer creates Account\n" +
+		"    Billing notifies \"Account Created\"\n" +
+		"}\n"
+	assertFormatIsFaithful(t, src)
+}
+
+// assertFormatIsFaithful asserts the four properties that define a safe
+// formatter, on a fixture already written in canonical form: byte-identical
+// output, a clean reparse, idempotence, and no comment lost.
+func assertFormatIsFaithful(t *testing.T, src string) {
+	t.Helper()
+	got := formatSource(t, src)
+	if got != src {
+		t.Errorf("canonical input must be returned unchanged\nwant:\n%s\ngot:\n%s", src, got)
+	}
+	if _, _, diags := syntax.Parse(got); len(diags) != 0 {
+		t.Errorf("formatted output does not parse cleanly: %+v\ngot:\n%s", diags, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+	wantComments, haveComments := commentTexts(t, src), commentTexts(t, got)
+	if !reflect.DeepEqual(wantComments, haveComments) {
+		t.Errorf("comments lost\nwant: %q\nhave: %q", wantComments, haveComments)
+	}
+}
+
+// TestFormatDocument_CommentOnlyBlockBodies covers the degenerate shape the
+// leading/trailing split does not otherwise reach: a block whose entire body
+// is a comment, so there is no statement for the comment to attach to.
+func TestFormatDocument_CommentOnlyBlockBodies(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"use_case", "use_case \"X\" {\n  // nothing modelled yet\n}\n"},
+		{"context_map", "context_map re {\n  // no edges agreed yet\n}\n"},
+		{"glossary", "glossary {\n  // terms pending\n}\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}

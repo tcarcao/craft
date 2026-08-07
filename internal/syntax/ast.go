@@ -1147,6 +1147,106 @@ func (s ServiceDecl) DeploymentTargetTokens() []SyntaxToken {
 // AsUseCaseDecl wraps a SyntaxKindUseCaseDecl node as a typed view.
 func AsUseCaseDecl(n SyntaxNode) UseCaseDecl { return UseCaseDecl{node: n} }
 
+// AsRefDecl wraps a SyntaxKindRef node as a typed view.
+func AsRefDecl(n SyntaxNode) RefDecl { return RefDecl{node: n} }
+
+// NodeSourceText returns a node's exact raw source text, trimmed, with every
+// byte between its first and last token preserved.
+//
+// It is the exported face of the single raw-source walk that ActionDecl,
+// TriggerDecl, EdgeDecl and GlossaryRelationDecl all render through. Callers
+// outside this package that need to reproduce a statement verbatim (the
+// formatter) should use this rather than space-joining Tokens(), which
+// destroys `re/billing` and `(1! & 2!)` alike.
+func NodeSourceText(n SyntaxNode) string { return rawSourceFrom(n, 0, -1) }
+
+// LeadingComments returns, in source order, the text of every comment token
+// that precedes n's first significant token.
+//
+// The parser attaches a comment as leading trivia of whatever it introduces,
+// so a comment written above a `when` line is the first child of that
+// scenario and one above an action is the first child of that action. A
+// renderer that walks only the typed accessors never sees them, which is how
+// Format Document came to delete every comment in a document.
+func LeadingComments(n SyntaxNode) []string {
+	var out []string
+	for el := range n.ChildrenIter() {
+		tok, ok := el.(SyntaxToken)
+		if !ok {
+			break // a child node means the significant content has started
+		}
+		switch tok.Kind() {
+		case SyntaxKindLineComment, SyntaxKindBlockComment, SyntaxKindDocComment:
+			out = append(out, tok.Text())
+		case SyntaxKindWhitespace:
+			// keep scanning
+		default:
+			return out // first significant token ends the leading run
+		}
+	}
+	return out
+}
+
+// TrailingComments returns, in source order, the text of every comment token
+// that is a direct child of n and follows n's last child node.
+//
+// These are the comments the parser could not attach to anything that comes
+// after them, because nothing does: a comment on the last line of a block
+// before its `}`, and a trailing same-line comment on a block's last
+// statement. LeadingComments cannot reach them, so a renderer that relies on
+// leading comments alone still drops these.
+func TrailingComments(n SyntaxNode) []string {
+	var out []string
+	started := false
+	for el := range n.ChildrenIter() {
+		switch c := el.(type) {
+		case SyntaxNode:
+			started = true
+			out = nil // only what follows the LAST child node is trailing
+		case SyntaxToken:
+			// An opening brace also starts the run, so a block whose body is
+			// nothing but a comment does not lose it for want of a child node.
+			if c.Kind() == SyntaxKindLBrace {
+				started = true
+				continue
+			}
+			if !started {
+				continue
+			}
+			switch c.Kind() {
+			case SyntaxKindLineComment, SyntaxKindBlockComment, SyntaxKindDocComment:
+				out = append(out, c.Text())
+			}
+		}
+	}
+	return out
+}
+
+// LeadingComments returns the comments written above this scenario's `when`
+// line. See the package-level LeadingComments.
+func (s ScenarioDecl) LeadingComments() []string { return LeadingComments(s.node) }
+
+// TrailingComments returns the comments that follow this scenario's last
+// action. See the package-level TrailingComments.
+func (s ScenarioDecl) TrailingComments() []string { return TrailingComments(s.node) }
+
+// LeadingComments returns the comments written above the `use_case` keyword.
+func (u UseCaseDecl) LeadingComments() []string { return LeadingComments(u.node) }
+
+// TrailingComments returns the comments that follow this use case's last
+// scenario, before the closing brace.
+func (u UseCaseDecl) TrailingComments() []string { return TrailingComments(u.node) }
+
+// LeadingComments returns the comments written above this action's line.
+// See the package-level LeadingComments.
+func (a ActionDecl) LeadingComments() []string { return LeadingComments(a.node) }
+
+// AsContextMapDecl wraps a SyntaxKindContextMapDecl node as a typed view.
+func AsContextMapDecl(n SyntaxNode) ContextMapDecl { return ContextMapDecl{node: n} }
+
+// AsGlossaryDecl wraps a SyntaxKindGlossaryDecl node as a typed view.
+func AsGlossaryDecl(n SyntaxNode) GlossaryDecl { return GlossaryDecl{node: n} }
+
 // UseCaseDecl is a typed view over a SyntaxKindUseCaseDecl node.
 type UseCaseDecl struct{ node SyntaxNode }
 
@@ -1215,6 +1315,11 @@ func (u UseCaseDecl) TagsBlocks() []TagsBlock {
 
 // TagsBlock is a typed view over a SyntaxKindTagsBlock node: `tags { tag_stmt* }`.
 type TagsBlock struct{ node SyntaxNode }
+
+// Node returns the underlying syntax node, for callers that need to walk the
+// block's children in document order rather than through Tags(). The formatter
+// needs that to keep comments written between tag statements.
+func (b TagsBlock) Node() SyntaxNode { return b.node }
 
 // Keyword returns the `tags` keyword token introducing this block.
 func (b TagsBlock) Keyword() *SyntaxToken { return b.node.ChildToken(SyntaxKindKwTags) }
@@ -2337,6 +2442,17 @@ func (e EdgeDecl) Verb() string {
 	return tok.Text()
 }
 
+// SourceText returns the edge statement exactly as it was written, including
+// the original spacing inside each endpoint.
+//
+// This goes through rawSourceFrom, the same single walk ActionDecl and
+// TriggerDecl use. Anything that rebuilds the statement by space-joining leaf
+// tokens splits a qualified endpoint into `re / billing`, because the `/` is
+// swept into the ref as its own token. That is exactly the defect the
+// use_case renderers were rewritten to avoid, and there is no reason for a
+// third spelling of the same walk.
+func (e EdgeDecl) SourceText() string { return NodeSourceText(e.node) }
+
 // LeftRef returns the RefDecl view of the left-hand endpoint (for position
 // info via RefDecl.Line/Col), or nil if malformed. See Left() for the text
 // accessor (Task 7).
@@ -2427,6 +2543,12 @@ func (g GlossaryRelationDecl) Verb() string {
 	}
 	return tok.Text()
 }
+
+// SourceText returns the relation statement exactly as it was written. See
+// EdgeDecl.SourceText: a glossary term node is where this matters most,
+// because a three-segment term like `re/billing/Invoice` carries two
+// slashes that a space-joining renderer turns into `re / billing / Invoice`.
+func (g GlossaryRelationDecl) SourceText() string { return NodeSourceText(g.node) }
 
 // LeftRef returns the RefDecl view of the left-hand term reference (for
 // position info via RefDecl.Line/Col), or nil if malformed. See Left() for

@@ -49,6 +49,16 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 	for el := range root.ChildrenIter() {
 		node, ok := el.(syntax.SyntaxNode)
 		if !ok {
+			// A comment with no declaration after it to attach to, such as one
+			// on the last line of the file, is a direct child of the root.
+			// Skipping every non-node child is how those were dropped.
+			if tok, isTok := el.(syntax.SyntaxToken); isTok && isCommentKind(tok.Kind()) {
+				if !first {
+					sb.WriteString("\n\n")
+				}
+				first = false
+				sb.WriteString(tok.Text())
+			}
 			continue
 		}
 
@@ -60,6 +70,10 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 		switch node.Kind() {
 		case syntax.SyntaxKindUseCaseDecl:
 			formatUseCaseDecl(&sb, node)
+		case syntax.SyntaxKindContextMapDecl:
+			formatContextMapDecl(&sb, node)
+		case syntax.SyntaxKindGlossaryDecl:
+			formatGlossaryDecl(&sb, node)
 		case syntax.SyntaxKindArchDecl:
 			// Preserve original formatting: arch component chains use
 			// free-form indentation that the formatter does not rewrite.
@@ -96,6 +110,7 @@ func bailsFormatting(d craft.Diagnostic) bool {
 func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 	uc := syntax.AsUseCaseDecl(node)
 
+	writeCommentLines(sb, "", uc.LeadingComments())
 	sb.WriteString("use_case")
 	if title := uc.Title(); title != nil {
 		// title.Text() is the raw source text and already includes both
@@ -105,10 +120,23 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 	}
 	sb.WriteString(" {\n")
 
+	// A tags { } block is a child of the use case, not of any scenario, so a
+	// renderer that walks only Scenarios() drops it silently. That is what
+	// deleted every `tags` block, along with the qualified refs inside it such
+	// as `journey: re/renewal-flow`.
+	tagBlocks := uc.TagsBlocks()
+	for _, tags := range tagBlocks {
+		writeCommentLines(sb, "  ", syntax.LeadingComments(tags.Node()))
+		sb.WriteString("  tags {\n")
+		writeBlockStatements(sb, tags.Node(), syntax.SyntaxKindTagStmt, "    ")
+		sb.WriteString("  }\n")
+	}
+
 	for i, sc := range uc.Scenarios() {
-		if i > 0 {
+		if i > 0 || len(tagBlocks) > 0 {
 			sb.WriteByte('\n') // blank line between scenarios
 		}
+		writeCommentLines(sb, "  ", sc.LeadingComments())
 		// Both renderers are the source-faithful ones. Anything that rebuilds
 		// a line by space-joining leaf tokens silently rewrites the user's
 		// file: it splits a qualified ref into "re / billing" and pulls a
@@ -117,9 +145,30 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 		sb.WriteString(sc.Trigger().SourceText())
 		sb.WriteByte('\n')
 		writeAlignedActions(sb, sc.Actions())
+		writeCommentLines(sb, "    ", sc.TrailingComments())
 	}
 
+	// A comment sitting between the last action and the closing brace reads as
+	// part of that scenario's body, so it keeps action indent. With no
+	// scenario at all there is no body to belong to and it sits at block level.
+	trailingIndent := "  "
+	if len(uc.Scenarios()) > 0 {
+		trailingIndent = "    "
+	}
+	writeCommentLines(sb, trailingIndent, uc.TrailingComments())
 	sb.WriteByte('}')
+}
+
+// writeCommentLines writes each comment on its own line at the given indent.
+// A comment always owns its line: keeping a trailing comment inline would
+// require re-deriving which line it belonged to after every other line has
+// been re-indented, and getting that wrong silently comments out real content.
+func writeCommentLines(sb *strings.Builder, indent string, comments []string) {
+	for _, comment := range comments {
+		sb.WriteString(indent)
+		sb.WriteString(comment)
+		sb.WriteByte('\n')
+	}
 }
 
 // writeAlignedActions writes a scenario's action lines, column-aligning any
@@ -134,8 +183,9 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 // trailing padding.
 func writeAlignedActions(sb *strings.Builder, actions []syntax.ActionDecl) {
 	type actionLine struct {
-		body string // the action rendered without its " [op]" suffix
-		op   string // annotation body without brackets, "" when none
+		comments []string // comment lines written above this action
+		body     string   // the action rendered without its " [op]" suffix
+		op       string   // annotation body without brackets, "" when none
 	}
 
 	lines := make([]actionLine, len(actions))
@@ -151,10 +201,19 @@ func writeAlignedActions(sb *strings.Builder, actions []syntax.ActionDecl) {
 				col = l + 2
 			}
 		}
-		lines[i] = actionLine{body: body, op: op}
+		// A comment line takes no part in the alignment column: it is not an
+		// annotated action, and letting a long comment push the column out
+		// would be surprising. It does not end the run either, matching the
+		// existing rule that only a blank line or a new scenario does.
+		lines[i] = actionLine{comments: action.LeadingComments(), body: body, op: op}
 	}
 
 	for _, l := range lines {
+		for _, comment := range l.comments {
+			sb.WriteString("    ")
+			sb.WriteString(comment)
+			sb.WriteByte('\n')
+		}
 		sb.WriteString("    ")
 		sb.WriteString(l.body)
 		if l.op != "" {
@@ -168,9 +227,116 @@ func writeAlignedActions(sb *strings.Builder, actions []syntax.ActionDecl) {
 	}
 }
 
+// formatContextMapDecl formats a context_map block: the header, then one edge
+// statement per line at 2-space indent.
+//
+// It exists because formatDecl cannot render these blocks without corrupting
+// them, in two independent ways. A qualified endpoint is a SyntaxKindRef node
+// whose `/` is a separate leaf token, so space-joining produces
+// `re / billing`, which no longer parses. And two adjacent edge statements are
+// siblings whose token parents are different Ref nodes under different
+// EdgeStmt parents, so isSiblingToken's same-grandparent test says "not
+// siblings" and the whole block collapses onto one line.
+//
+// Both are solved by the seam the use_case renderers already use: ask the node
+// for its own source text rather than reassembling it from leaves.
+func formatContextMapDecl(sb *strings.Builder, node syntax.SyntaxNode) {
+	cm := syntax.AsContextMapDecl(node)
+	writeCommentLines(sb, "", syntax.LeadingComments(node))
+	sb.WriteString("context_map")
+	if domain := cm.Domain(); domain != "" {
+		sb.WriteByte(' ')
+		sb.WriteString(domain)
+	}
+	sb.WriteString(" {\n")
+	writeBlockStatements(sb, node, syntax.SyntaxKindEdgeStmt, "  ")
+	sb.WriteByte('}')
+}
+
+// formatGlossaryDecl formats a glossary block. Structurally identical to
+// formatContextMapDecl, and corrupted by formatDecl for the same two reasons,
+// with the extra sting that a three-segment term node carries two slashes.
+func formatGlossaryDecl(sb *strings.Builder, node syntax.SyntaxNode) {
+	gl := syntax.AsGlossaryDecl(node)
+	writeCommentLines(sb, "", syntax.LeadingComments(node))
+	sb.WriteString("glossary")
+	if domain := gl.Domain(); domain != "" {
+		sb.WriteByte(' ')
+		sb.WriteString(domain)
+	}
+	sb.WriteString(" {\n")
+	writeBlockStatements(sb, node, syntax.SyntaxKindGlossaryRelation, "  ")
+	sb.WriteByte('}')
+}
+
+// writeBlockStatements writes one statement per line at 2-space indent,
+// preserving any comment lines interleaved between them.
+//
+// It walks the block's children in document order rather than the typed
+// accessor list, because a comment is a trivia token parked between two
+// statement nodes and the typed accessors do not return it. Walking the typed
+// list is how the formatter came to delete every comment in a file.
+func writeBlockStatements(sb *strings.Builder, node syntax.SyntaxNode, stmtKind syntax.SyntaxKind, indent string) {
+	insideBraces := false
+	for el := range node.ChildrenIter() {
+		switch c := el.(type) {
+		case syntax.SyntaxToken:
+			if c.Kind() == syntax.SyntaxKindLBrace {
+				insideBraces = true
+				continue
+			}
+			// Comments before the `{` were written above the header by the
+			// caller; re-emitting them here would both duplicate them and
+			// indent them into the block body.
+			if insideBraces && isCommentKind(c.Kind()) {
+				sb.WriteString(indent)
+				sb.WriteString(c.Text())
+				sb.WriteByte('\n')
+			}
+		case syntax.SyntaxNode:
+			if c.Kind() != stmtKind {
+				continue
+			}
+			sb.WriteString(indent)
+			sb.WriteString(syntax.NodeSourceText(c))
+			sb.WriteByte('\n')
+		}
+	}
+}
+
+// isCommentKind reports whether a leaf token is a comment. Line and block
+// comments are trivia and excluded from Tokens(); doc comments are not trivia
+// and are included. Every renderer has to treat all three the same way, so the
+// test lives here rather than being spelled out at each site.
+func isCommentKind(k syntax.SyntaxKind) bool {
+	return k == syntax.SyntaxKindLineComment ||
+		k == syntax.SyntaxKindBlockComment ||
+		k == syntax.SyntaxKindDocComment
+}
+
+// significantTokens returns a node's leaf tokens with whitespace dropped but
+// comments kept.
+//
+// Tokens() drops line and block comments along with the whitespace, because
+// all three are trivia. That is right for a parser that only cares about
+// structure and wrong for a renderer, which has to put every byte the author
+// wrote back on disk. Using it is why Format Document silently deleted every
+// comment in a file.
+func significantTokens(node syntax.SyntaxNode) []syntax.SyntaxToken {
+	all := node.AllTokens()
+	out := make([]syntax.SyntaxToken, 0, len(all))
+	for _, tok := range all {
+		if tok.Kind() == syntax.SyntaxKindWhitespace {
+			continue
+		}
+		out = append(out, tok)
+	}
+	return out
+}
+
 // formatDecl formats a single top-level declaration into sb.
 func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
-	tokens := node.Tokens()
+	tokens := significantTokens(node)
 	if len(tokens) == 0 {
 		return
 	}
@@ -180,6 +346,43 @@ func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 
 	for i, tok := range tokens {
 		kind := tok.Kind()
+
+		// A reference is an atom, not a token sequence. Its `/` and `:`
+		// separators are leaf tokens, so falling through to the space-joining
+		// logic below turns `repo: olxeu/realestate/subscriptions` into
+		// `olxeu / realestate / subscriptions` and `bc:re/billing` into
+		// `bc: re/billing`, neither of which parses back. Emit the whole ref
+		// once, from its own accessor, and skip the tokens it covers.
+		//
+		// Doing it here rather than per block type covers every declaration
+		// formatDecl handles, present and future: service `contexts:`,
+		// `catalog_ref:` and `repo:` values, exposure `to:` / `through:` /
+		// `contexts:` values, and domain bounded-context lists.
+		if parent := tok.Parent(); parent != nil && parent.Kind() == syntax.SyntaxKindRef {
+			if i > 0 {
+				if prevParent := tokens[i-1].Parent(); prevParent != nil && prevParent.Equal(*parent) {
+					continue // covered by the RefText already written
+				}
+			}
+			sep := tokenSeparator(tokens, i, depth, needsNewline)
+			needsNewline = false
+			sb.WriteString(sep)
+			sb.WriteString(syntax.AsRefDecl(*parent).RefText())
+			continue
+		}
+
+		switch {
+		case isCommentKind(kind):
+			// A comment always owns its line. Placing it inline would let a
+			// `// note` swallow whatever the separator logic put after it.
+			if i > 0 {
+				sb.WriteByte('\n')
+				sb.WriteString(strings.Repeat("  ", depth))
+			}
+			sb.WriteString(tok.Text())
+			needsNewline = true
+			continue
+		}
 
 		switch kind {
 		case syntax.SyntaxKindLBrace:
