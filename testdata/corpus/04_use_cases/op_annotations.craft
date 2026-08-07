@@ -11,7 +11,7 @@ use_case "Retry a failed charge" {
     Billing asks Ledger to record the entry                [GRPC ledger.Postings/Create]
     Gateway returns to Billing the authorization result    [200 AuthorizationResult]
     Billing notifies billing.ChargeSucceeded               [TOPIC billing.v1.charge-succeeded]
-    Subscriptions marks the subscription active
+    re/subscriptions marks the subscription active
     Subscriptions asks Audit to log the outcome            [op1/op2/op3/op4/op5]
     Subscriptions asks Legacy for a reconciliation         [legacy-mainframe-txn-44]
 

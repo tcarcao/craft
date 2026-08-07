@@ -92,11 +92,11 @@
             {
               "id": "action_7",
               "type": "internal_action",
-              "context": "Subscriptions",
+              "context": "re/subscriptions",
               "verb": "marks",
               "connector": "the",
               "phrase": "subscription active",
-              "description": "Subscriptions marks the subscription active",
+              "description": "re/subscriptions marks the subscription active",
               "line": 14
             },
             {

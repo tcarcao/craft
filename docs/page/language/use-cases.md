@@ -167,6 +167,8 @@ Inventory updates stock levels
 <domain> <verb> [connector] <phrase>
 ```
 
+The subject also accepts a qualified `<domain>/<name>` reference: `re/billing validates the event`. A `kind:` prefix is not accepted. Unlike the other three action kinds, an ambiguous bare subject here is not checked: `craft/sema/ambiguous-bc` does not fire for an internal action (see [Diagnostics](#diagnostics) below).
+
 **Use when:** A domain does something internally without calling other domains.
 
 ### Return Actions
@@ -216,16 +218,20 @@ The bracket is optional; lines without one are unaffected. Its contents are **hy
 
 An empty annotation, `Subscriptions asks Billing for a fresh charge attempt []`, is a `craft/syntax/empty-op-annotation` error, not a silently dropped bracket.
 
+**Formatting.** `craft fmt` column-aligns operation annotations, one column per contiguous run of annotated lines within a scenario. A non-annotated action inside a run does not reset it. A blank line or a new scenario does. Alignment is cosmetic; the grammar itself stays whitespace-insensitive.
+
+**Go library API.** `pkg/craft`, the stable public Go API, exposes the annotation as `craft.Operation` (`Verb`, `Payload`, `Text` fields), the recognised verbs as the `craft.OpVerbGET` through `craft.OpVerbQUERY` constants, and `craft.ProtocolVerbs()` returning the same set as a `[]string`.
+
 ## Diagnostics
 
 Use-case actions and triggers can emit these:
 
 | Code | Severity | When |
 |------|----------|------|
-| `craft/syntax/kind-prefix-in-target` | error | a `kind:` prefix (`bc:`, `domain:`, `service:`, `term:`) is written in a bounded-context slot: the `asks` target, the `asks`/`notifies` subject, the `returns` target, or the `when ... listens` trigger context. Write `Billing` or `re/billing` instead. |
+| `craft/syntax/kind-prefix-in-target` | error | a `kind:` prefix (`bc:`, `domain:`, `service:`, `term:`) is written in a bounded-context slot: the subject of any action (`asks`, `notifies`, `returns`, or an internal action), the `asks` target, the `returns` target, or the `when ... listens` trigger context. Write `Billing` or `re/billing` instead. |
 | `craft/syntax/empty-op-annotation` | error | an action ends in `[]`, an empty operation annotation. |
-| `craft/sema/ambiguous-bc` | error | a bare bounded-context name in one of those same slots is declared in two or more domains. Qualify it as `<domain>/<name>`. |
-| `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference in one of those slots has the wrong shape: an empty segment (`re/ billing`, `re//billing`) or more than two segments (`re/a/b`). |
+| `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at one of exactly four sites: the `sync_action` (`asks`) subject and target, the `async_action` (`notifies`) subject, or the `domain_listen` (`when ... listens`) trigger context. Qualify it as `<domain>/<name>`. It does **not** fire for an internal action's subject or for either side of a `returns` action; an ambiguous name there is not yet checked. |
+| `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (an empty segment like `re/ billing` or `re//billing`, or more than two segments like `re/a/b`) in any bounded-context slot: any action's subject, the `asks` target, the `returns` target, or the trigger context. |
 
 ## Deprecated: Quoted Event Strings
 
