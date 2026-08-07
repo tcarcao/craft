@@ -113,40 +113,35 @@ token's first line and every line in between, and only ever releases the last. A
 definition the end of its line, so a line the token runs off the end of can never carry one, and
 excluding it can only ever remove a false positive.
 
-That reasoning is sound for the interior set, but it does not make the alignment pass as a whole
+That reasoning is sound for the interior set, but it did not on its own make the alignment pass
 total, and an earlier draft of this section said "total" without that qualification. The released
-line is then handed to `splitAnnotation`, which still scans it textually, and two shapes are
-recorded as known limitations below.
+line was then handed to `splitAnnotation`, which scanned it textually.
 
 That was necessary but not sufficient. `splitAnnotation`, the only consumer of the set, held an
 independent rule of its own: any line whose first non-space character was `*` is a comment
 continuation. It vetoed exactly the line the interior change had just released, so for the
-idiomatic `*`-per-line comment style the two rules cancelled and nothing changed. It now
-disqualifies such a line only when the comment does not CLOSE on it, and searches for the
-annotation after the `*/`. Block comments do not nest, so a `*/` cannot occur on a line a comment
-is merely passing through; that is what makes the widening safe rather than lucky.
+idiomatic `*`-per-line comment style the two rules cancelled and nothing changed. Widening it to
+disqualify such a line only when the comment does not CLOSE on it fixed that spelling and left the
+next one broken, which is what finally made the case for removing the textual scan altogether.
+
+**The comment end is handed down too.** `writeTokens` now returns a second map alongside
+`interior`: per emitted line, the byte offset just past the last comment token ending on it.
+`splitAnnotation` takes that offset as a parameter and its entire textual analysis is deleted, the
+leading `//`/`/*`/`*` cases and the scan for a `//` that looked like it opened a comment. What is
+left is the `]` suffix check, `open >= from`, and the empty-body guard.
+
+Every rule that came out falls out of the exact offset instead. A line comment's token runs to end
+of line, so its offset is the line's length and every bracket on the line is comment text. A `//`
+in a URL opens nothing, so no comment ends on that line, the offset is zero, and the annotation
+stands without needing a rule about what follows a `:`. A block comment closing partway along
+reports the offset just past its `*/`, so content after the close aligns whatever the comment's
+first character was.
+
+The offset is a byte offset, not a rune count, because `splitAnnotation` compares it against
+`strings.LastIndex`. A rune count is never larger, so the error would always be in the direction
+that reads comment text as an annotation and rewrites whitespace inside a comment.
 
 ## Known limitations of the alignment pass
-
-Found in the re-review of the fix wave, adjudicated as cosmetic and deliberately not fixed here.
-Neither alters content: both are a missed or overwide alignment on a line that also carries a
-block comment, and both are idempotent.
-
-**A comment closing on a line that begins with a word loses alignment.**
-`formatalign.go:130-150` leaves `from` at zero when the closing line does not start with `*`, so
-the `//` scan runs over comment text. `see // here */ A asks B to c [GET /x]` misses alignment
-while the `*`-led spelling of the same comment aligns. It is the same asymmetry Important 2 fixed,
-one shape further out.
-
-**The alignment column is measured over comment text.** `formatalign.go:47-51` measures the whole
-line, so `/* http://a [9] */ A asks ...` pushes its siblings out by roughly twenty columns. This
-became reachable only because the fix admitted these lines into alignment runs at all; before it,
-the line was excluded and the question never arose.
-
-Both are worth fixing when the alignment pass is next touched. The pass is line oriented and
-re-derives comment structure textually, which is the root of both: the walker already knows where
-every comment token starts and ends, and handing that down rather than re-deriving it would remove
-the class.
 
 **A whitespace-only file never reaches a fixed point.** Formatting alternates between the empty
 string and a single newline: `""` becomes `"\n"`, which becomes `""`, and so on. This predates
@@ -154,6 +149,18 @@ this work and is byte-for-byte unchanged by it, verified by measuring both sides
 than a note in the review suggested: every whitespace-only input collapses to `""` on the first
 pass and then oscillates, not only the two shapes named there. No file in the corpus is
 whitespace-only, and a document with any content at all is a fixed point.
+
+### Recorded in error
+
+This section previously carried a second entry, "the alignment column is measured over comment
+text", on the reasoning that `/* http://a [9] */ A asks B to c [GET /x]` pushes its siblings out
+by roughly twenty columns. It was never measured. Measuring it shows the behaviour is correct: the
+line does share a column with its siblings, and it is wide because the comment on it is wide,
+which is what column alignment does. There is nothing to fix and nothing was changed for it.
+
+It is written down rather than quietly dropped because the reasoning that produced it is the kind
+that recurs. A record that calls correct behaviour a defect costs more than a missing entry: it
+invites a change to code that is already right.
 
 ## Consequences
 

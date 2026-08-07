@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -550,6 +551,126 @@ func TestFormatDocument_AlignsAfterMultilineCommentClose(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestFormatDocument_AlignsAfterAWordLedCommentClose is the shape the
+// alignment pass could not see while it re-derived comment structure from text.
+//
+// `see // here */ A asks ...` closes a block comment on a line that begins with
+// a word. No leading `//`, `/*` or `*` matched, so the old code assumed the
+// line held no comment at all and then found the `//` in the comment's own text
+// and refused the line. The identical comment written with a leading `*`
+// aligned. Same content, different spelling, different result, which is what
+// gives a re-derived answer away.
+func TestFormatDocument_AlignsAfterAWordLedCommentClose(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    /* note\n" +
+		"    see // here */ A asks B to c  [GET /x]\n" +
+		"    A asks B to dddddddd  [GET /y]\n" +
+		"}\n"
+	got := FormatDocument(src)
+
+	var cols []int
+	for _, line := range strings.Split(got, "\n") {
+		if i := strings.Index(line, "[GET"); i >= 0 {
+			cols = append(cols, i)
+		}
+	}
+	if len(cols) != 2 {
+		t.Fatalf("expected 2 annotations, found %d in:\n%s", len(cols), got)
+	}
+	if cols[0] != cols[1] {
+		t.Errorf("annotations not aligned: columns %d and %d in:\n%s", cols[0], cols[1], got)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
+// TestFormatDocument_NonAsciiCommentKeepsItsBracket is the byte-offset half of
+// the walker's answer, at the level where getting it wrong does damage.
+//
+// The comment's end is a byte offset, because splitAnnotation compares it
+// against strings.LastIndex. A rune count would be smaller, and on this line
+// smaller by enough to put the comment's own `[1]` past it: the pass would then
+// read comment text as an annotation and pad it out to the column below, which
+// is whitespace rewritten inside a comment.
+func TestFormatDocument_NonAsciiCommentKeepsItsBracket(t *testing.T) {
+	const note = "    // ééééééééé [1]"
+	if len(note) <= utf8.RuneCountInString(note) {
+		t.Fatalf("fixture must be multi-byte for this test to distinguish the two")
+	}
+	if strings.LastIndex(note, "[") < utf8.RuneCountInString(note) {
+		t.Fatalf("fixture must put the bracket past the line's rune count, or a rune count would also pass")
+	}
+
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		note + "\n" +
+		"    A asks B for c  [POST /v1/x]\n" +
+		"}\n"
+	got := FormatDocument(src)
+
+	if !strings.Contains(got, note+"\n") {
+		t.Errorf("a comment was rewritten by alignment; wanted %q verbatim in:\n%s", note, got)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
+// TestWriteTokens_ReportsWhereCommentTextStops pins the walker's half of the
+// contract directly, so that a change to it fails here rather than as a
+// puzzling alignment result two files away.
+//
+// The three answers below are the three shapes there are: a line comment ends
+// at the line's end, a multi-line comment reports only its LAST line, and the
+// lines it runs off the end of are interior instead. Written as exact offsets
+// rather than a recomputed expectation, because a test that re-derives the
+// answer the same way the code does is the arrangement this fix removed.
+func TestWriteTokens_ReportsWhereCommentTextStops(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    // ünïcode nöte [1]\n" +
+		"    /* nöte\n" +
+		"    see // hère */ A asks B to c  [GET /x]\n" +
+		"}\n"
+	gn, _, _ := syntax.Parse(src)
+
+	var interior map[int]bool
+	var commentEnd map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		interior, commentEnd = writeTokens(&sb, node)
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	// Line 2 is the line comment, which runs to end of line: its end is the
+	// line's BYTE length, 26, not its rune count of 23.
+	// Line 3 opens the block comment and the token runs off the end of it.
+	// Line 4 is where that token stops, 19 bytes along, just past the `*/`.
+	wantEnd := map[int]int{2: len(lines[2]), 4: 19}
+	wantInterior := map[int]bool{3: true}
+
+	if !reflect.DeepEqual(commentEnd, wantEnd) {
+		t.Errorf("commentEnd = %v, want %v, over lines:\n%q", commentEnd, wantEnd, lines)
+	}
+	if !reflect.DeepEqual(interior, wantInterior) {
+		t.Errorf("interior = %v, want %v", interior, wantInterior)
+	}
+	if len(lines[2]) != 26 || utf8.RuneCountInString(lines[2]) != 23 {
+		t.Errorf("fixture drifted: line 2 is %q", lines[2])
+	}
+	if got := lines[4][:19]; !strings.HasSuffix(got, "*/") {
+		t.Errorf("the block comment's end does not land just past its close: %q", got)
+	}
 }
 
 // TestFormatDocument_AlignmentIsIdempotent formats an already-aligned document

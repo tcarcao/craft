@@ -78,9 +78,13 @@ a change to one stage that nobody checked against the next.
    the file's own final newline, so writing one unconditionally grew the file on every format.
 5. `alignAnnotations` (`formatalign.go`) rewrites the run of spaces before a `[`, over the text
    steps 1 to 3 produced. It is line oriented and therefore blind to token boundaries, so
-   `writeTokens` hands it the set of lines a multi-line token runs off the end of, and
-   `splitAnnotation` decides per line which part of it is comment. Those two must agree: they
-   are in different files and each independently vetoes the other.
+   `writeTokens` hands it both answers it cannot work out for itself: the set of lines a
+   multi-line token runs off the end of, and the byte offset per line just past the last comment
+   token ending on it. There is one source of truth for where a comment stops, and it is the
+   walker. Nothing in this step reads the shape of a line to decide what part of it is comment.
+   It used to, by pattern-matching leading `//`, `/*` and `*`, and each alignment defect on this
+   pass was a spelling those patterns missed. See
+   [lossless-token-text.md](lossless-token-text.md).
 
 ## Architecture
 
@@ -92,7 +96,7 @@ One walker over `root.AllTokens()`. It replaces `formatUseCaseDecl`, `formatCont
 deleted" below. It has since been deleted, once the parser stopped folding trailing comments
 into a whitespace token. See [lossless-token-text.md](lossless-token-text.md).
 
-The walker (`writeTokens`, `internal/lsp/formatter.go:233-317`) holds five pieces of state:
+The walker (`writeTokens`, `internal/lsp/formatter.go:260-403`) holds five pieces of state:
 brace depth, scenario depth, the raw whitespace text accumulated since the last emitted token
 (`gap`), the previous token emitted, and whether that previous token opened the current
 scenario. There is no discrete "line just ended" or "blank line pending" boolean: `separatorFor`
@@ -353,10 +357,15 @@ necessary and not sufficient: `splitAnnotation`, the set's only consumer, indepe
 any line whose first non-space character was `*`, which is exactly what the idiomatic
 `*`-per-line comment style produces on its closing line. The two rules cancelled, and the fix
 read as complete because the test fixture chosen used the bare `*/` style that only the first
-rule governs. `splitAnnotation` now disqualifies such a line only when the comment does not close
-on it, and searches for the annotation after the `*/`. Both closing styles align. The narrowed
-interior set also fixed a defect in the other direction, where a comment opened partway along a
-line of content left its body text being padded as though it were an action.
+rule governs. `splitAnnotation` was widened to disqualify such a line only when the comment does
+not close on it, and to search for the annotation after the `*/`. Both closing styles aligned. The
+narrowed interior set also fixed a defect in the other direction, where a comment opened partway
+along a line of content left its body text being padded as though it were an action.
+
+That widening has since been superseded: `splitAnnotation` no longer reads the line at all, and is
+told where comment text stops by `writeTokens`. Adding one more pattern to a textual scan is what
+this whole record argues against, and the second time the same defect shape appeared it was clear
+enough. See [lossless-token-text.md](lossless-token-text.md).
 
 **`trailingCommentLines` stripped interior indentation.** A comment after the last declaration
 went through `trailingCommentLines` rather than the walker, and that function trimmed each line.

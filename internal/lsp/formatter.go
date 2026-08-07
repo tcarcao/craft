@@ -101,8 +101,8 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			// by blank lines, and top-level declarations are always joined by
 			// one, so no run could ever have spanned two declarations anyway.
 			var decl strings.Builder
-			interior := writeTokens(&decl, node)
-			sb.WriteString(alignAnnotations(decl.String(), interior))
+			interior, commentEnd := writeTokens(&decl, node)
+			sb.WriteString(alignAnnotations(decl.String(), interior, commentEnd))
 		}
 	}
 
@@ -223,7 +223,14 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // formatter has never seen still round-trips, because nothing here inspects
 // what a token means.
 //
-// It returns the set of written line indices that fall INSIDE a token rather
+// It returns two pieces of bookkeeping, both for alignAnnotations, and both
+// for the same reason: that pass is line oriented, so it sees the walker's
+// output only as text and cannot recover where a token began or ended. The
+// walker is the one place that knows both exactly, so it is the place that
+// answers, rather than leaving a downstream pass to guess from the shape of a
+// line.
+//
+// interior is the set of written line indices that fall INSIDE a token rather
 // than between two of them: every line a multi-line token spans EXCEPT its
 // last. The rule is "the token's text runs to the end of this line". That is
 // true of the token's first line (the token starts partway along it and then
@@ -233,19 +240,24 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // a line the token runs off the end of can never carry one, so excluding it
 // only ever removes a false positive.
 //
-// Only alignAnnotations needs this, and only because
-// it is line oriented: a multi-line block comment is one token carrying
-// newlines, so a pass that splits the output into lines cannot tell that
-// pass's interior lines apart from real ones and will happily rewrite the
-// whitespace in them. The walker is the one place that knows, exactly and
-// without heuristics, where a token's text starts and stops, so it is the
-// place that answers.
-//
-// Today only comments produce a multi-line token, but the set is kept in terms
+// Today only comments produce a multi-line token, but interior is kept in terms
 // of tokens rather than of comments: the invariant the formatter rests on is
 // that whitespace BETWEEN tokens is the only thing any pass may touch, and that
 // holds whatever kind of token grows a newline next.
-func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
+//
+// commentEnd maps a written line index to the BYTE offset within that line just
+// past the end of the last comment token that ENDS on it. Lines with no comment
+// ending on them are absent, which reads as zero: nothing on the line is
+// comment, so an annotation may sit anywhere. A `[` at or after the recorded
+// offset is outside every comment on the line and can be a real annotation; one
+// before it is comment text. Byte offsets rather than rune counts, because
+// splitAnnotation compares against strings.LastIndex, which is a byte index.
+//
+// A line comment runs to the end of its line by definition, so its offset is
+// the line's length and every bracket on the line falls before it. A block
+// comment closing partway along a line yields the offset just past its `*/`,
+// which is exactly where ordinary content resumes.
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map[int]int) {
 	braceDepth := 0
 	scenarioDepth := 0
 	gap := ""
@@ -254,6 +266,20 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 
 	line := 0
 	var interior map[int]bool
+	var commentEnd map[int]int
+
+	// col is the byte length of the output line currently being built, over
+	// everything this walker has written. It is tracked incrementally rather
+	// than measured from the builder, because strings.Builder cannot be read
+	// without materialising the whole declaration on every token.
+	col := 0
+	advance := func(s string) {
+		if n := strings.LastIndexByte(s, '\n'); n >= 0 {
+			col = len(s) - n - 1
+			return
+		}
+		col += len(s)
+	}
 
 	toks := node.AllTokens()
 	for i, tok := range toks {
@@ -316,6 +342,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 		sb.WriteString(tok.Text())
 
 		line += strings.Count(sep, "\n")
+		advance(sep)
 		if n := strings.Count(tok.Text(), "\n"); n > 0 {
 			// Every line this token runs off the end of is interior: its own
 			// first line (line) and each line in between. Only the last line
@@ -337,6 +364,21 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 			}
 			line += n
 		}
+		advance(tok.Text())
+
+		// Where the comment stops is recorded for the line it stops ON, which
+		// for a multi-line comment is its last: line has already been advanced
+		// past the newlines the token carries. Recording it for every comment
+		// kind, single-line and multi-line alike, is what lets the alignment
+		// pass drop its own reading of what a line looks like. Later comments
+		// on the same line overwrite earlier ones, so what survives is the last
+		// one to end there, which is the only one that can shadow a `[`.
+		if isCommentKind(tok.Kind()) {
+			if commentEnd == nil {
+				commentEnd = make(map[int]int, 1)
+			}
+			commentEnd[line] = col
+		}
 
 		if tok.Kind() == syntax.SyntaxKindLBrace {
 			braceDepth++
@@ -357,7 +399,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) map[int]bool {
 		prevLedScenario = leadsScenario
 	}
 
-	return interior
+	return interior, commentEnd
 }
 
 // nextRealTokenIsWhen reports whether the first token after i that carries
