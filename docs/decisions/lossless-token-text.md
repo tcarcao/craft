@@ -11,7 +11,7 @@ The token-stream formatter was built on a stated invariant: every non-whitespace
 written verbatim, exactly once, in document order. That invariant is only as strong as the
 tree's own guarantee about token text, and craft's guarantee was weaker than it looked.
 
-`syntax.Parse` asserts `checkTreeWidth(root, len(src))` — that token widths *sum* to the file
+`syntax.Parse` asserts `checkTreeWidth(root, len(src))`, which says only that token widths *sum* to the file
 length. Rowan, the model this parser cites, guarantees something stronger: concatenating the
 tokens *reproduces the source*. Width equality is a checksum. It catches length drift and
 nothing else.
@@ -20,7 +20,7 @@ Two defects hid behind it.
 
 **Tokens could lie about their own text.** `tokenText` (parser.go) returns raw source only when
 `tok.Raw != ""`, and three emit sites bypass it entirely with `tok.Value`. For an unterminated
-string the tree carries text `Oops` at a range whose bytes are `"Oop` — same width, different
+string the tree carries text `Oops` at a range whose bytes are `"Oop`: same width, different
 content. `testdata/broken/unclosed_notifies_string.craft` demonstrates it at `len(src) == 331`
 and `len(concat) == 331`. One file in 94 violates text equality; every one of the 94 passes the
 width check.
@@ -43,7 +43,7 @@ stripped indentation.
 Four properties, in dependency order:
 
 1. **The lexer is infallible and total.** `rustc_lexer` never fails and never skips a byte. An
-   unterminated string is still a token — `Str { terminated: false }` — spanning from the
+   unterminated string is still a token, `Str { terminated: false }`, spanning from the
    opening quote onward, text intact, quote included.
 2. **Errors travel out of band.** Malformedness is carried by the token *kind* plus a parallel
    error list keyed by offset. Never by mutating the token's text.
@@ -53,7 +53,7 @@ Four properties, in dependency order:
 4. **Round-trip is asserted.** `to_string()` reproduces the source.
 
 The fourth is only safe because of the first. Because tokens are slices of source and nothing is
-ever repaired or dropped, no *input* can violate round-trip — only a *bug in the parser* can.
+ever repaired or dropped, no *input* can violate round-trip; only a *bug in the parser* can.
 
 That is the load-bearing insight here. The question is not how loudly to complain about
 malformed files; it is to make the violation structurally impossible and then assert as a
@@ -66,9 +66,17 @@ range rather than trusting `Value` or `Raw`. This closes the class, not the inst
 kind added later cannot reintroduce the bug, because there is no longer a code path that
 constructs token text from anything but the source.
 
-**Text equality replaces width equality.** `checkTreeWidth` becomes `checkTreeText`. It is a
-hard failure rather than a diagnostic, because after the emit-site change it can only ever
-indicate a craft bug.
+**Text equality replaces width equality.** `checkTreeWidth` becomes `checkTreeText`.
+
+Its severity is split by build context, and the reason is worth stating because it is where craft
+diverges from rust-analyzer. After the emit-site change a violation can only indicate a craft bug,
+never bad input, so under test it panics: loud, unmissable, and impossible for CI to skip.
+It does not panic in production, because `syntax.Parse` is reached from `pkg/craft/parse.go`,
+which is craft's *public library API*. A panic there crashes the consumer's process, not ours.
+rust-analyzer can assert freely because it is only ever an LSP, where the worst case is one
+degraded request; craft is both an LSP and an embedded library, so it does not get that freedom.
+The LSP itself is shielded either way by the per-handler recovery at `internal/lsp/middleware.go`.
+`testing.Testing()` selects between the two.
 
 **Trailing trivia is tokenized.** The trivia loop runs after the last declaration, so a comment
 at end of file becomes a `LineComment`/`BlockComment` token like every other comment.
@@ -88,6 +96,6 @@ All three recorded limitations are removed rather than mitigated.
 it was defending is now guaranteed upstream, so it becomes a tripwire rather than a safety net.
 
 The tree now faithfully carries malformed source. An unterminated string keeps its opening
-quote, where previously the parser silently repaired it. This is the correct behaviour — it is
-what makes the formatter safe on files that do not parse cleanly — but it is a visible change
+quote, where previously the parser silently repaired it. This is the correct behaviour, and it is
+what makes the formatter safe on files that do not parse cleanly, but it is a visible change
 for any consumer that was relying on the repaired form.

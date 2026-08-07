@@ -67,8 +67,9 @@ One walker over `root.AllTokens()`. It replaces `formatUseCaseDecl`, `formatCont
 `formatGlossaryDecl`, `formatDecl`, `writeBlockStatements`, `writeRefWithComments`, and
 `significantTokens`.
 
-`trailingCommentLines` is not among them: it stays, and does not go away, for the reason given
-under "What gets deleted" below.
+`trailingCommentLines` was not among them: it stayed, for the reason given under "What gets
+deleted" below. It has since been deleted, once the parser stopped folding trailing comments
+into a whitespace token. See [lossless-token-text.md](lossless-token-text.md).
 
 The walker (`writeTokens`, `internal/lsp/formatter.go:233-317`) holds five pieces of state:
 brace depth, scenario depth, the raw whitespace text accumulated since the last emitted token
@@ -214,13 +215,21 @@ Roughly 300 of `internal/lsp/formatter.go`'s 626 lines:
 - `writeBlockStatements`, `writeRefWithComments`, `writeCommentLines`
 - `significantTokens`, `isCommentKind`
 
-**`trailingCommentLines` stays.** An earlier draft listed it for deletion on the belief that
-end-of-file comments are ordinary tokens the walker would pick up. They are not: the parser
-folds everything past the last real token into a single `SyntaxKindWhitespace` token, so the
-bytes survive in the tree but no token carries a comment kind. That is exactly why a file
-ending in a comment lost it, and a comment-only file was truncated to zero bytes, before
-v2.16.0 fixed both. Deleting the function reintroduces those two defects. It reaches the text
-through the trivia rather than through the kind, which is the only way to recover it.
+**`trailingCommentLines` stays.** *(Superseded. It was deleted in the follow-up work recorded in
+[lossless-token-text.md](lossless-token-text.md); the reasoning below was correct at the time and
+is kept because it shows why the fix had to happen in the parser.)*
+
+An earlier draft listed it for deletion on the belief that end-of-file comments are ordinary
+tokens the walker would pick up. They were not: the parser folded everything past the last real
+token into a single `SyntaxKindWhitespace` token, so the bytes survived in the tree but no token
+carried a comment kind. That is exactly why a file ending in a comment lost it, and a
+comment-only file was truncated to zero bytes, before v2.16.0 fixed both. Deleting the function
+at that point would have reintroduced both defects. It reached the text through the trivia rather
+than through the kind, which was the only way to recover it.
+
+The conclusion held; the premise was the bug. Once `peek()`'s skipping of comment tokens was
+identified as the reason trailing comments were never consumed, tokenizing them made the function
+dead rather than load-bearing, and it was deleted with no replacement.
 
 `writeAlignedActions` survives in spirit as the alignment post-pass.
 
@@ -245,31 +254,34 @@ tokens covered by the strongest assertion:
 Under this design that assertion should be impossible to fail rather than merely observed to
 pass, which is the difference the rewrite buys.
 
-`contentDrift` stays as a runtime guard. It is unreachable for any document the parser accepts
-without diagnostics, and load bearing for those it does not.
+`contentDrift` stays as a runtime guard, and is now unreachable from any input at all.
 `TestFormatDocument_EveryCraftFileInRepo` (`internal/lsp/formatter_corpus_test.go:154-161`)
 asserts it does not fire for any file in the corpus, so that if the invariant is ever broken it
 surfaces immediately rather than as a silent no-op.
 
-The reachable half is real and is pinned by
-`TestFormatDocumentChecked_DriftPathIsReachable`. An unterminated string at end of line, as in
+This section originally documented a reachable half. An unterminated string at end of line, as in
 
     use_case "X" {
       when U does x A notifies "Oops
     }
 
-produces ZERO diagnostics, so `bailsFormatting` lets it through. The lexer yields an `Ident`
-whose `Text()` is `Oops` at the offset of the `"`, with the leftover byte landing in a
-`Whitespace` token as `s\n`. The widths still sum, so the tree passes the losslessness check
-that compares `root.Width()` against `len(src)`, but concatenating `AllTokens()` text does not
-reproduce the source, and no walk over those tokens can. `contentDrift` catches it and the
-formatter returns the input untouched.
+produces ZERO diagnostics, so `bailsFormatting` let it through, and the lexer yielded a token
+whose `Text()` was `Oops` at the offset of the `"`, with the leftover byte landing in a
+`Whitespace` token. The widths still summed, so the tree passed a losslessness check that
+compared `root.Width()` against `len(src)`, but concatenating `AllTokens()` text did not
+reproduce the source, and no walk over those tokens could.
 
-That is a lexer defect upstream of the formatter and predates this branch: a token whose
-`Text()` differs from the source bytes at its own range is a losslessness violation, and every
-consumer of the token stream rests on that property. It is worth fixing where it lives rather
-than here. The formatter's message therefore does not ask for a bug report, since for the only
-known trigger the bug is not the formatter's and the file is a typo.
+That was a parser defect upstream of the formatter, and it has since been fixed where it lives:
+see [lossless-token-text.md](lossless-token-text.md). Token text is now a slice of the source at
+every emit site, and `checkTreeText` asserts that concatenating the tokens reproduces the file.
+The fixture above now parses, formats, and returns byte-identical with its opening quote intact.
+
+So `contentDrift` no longer defends against parser bugs; the parser defends against those itself.
+What it still defends against is a bug in the formatter's own walker dropping, duplicating, or
+reordering a token, which no upstream invariant can rule out. That makes it belt-and-braces
+rather than load bearing. Because no real input reaches it, it is covered by
+`TestContentDrift_RefusesToLoseContent`, which unit-tests the function directly across all four
+cases: whitespace-only change, dropped content, duplicated content, and reordered content.
 
 ## Re-blessing
 
@@ -299,25 +311,35 @@ that bail-out stays in front of the walker.
 - changing indent width, or any style decision not listed under Behaviour changes
 - LSP navigation for qualified names, which is tracked separately
 
-## Known limitations, found during review and deliberately not fixed here
+## Known limitations, found during review and since fixed
 
-**A comment closing on a line that also carries an annotation loses alignment on that line.**
-`writeTokens` marks every emitted line after a token's first as interior to it, so when a
-multi-line comment's `*/` shares a line with a following annotated action, that whole physical
-line is excluded from the alignment run. The annotation keeps whatever spacing the author
-wrote while its siblings align to a column. No content is altered and the result is
-idempotent, so this is a missed alignment rather than a correctness problem. No file in the
-repository has the shape.
+This section originally recorded three limitations that this branch deliberately did not fix.
+All three have since been fixed. The design record for that work is
+[lossless-token-text.md](lossless-token-text.md); this section is kept rather than deleted so
+the reasoning stays legible.
 
-**`trailingCommentLines` strips interior indentation.** A comment after the last declaration
-goes through `trailingCommentLines` rather than the walker, and that function trims each line,
-so `   note [1]` comes back as `note [1]`. This predates the rewrite and is untouched by it.
-It is the one remaining path that renders a comment without going through the token walk.
+Two of the three turned out not to be formatter limitations at all. They were parser defects
+that the formatter had grown workarounds for, which is why they resisted being fixed here.
 
-**The lexer can emit a token whose text does not match its own source range.** For an
-unterminated string at end of line it yields an Ident whose `Text()` is the string body while
-the leftover byte lands in a Whitespace token. Widths still sum, so `root.Width() == len(src)`
-passes, which makes that assertion weaker than it reads: it proves the tree spans the source,
-not that concatenating token text reproduces it. This is upstream of the formatter and affects
-every consumer that rebuilds text from tokens. It is why `contentDrift` remains reachable and
-therefore load-bearing.
+**A comment closing on a line that also carries an annotation lost alignment on that line.**
+`writeTokens` marked every emitted line after a token's first as interior to it, so when a
+multi-line comment's `*/` shared a line with a following annotated action, that whole physical
+line was excluded from the alignment run. Fixed by marking only the lines strictly between a
+token's first and last: a token that ends mid-line no longer claims the rest of that line.
+
+**`trailingCommentLines` stripped interior indentation.** A comment after the last declaration
+went through `trailingCommentLines` rather than the walker, and that function trimmed each line.
+The root cause was in the parser: `peek()` skips comment tokens, so at end of file the main loop
+exited with trailing comments unconsumed and they were swept into a single `Whitespace` token.
+No token-walking consumer could see them, which is the only reason the scraping path existed.
+Fixed by tokenizing trailing trivia; `trailingCommentLines` was then deleted rather than
+repaired, and the indentation strip went with it.
+
+**The parser could emit a token whose text did not match its own source range.** For an
+unterminated string at end of line it yielded a token whose `Text()` was the string body while
+the leftover byte landed in a Whitespace token. Widths still summed, so `root.Width() == len(src)`
+passed. The deeper reason that check could never catch this: token length was *derived from token
+text*, so a wrong text produced a length wrong by exactly the same amount. Width equality was not
+merely a weak test of this property, it was structurally incapable of testing it. Fixed by
+recording each token's byte end in the lexer, slicing token text from source at every emit site,
+and replacing the width check with `checkTreeText`.
