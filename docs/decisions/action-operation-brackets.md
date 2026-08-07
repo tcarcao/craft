@@ -212,9 +212,21 @@ There is no domain scope on `use_case` today, and this decision does not add one
 by two or more domains (`validate.go:380-394`). The actionable gap is that
 `buildDependencyEdges` silently drops that case instead of reporting it.
 
-So: emit `craft/sema/ambiguous-bc` for use-case action subjects and targets that resolve
+So: emit `craft/sema/ambiguous-bc` wherever a use case resolves a bounded context
 ambiguously, with the fix being to write `re/billing`. This is what makes dropping `bc:`
 safe, the ambiguity that qualification was papering over becomes a diagnostic instead.
+
+`buildDependencyEdges` resolves bounded contexts at three sites, all of which previously
+dropped the ambiguous case silently, and all three are now diagnosed:
+
+1. `sync_action` subject and target (`asks`)
+2. `async_action` subject (`notifies`)
+3. `domain_listen` trigger context (`when X listens ...`)
+
+Only site 1 lost its `kind:` escape hatch in this release, so covering 2 and 3 is not
+strictly required to make the breaking change safe. It is covered anyway, because a
+value that silently vanishes from the dependency graph is a bug regardless of whether
+the author had a workaround, and because one rule is easier to document than three.
 
 Adding `use_case "..." in <domain>` scoping is deferred until someone hits a case where
 per-file scoping would genuinely reduce noise.
