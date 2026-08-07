@@ -2312,18 +2312,20 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			// entity.name.type, connector words like "to" → keyword.operator).
 			phraseWordIdx := s.semanticTokenTypeIndex("craft-phrase-word")
 			if phraseWordIdx >= 0 && trigger.Kind() == "external" {
-				subjectSkipped := false
-				for _, tok := range trigger.Tokens() {
+				// The subject is already handled above, so skip its tokens.
+				// A qualified subject (re/billing) is more than one token, so
+				// take the span from the AST rather than skipping just one.
+				subjectSpan := trigger.SubjectSpan()
+				for i, tok := range trigger.Tokens() {
+					if i < subjectSpan {
+						continue
+					}
 					if tok.Kind() != syntax.SyntaxKindIdent {
 						continue
 					}
 					tokLine, _, tokOk := tokPosVal(tok)
 					if !tokOk {
 						continue
-					}
-					if !subjectSkipped {
-						subjectSkipped = true
-						continue // subject already handled above
 					}
 					val := tok.Text()
 					if len(val) == 0 {
@@ -2453,12 +2455,16 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 
 	switch kind {
 	case "internal_action":
-		// toks: [subject, verb, (connector?), phrase...]
-		if len(toks) < 2 {
+		// toks: [subject..., verb, (connector?), phrase...]
+		// The subject may be a multi-token Ref (e.g. "re/billing"), so take the
+		// verb token and the connector position from the AST rather than
+		// assuming the subject is exactly one token wide.
+		verbTok := action.VerbToken()
+		if verbTok == nil {
 			return nil
 		}
-		emit(toks[1], verbIdx) // verb
-		start := 2
+		emit(*verbTok, verbIdx)
+		start := action.SlotEndIndex()
 		// connector is always SyntaxKindIdent for internal_action (parser guarantee)
 		if start < len(toks) && isConnectorWord(toks[start].Text()) && tokLineNum(toks[start]) == actionLine {
 			emit(toks[start], connIdx)
@@ -2504,14 +2510,11 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 		// whether a target is present. Pass 1's kind→type table already
 		// classifies SyntaxKindKwTo as craft-connector-word, so re-emitting
 		// it here would double-emit it, and the real connector word would
-		// never be classified. Return-action targets are always a single
-		// token (never a multi-token slug ref), so walk positionally
-		// instead, mirroring phraseStartIndex's return_action branch in
-		// internal/syntax/ast.go.
-		start := 2
-		if start < len(toks) && toks[start].Kind() == syntax.SyntaxKindKwTo {
-			start += 2 // skip `to target`
-		}
+		// never be classified. ActionDecl.SlotEndIndex gives the index just
+		// past the subject, `returns` and any `to <target>` pair — which is
+		// exactly where that connector word sits — and accounts for a
+		// multi-token Ref subject or target (e.g. "re/billing").
+		start := action.SlotEndIndex()
 		if start < len(toks) && tokLineNum(toks[start]) == actionLine && isConnectorWord(toks[start].Text()) {
 			emit(toks[start], connIdx)
 			start++

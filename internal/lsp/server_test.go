@@ -4484,3 +4484,160 @@ func TestFoldingRanges_UseCaseAndExposure(t *testing.T) {
 	}
 	cancel()
 }
+
+// TestSemanticTokens_QualifiedSubject is the Task 6b counterpart to
+// TestSemanticTokens_SlugTarget. Once the action subject may itself be a
+// multi-token Ref ("re/billing" flattens to three leaf tokens: re, /,
+// billing), classifyActionIdents can no longer read the verb at token 1 or
+// start the connector/phrase scan at token 2. Both the internal_action and
+// return_action branches walk positionally, so both are covered here: a wrong
+// offset would colour the subject's own segments as phrase words and miss the
+// real verb and connector.
+func TestSemanticTokens_QualifiedSubject(t *testing.T) {
+	serverIn, testOut := io.Pipe()
+	testIn, serverOut := io.Pipe()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	defer testOut.Close()
+
+	br := bufio.NewReader(testIn)
+	id := 1
+
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &id, Method: "initialize",
+		Params: json.RawMessage(`{"processId":null,"rootUri":null,"capabilities":{}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readMsg(br); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMsg(testOut, lspMsg{JSONRPC: "2.0", Method: "initialized", Params: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Line 0: use_case "QualifiedSubject" {
+	// Line 1:   when re/Billing creates Account
+	//   col 10: Billing   (len 7)  — trigger subject ref segment, NOT craft-phrase-word
+	//   col 26: Account   (len 7)  — phrase word → craft-phrase-word (33)
+	// Line 2:     re/billing validates the invoice
+	//   col 4:  re        (len 2)  — subject ref segment, NOT craft-phrase-word
+	//   col 7:  billing   (len 7)  — subject ref segment, NOT craft-phrase-word
+	//   col 15: validates (len 9)  — verb → craft-regular-verb (27)
+	//   col 25: the       (len 3)  — connector → craft-connector-word (29)
+	//   col 29: invoice   (len 7)  — phrase word → craft-phrase-word (33)
+	// Line 3:     re/billing returns to re/ledger charge result
+	//   col 29: ledger    (len 6)  — target ref segment, NOT craft-phrase-word
+	//   col 36: charge    (len 6)  — phrase word → craft-phrase-word (33)
+	//   col 43: result    (len 6)  — phrase word → craft-phrase-word (33)
+	src := "use_case \"QualifiedSubject\" {\n" +
+		"  when re/Billing creates Account\n" +
+		"    re/billing validates the invoice\n" +
+		"    re/billing returns to re/ledger charge result\n" +
+		"}"
+	id++
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", Method: "textDocument/didOpen",
+		Params: json.RawMessage(fmt.Sprintf(
+			`{"textDocument":{"uri":"file:///qualified_subject.craft","languageId":"craft","version":1,"text":%s}}`,
+			mustMarshalString(src),
+		)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	id++
+	tokID := id
+	if err := writeMsg(testOut, lspMsg{
+		JSONRPC: "2.0", ID: &tokID,
+		Method: "textDocument/semanticTokens/full",
+		Params: json.RawMessage(`{"textDocument":{"uri":"file:///qualified_subject.craft"}}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp lspMsg
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		msg, err := readMsg(br)
+		if err != nil {
+			t.Fatalf("reading: %v", err)
+		}
+		if msg.ID != nil && *msg.ID == tokID {
+			resp = msg
+			break
+		}
+	}
+	if resp.ID == nil {
+		t.Fatal("timed out waiting for qualified subject token response")
+	}
+
+	var result struct {
+		Data []uint32 `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	type absToken struct{ line, startChar, length, tokenType uint32 }
+	byPos := make(map[[2]uint32]absToken)
+	var curLine, curChar uint32
+	for i := 0; i+4 < len(result.Data); i += 5 {
+		dl, dc, ln, tt := result.Data[i], result.Data[i+1], result.Data[i+2], result.Data[i+3]
+		curLine += dl
+		if dl > 0 {
+			curChar = dc
+		} else {
+			curChar += dc
+		}
+		byPos[[2]uint32{curLine, curChar}] = absToken{curLine, curChar, ln, tt}
+	}
+
+	const craftRegularVerb = 27
+	const craftConnectorWord = 29
+	const craftPhraseWord = 33
+
+	notPhrase := []struct {
+		name       string
+		line, char uint32
+	}{
+		{"Billing (trigger subject)", 1, 10},
+		{"re (internal_action subject)", 2, 4},
+		{"billing (internal_action subject)", 2, 7},
+		{"re (return_action subject)", 3, 4},
+		{"billing (return_action subject)", 3, 7},
+		{"ledger (return_action target)", 3, 29},
+	}
+	for _, c := range notPhrase {
+		if tok, ok := byPos[[2]uint32{c.line, c.char}]; ok && tok.tokenType == craftPhraseWord {
+			t.Errorf("%s: got craft-phrase-word, want anything else (it is a ref segment)", c.name)
+		}
+	}
+
+	want := []struct {
+		name       string
+		line, char uint32
+		tokenType  uint32
+	}{
+		{"Account", 1, 26, craftPhraseWord},
+		{"validates", 2, 15, craftRegularVerb},
+		{"the", 2, 25, craftConnectorWord},
+		{"invoice", 2, 29, craftPhraseWord},
+		{"charge", 3, 36, craftPhraseWord},
+		{"result", 3, 43, craftPhraseWord},
+	}
+	for _, c := range want {
+		tok, ok := byPos[[2]uint32{c.line, c.char}]
+		if !ok {
+			t.Errorf("%s not found at line %d col %d", c.name, c.line, c.char)
+			continue
+		}
+		if tok.tokenType != c.tokenType {
+			t.Errorf("%s: got tokenType %d, want %d", c.name, tok.tokenType, c.tokenType)
+		}
+	}
+}

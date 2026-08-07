@@ -130,14 +130,8 @@ use_case "X" {
 // The notifies subject is unambiguous here (Subscriptions is declared in
 // only one domain), so no diagnostic should fire. This is the async-site
 // counterpart to TestAmbiguousBC_QualifiedTargetIsClean: it proves the
-// predicate does not over-fire on a clean bare name.
-//
-// Note: unlike the asks target slot, the grammar does not support a
-// qualified <domain>/<name> form in the notifies subject position or the
-// listens trigger context below. SubjectName() and ContextName() both
-// read a single plain token with no ref-awareness (see ast.go), so
-// "re/billing notifies ..." does not parse as one qualified subject. An
-// unambiguous bare name is the correct clean-case test for these two sites.
+// predicate does not over-fire on a clean bare name. The qualified form of
+// the same clean case is covered by TestAmbiguousBC_QualifiedSubjectsAreClean.
 func TestAmbiguousBC_UnambiguousNotifiesSubjectIsClean(t *testing.T) {
 	src := `domain re {
   Billing
@@ -189,9 +183,9 @@ use_case "X" {
 }
 
 // Clean-case counterpart to TestAmbiguousBC_InListensTrigger: the trigger
-// context (Subscriptions) is unambiguous, so no diagnostic should fire. See
-// the note on TestAmbiguousBC_UnambiguousNotifiesSubjectIsClean for why this
-// uses an unambiguous bare name rather than a qualified ref.
+// context (Subscriptions) is unambiguous, so no diagnostic should fire. The
+// qualified form of the same clean case is covered by
+// TestAmbiguousBC_QualifiedSubjectsAreClean.
 func TestAmbiguousBC_UnambiguousListensContextIsClean(t *testing.T) {
 	src := `domain re {
   Billing
@@ -245,5 +239,61 @@ use_case "X" {
 	}
 	if ambiguous[0].Range.Start.Character == ambiguous[1].Range.Start.Character {
 		t.Errorf("subject and target diagnostics must not share a position, got both at character %d", ambiguous[0].Range.Start.Character)
+	}
+}
+
+// Task 6b: the action subject and the domain_listen trigger context accept
+// the qualified <domain>/<name> form, so the fix craft/sema/ambiguous-bc
+// recommends ("qualify it as <domain>/<name>") is expressible at every site
+// the diagnostic fires from. Each case below is the ambiguous fixture from
+// the tests above with the ambiguous bare Billing qualified; the diagnostic
+// must fall silent. This is the test that proves the point of the task: an
+// ambiguous name the user cannot disambiguate is a broken message.
+func TestAmbiguousBC_QualifiedSubjectsAreClean(t *testing.T) {
+	const domains = `domain re {
+  Billing
+  Subscriptions
+}
+
+domain ops {
+  Billing
+}
+
+`
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "asks subject",
+			body: "use_case \"X\" {\n  when U does x\n    re/Billing asks Subscriptions to renew\n}",
+		},
+		{
+			name: "notifies subject",
+			body: "use_case \"X\" {\n  when U does x\n    re/Billing notifies \"Charged\"\n}",
+		},
+		{
+			name: "listens trigger context",
+			body: "use_case \"X\" {\n  when re/Billing listens \"Charged\"\n    Subscriptions validates charge\n}",
+		},
+		{
+			name: "returns target",
+			body: "use_case \"X\" {\n  when U does x\n    Subscriptions returns to re/Billing charge result\n}",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, d := range analyzeSingleFileForTest(t, domains+tc.body) {
+				if d.Code == "craft/sema/ambiguous-bc" {
+					t.Errorf("qualified ref must not be ambiguous, got %+v", d)
+				}
+				// Guards against passing vacuously: if the qualified form
+				// stopped parsing, the absence of the ambiguity diagnostic
+				// above would prove nothing.
+				if d.Code == "craft/syntax/unexpected-token" {
+					t.Errorf("qualified ref must parse cleanly, got %+v", d)
+				}
+			}
+		})
 	}
 }

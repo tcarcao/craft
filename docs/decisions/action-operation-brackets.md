@@ -228,6 +228,25 @@ strictly required to make the breaking change safe. It is covered anyway, becaus
 value that silently vanishes from the dependency graph is a bug regardless of whether
 the author had a workaround, and because one rule is easier to document than three.
 
+Covering all three sites exposed a gap: the diagnostic tells the author to "qualify it
+as `<domain>/<name>`", but only the `asks` target slot could express that. The action
+subject and the trigger context each consumed a single identifier. Rather than weaken
+the message, every slot that names a bounded context now accepts the qualified form:
+
+```craft
+use_case "X" {
+  when re/billing listens vas.VasApplied
+    re/billing asks Ledger to record the entry
+    re/billing notifies billing.ChargeSucceeded
+    re/subscriptions returns to re/billing charge result
+}
+```
+
+A `kind:` prefix stays rejected in all of them, for the same reason it is rejected in
+the `asks` target. The trigger subject is consumed before its verb is known, so an
+external trigger accepts a qualified actor too; that falls out of the grammar rather
+than being a separate decision.
+
 Adding `use_case "..." in <domain>` scoping is deferred until someone hits a case where
 per-file scoping would genuinely reduce noise.
 

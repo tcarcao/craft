@@ -211,14 +211,18 @@ func projectTriggerFromView(t TriggerDecl) model.Trigger {
 			ref = refIfWrapped(elems[2])
 		}
 	default: // external
-		// Match lower.go lowerTrigger: read by token position, not by kind.
-		// Actor is tokens[0] (may be a keyword like KwUser, not SyntaxKindIdent).
+		// Match lower.go lowerTrigger: read by position, not by kind. The
+		// actor is element 0 (may be a keyword like KwUser or KwCron rather
+		// than SyntaxKindIdent, or a multi-token qualified Ref since Task 6b),
+		// and the verb is element 1, whose token index therefore depends on
+		// the actor's span.
 		tokens := t.Tokens()
-		if len(tokens) >= 1 {
-			actor = tokens[0].Text()
+		elems := significantElements(t.node)
+		if len(elems) >= 1 {
+			actor = refAwareText(elems[0])
 		}
-		if len(tokens) >= 2 {
-			verb = tokens[1].Text()
+		if i := tokenIndexAt(elems, 1); i < len(tokens) {
+			verb = tokens[i].Text()
 		}
 		// phrase is the exact raw source substring (Bug 8a fix), not a
 		// space-joined reconstruction that would insert spaces into tight
@@ -273,16 +277,12 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) model.Ac
 		// a.ConnectorValue() only returns KwTo; must check tokens for "for" too.
 		{
 			tokens := a.Tokens()
-			// target (tokens index 2) may be a multi-token Ref (Task 4, e.g.
-			// bc:re/billing spans 5 flat tokens); skip its actual span rather
-			// than assuming exactly one flat token, or the connector/phrase
-			// split below would start mid-ref.
-			i := 2 // after subject, asks
-			if elems := significantElements(a.node); len(elems) > 2 {
-				i += elementSpan(elems[2])
-			} else {
-				i++
-			}
+			// The subject (Task 6b) and the target (Task 4) may each be a
+			// multi-token Ref (bc:re/billing spans 5 flat tokens), so ask the
+			// AST where the structural slots end rather than assuming one
+			// token per slot, or the connector/phrase split below would start
+			// mid-ref.
+			i := slotEndIndex(a) // after subject, asks, target
 			if i < len(tokens) {
 				tok := tokens[i]
 				if tok.Kind() == SyntaxKindKwTo || (tok.Kind() == SyntaxKindIdent && tok.Text() == "for") {
@@ -308,11 +308,9 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) model.Ac
 		connector = ""
 		{
 			tokens := a.Tokens()
-			i := 2
-			// skip optional `to <target>`
-			if i < len(tokens) && tokens[i].Kind() == SyntaxKindKwTo {
-				i += 2 // skip `to` and target
-			}
+			// slotEndIndex skips subject, `returns` and the optional
+			// `to <target>` pair, each of which may be wider than one token.
+			i := slotEndIndex(a)
 			// optional connector_word after target
 			if i < len(tokens) && isConnectorWord(tokens[i].Text()) {
 				connector = tokens[i].Text()
@@ -330,8 +328,10 @@ func projectActionFromView(a ActionDecl, id string, li green.LineIndex) model.Ac
 		// Match lower.go: isConnectorWord applies to any connector ident (a/an/the/as/to/etc.),
 		// not just SyntaxKindKwTo. Extract connector directly from tokens.
 		tokens := a.Tokens()
-		if len(tokens) > 2 && isConnectorWord(tokens[2].Text()) {
-			connector = tokens[2].Text()
+		// The connector sits just past subject and verb; the subject may be a
+		// multi-token qualified Ref (Task 6b), so read the index from the AST.
+		if i := slotEndIndex(a); i < len(tokens) && isConnectorWord(tokens[i].Text()) {
+			connector = tokens[i].Text()
 		}
 		// phrase is already set from a.PhraseText() above (Bug 8a fix) — see
 		// the sync_action case comment.

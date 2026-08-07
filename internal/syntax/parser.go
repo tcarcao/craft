@@ -979,10 +979,14 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 		p.builder.FinishNode()
 		return diags
 	}
-	// Always emit the trigger subject as SyntaxKindIdent so that ActorName() /
-	// ContextName() (which call ChildToken(SyntaxKindIdent)) find it correctly,
-	// even when the lexer classifies it as a keyword (e.g. "Actor" → TokenKwActor).
-	p.consumeAs(SyntaxKindIdent)
+	// The subject of a `listens` trigger names a bounded context, so it accepts
+	// the qualified `<domain>/<name>` form. Which trigger form this is is not
+	// known until the verb is read, one slot later, so the external form
+	// accepts a qualified actor too. A bare subject is still emitted as a
+	// single SyntaxKindIdent token, even when the lexer classifies it as a
+	// keyword (e.g. "Actor" → TokenKwActor), so ActorName() / ContextName()
+	// read it the way they always have.
+	diags = append(diags, p.parseNameSlot("a trigger subject")...)
 
 	// The second token is the verb.  If it is `listens` (ident), this is domain_listen.
 	verbTok := p.peek()
@@ -1055,10 +1059,12 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 		return diags
 	}
 	actionLine := subjectTok.Line
-	// Always emit the action subject as SyntaxKindIdent so that SubjectName()
-	// (which calls ChildToken(SyntaxKindIdent)) finds it correctly, even when
-	// the lexer classifies it as a keyword (e.g. "Service" → TokenKwService).
-	p.consumeAs(SyntaxKindIdent)
+	// The subject names a bounded context, so it accepts the qualified
+	// `<domain>/<name>` form the ambiguous-bc diagnostic recommends. A bare
+	// subject is still emitted as a single SyntaxKindIdent token, even when
+	// the lexer classifies it as a keyword (e.g. "Service" → TokenKwService),
+	// so SubjectName() reads it the way it always has.
+	diags = append(diags, p.parseNameSlot("an action subject")...)
 
 	verbTok := p.peek()
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
@@ -1120,7 +1126,7 @@ func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
 	targetTok := p.peek()
 	if targetTok.Type == lexer.TokenIdent {
 		if kind := p.parseRef(); kind != "" {
-			diags = append(diags, p.diagKindPrefixInTarget(targetTok, kind))
+			diags = append(diags, p.diagKindPrefixInSlot(targetTok, kind, "an asks target"))
 		}
 	} else if isAnyKeywordAsIdent(targetTok.Type) {
 		// "domain" and "service" lex as hard keywords rather than TokenIdent,
@@ -1135,7 +1141,7 @@ func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
 		hasColon := p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == targetTok.Line && adjacentTokens(targetTok, p.peekAt(1))
 		if hasColon {
 			if kind := p.parseRef(); kind != "" {
-				diags = append(diags, p.diagKindPrefixInTarget(targetTok, kind))
+				diags = append(diags, p.diagKindPrefixInSlot(targetTok, kind, "an asks target"))
 			}
 		} else {
 			p.consumeAs(SyntaxKindIdent)
@@ -1185,6 +1191,10 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 }
 
 // parseReturnsAction parses [to <target>] [connector_word] <phrase> after `returns`.
+//
+// The target names a bounded context, so it takes the same qualified
+// `<domain>/<name>` form as the asks target and the action subject, and
+// rejects a `kind:` prefix for the same reason.
 func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 	var diags []model.Diagnostic
 	// Check for optional `to <target>`
@@ -1192,7 +1202,7 @@ func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 		p.consumeAs(SyntaxKindKwTo)
 		targetTok := p.peek()
 		if targetTok.Type == lexer.TokenIdent || isAnyKeywordAsIdent(targetTok.Type) {
-			p.consumeAs(SyntaxKindIdent)
+			diags = append(diags, p.parseNameSlot("a returns target")...)
 		}
 	}
 
@@ -1866,18 +1876,19 @@ func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
 	}
 }
 
-// diagKindPrefixInTarget produces a craft/syntax/kind-prefix-in-target
-// diagnostic for an asks target that carries a recognised `kind:` prefix
-// (bc:/domain:/service:/term:). The asks target slot already implies a
-// bounded context, so the prefix is rejected; the bare or qualified
-// `<domain>/<name>` form is the only legal spelling. tok is the target's
-// leading token, captured before parseRef consumed it.
-func (p *Parser) diagKindPrefixInTarget(tok lexer.Token, kind string) model.Diagnostic {
+// diagKindPrefixInSlot produces a craft/syntax/kind-prefix-in-target
+// diagnostic for a name slot that carries a recognised `kind:` prefix
+// (bc:/domain:/service:/term:). Such a slot already implies what it names, so
+// the prefix is rejected; the bare or qualified `<domain>/<name>` form is the
+// only legal spelling. slot names the position, with its article, e.g.
+// "an asks target". tok is the slot's leading token, captured before parseRef
+// consumed it.
+func (p *Parser) diagKindPrefixInSlot(tok lexer.Token, kind, slot string) model.Diagnostic {
 	return model.Diagnostic{
 		Code: "craft/syntax/kind-prefix-in-target",
 		Message: fmt.Sprintf(
-			"remove the %q prefix: an asks target is always a bounded context, write the bare name or the <domain>/<name> form",
-			kind+":"),
+			"remove the %q prefix: %s is written as a bare name or in the <domain>/<name> form",
+			kind+":", slot),
 		Severity: model.SeverityError,
 		Range:    tokenRange(tok),
 	}
@@ -2404,6 +2415,55 @@ func (p *Parser) parseRef() string {
 	}
 	p.builder.FinishNode()
 	return kind
+}
+
+// refShapedAhead reports whether the token at the cursor starts a MULTI-token
+// reference: an ident (or keyword-as-ident) immediately followed, with no
+// intervening whitespace and on the same line, by '/' (a qualified
+// `<domain>/<name>` path) or by ':' after a recognised kind word (a `kind:`
+// prefix, which the slot then rejects).
+//
+// Slots that accept a name use this to decide between parseRef and a plain
+// consumeAs(SyntaxKindIdent). Routing only genuinely ref-shaped names through
+// parseRef keeps the tree shape of a bare single-ident name exactly as it has
+// always been, which matters most for the action/trigger subject: that is
+// every action line in every existing .craft file, and every accessor that
+// reads it positionally. Requiring the '/' or ':' also keeps the cursor off
+// parseRef's zero-progress path for a bare keyword-as-ident.
+//
+// The colon case is deliberately narrower than parseRef's own kind-prefix
+// branch: only `bc:`/`domain:`/`service:`/`term:` count. An unrecognised
+// `foo: bar` in a subject slot is a typo, not a reference, and keeps
+// reporting the unexpected-token error it always did instead of being
+// silently absorbed into a ref node.
+func (p *Parser) refShapedAhead() bool {
+	first := p.peek()
+	if first.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(first.Type) {
+		return false
+	}
+	next := p.peekAt(1)
+	isKindPrefix := next.Type == lexer.TokenColon && isSlugKind(first.Value)
+	isPathSlash := next.Type == lexer.TokenError && next.Value == "/"
+	if !isKindPrefix && !isPathSlash {
+		return false
+	}
+	return next.Line == first.Line && adjacentTokens(first, next)
+}
+
+// parseNameSlot consumes one name slot: a qualified or kind-prefixed ref via
+// parseRef when the cursor is on a ref shape, else a single ident token. slot
+// names the position for the diagnostic raised when a `kind:` prefix is
+// present, e.g. "an action subject".
+func (p *Parser) parseNameSlot(slot string) []model.Diagnostic {
+	tok := p.peek()
+	if !p.refShapedAhead() {
+		p.consumeAs(SyntaxKindIdent)
+		return nil
+	}
+	if kind := p.parseRef(); kind != "" {
+		return []model.Diagnostic{p.diagKindPrefixInSlot(tok, kind, slot)}
+	}
+	return nil
 }
 
 // adjacentTokens reports whether b begins immediately where a ends, with no

@@ -1099,3 +1099,256 @@ func TestAsksTarget_QualifiedPathStillLegal(t *testing.T) {
 		})
 	}
 }
+
+// --- Task 6b: qualified refs in the subject and trigger-context slots ---
+
+// qualifiedSubjectSrc exercises a qualified `<domain>/<name>` subject in every
+// action kind plus the domain_listen trigger context, with a qualified
+// `returns to` target thrown in. It is shared by the accessor test and the
+// round-trip test below so both cover exactly the same shapes.
+const qualifiedSubjectSrc = `use_case "X" {
+  when re/billing listens vas.VasApplied
+    re/billing asks Ledger to record the entry [POST /v1/entries]
+    re/billing notifies billing.ChargeSucceeded
+    re/subscriptions returns to re/billing charge result
+    re/billing validates invoice format
+}`
+
+// TestQualifiedSubject_AllActionKinds is the Task 6b regression lock. A
+// qualified subject is three flat tokens (re, /, billing) where every action
+// accessor used to assume exactly one, so this asserts not just SubjectName()
+// but PhraseText(), ConnectorValue(), VerbValue() and Description() — those
+// are what the token-index arithmetic breaks if the subject span is not
+// skipped.
+func TestQualifiedSubject_AllActionKinds(t *testing.T) {
+	tree, _, diags := syntax.Parse(qualifiedSubjectSrc)
+	for _, d := range diags {
+		if d.Severity == model.SeverityError {
+			t.Fatalf("unexpected error diagnostic: [%s] %s", d.Code, d.Message)
+		}
+	}
+	sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+
+	trigger := sc.Trigger()
+	if got := trigger.Kind(); got != "domain_listen" {
+		t.Fatalf("trigger kind = %q, want domain_listen", got)
+	}
+	if got := trigger.ContextName(); got != "re/billing" {
+		t.Errorf("ContextName() = %q, want %q", got, "re/billing")
+	}
+	if got := trigger.EventValue(); got != "vas.VasApplied" {
+		t.Errorf("trigger EventValue() = %q, want %q", got, "vas.VasApplied")
+	}
+
+	actions := sc.Actions()
+	if len(actions) != 4 {
+		t.Fatalf("want 4 actions, got %d", len(actions))
+	}
+
+	asks := actions[0]
+	if got := asks.Kind(); got != "sync_action" {
+		t.Fatalf("actions[0] kind = %q, want sync_action", got)
+	}
+	if got := asks.SubjectName(); got != "re/billing" {
+		t.Errorf("asks SubjectName() = %q, want %q", got, "re/billing")
+	}
+	if got := asks.TargetName(); got != "Ledger" {
+		t.Errorf("asks TargetName() = %q, want %q", got, "Ledger")
+	}
+	if got := asks.ConnectorValue(); got != "to" {
+		t.Errorf("asks ConnectorValue() = %q, want %q", got, "to")
+	}
+	if got := asks.PhraseText(); got != "record the entry" {
+		t.Errorf("asks PhraseText() = %q, want %q", got, "record the entry")
+	}
+	if got := asks.OpText(); got != "POST /v1/entries" {
+		t.Errorf("asks OpText() = %q, want %q", got, "POST /v1/entries")
+	}
+	if got := asks.Description(); got != "re/billing asks Ledger to record the entry" {
+		t.Errorf("asks Description() = %q", got)
+	}
+
+	notifies := actions[1]
+	if got := notifies.Kind(); got != "async_action" {
+		t.Fatalf("actions[1] kind = %q, want async_action", got)
+	}
+	if got := notifies.SubjectName(); got != "re/billing" {
+		t.Errorf("notifies SubjectName() = %q, want %q", got, "re/billing")
+	}
+	if got := notifies.EventValue(); got != "billing.ChargeSucceeded" {
+		t.Errorf("notifies EventValue() = %q, want %q", got, "billing.ChargeSucceeded")
+	}
+	if got := notifies.Description(); got != `re/billing notifies "billing.ChargeSucceeded"` {
+		t.Errorf("notifies Description() = %q", got)
+	}
+
+	returns := actions[2]
+	if got := returns.Kind(); got != "return_action" {
+		t.Fatalf("actions[2] kind = %q, want return_action", got)
+	}
+	if got := returns.SubjectName(); got != "re/subscriptions" {
+		t.Errorf("returns SubjectName() = %q, want %q", got, "re/subscriptions")
+	}
+	if got := returns.TargetName(); got != "re/billing" {
+		t.Errorf("returns TargetName() = %q, want %q", got, "re/billing")
+	}
+	if got := returns.PhraseText(); got != "charge result" {
+		t.Errorf("returns PhraseText() = %q, want %q", got, "charge result")
+	}
+	if got := returns.Description(); got != "re/subscriptions returns charge result to re/billing" {
+		t.Errorf("returns Description() = %q", got)
+	}
+
+	internal := actions[3]
+	if got := internal.Kind(); got != "internal_action" {
+		t.Fatalf("actions[3] kind = %q, want internal_action", got)
+	}
+	if got := internal.SubjectName(); got != "re/billing" {
+		t.Errorf("internal SubjectName() = %q, want %q", got, "re/billing")
+	}
+	if got := internal.VerbValue(); got != "validates" {
+		t.Errorf("internal VerbValue() = %q, want %q", got, "validates")
+	}
+	if got := internal.ConnectorValue(); got != "" {
+		t.Errorf("internal ConnectorValue() = %q, want empty", got)
+	}
+	if got := internal.PhraseText(); got != "invoice format" {
+		t.Errorf("internal PhraseText() = %q, want %q", got, "invoice format")
+	}
+	if got := internal.Description(); got != "re/billing validates invoice format" {
+		t.Errorf("internal Description() = %q", got)
+	}
+}
+
+// TestQualifiedSubject_Columns locks the 1-based columns the LSP and sema
+// report for a qualified subject and trigger context: they must point at the
+// first character of the ref, not at some interior segment.
+func TestQualifiedSubject_Columns(t *testing.T) {
+	tree, li, _ := syntax.Parse(qualifiedSubjectSrc)
+	sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+	if got := sc.Trigger().ActorCol(li); got != 8 {
+		t.Errorf("trigger ActorCol() = %d, want 8", got)
+	}
+	actions := sc.Actions()
+	if got := actions[0].SubjectCol(li); got != 5 {
+		t.Errorf("asks SubjectCol() = %d, want 5", got)
+	}
+	if got := actions[0].Line(li); got != 3 {
+		t.Errorf("asks Line() = %d, want 3", got)
+	}
+	if got := actions[2].TargetCol(li); got != 33 {
+		t.Errorf("returns TargetCol() = %d, want 33", got)
+	}
+}
+
+// TestQualifiedSubject_RoundTrip proves the new multi-token subject slot is
+// still lossless: every token reaches the tree via consumeAs, so reassembling
+// the green tree reproduces the source byte for byte.
+func TestQualifiedSubject_RoundTrip(t *testing.T) {
+	g, _, _ := syntax.Parse(qualifiedSubjectSrc)
+	if got := reassembleGreen(g); got != qualifiedSubjectSrc {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", qualifiedSubjectSrc, got)
+	}
+}
+
+// TestQualifiedSubject_RejectsKindPrefix mirrors TestAsksTarget_RejectsKindPrefix
+// for the three slots Task 6b opened up. A `kind:` prefix stays rejected there
+// for the same reason it is rejected in the asks target: the slot already
+// implies a bounded context. The full prefixed text must still survive in the
+// accessor, since the diagnostic is additive and does not change what parseRef
+// consumes.
+func TestQualifiedSubject_RejectsKindPrefix(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want func(syntax.ScenarioDecl) string
+	}{
+		{
+			name: "action subject",
+			src:  "use_case \"X\" {\n  when U does x\n    bc:re/billing asks Ledger to record\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].SubjectName() },
+		},
+		{
+			name: "trigger context",
+			src:  "use_case \"X\" {\n  when bc:re/billing listens vas.VasApplied\n    A does x\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Trigger().ContextName() },
+		},
+		{
+			name: "returns target",
+			src:  "use_case \"X\" {\n  when U does x\n    A returns to bc:re/billing charge result\n}",
+			want: func(sc syntax.ScenarioDecl) string { return sc.Actions()[0].TargetName() },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, _, diags := syntax.Parse(tc.src)
+			found := false
+			for _, d := range diags {
+				if d.Code == "craft/syntax/kind-prefix-in-target" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected craft/syntax/kind-prefix-in-target, got %+v", diags)
+			}
+			sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+			if got := tc.want(sc); got != "bc:re/billing" {
+				t.Errorf("accessor = %q, want %q (must not be truncated to the kind word)", got, "bc:re/billing")
+			}
+		})
+	}
+}
+
+// TestQualifiedExternalTriggerActor covers the external trigger form. The
+// trigger subject is consumed before its verb is known, so routing it through
+// parseRef makes a qualified actor parse too; ActorName() and the trigger
+// phrase must both stay correct across the wider subject.
+func TestQualifiedExternalTriggerActor(t *testing.T) {
+	src := "use_case \"X\" {\n  when re/billing creates the invoice\n    A does x\n}"
+	tree, _, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == model.SeverityError {
+			t.Fatalf("unexpected error diagnostic: [%s] %s", d.Code, d.Message)
+		}
+	}
+	trigger := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0].Trigger()
+	if got := trigger.Kind(); got != "external" {
+		t.Fatalf("trigger kind = %q, want external", got)
+	}
+	if got := trigger.ActorName(); got != "re/billing" {
+		t.Errorf("ActorName() = %q, want %q", got, "re/billing")
+	}
+	if got := trigger.PhraseText(); got != "invoice" {
+		t.Errorf("PhraseText() = %q, want %q", got, "invoice")
+	}
+}
+
+// TestBareSubject_StillUnwrapped guards the narrow scope of Task 6b: an
+// ordinary single-ident subject must keep its existing shape and accessor
+// results, since that is every action line in every existing .craft file.
+func TestBareSubject_StillUnwrapped(t *testing.T) {
+	src := "use_case \"X\" {\n  when User creates Account\n    Auth asks DB to check email\n    Auth validates email format\n}"
+	tree, _, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if d.Severity == model.SeverityError {
+			t.Fatalf("unexpected error diagnostic: [%s] %s", d.Code, d.Message)
+		}
+	}
+	sc := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0]
+	if got := sc.Trigger().ActorName(); got != "User" {
+		t.Errorf("ActorName() = %q, want User", got)
+	}
+	actions := sc.Actions()
+	if got := actions[0].SubjectName(); got != "Auth" {
+		t.Errorf("SubjectName() = %q, want Auth", got)
+	}
+	if got := actions[0].PhraseText(); got != "check email" {
+		t.Errorf("PhraseText() = %q, want %q", got, "check email")
+	}
+	if got := actions[1].VerbValue(); got != "validates" {
+		t.Errorf("VerbValue() = %q, want validates", got)
+	}
+	if got := actions[1].PhraseText(); got != "email format" {
+		t.Errorf("PhraseText() = %q, want %q", got, "email format")
+	}
+}
