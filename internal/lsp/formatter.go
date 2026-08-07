@@ -46,25 +46,32 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 
 	var sb strings.Builder
 	first := true
+	gap := ""
 
 	for el := range root.ChildrenIter() {
 		node, ok := el.(syntax.SyntaxNode)
 		if !ok {
 			// A comment with no declaration after it to attach to, such as one
-			// on the last line of the file, is a direct child of the root.
-			// Skipping every non-node child is how those were dropped.
-			// Note this only fires for a comment the parser tokenised at root
-			// level. A comment with nothing after it never gets that far: the
-			// parser dumps everything past the last real token into a single
-			// Whitespace token, so the text is there but the kind is not.
-			// trailingCommentLines below is what recovers those.
-			if tok, isTok := el.(syntax.SyntaxToken); isTok && isCommentKind(tok.Kind()) {
-				if !first {
-					sb.WriteString("\n\n")
+			// on the last line of the file, is a direct child of the root
+			// rather than trivia attached inside a declaration node. Since
+			// docs/decisions/lossless-token-text.md, the parser tokenises
+			// these with their own comment kind instead of folding them into
+			// trailing whitespace, so they reach here already carrying the
+			// kind check below needs.
+			if tok, isTok := el.(syntax.SyntaxToken); isTok {
+				if tok.Kind() == syntax.SyntaxKindWhitespace {
+					gap += tok.Text()
+					continue
 				}
-				first = false
-				sb.WriteString(tok.Text())
+				if isCommentKind(tok.Kind()) {
+					if !first {
+						sb.WriteString(rootGapSeparator(gap))
+					}
+					first = false
+					sb.WriteString(tok.Text())
+				}
 			}
+			gap = ""
 			continue
 		}
 
@@ -72,6 +79,7 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			sb.WriteString("\n\n")
 		}
 		first = false
+		gap = ""
 
 		switch node.Kind() {
 		case syntax.SyntaxKindArchDecl:
@@ -98,14 +106,6 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 		}
 	}
 
-	if tail := trailingCommentLines(content, root); len(tail) > 0 {
-		if !first {
-			sb.WriteString("\n\n")
-		}
-		first = false
-		sb.WriteString(strings.Join(tail, "\n"))
-	}
-
 	if !first {
 		sb.WriteByte('\n')
 	}
@@ -121,45 +121,6 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 		return content, drift
 	}
 	return formatted, nil
-}
-
-// trailingCommentLines returns the comment lines that sit after the last real
-// token in the document, one per line and stripped of indentation.
-//
-// A comment with a declaration after it is tokenised as trivia and attached to
-// that declaration, so every renderer can find it. A comment with NOTHING
-// after it never gets that treatment: the parser dumps the whole remainder of
-// the source into one SyntaxKindWhitespace token, so the bytes survive in the
-// tree (losslessness holds) but no token carries a comment kind. Filtering on
-// kind therefore finds nothing, which is how a file ending in a comment lost
-// it, and how a file that is nothing BUT a comment was truncated to zero
-// bytes.
-//
-// Reaching the text through the trivia rather than through the kind is the
-// fix. Nothing in this tail can be anything other than a comment or blank
-// space: real content there would have produced a diagnostic, and the
-// formatter would have declined to run at all.
-func trailingCommentLines(content string, root syntax.SyntaxNode) []string {
-	end := 0
-	for _, tok := range root.AllTokens() {
-		if tok.Kind() == syntax.SyntaxKindWhitespace || tok.Kind() == syntax.SyntaxKindEOF {
-			continue
-		}
-		if e := int(tok.Offset()) + len(tok.Text()); e > end {
-			end = e
-		}
-	}
-	if end >= len(content) {
-		return nil
-	}
-
-	var out []string
-	for _, line := range strings.Split(content[end:], "\n") {
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	return out
 }
 
 // contentDrift enforces the formatter's contract: formatting changes
@@ -188,7 +149,11 @@ func trailingCommentLines(content string, root syntax.SyntaxNode) []string {
 // and re-rendering from them therefore cannot either. That is a lexer defect
 // upstream of the formatter and predates this branch; the message says nothing
 // about a formatter bug because for the only known trigger it would be wrong.
-// TestFormatDocumentChecked_DriftPathIsReachable pins the route.
+//
+// That trigger is fixed now: every token's text is sliced from source at its
+// own range, so no known real input reaches this function with content that
+// differs by more than whitespace. TestContentDrift_RefusesToLoseContent
+// exercises it directly instead.
 func contentDrift(in, out string) *craft.Diagnostic {
 	if squashWhitespace(in) == squashWhitespace(out) {
 		return nil

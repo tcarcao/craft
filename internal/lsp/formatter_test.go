@@ -1181,3 +1181,52 @@ func TestFormatDocument_TrailingCommentBeforeAScenarioStaysPut(t *testing.T) {
 	src := "use_case \"X\" {\n  when A does x\n    P does y // note\n\n  when B does z\n    Q does w\n}\n"
 	assertFormatIsFaithful(t, src)
 }
+
+// TestFormatDocument_TrailingCommentIndentation pins the reason
+// trailingCommentLines was deleted rather than kept: trailing comments now go
+// through the token walk like every other comment, which means their
+// indentation survives. trailingCommentLines trimmed each line, so
+// "   note [1]" came back as "note [1]".
+func TestFormatDocument_TrailingCommentIndentation(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{
+			name: "comment only file",
+			src:  "// just this\n",
+			want: "// just this\n",
+		},
+		{
+			name: "trailing comment after decl",
+			src:  "domain re {\n  Billing\n}\n\n// trail\n",
+			want: "domain re {\n  Billing\n}\n\n// trail\n",
+		},
+		{
+			name: "indented trailing block comment",
+			src:  "domain re {\n  Billing\n}\n\n/* a\n   b */\n",
+			want: "domain re {\n  Billing\n}\n\n/* a\n   b */\n",
+		},
+	}
+	for _, c := range cases {
+		got := FormatDocument(c.src)
+		if got != c.want {
+			t.Errorf("%s:\n got: %q\nwant: %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestFormatDocument_ConsecutiveTrailingComments is the direct regression test
+// for Task 5's Job 2: consecutive comment-kind root children must derive
+// their separator from the author's actual whitespace, not a forced blank
+// line. Both directions matter — no blank line stays as none, and a blank
+// line the author wrote survives.
+func TestFormatDocument_ConsecutiveTrailingComments(t *testing.T) {
+	cases := []struct{ name, src string }{
+		{"no blank line between", "actor user Alice\n\n// a\n// b\n"},
+		{"blank line between", "actor user Alice\n\n// a\n\n// b\n"},
+		{"three in a row, no blanks", "actor user Alice\n\n// a\n// b\n// c\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFormatIsFaithful(t, tc.src)
+		})
+	}
+}

@@ -167,6 +167,27 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	}
 }
 
+// rootGapSeparator returns the whitespace to emit before a root-level
+// comment that has no declaration to attach to, such as one on the last
+// line of the file.
+//
+// This is the same author-decides rule separatorFor's own newline-count
+// switch applies within a declaration, deliberately reused here rather than
+// a fixed blank line: two trailing comments the author wrote back to back
+// (a single newline between them) must stay back to back, and a blank line
+// the author put between them must survive as one. There is no depth to
+// indent for: this only ever fires at brace depth zero.
+func rootGapSeparator(gap string) string {
+	switch strings.Count(gap, "\n") {
+	case 0:
+		return " "
+	case 1:
+		return "\n"
+	default:
+		return "\n\n"
+	}
+}
+
 // isRefColon reports whether tok is the `:` inside a node slug such as
 // `bc:re/billing`, as opposed to a field separator such as `contexts:`.
 func isRefColon(tok syntax.SyntaxToken) bool {
