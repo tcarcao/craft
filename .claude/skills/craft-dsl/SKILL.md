@@ -53,7 +53,8 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 <deployment_rule>    ::= <percentage> "->" <identifier>
 
 // --- Node slugs: typed, code-anchored references (vNext) ---
-// [kind:][namespace/]name — used as asks targets
+// [kind:][namespace/]name; NOT used in use_case bounded-context slots (see
+// bc_ref below); a kind: prefix there is a parse error
 <node_slug>          ::= (<slug_kind> ":")? <slug_path>
 <slug_kind>          ::= "domain" | "bc" | "term" | "service"
 <slug_path>          ::= <identifier> ("/" <identifier>)*
@@ -92,14 +93,27 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 // --- Use Cases: business scenarios with event-driven flows ---
 <use_case>           ::= "use_case" <string> "{" <scenario>+ "}"
 <scenario>           ::= <trigger> <action>+
-<trigger>            ::= "when" <identifier> "listens" <event_ref>
+<trigger>            ::= "when" <bc_ref> "listens" <event_ref>
                        | "when" <identifier> <verb> <phrase>?
                        | "when" <event_ref>
 <action>             ::= <sync_action> | <async_action> | <internal_action> | <return_action>
-<sync_action>        ::= <identifier> "asks" (<identifier> | <node_slug>) <phrase>
-<async_action>       ::= <identifier> "notifies" <event_ref>
-<internal_action>    ::= <identifier> <verb> <phrase>
-<return_action>      ::= <identifier> "returns" ("to" <identifier>)? <phrase>
+<sync_action>        ::= <bc_ref> "asks" <bc_ref> <phrase> <op_annotation>?
+<async_action>       ::= <bc_ref> "notifies" <event_ref> <op_annotation>?
+<internal_action>    ::= <bc_ref> <verb> <phrase> <op_annotation>?
+<return_action>      ::= <bc_ref> "returns" ("to" <bc_ref>)? <phrase> <op_annotation>?
+// bc_ref is the same production used by context_map endpoints (defined
+// above): bare or domain-qualified, no kind: prefix. A kind: prefix in any
+// of these slots is a craft/syntax/kind-prefix-in-target parse error.
+
+// --- Operation annotations: trailing bracket on any action (vNext) ---
+<op_annotation>      ::= "[" <op_body> "]"
+<op_body>            ::= (<protocol_verb> <ws>)? <payload>
+<protocol_verb>      ::= "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+                       | "HEAD" | "OPTIONS" | "GRPC" | "TOPIC" | "QUERY"
+<payload>            ::= <raw-text-up-to-closing-bracket>
+// The annotation is the LAST "[" on the line whose "]" is the line's final
+// token; a "[" that does not close at end of line stays ordinary prose. An
+// empty annotation "[]" is a craft/syntax/empty-op-annotation error.
 
 // --- Terminals ---
 <connector>          ::= "a" | "an" | "the" | "as" | "to" | "from" | "in" | "on"
@@ -121,7 +135,7 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 - Comments use `//` (single-line), but **only when `//` is preceded by whitespace or starts the line**. `http://api`, `50/50`, and `and/maybe` inside a narrative phrase are NOT comments — the `/` there has no whitespace before it. ` // trailing note` (space before `//`) is a comment. Block comments `/* ... */` follow the same whitespace-preceded rule.
 - Whitespace (spaces, tabs) is ignored; newlines are not
 - **Multi-line lists are supported** — end each intermediate line with a comma and continue on the next line. The last item must not have a trailing comma when followed by another property
-- **Flexible prose**: narrative tails (the `<phrase>` in `asks`, internal actions, `returns`, and external triggers) are captured as raw rest-of-line text. Special characters like `! & * / # ? +` don't need quoting: `Subscriptions asks bc:re/billing for a fresh charge attempt (1! & 2!)` is valid as-is.
+- **Flexible prose**: narrative tails (the `<phrase>` in `asks`, internal actions, `returns`, and external triggers) are captured as raw rest-of-line text. Special characters like `! & * / # ? +` don't need quoting: `Subscriptions asks re/billing for a fresh charge attempt (1! & 2!)` is valid as-is. One exception: a bracketed run that closes at the end of the line is an **operation annotation** (see "Operation Annotations" below), not prose.
 - **Typed refs replace free-text event strings**: `notifies`/`listens` take an `<event_ref>` — a dotted qualified id (e.g. `vas.VasApplied`), not prose. The old quoted-string form (`notifies "Order Created"`) still parses but is **deprecated** — see "Deprecated: Quoted Event Strings" below.
 
 ---
@@ -223,10 +237,9 @@ A **node slug** is the typed, code-anchored way to reference a domain, bounded c
 
 A malformed namespace (wrong segment count, empty segment, or an unrecognised `kind:` word) is a `craft/sema/malformed-slug` error.
 
-Node slugs are used for:
-- **`asks` targets** — `Subscriptions asks bc:re/billing for a fresh charge attempt` (a bare identifier like `Billing` is still valid too — it's the short form, resolved by context)
+**`use_case` bounded-context slots do not accept node slugs.** The `asks` target, the `asks`/`notifies` subject, the `returns` target, and the `when ... listens` trigger context each accept a bare name (`Billing`) or a domain-qualified `<domain>/<name>` reference (`re/billing`), never a `kind:` prefix. `Subscriptions asks re/billing for a fresh charge attempt` is correct; `Subscriptions asks bc:re/billing for a fresh charge attempt` is a `craft/syntax/kind-prefix-in-target` parse error.
 
-`context_map` endpoints do **not** use node slugs — they use a simpler bare-or-domain-qualified bounded-context reference (see below).
+`context_map` endpoints likewise do **not** use node slugs: they use a simpler bare-or-domain-qualified bounded-context reference (see below).
 
 **Term module-scoping:** a bare term name written inside its own bounded context resolves to that BC's namespace automatically. Any **cross-BC** term reference must use the fully-qualified `term:<bc>/<name>` slug — a bare cross-context term reference can't be locally verified and is a hub-side error.
 
@@ -363,18 +376,38 @@ The core dynamic modeling construct. Each use case contains scenarios triggered 
 |------|--------|---------|
 | External (actor) | `when <actor> <verb> <phrase>` | `when Customer places order` (actor can be any name, including `CRON` for scheduler-driven triggers) |
 | Event | `when <event_ref>` | `when order.OrderPlaced` |
-| Bounded context listener | `when <context> listens <event_ref>` | `when Payment listens order.OrderCreated` |
+| Bounded context listener | `when <context> listens <event_ref>` | `when Payment listens order.OrderCreated` (`<context>` can be bare or domain-qualified: `when re/billing listens vas.VasApplied`) |
 
 **Action types:**
 
 | Type | Keyword | Syntax | Meaning |
 |------|---------|--------|---------|
-| Synchronous | `asks` | `Order asks Inventory to reserve items` | Bounded context-to-bounded context call. Target can be a bare name (`Inventory`) or a node slug (`bc:re/billing`) |
-| Asynchronous | `notifies` | `Order notifies order.OrderCreated` | Publish event, referenced by a typed event ref |
+| Synchronous | `asks` | `Order asks Inventory to reserve items` | Bounded context-to-bounded context call. Subject and target can each be a bare name (`Inventory`) or domain-qualified (`re/billing`), never a `kind:` prefix (`bc:re/billing` is a `craft/syntax/kind-prefix-in-target` error) |
+| Asynchronous | `notifies` | `Order notifies order.OrderCreated` | Publish event, referenced by a typed event ref. Subject can be bare or domain-qualified |
 | Internal | any verb | `Order validates items` | Bounded context-internal operation |
-| Return | `returns` | `Database returns to Auth the user record` | Return response |
+| Return | `returns` | `Database returns to Auth the user record` | Return response. Subject and `to` target can each be bare or domain-qualified |
 
 An `<event_ref>` is a dotted qualified id (the FQ Avro record name / OpenAPI `operationId` the event corresponds to in code) — `vas.VasApplied`, `com.olx.re.subscriptions.SubscriptionCreated`. No `kind:` prefix, no `/`.
+
+**Operation annotations:** any action may end with a bracketed annotation describing the wire call it makes:
+
+```craft
+Subscriptions asks Billing for a fresh charge attempt  [POST /v1/accounts/{id}/charges]
+Billing asks Ledger to record the entry                [GRPC ledger.Postings/Create]
+Billing notifies billing.ChargeSucceeded                [TOPIC billing.v1.charge-succeeded]
+Subscriptions asks Legacy for a reconciliation          [legacy-mainframe-txn-44]
+```
+
+If the first token inside `[...]` is a recognised protocol verb (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `GRPC`, `TOPIC`, `QUERY`), the annotation is structured (verb + payload); otherwise the whole content is stored verbatim as an opaque payload, with no diagnostic. `[legacy-mainframe-txn-44]` is just as valid as `[POST /v1/charges]`. The annotation is the **last** `[` on the line whose `]` is the line's final token; a `[` that doesn't close at end of line stays prose. An empty `[]` is a `craft/syntax/empty-op-annotation` error.
+
+**Use-case diagnostics:**
+
+| Code | Severity | When |
+|------|----------|------|
+| `craft/syntax/kind-prefix-in-target` | error | a `kind:` prefix in the `asks` target, the `asks`/`notifies` subject, the `returns` target, or the `when ... listens` trigger context |
+| `craft/syntax/empty-op-annotation` | error | an action ends in `[]` |
+| `craft/sema/ambiguous-bc` | error | a bare bounded-context name in one of those slots is declared in two or more domains, qualify it as `<domain>/<name>` |
+| `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference in one of those slots has the wrong shape (empty segment, or more than two segments) |
 
 **Event-driven pattern:** Bounded contexts publish events with `notifies`, and other scenarios react with `when <context> listens <event_ref>`. This models async choreography — the heart of good Craft modeling.
 
@@ -513,6 +546,10 @@ These are the most frequent syntax errors. Avoid them:
 11. **`context_map` endpoint with a `bc:`/`service:`/`term:` prefix** — `context_map` endpoints are bare or domain-qualified bounded-context names only (`billing`, `re/billing`); there is no kind prefix inside a `context_map` block. An endpoint that resolves to a domain, service, or actor instead of a bounded context is a `craft/sema/edge-endpoint-not-bc` error
 12. **Unspaced `//` inside prose is NOT a comment** — `http://api`, `50/50`, `and/maybe` stay as prose because there's no whitespace before the `//`/`/`. A comment needs a space (or line-start) before it: `Auth checks token  // TODO`
 13. **Malformed `glossary` term node** — a term node is `<bc>/<term>` or `<domain>/<bc>/<term>`; the last `/`-segment is the term. A bare term with no BC (`Invoice same_as Bill`) is invalid, and `.` is never allowed in a term node (it's reserved for event refs). The glossary verbs are `same_as`, `contrasts`, `distinct_from` — all symmetric, so don't worry about which side is which
+14. **`kind:` prefix in a `use_case` bounded-context slot**: the `asks` target, the `asks`/`notifies` subject, the `returns` target, and the `when ... listens` trigger context are all bare-or-domain-qualified only, same rule as `context_map`. `Subscriptions asks bc:re/billing for a fresh charge attempt` is a `craft/syntax/kind-prefix-in-target` error; write `Subscriptions asks re/billing for a fresh charge attempt`
+15. **Empty operation annotation**: `Subscriptions asks Billing for a fresh charge attempt []` is a `craft/syntax/empty-op-annotation` error, not a silently dropped bracket
+16. **Ambiguous bare bounded-context name in a use case**: if a bare name like `Billing` is declared in two or more `domain` blocks, every `use_case` slot that resolves it (`asks` subject/target, `notifies` subject, `listens` trigger context) is a `craft/sema/ambiguous-bc` error. Qualify it as `<domain>/<name>`
+17. **Malformed qualified bounded-context reference**: `re/ billing` (space in a segment) and `re//billing` (empty segment) and `re/a/b` (more than two segments) are all `craft/sema/malformed-slug` errors, in any bounded-context slot, not just `asks` targets
 
 ---
 

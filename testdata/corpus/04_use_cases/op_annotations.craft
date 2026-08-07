@@ -1,0 +1,20 @@
+domain re {
+  Subscriptions
+  Billing
+  Ledger
+}
+
+use_case "Retry a failed charge" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/accounts/{id}/charges]
+    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+    Billing asks Ledger to record the entry                [GRPC ledger.Postings/Create]
+    Gateway returns to Billing the authorization result    [200 AuthorizationResult]
+    Billing notifies billing.ChargeSucceeded               [TOPIC billing.v1.charge-succeeded]
+    Subscriptions marks the subscription active
+    Subscriptions asks Audit to log the outcome            [op1/op2/op3/op4/op5]
+    Subscriptions asks Legacy for a reconciliation         [legacy-mainframe-txn-44]
+
+  when re/billing listens vas.VasApplied
+    re/billing asks Ledger to record a duplicate-charge audit entry  [POST /v1/entries]
+}

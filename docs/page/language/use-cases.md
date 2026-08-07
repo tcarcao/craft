@@ -87,6 +87,8 @@ when Inventory listens order.OrderCancelled
 when <domain> listens <event_ref>
 ```
 
+The trigger context also accepts a **qualified** `<domain>/<name>` reference, e.g. `when re/billing listens vas.VasApplied`, useful when a bare name is ambiguous across domains. A `kind:` prefix (`bc:re/billing`) is not accepted here either.
+
 ### CRON Triggers
 
 Scheduled tasks:
@@ -117,12 +119,12 @@ Payment asks Gateway for transaction status
 
 **Syntax:**
 ```craft
-<domain> asks <domain> [connector] <phrase>
+<domain> asks <domain> [connector] <phrase> [operation]
 ```
 
-The target can also be a **node slug** for a cross-context/typed reference: `Subscriptions asks bc:re/billing for a fresh charge attempt`. See [Node Slugs](/language/overview) — a bare domain name like `Inventory` is still the normal short form.
+Both the subject and the target accept a **qualified** `<domain>/<name>` reference for disambiguation: `re/subscriptions asks re/billing for a fresh charge attempt`. A bare name like `Inventory` is still the normal short form. A `kind:` prefix is **not** accepted in either slot: `Subscriptions asks bc:re/billing for a fresh charge attempt` is a `craft/syntax/kind-prefix-in-target` parse error. Write `Billing` or `re/billing` instead. See [Node Slugs](/language/overview).
 
-The trailing `<phrase>` accepts special characters unquoted (`! & * / # ? +`), e.g. `Subscriptions asks bc:re/billing for a fresh charge attempt (1! & 2!)` — no need to quote punctuation.
+The trailing `<phrase>` still accepts special characters unquoted (`! & * / # ? +`), e.g. `Subscriptions asks Billing for a fresh charge attempt (1! & 2!)`, no need to quote punctuation. The one exception: a bracketed run that closes at the end of the line is now parsed as an **operation annotation**, not prose. See [Operation Annotations](#operation-annotations) below.
 
 **Use when:** One domain needs an immediate response from another.
 
@@ -140,6 +142,8 @@ Profile notifies profile.UserUpdated
 ```craft
 <domain> notifies <event_ref>
 ```
+
+The subject also accepts a qualified `<domain>/<name>` reference: `re/billing notifies billing.ChargeSucceeded`. A `kind:` prefix is not accepted here either.
 
 **Use when:** Other domains might want to react, but the publisher doesn't need a response.
 
@@ -181,7 +185,47 @@ Gateway returns to Payment the transaction result
 <domain> returns [to <domain>] [connector] <phrase>
 ```
 
+The subject and the `to` target both accept a qualified `<domain>/<name>` reference: `re/subscriptions returns to re/billing charge result`. A `kind:` prefix is not accepted in either slot.
+
 **Use when:** A domain returns data, especially in response to an `asks` action.
+
+## Operation Annotations
+
+Any action (`asks`, `notifies`, `returns`, or an internal action) may end with a bracketed **operation annotation** describing the actual wire call it corresponds to:
+
+```craft
+Subscriptions asks Billing for a fresh charge attempt  [POST /v1/accounts/{id}/charges]
+Billing asks Ledger to record the entry                [GRPC ledger.Postings/Create]
+Billing notifies billing.ChargeSucceeded                [TOPIC billing.v1.charge-succeeded]
+Subscriptions asks Audit to log the outcome            [op1/op2/op3]
+Subscriptions asks Legacy for a reconciliation          [legacy-mainframe-txn-44]
+```
+
+**Syntax:**
+```craft
+<action> [<protocol_verb> <payload>]
+<action> [<payload>]
+```
+
+The bracket is optional; lines without one are unaffected. Its contents are **hybrid**:
+
+- If the first whitespace-delimited token is a recognised protocol verb, the annotation is parsed as structure: a verb plus the remaining payload. The recognised set is `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `GRPC`, `TOPIC`, `QUERY`.
+- Otherwise, the entire bracket content is stored verbatim as an opaque payload, with no diagnostic. `[op1/op2/op3]` and `[legacy-mainframe-txn-44]` are equally valid annotations: an unrecognised leading word is payload, not an error.
+
+**Boundary rule:** the annotation is the **last** `[` on the line whose matching `]` is the line's final token. A `[` that does not close at the end of the line stays ordinary prose, so existing phrases are unaffected unless they end in a bracketed run.
+
+An empty annotation, `Subscriptions asks Billing for a fresh charge attempt []`, is a `craft/syntax/empty-op-annotation` error, not a silently dropped bracket.
+
+## Diagnostics
+
+Use-case actions and triggers can emit these:
+
+| Code | Severity | When |
+|------|----------|------|
+| `craft/syntax/kind-prefix-in-target` | error | a `kind:` prefix (`bc:`, `domain:`, `service:`, `term:`) is written in a bounded-context slot: the `asks` target, the `asks`/`notifies` subject, the `returns` target, or the `when ... listens` trigger context. Write `Billing` or `re/billing` instead. |
+| `craft/syntax/empty-op-annotation` | error | an action ends in `[]`, an empty operation annotation. |
+| `craft/sema/ambiguous-bc` | error | a bare bounded-context name in one of those same slots is declared in two or more domains. Qualify it as `<domain>/<name>`. |
+| `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference in one of those slots has the wrong shape: an empty segment (`re/ billing`, `re//billing`) or more than two segments (`re/a/b`). |
 
 ## Deprecated: Quoted Event Strings
 

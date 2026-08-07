@@ -58,6 +58,7 @@ examples/       Example .craft files
 | `when`        | Scenario trigger (actor, event, domain listener, CRON) |
 | `asks … to`   | Synchronous domain-to-domain action |
 | `notifies`    | Asynchronous event publication |
+| `[...]`       | Trailing operation annotation on any action: a recognised protocol verb (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS`/`GRPC`/`TOPIC`/`QUERY`) plus payload, or an opaque payload verbatim |
 | `domain`      | A top-level domain grouping bounded contexts |
 | `expose`      | API exposure definition |
 | `context_map` | Strategic view classifying BC-to-BC relationships with DDD patterns (`customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language`, `partnership`, `shared_kernel`, `separate_ways`) |
@@ -67,7 +68,7 @@ examples/       Example .craft files
 
 ```craft
 services {
-  UserService: {
+  UserService {
     contexts: Authentication, Profile
     data-stores: user_db
     language: golang
@@ -77,7 +78,7 @@ services {
 use_case "User Registration" {
   when Business_User creates Account
     Authentication validates email format
-    Authentication asks Database to check email uniqueness
+    Authentication asks Database to check email uniqueness  [POST /v1/users/check-email]
     Profile creates user profile
     Authentication notifies "User Registered"
 }
