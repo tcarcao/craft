@@ -495,3 +495,31 @@ func TestFormatDocument_TemplatedPathStillAligns(t *testing.T) {
 		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
 	}
 }
+
+// TestFormatDocument_UnbalancedRBraceDoesNotPanic covers I2: a stray `}` only
+// produces a warning-severity diagnostic, so it used to reach formatDecl's
+// RBrace branch with depth 0 and crash on `strings.Repeat("  ", -1)`.
+func TestFormatDocument_UnbalancedRBraceDoesNotPanic(t *testing.T) {
+	src := "use_case \"X\" {\n when U does y\n A does {x}\n}\n"
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("FormatDocument panicked on an unbalanced }: %v", r)
+		}
+	}()
+	if got := formatSource(t, src); got == "" {
+		t.Error("expected non-empty output")
+	}
+}
+
+// formatDecl is reachable with an unbalanced `}` only through a top-level
+// stray brace, so exercise that shape directly too rather than relying on the
+// use_case route staying the same.
+func TestFormatDecl_StrayTopLevelRBraceDoesNotPanic(t *testing.T) {
+	src := "services {\n  A {\n    contexts: X\n  }\n}\n}\n"
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("FormatDocument panicked on a stray top-level }: %v", r)
+		}
+	}()
+	formatSource(t, src)
+}

@@ -171,7 +171,12 @@ func formatDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 			needsNewline = true
 
 		case syntax.SyntaxKindRBrace:
-			depth--
+			// Floor the decrement. An unbalanced `}` only produces a
+			// warning-severity diagnostic, so it reaches here with depth 0 and
+			// would make strings.Repeat panic with a negative count.
+			if depth > 0 {
+				depth--
+			}
 			sb.WriteByte('\n')
 			sb.WriteString(strings.Repeat("  ", depth))
 			sb.WriteByte('}')
