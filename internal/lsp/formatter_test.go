@@ -259,10 +259,30 @@ func TestFormatDocument_UseCaseRoundTrip(t *testing.T) {
 		src  string
 	}{
 		{"sync action", "use_case \"X\" {\n  when User creates Account\n    Auth asks DB to check email\n}\n"},
-		{"sync action with annotation", "use_case \"X\" {\n  when U does x\n    Auth asks DB to check email [POST /v1/check]\n}\n"},
+		// Single-line runs align to their own length + 2, i.e. two spaces
+		// before "[". These two fixtures were single-space before the
+		// alignment pass existed; they are updated here to their new
+		// canonical (already-aligned) form so this guard keeps asserting
+		// byte-identical output instead of being weakened.
+		{"sync action with annotation", "use_case \"X\" {\n  when U does x\n    Auth asks DB to check email  [POST /v1/check]\n}\n"},
 		{"async action with typed event ref", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded\n}\n"},
 		{"async action with legacy quoted event", "use_case \"X\" {\n  when U does x\n    Billing notifies \"Order Created\"\n}\n"},
-		{"async action with annotation", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded [GRPC Pay]\n}\n"},
+		{"async action with annotation", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded  [GRPC Pay]\n}\n"},
+		// Multi-line run, already column-aligned: the shorter second line is
+		// padded out to the longer first line's column + 2. Byte-identical
+		// output here is what proves alignment is a no-op on already-aligned
+		// input, not just on single-annotation lines.
+		{"multi-line run already aligned", "use_case \"X\" {\n  when CRON detects a failed charge\n" +
+			"    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
+			"    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n}\n"},
+		// A non-annotated action line inside the run is left un-padded, but it
+		// does not reset the alignment column for the annotated lines that
+		// follow it: the whole scenario's action block is one run.
+		{"non-annotated action inside run does not break alignment", "use_case \"X\" {\n  when CRON detects a failed charge\n" +
+			"    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
+			"    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n" +
+			"    Billing asks Ledger to record the entry\n" +
+			"    Gateway returns to Billing the authorization result    [200 AuthorizationResult]\n}\n"},
 		{"return action with target", "use_case \"X\" {\n  when U does x\n    Auth returns to User charge result\n}\n"},
 		{"return action without target", "use_case \"X\" {\n  when U does x\n    Auth returns charge result\n}\n"},
 		{"internal action", "use_case \"X\" {\n  when U does x\n    Auth validates email format\n}\n"},
@@ -302,5 +322,130 @@ func TestFormatDocument_UseCaseRoundTrip(t *testing.T) {
 				t.Errorf("formatting changed the parsed model\nbefore: %+v\nafter:  %+v", want, have)
 			}
 		})
+	}
+}
+
+// formatSource calls the same entry point the LSP formatting handler uses.
+func formatSource(t *testing.T, src string) string {
+	t.Helper()
+	return FormatDocument(src)
+}
+
+// TestFormatDocument_AlignsOpAnnotations is the RED/GREEN case for the
+// alignment pass: two annotations at mismatched columns must be pushed out to
+// a shared column (the longer line's length + 2), and the unannotated third
+// action must be left alone.
+func TestFormatDocument_AlignsOpAnnotations(t *testing.T) {
+	src := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt [POST /v1/charges]
+    Billing asks Gateway to authorize the card [POST /pay/v2/authorize]
+    Billing asks Ledger to record the entry
+}
+`
+	want := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
+    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+    Billing asks Ledger to record the entry
+}
+`
+	got := formatSource(t, src)
+	if got != want {
+		t.Errorf("format mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+	if _, _, diags := syntax.Parse(got); len(diags) != 0 {
+		t.Errorf("aligned output does not parse cleanly: %+v\ngot:\n%s", diags, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+	wantShapes, haveShapes := shapesOf(t, src), shapesOf(t, got)
+	if !reflect.DeepEqual(wantShapes, haveShapes) {
+		t.Errorf("alignment changed the parsed model\nbefore: %+v\nafter:  %+v", wantShapes, haveShapes)
+	}
+}
+
+// TestFormatDocument_AlignmentIsIdempotent formats an already-aligned document
+// a second time and requires no further change: alignment must be a fixed
+// point, not a moving target on repeated saves.
+func TestFormatDocument_AlignmentIsIdempotent(t *testing.T) {
+	src := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
+    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+}
+`
+	once := formatSource(t, src)
+	twice := formatSource(t, once)
+	if once != twice {
+		t.Errorf("format is not idempotent\nonce:\n%s\ntwice:\n%s", once, twice)
+	}
+}
+
+// TestFormatDocument_BlankLineResetsAnnotationRun proves a run does not reach
+// across scenarios: the second scenario's short action line must align to its
+// own length, not stretch out to the far column of the first scenario's long
+// one.
+func TestFormatDocument_BlankLineResetsAnnotationRun(t *testing.T) {
+	src := `use_case "Retry" {
+  when A does x
+    Subscriptions asks Billing for a very long fresh charge attempt [POST /v1/charges]
+
+  when B does y
+    A asks C for d [GET /v1/d]
+}
+`
+	got := formatSource(t, src)
+	if !strings.Contains(got, "A asks C for d  [GET /v1/d]") {
+		t.Errorf("second run should align independently, got:\n%s", got)
+	}
+}
+
+// TestFormatDocument_NonAnnotatedActionInsideRunKeepsAlignment covers the
+// motivating example from the task brief: a scenario's action block is a
+// single run even when one of its lines carries no annotation. That line is
+// left un-padded, but it does not reset the alignment column for the
+// annotated lines around it, so the whole block still reads as one column.
+//
+// This is a deliberate reading of "a line that is not an annotated action
+// ends the run": within one scenario there is no line between actions other
+// than other actions (blank lines and `when` only ever appear at a scenario
+// boundary), so the run is scoped to the scenario's action list, and a
+// non-annotated action inside it is inert rather than a boundary.
+func TestFormatDocument_NonAnnotatedActionInsideRunKeepsAlignment(t *testing.T) {
+	src := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt [POST /v1/charges]
+    Billing asks Gateway to authorize the card [POST /pay/v2/authorize]
+    Billing asks Ledger to record the entry
+    Gateway returns to Billing the authorization result [200 AuthorizationResult]
+}
+`
+	want := `use_case "Retry" {
+  when CRON detects a failed charge
+    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
+    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+    Billing asks Ledger to record the entry
+    Gateway returns to Billing the authorization result    [200 AuthorizationResult]
+}
+`
+	got := formatSource(t, src)
+	if got != want {
+		t.Errorf("format mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
+// TestFormatDocument_NoAnnotationsUnaffected is the assertion-1 control: a
+// scenario with no operation annotations at all must format identically to
+// how it did before the alignment pass existed.
+func TestFormatDocument_NoAnnotationsUnaffected(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    Auth asks DB to check email\n    Auth validates the result\n}\n"
+	got := formatSource(t, src)
+	if got != src {
+		t.Errorf("annotation-free scenario must be unchanged\nwant: %q\ngot:  %q", src, got)
 	}
 }

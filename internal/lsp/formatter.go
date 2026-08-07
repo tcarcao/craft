@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/pkg/craft"
@@ -85,14 +86,55 @@ func formatUseCaseDecl(sb *strings.Builder, node syntax.SyntaxNode) {
 		sb.WriteString("  when ")
 		sb.WriteString(sc.Trigger().SourceText())
 		sb.WriteByte('\n')
-		for _, action := range sc.Actions() {
-			sb.WriteString("    ")
-			sb.WriteString(action.SourceText())
-			sb.WriteByte('\n')
-		}
+		writeAlignedActions(sb, sc.Actions())
 	}
 
 	sb.WriteByte('}')
+}
+
+// writeAlignedActions writes a scenario's action lines, column-aligning any
+// trailing `[...]` operation annotations to a shared column.
+//
+// A scenario's action list is the whole alignment run: nothing but actions
+// ever appears between them (a blank line or `when` only occurs at a scenario
+// boundary, which is a separate call to this function). The column is
+// max(visible length of the line before the annotation) + 2, computed over
+// only the annotated lines. An action with no annotation contributes nothing
+// to that max and is written back exactly as SourceText renders it, with no
+// trailing padding.
+func writeAlignedActions(sb *strings.Builder, actions []syntax.ActionDecl) {
+	type actionLine struct {
+		body string // SourceText with the " [op]" suffix stripped
+		op   string // annotation body without brackets, "" when none
+	}
+
+	lines := make([]actionLine, len(actions))
+	col := 0
+	for i, action := range actions {
+		full := action.SourceText()
+		op := action.OpText()
+		body := full
+		if op != "" {
+			body = strings.TrimSuffix(full, " ["+op+"]")
+			if l := utf8.RuneCountInString(body); l+2 > col {
+				col = l + 2
+			}
+		}
+		lines[i] = actionLine{body: body, op: op}
+	}
+
+	for _, l := range lines {
+		sb.WriteString("    ")
+		sb.WriteString(l.body)
+		if l.op != "" {
+			pad := col - utf8.RuneCountInString(l.body)
+			sb.WriteString(strings.Repeat(" ", pad))
+			sb.WriteByte('[')
+			sb.WriteString(l.op)
+			sb.WriteByte(']')
+		}
+		sb.WriteByte('\n')
+	}
 }
 
 // formatDecl formats a single top-level declaration into sb.
