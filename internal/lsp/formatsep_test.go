@@ -91,6 +91,73 @@ func TestSeparatorFor_AdjacentTokensStayAdjacent(t *testing.T) {
 	}
 }
 
+// TestSeparatorFor_OneSpaceBeforeAnOpeningBrace is the mirror of the existing
+// rule that breaks the line after `{`. Without it a minified declaration only
+// half expanded: the body was indented onto its own lines but the brace stayed
+// glued to the block name, as `service Foo{`.
+func TestSeparatorFor_OneSpaceBeforeAnOpeningBrace(t *testing.T) {
+	src := "service Foo{contexts: A}\n"
+	prev := sepTok(t, src, 1) // Foo
+	curr := sepTok(t, src, 2) // {
+	if got := separatorFor(&prev, "", curr, 0); got != " " {
+		t.Errorf("got %q, want a single space so `service Foo{` becomes `service Foo {`", got)
+	}
+}
+
+// TestSeparatorFor_AuthorBraceOnItsOwnLineSurvives guards the rule above. A
+// line break the author wrote is authorial, so a brace deliberately placed on
+// its own line must not be pulled up onto the header.
+func TestSeparatorFor_AuthorBraceOnItsOwnLineSurvives(t *testing.T) {
+	src := "service Foo\n{\n  contexts: A\n}\n"
+	prev := sepTok(t, src, 1) // Foo
+	curr := sepTok(t, src, 2) // {
+	if got := separatorFor(&prev, "\n", curr, 0); got != "\n" {
+		t.Errorf("got %q, want the author's line break preserved", got)
+	}
+}
+
+// TestSeparatorFor_NewLineAfterAClosingBrace is the mirror of the existing rule
+// that breaks the line before `}`. Without it `}Commerce{` never broke, so two
+// sibling blocks ran together on one line.
+func TestSeparatorFor_NewLineAfterAClosingBrace(t *testing.T) {
+	src := "domains{Auth{Login}Commerce{Cart}}\n"
+	prev := sepTok(t, src, 4) // } closing Auth
+	curr := sepTok(t, src, 5) // Commerce
+	if got := separatorFor(&prev, "", curr, 1); got != "\n  " {
+		t.Errorf("got %q, want a newline and one level of indent", got)
+	}
+}
+
+// TestSeparatorFor_BlankLineAfterAClosingBraceSurvives guards the rule above,
+// so a blank line the author put between two sibling blocks is not flattened.
+func TestSeparatorFor_BlankLineAfterAClosingBraceSurvives(t *testing.T) {
+	src := "domains {\n  Auth {\n    Login\n  }\n\n  Commerce {\n    Cart\n  }\n}\n"
+	prev := sepTok(t, src, 5) // } closing Auth
+	curr := sepTok(t, src, 6) // Commerce
+	if got := separatorFor(&prev, "\n\n  ", curr, 1); got != "\n\n  " {
+		t.Errorf("got %q, want the author's blank line preserved", got)
+	}
+}
+
+// TestSeparatorFor_SeveralStatementsOnOneLineStayThere pins the accepted limit
+// of minified expansion rather than leaving it to be rediscovered as a bug.
+//
+// Braces expand because a brace is a token the walker can see. A statement
+// boundary is not: `user Alice system Bot` is two statements separated by the
+// same single space that separates `user` from `Alice`, and nothing in the gap
+// tells them apart. Deriving the boundary from the tree instead was tried and
+// emitted source that did not parse, because an action's event ref and its
+// `[op]` annotation are non-nested siblings and got split across lines. The
+// formatter leaves these as the author wrote them.
+func TestSeparatorFor_SeveralStatementsOnOneLineStayThere(t *testing.T) {
+	src := "actors{user Alice system Bot}\n"
+	prev := sepTok(t, src, 3) // Alice
+	curr := sepTok(t, src, 4) // system
+	if got := separatorFor(&prev, " ", curr, 1); got != " " {
+		t.Errorf("got %q, want a single space: statement boundaries are not inferred", got)
+	}
+}
+
 func TestSeparatorFor_NoSpaceBeforeColonOrComma(t *testing.T) {
 	src := "services {\n  S {\n    contexts: A, B\n  }\n}\n"
 	gn, _, _ := syntax.Parse(src)

@@ -196,6 +196,15 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 
 			got, blocked := FormatDocumentChecked(src)
 			if blocked != nil {
+				// contentDrift is not a licence to decline. Declining because
+				// the parse was too broken to re-render is correct behaviour;
+				// declining because the renderer would have changed content is
+				// a formatter bug that this loop must not wave through. Both
+				// return the input unchanged, so without naming the code the
+				// assertions below are skipped and drift passes in silence.
+				if blocked.Code == "craft/internal/formatter-content-drift" {
+					t.Fatalf("contentDrift fired: the walker would have changed more than whitespace, so the token stream is losing content")
+				}
 				if got != src {
 					t.Fatalf("a file the formatter declined to format must come back byte-identical\nblocked by: [%s] %s", blocked.Code, blocked.Message)
 				}

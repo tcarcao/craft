@@ -8,8 +8,14 @@ import (
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
+// The braces here are minified and the statements are not, which is exactly
+// the split the formatter supports. Every brace is placed by the formatter, so
+// `domains{` becomes `domains {` and `}Commerce{` breaks. The statements keep
+// the author's line breaks, because a statement boundary is not something the
+// token stream carries: see
+// TestSeparatorFor_SeveralStatementsOnOneLineStayThere.
 func TestFormatDocument_DomainsBlock(t *testing.T) {
-	input := `domains{Auth{Login Register}Commerce{Cart Checkout}}`
+	input := "domains{Auth{Login\nRegister}Commerce{Cart\nCheckout}}"
 	got := FormatDocument(input)
 
 	checks := []string{
@@ -30,7 +36,7 @@ func TestFormatDocument_DomainsBlock(t *testing.T) {
 }
 
 func TestFormatDocument_ServiceFields(t *testing.T) {
-	input := `service Foo{language:golang contexts:Auth,Profile}`
+	input := "service Foo{language:golang\ncontexts:Auth,Profile}"
 	got := FormatDocument(input)
 
 	checks := []string{
@@ -46,7 +52,7 @@ func TestFormatDocument_ServiceFields(t *testing.T) {
 }
 
 func TestFormatDocument_ActorsBlock(t *testing.T) {
-	input := `actors{user Alice system Bot}`
+	input := "actors{user Alice\nsystem Bot}"
 	got := FormatDocument(input)
 
 	checks := []string{
@@ -117,7 +123,7 @@ func TestFormatDocument_MixedUseCaseAndService(t *testing.T) {
 
 func TestFormatDocument_QuotedServiceNameRoundTrip(t *testing.T) {
 	// "Order Service" has a space — must be quoted in output; losing quotes breaks DSL.
-	input := `service "Order Service"{language:golang contexts:Cart,Checkout}`
+	input := "service \"Order Service\"{language:golang\ncontexts:Cart,Checkout}"
 	got := FormatDocument(input)
 	checks := []string{
 		`service "Order Service" {`,
@@ -598,7 +604,11 @@ func TestFormatDocument_CommentsSurvive(t *testing.T) {
 		{"above a top-level block", "// leading\nservices {\n  A {\n    contexts: X\n  }\n}\n"},
 		{"inside a nested block", "services {\n  // about A\n  A {\n    // about contexts\n    contexts: X\n  }\n}\n"},
 		{"above a use_case", "// this is a comment\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
-		{"above a scenario", "use_case \"X\" {\n  // first flow\n  when U does x\n    A asks B for c\n}\n"},
+		// The blank line the formatter puts before every scenario lands after a
+		// leading comment rather than before it, because the comment is just the
+		// token preceding the `when`. Canonical form therefore carries the blank
+		// line here.
+		{"above a scenario", "use_case \"X\" {\n  // first flow\n\n  when U does x\n    A asks B for c\n}\n"},
 		{"above an action", "use_case \"X\" {\n  when U does x\n    // why this call\n    A asks B for c\n}\n"},
 		{"after the last action", "use_case \"X\" {\n  when U does x\n    A asks B for c\n    // TODO: confirm subject\n}\n"},
 		{"doc comment", "/// documented\nactor user Alice\n"},
@@ -704,17 +714,24 @@ func TestFormatDocument_TrailingCommentWithoutFinalNewline(t *testing.T) {
 }
 
 // TestFormatDocument_RefAdjacentCommentsSurvive covers a comment the parser
-// attached inside a Ref node. The atomic-ref branch runs before the comment
-// branch and rendered the ref through RefText, which reads the trivia-free
-// token list, so the comment was swallowed by the very fix that stopped
-// `re/billing` being split.
+// attached inside a Ref node. The atomic-ref branch used to run before the
+// comment branch and rendered the ref through RefText, which reads the
+// trivia-free token list, so the comment was swallowed by the very fix that
+// stopped `re/billing` being split.
+//
+// The token walker has no atomic-ref branch to swallow it: a comment is a
+// token like any other and is written where the author put it. The value that
+// follows keeps the author's line break, which it must, because a line comment
+// runs to end of line and would otherwise swallow the value. It sits at the
+// block's own indent rather than a hanging indent, because the formatter is no
+// longer the one splitting the field across two lines.
 func TestFormatDocument_RefAdjacentCommentsSurvive(t *testing.T) {
 	cases := []struct {
 		name string
 		src  string
 	}{
-		{"comment before a field value", "services {\n  A {\n    repo: // note\n      olxeu/realestate\n  }\n}\n"},
-		{"comment inside a list", "services {\n  A {\n    contexts: X, // why\n      Y\n  }\n}\n"},
+		{"comment before a field value", "services {\n  A {\n    repo: // note\n    olxeu/realestate\n  }\n}\n"},
+		{"comment inside a list", "services {\n  A {\n    contexts: X, // why\n    Y\n  }\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -922,7 +939,10 @@ func TestWriteTokens_ExpandsMinifiedDeclaration(t *testing.T) {
 		}
 	}
 	got := sb.String()
-	if !strings.Contains(got, "Foo{\n  contexts: A\n}") {
+	// `Foo {` with the space, not `Foo{`. The original assertion here was
+	// written before the `curr == LBrace` mirror existed and encoded its
+	// absence, so it certified a half-expanded declaration as correct.
+	if !strings.Contains(got, "Foo {\n  contexts: A\n}") {
 		t.Errorf("minified declaration did not expand:\n%q", got)
 	}
 }
