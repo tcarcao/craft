@@ -1111,13 +1111,35 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 
 // parseAsksAction parses: <target> to|for <phrase>
 // The `asks` keyword token has already been consumed by parseAction.
+//
+// A `kind:` prefix in the target slot is rejected: the slot already implies a
+// bounded context, the same rule context_map enforces for its endpoints. The
+// qualified `<domain>/<name>` form stays legal.
 func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
 	var diags []model.Diagnostic
 	targetTok := p.peek()
 	if targetTok.Type == lexer.TokenIdent {
-		p.parseRef()
+		if kind := p.parseRef(); kind != "" {
+			diags = append(diags, p.diagKindPrefixInTarget(targetTok, kind))
+		}
 	} else if isAnyKeywordAsIdent(targetTok.Type) {
-		p.consumeAs(SyntaxKindIdent)
+		// "domain" and "service" lex as hard keywords rather than TokenIdent,
+		// so a kind-prefixed target using one of them (e.g.
+		// "domain:re/monetization", "service:billing-api") lands here, not in
+		// the TokenIdent branch above. Only hand it to parseRef when it is
+		// immediately followed by ':' — parseRef's own kind-prefix branch
+		// handles that shape correctly. A bare keyword-as-ident with no colon
+		// is not a ref shape; consume it directly instead, mirroring
+		// parseEdgeEndpoint's guard against parseRef's zero-progress hole on
+		// that shape (see the comment on parseEdgeEndpoint).
+		hasColon := p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == targetTok.Line && adjacentTokens(targetTok, p.peekAt(1))
+		if hasColon {
+			if kind := p.parseRef(); kind != "" {
+				diags = append(diags, p.diagKindPrefixInTarget(targetTok, kind))
+			}
+		} else {
+			p.consumeAs(SyntaxKindIdent)
+		}
 	}
 
 	// connector: "to" or "for"
@@ -1841,6 +1863,23 @@ func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
 		Message:  "empty operation annotation `[]`; expected a verb and/or payload, e.g. [POST /v1/charges]",
 		Severity: model.SeverityError,
 		Range:    r,
+	}
+}
+
+// diagKindPrefixInTarget produces a craft/syntax/kind-prefix-in-target
+// diagnostic for an asks target that carries a recognised `kind:` prefix
+// (bc:/domain:/service:/term:). The asks target slot already implies a
+// bounded context, so the prefix is rejected; the bare or qualified
+// `<domain>/<name>` form is the only legal spelling. tok is the target's
+// leading token, captured before parseRef consumed it.
+func (p *Parser) diagKindPrefixInTarget(tok lexer.Token, kind string) model.Diagnostic {
+	return model.Diagnostic{
+		Code: "craft/syntax/kind-prefix-in-target",
+		Message: fmt.Sprintf(
+			"remove the %q prefix: an asks target is always a bounded context, write the bare or <domain>/<name> form",
+			kind+":"),
+		Severity: model.SeverityError,
+		Range:    tokenRange(tok),
 	}
 }
 

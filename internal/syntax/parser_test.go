@@ -484,6 +484,12 @@ func TestProse_TrailingCommentAfterWhitespaceIsSeparated(t *testing.T) {
 // asserts a kind-prefixed slug (bc:re/billing) round-trips exactly through
 // TargetName() — NOT truncated to the kind word "bc", which is what a naive
 // ChildToken(SyntaxKindIdent)/Name() call on the ref node would yield.
+//
+// Since Task 5, a `bc:` prefix in the asks target slot is itself rejected
+// (the slot already implies a bounded context), so this fixture now also
+// carries exactly that one diagnostic. TargetName() must still round-trip
+// the full, untruncated text — Task 5 only adds a diagnostic, it does not
+// change what parseRef consumes.
 func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
 	src := `use_case "x" {
   when Subscriptions listens vas.VasApplied
@@ -491,8 +497,8 @@ func TestTypedRefs_NotifiesListensAsks(t *testing.T) {
     Fulfillment notifies vas.VasFulfilled
 }`
 	gn, _, diags := syntax.Parse(src)
-	if len(diags) != 0 {
-		t.Fatalf("unexpected diagnostics: %v", diags)
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/kind-prefix-in-target" {
+		t.Fatalf("expected exactly one craft/syntax/kind-prefix-in-target diagnostic, got: %v", diags)
 	}
 	root := syntax.Root(gn)
 	ucNodes := root.ChildNodes(syntax.SyntaxKindUseCaseDecl)
@@ -1045,5 +1051,51 @@ func TestOpAnnotation_EmptyBracketsDiagnostic(t *testing.T) {
 	}
 	if found.Severity != model.SeverityError {
 		t.Errorf("severity = %v, want SeverityError", found.Severity)
+	}
+}
+
+// TestAsksTarget_RejectsKindPrefix is the Task 5 TDD lock: an asks target
+// slot already implies a bounded context (the same rule context_map's
+// endpoint-kind validation enforces), so a `kind:` prefix there is redundant
+// at best and misleading at worst. Every recognised slug kind word must be
+// rejected.
+func TestAsksTarget_RejectsKindPrefix(t *testing.T) {
+	cases := []string{"bc:re/billing", "domain:re/monetization", "service:billing-api", "term:billing/dunning"}
+	for _, target := range cases {
+		t.Run(target, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    A asks " + target + " for c\n}"
+			_, _, diags := syntax.Parse(src)
+			found := false
+			for _, d := range diags {
+				if d.Code == "craft/syntax/kind-prefix-in-target" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected craft/syntax/kind-prefix-in-target for %q, got %+v", target, diags)
+			}
+		})
+	}
+}
+
+// TestAsksTarget_QualifiedPathStillLegal confirms the rejection in
+// TestAsksTarget_RejectsKindPrefix is scoped to the `kind:` prefix only: the
+// qualified `<domain>/<name>` form and a bare bounded-context name both stay
+// legal, with no error diagnostic and no truncation of TargetName().
+func TestAsksTarget_QualifiedPathStillLegal(t *testing.T) {
+	for _, target := range []string{"re/billing", "Billing"} {
+		t.Run(target, func(t *testing.T) {
+			src := "use_case \"X\" {\n  when U does x\n    A asks " + target + " for c\n}"
+			tree, _, diags := syntax.Parse(src)
+			for _, d := range diags {
+				if d.Severity == "error" {
+					t.Errorf("unexpected error for %q: [%s] %s", target, d.Code, d.Message)
+				}
+			}
+			a := syntax.AsFile(syntax.Root(tree)).UseCases()[0].Scenarios()[0].Actions()[0]
+			if got := a.TargetName(); got != target {
+				t.Errorf("TargetName() = %q, want %q", got, target)
+			}
+		})
 	}
 }
