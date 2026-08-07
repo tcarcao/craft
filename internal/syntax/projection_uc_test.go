@@ -127,7 +127,7 @@ func TestProject_ActionOperation_OmittedWhenAbsent(t *testing.T) {
 // An empty `[]` annotation is invalid input, not empty-but-valid input: it
 // must produce a diagnostic and must not populate Operation. The projection
 // predicate keying off OpText() == "" already treats `[]` the same as no
-// annotation at all, which is correct here — the diagnostic is what tells the
+// annotation at all, which is correct here: the diagnostic is what tells the
 // user their `[]` was rejected rather than silently accepted.
 func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
 	src := `use_case "X" {
