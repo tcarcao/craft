@@ -155,6 +155,33 @@ craft inspect docs/payments.craft --format json | jq '.services'
 
 ---
 
+### `fmt` — format .craft files to canonical form
+
+```
+craft fmt <files...> [flags]
+```
+
+Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies 2-space indent, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations across each contiguous run.
+
+Comments stay where the author put them, including a trailing comment at the end of an action line. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+
+If a file has a parse error too severe to re-render from, `craft fmt` leaves it untouched and reports it as skipped rather than silently rewriting it or reporting it as clean.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | false | Write nothing; name each unformatted file and exit non-zero |
+
+**Examples:**
+```bash
+craft fmt docs/payments.craft
+craft fmt "docs/**/*.craft"          # quote the glob so the shell does not expand it
+craft fmt --check "docs/**/*.craft"  # CI gate: exits 1 if any file is unformatted
+```
+
+Arguments are paths or globs (`**` supported). Directories are not walked: `craft fmt docs/` is an error, use `craft fmt "docs/**/*.craft"`.
+
+---
+
 ### `check` — parse and emit CraftDoc JSON
 
 ```

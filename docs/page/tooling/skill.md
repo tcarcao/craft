@@ -24,9 +24,11 @@ The skill provides Claude with:
 - The complete BNF grammar, including typed event refs, node slugs (`bc:`/`domain:`/`term:`/`service:`), and the `context_map` block
 - All construct types: actors, domains, services, `context_map`, architecture, exposures, use cases
 - Event-driven choreography patterns (`notifies` / `listens`) using typed event refs — the quoted-string form is recognized but flagged as deprecated
+- Operation annotations: a trailing `[POST /v1/charges]` on any action line, for when the use case is the integration contract, including which protocol verbs are recognized and when the payload stays opaque
+- Where a `kind:` prefix is a parse error rather than a valid slug, which is every bounded-context slot inside a `use_case`
 - Common mistakes and how to avoid them
 - File conventions (kebab-case filenames, canonical ordering, `docs/` placement)
-- Integration with `craft` for validation and diagram generation
+- Integration with `craft` for validation, formatting, and diagram generation
 
 ## Example session
 
@@ -51,6 +53,7 @@ The skill and CLI complement each other:
 |------|------|
 | Generate or extend `.craft` files | Claude Code skill |
 | Validate syntax and lint rules | `craft validate` |
+| Format to canonical form | `craft fmt` |
 | Produce diagrams | `craft generate` |
 | Inspect the parsed model | `craft inspect` |
 
