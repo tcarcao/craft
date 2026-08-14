@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"testing"
 	"time"
 
@@ -88,16 +87,16 @@ type useCaseResult struct {
 func extractUseCases(t *testing.T, craftSrc string) []useCaseResult {
 	t.Helper()
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	t.Cleanup(func() {
 		cancel()
 		testOut.Close()
 	})
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 
 	br := bufio.NewReader(testIn)
 	id := 1
