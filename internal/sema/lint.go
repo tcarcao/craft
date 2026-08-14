@@ -8,12 +8,35 @@ package sema
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
+
+// sortedTreeURIs returns the file URIs of perFileTrees in ascending order.
+//
+// Every rule below walks the workspace file-by-file while accumulating into a
+// map keyed by something COARSER than the file — an event name, an actor name,
+// a publisher/listener pair. The first file to reach a given key is the one that
+// gets recorded, and every later file with the same key is suppressed as a
+// duplicate. Ranging over the map directly therefore does not merely shuffle the
+// output: it changes WHICH file and line a finding is reported against, because
+// a different file wins the race on each run. The finding count stays identical,
+// which is exactly what makes the bug easy to miss.
+//
+// Walking in sorted URI order makes "first file wins" a deterministic statement
+// about the corpus instead of a statement about Go's map seed.
+func sortedTreeURIs(perFileTrees map[string]syntax.SyntaxNode) []string {
+	uris := make([]string, 0, len(perFileTrees))
+	for uri := range perFileTrees {
+		uris = append(uris, uri)
+	}
+	sort.Strings(uris)
+	return uris
+}
 
 // LintWorkspace runs style and consistency checks across all workspace files.
 // It accepts the per-file syntax tree map and the merged workspace symbol table.
@@ -56,7 +79,8 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]gr
 	published := map[string]pubSite{}
 	consumed := map[string]bool{}
 
-	for uri, tree := range perFileTrees {
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		tree := perFileTrees[uri]
 		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, uc := range file.UseCases() {
@@ -116,8 +140,8 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 	}
 
 	used := map[string]bool{}
-	for _, tree := range perFileTrees {
-		file := syntax.AsFile(tree)
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		file := syntax.AsFile(perFileTrees[uri])
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
 				trigger := sc.Trigger()
@@ -187,7 +211,8 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 		}
 	}
 
-	for uri, tree := range perFileTrees {
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		tree := perFileTrees[uri]
 		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, uc := range file.UseCases() {
@@ -312,7 +337,8 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 	publishersByEvent := map[string][]asyncSite{}
 	listenersByEvent := map[string][]asyncSite{}
 
-	for uri, tree := range perFileTrees {
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		tree := perFileTrees[uri]
 		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, uc := range file.UseCases() {
@@ -398,7 +424,8 @@ func lintAmbiguousUseCaseRefs(
 	lis map[string]green.LineIndex,
 ) []model.Diagnostic {
 	var diags []model.Diagnostic
-	for uri, tree := range perFileTrees {
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		tree := perFileTrees[uri]
 		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, uc := range file.UseCases() {
@@ -480,7 +507,8 @@ func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 	deps := buildDependencyEdges(perFileTrees, ws, lis)
 
 	var diags []model.Diagnostic
-	for uri, tree := range perFileTrees {
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		tree := perFileTrees[uri]
 		li := lis[uri]
 		file := syntax.AsFile(tree)
 		for _, cm := range file.ContextMaps() {
@@ -574,8 +602,8 @@ func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 	// The adjacency already holds one entry per unordered pair, so iterating
 	// it fires each pair at most once.
 	classified := map[pairKey]bool{}
-	for _, tree := range perFileTrees {
-		file := syntax.AsFile(tree)
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		file := syntax.AsFile(perFileTrees[uri])
 		for _, cm := range file.ContextMaps() {
 			scope := cm.Domain()
 			for _, edge := range cm.Edges() {
