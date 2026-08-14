@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sort"
+	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/model"
@@ -592,6 +594,18 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 // MergeWorkspaceSymbols merges per-file symbol tables into a workspace-level
 // index. Cross-file duplicate service declarations emit a warning diagnostic
 // with SourceURI set to the second file that declares the same name.
+//
+// Files are merged in ascending URI order and the FIRST declaration of a name
+// wins, for every symbol kind. Both halves matter, and for the same reason the
+// lint rules walk sorted (see sortedTreeURIs): these maps are keyed by bare
+// name, so a name declared in two files has exactly one winner, and the winner
+// is what every downstream consumer reports as the declaration site — the URI
+// and line of an unused-actor finding, the owning domain a bare bounded-context
+// reference resolves to, the position go-to-definition jumps to. Ranging over
+// perFile directly let Go's map seed pick that winner, so those answers changed
+// between two runs over identical input. Sorting alone is not enough: with
+// last-write-wins the winner would be the alphabetically LAST file, which
+// contradicts the rule the service branch below already documents.
 func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []model.Diagnostic) {
 	ws := WorkspaceSymbols{
 		Actors:          make(map[string]ActorSymbol),
@@ -601,15 +615,28 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 		Services:        make(map[string]ServiceSymbol),
 		UseCases:        make(map[string]UseCaseSymbol),
 	}
+	uris := make([]string, 0, len(perFile))
+	for uri := range perFile {
+		uris = append(uris, uri)
+	}
+	sort.Strings(uris)
+
 	var diags []model.Diagnostic
-	for _, syms := range perFile {
+	for _, uri := range uris {
+		syms := perFile[uri]
 		for _, a := range syms.Actors {
-			ws.Actors[a.Name] = a
+			if _, dup := ws.Actors[a.Name]; !dup {
+				ws.Actors[a.Name] = a
+			}
 		}
 		for _, d := range syms.Domains {
-			ws.Domains[d.Name] = d
+			if _, dup := ws.Domains[d.Name]; !dup {
+				ws.Domains[d.Name] = d
+			}
 			for _, bc := range d.BoundedContexts {
-				ws.BoundedContexts[bc] = d
+				if _, dup := ws.BoundedContexts[bc]; !dup {
+					ws.BoundedContexts[bc] = d
+				}
 			}
 		}
 		for _, s := range syms.Services {
@@ -634,10 +661,14 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 			ws.Services[s.Name] = s
 		}
 		for _, uc := range syms.UseCases {
-			ws.UseCases[uc.Name] = uc
+			if _, dup := ws.UseCases[uc.Name]; !dup {
+				ws.UseCases[uc.Name] = uc
+			}
 		}
 		for name, pos := range syms.BCPositions {
-			ws.BCPositions[name] = pos
+			if _, dup := ws.BCPositions[name]; !dup {
+				ws.BCPositions[name] = pos
+			}
 		}
 	}
 	return ws, diags
@@ -878,6 +909,27 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 // resolveUseCaseRef attempts to resolve a name from a use-case body against
 // the workspace symbol tables. Returns the target and true if found.
 func resolveUseCaseRef(ws WorkspaceSymbols, name string) (UseCaseRefTarget, bool) {
+	// Qualified `<domain>/<name>` names a specific bounded context, exactly as it
+	// does for a context_map endpoint (see resolveBCRef). The grammar defines the
+	// use-case participant slot as the same <bc_ref> production — bare OR
+	// domain-qualified — so both forms must resolve here. Qualification is not
+	// stylistic: a bounded-context name declared in two domains can only be
+	// referenced unambiguously in this form.
+	if idx := strings.IndexByte(name, '/'); idx >= 0 {
+		domain, bcName := name[:idx], name[idx+1:]
+		if dom, ok := ws.Domains[domain]; ok && domainHasBC(dom, bcName) {
+			t := UseCaseRefTarget{Kind: "bounded_context", Domain: &dom}
+			// Positions are indexed by bare BC name.
+			if pos, ok := ws.BCPositions[bcName]; ok {
+				t.BCLine = pos.Line
+				t.BCColumn = pos.Column
+				t.BCURI = pos.URI
+			}
+			return t, true
+		}
+		return UseCaseRefTarget{}, false
+	}
+
 	if a, ok := ws.Actors[name]; ok {
 		return UseCaseRefTarget{Kind: "actor", Actor: &a}, true
 	}

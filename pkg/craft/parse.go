@@ -104,6 +104,14 @@ func ParseFiles(files map[string][]byte) (*CraftDoc, []Diagnostic, error) {
 		diags = append(diags, sortDiags(remapURIs(sema.LintWorkspace(perFileTrees, ws, perFileLIs)))...)
 	}
 
+	// One final total-order sort over the whole slice. Each block above is sorted
+	// on its own, which orders diagnostics WITHIN a block but says nothing about
+	// the concatenation — and several rules draw their findings from maps, so the
+	// order a block is built in is not stable across runs. Sorting once at the end
+	// makes the returned slice byte-identical for identical input, which is what
+	// lets callers diff two runs and trust the result.
+	sortDiags(diags)
+
 	return merged, diags, nil
 }
 
@@ -160,7 +168,17 @@ func sortDiags(diags []Diagnostic) []Diagnostic {
 		if a.Range.Start.Character != b.Range.Start.Character {
 			return a.Range.Start.Character < b.Range.Start.Character
 		}
-		return a.Code < b.Code
+		if a.Code != b.Code {
+			return a.Code < b.Code
+		}
+		// Message is the final tiebreak, and it is what makes this a TOTAL order.
+		// Without it, two diagnostics sharing a position and a code keep whatever
+		// relative order the upstream map iteration produced, and SliceStable
+		// faithfully preserves that instability — so consecutive runs over an
+		// identical tree emit the same diagnostics in a different order. Rules that
+		// fire repeatedly under one code (the past-tense event check, the
+		// unclassified-communication hint) are where that showed.
+		return a.Message < b.Message
 	})
 	return diags
 }
