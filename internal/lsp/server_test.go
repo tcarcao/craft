@@ -58,14 +58,15 @@ func readMsg(r *bufio.Reader) (lspMsg, error) {
 }
 
 func TestServeLifecycle(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
 	go func() {
+		defer serverOut.Close()
 		errCh <- lsp.Serve(ctx, serverIn, serverOut)
 	}()
 
@@ -165,9 +166,13 @@ func TestServeLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Bounded by its own timer rather than by ctx.Done(). The server context is
+	// a lifetime for the goroutine, deliberately far longer than any test's own
+	// waits (see serverLifetime); reusing it here would make this assertion wait
+	// that whole time before reporting.
 	select {
-	case <-ctx.Done():
-		t.Fatal("server did not exit within 5s")
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not exit within 5s of the exit notification")
 	case err := <-errCh:
 		if err != nil && !isClosedPipe(err) {
 			t.Fatalf("server returned unexpected error: %v", err)
@@ -184,14 +189,15 @@ func isClosedPipe(err error) bool {
 }
 
 func TestSetTrace_LogTrace(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
 	go func() {
+		defer serverOut.Close()
 		errCh <- lsp.Serve(ctx, serverIn, serverOut)
 	}()
 
@@ -317,14 +323,15 @@ func TestSetTrace_LogTrace(t *testing.T) {
 }
 
 func TestExecuteCommand_CraftExtractWorkspace(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
 	go func() {
+		defer serverOut.Close()
 		errCh <- lsp.Serve(ctx, serverIn, serverOut)
 	}()
 	defer testOut.Close()
@@ -430,14 +437,14 @@ func mustMarshalString(s string) string {
 }
 
 func TestInlayHints_ServiceContextResolvesToDomain(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -542,13 +549,13 @@ func TestInlayHints_ServiceContextResolvesToDomain(t *testing.T) {
 // entry silently fails to resolve against the (unquoted) resolution map and
 // produces no inlay hint at all.
 func TestInlayHints_QuotedServiceContextResolvesToDomain(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -617,14 +624,14 @@ func TestInlayHints_QuotedServiceContextResolvesToDomain(t *testing.T) {
 }
 
 func TestExtractDslFromBlockRanges_GroupedService(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -708,14 +715,14 @@ func TestExtractDslFromBlockRanges_GroupedService(t *testing.T) {
 }
 
 func TestExtractDslFromBlockRanges_TopLevelService(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -795,14 +802,14 @@ func TestExtractDslFromBlockRanges_TopLevelService(t *testing.T) {
 }
 
 func TestExtractDslFromBlockRanges_GroupedDomain(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -883,14 +890,14 @@ func TestExtractDslFromBlockRanges_GroupedDomain(t *testing.T) {
 }
 
 func TestExtractDslFromBlockRanges_TopLevelDomain(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -968,14 +975,14 @@ func TestExtractDslFromBlockRanges_TopLevelDomain(t *testing.T) {
 }
 
 func TestExtractDslFromBlockRanges_OutOfBoundsRangeReturnsEmpty(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1048,14 +1055,14 @@ func TestExtractDslFromBlockRanges_OutOfBoundsRangeReturnsEmpty(t *testing.T) {
 }
 
 func TestExtractDslFromBlockRanges_UnmatchedInBoundsRangeFallsBackToRawLines(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1149,14 +1156,14 @@ func TestExtractDslFromBlockRanges_UnmatchedInBoundsRangeFallsBackToRawLines(t *
 // for actors, domain names, bounded contexts, and services. This guards against
 // regressions where all tokens are emitted at column 0.
 func TestSemanticTokens_ColumnTracking(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1312,13 +1319,13 @@ func TestSemanticTokens_ColumnTracking(t *testing.T) {
 // (not hardcoded to column 0). This guards the fix for the bug where the token
 // started at the beginning of the line, overlapping the `when` keyword.
 func TestSemanticTokens_TriggerAndActionColumns(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1436,13 +1443,13 @@ func TestSemanticTokens_TriggerAndActionColumns(t *testing.T) {
 }
 
 func TestSemanticTokens_TargetContext(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1560,13 +1567,13 @@ func TestSemanticTokens_TargetContext(t *testing.T) {
 // as craft-usecase-string (index 30) and event strings in notifies/listens actions
 // are emitted as craft-event-string (index 31), rather than craft-regular-string (32).
 func TestSemanticTokens_StringTypes(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1689,13 +1696,13 @@ func TestSemanticTokens_StringTypes(t *testing.T) {
 }
 
 func TestSemanticTokens_ExposureAndArch(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -1825,12 +1832,12 @@ func TestSemanticTokens_ExposureAndArch(t *testing.T) {
 // TestSemanticTokens_ServiceBody verifies that data store names, language values,
 // deployment types, and deployment targets are classified correctly.
 func TestSemanticTokens_ServiceBody(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 	br := bufio.NewReader(testIn)
 	id := 1
@@ -1967,14 +1974,14 @@ func TestDefinition_TargetContextColumnAware(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			serverIn, testOut := io.Pipe()
-			testIn, serverOut := io.Pipe()
+			serverIn, testOut := newTestPipe()
+			testIn, serverOut := newTestPipe()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 			defer cancel()
 			defer testOut.Close()
 
-			go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+			go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 			br := bufio.NewReader(testIn)
 
 			id := 1
@@ -2062,14 +2069,14 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 	// L8:  }
 	const craftSrc = "domain Auth {\n  Login\n  Session\n}\nuse_case \"T\" {\n  when Login initiates x\n    Session validates tok\n}"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -2147,13 +2154,13 @@ func TestDefinition_BoundedContextOwnLine(t *testing.T) {
 // TestSemanticTokens_VerbsAndPhrases verifies that action verbs, connector words,
 // and phrase words in use-case bodies are classified with correct craft-* types.
 func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -2263,13 +2270,13 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 	}
 
 	t.Run("sync_action", func(t *testing.T) {
-		sIn, tOut2 := io.Pipe()
-		tIn2, sOut2 := io.Pipe()
+		sIn, tOut2 := newTestPipe()
+		tIn2, sOut2 := newTestPipe()
 
-		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx2, cancel2 := context.WithTimeout(context.Background(), serverLifetime)
 		defer cancel2()
 
-		go func() { lsp.Serve(ctx2, sIn, sOut2) }() //nolint:errcheck
+		go func() { defer sOut2.Close(); lsp.Serve(ctx2, sIn, sOut2) }() //nolint:errcheck
 		defer tOut2.Close()
 
 		br2 := bufio.NewReader(tIn2)
@@ -2393,13 +2400,13 @@ func TestSemanticTokens_VerbsAndPhrases(t *testing.T) {
 // same token as ActionDecl.PhraseText() (see phraseStartIndex in
 // internal/syntax/ast.go).
 func TestSemanticTokens_SlugTarget(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -2550,13 +2557,13 @@ func TestSemanticTokens_SlugTarget(t *testing.T) {
 // unclassified would defeat the point of the annotation reading as one
 // visually distinct unit.
 func TestSemanticTokens_OpAnnotation(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -2732,13 +2739,13 @@ func TestSemanticTokens_OpAnnotation(t *testing.T) {
 // craft-connector-word. This asserts "with" IS classified and "success" is
 // craft-phrase-word.
 func TestSemanticTokens_ReturnActionConnectorNoTarget(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -2855,13 +2862,13 @@ func TestSemanticTokens_ReturnActionConnectorNoTarget(t *testing.T) {
 // asserts the target-introducer "to" is emitted exactly ONCE, "with" IS
 // classified as craft-connector-word, and "success" is craft-phrase-word.
 func TestSemanticTokens_ReturnActionConnectorWithTarget(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -2995,12 +3002,12 @@ func TestSemanticTokens_ReturnActionConnectorWithTarget(t *testing.T) {
 // "when VASScheduling listens ...") were emitted at col 0 instead of their
 // actual column, because ActorCol() guards on Kind()!="external".
 func TestSemanticTokens_DomainListenTriggerColumn(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 	br := bufio.NewReader(testIn)
 	id := 1
@@ -3093,14 +3100,14 @@ func TestSemanticTokens_DomainListenTriggerColumn(t *testing.T) {
 // overriding the TextMate entity-name / connector-keywords patterns that would
 // otherwise color them as entity types or operators.
 func TestSemanticTokens_TriggerPhrase(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -3244,14 +3251,14 @@ func TestSemanticTokens_TriggerPhrase(t *testing.T) {
 // so the last 1-2 characters of every string fell back to TextMate highlighting,
 // producing a visible color split in themes where string.other ≠ string.quoted.double.
 func TestSemanticTokens_StringLength(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)
@@ -3390,12 +3397,12 @@ func TestDefinition_ServiceContextTokenOffset(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			serverIn, testOut := io.Pipe()
-			testIn, serverOut := io.Pipe()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			serverIn, testOut := newTestPipe()
+			testIn, serverOut := newTestPipe()
+			ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 			defer cancel()
 			defer testOut.Close()
-			go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+			go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 			br := bufio.NewReader(testIn)
 
 			id := 1
@@ -3485,12 +3492,12 @@ func TestDefinition_ServiceContext_QuotedName(t *testing.T) {
 	// L7: }
 	const craftSrc = "domain Login {\n  Login\n}\nservices {\n  UserSvc {\n    contexts: \"Login\"\n  }\n}"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -3570,12 +3577,12 @@ func TestRename_ActorName(t *testing.T) {
 	// L5: }
 	const craftSrc = "actor user Alice\nuse_case \"T\" {\n  when Alice creates Session\n    Alice asks Auth to validate\n}"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -3681,12 +3688,12 @@ func TestRename_ActorName(t *testing.T) {
 func TestPrepareRename_QuotedServiceName(t *testing.T) {
 	const craftSrc = "service \"Payment Service\" {\n  contexts: Payment\n}\n"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -3771,12 +3778,12 @@ func TestPrepareRename_QuotedServiceName(t *testing.T) {
 func TestRename_QuotedServiceName(t *testing.T) {
 	const craftSrc = "service \"Payment Service\" {\n  contexts: Payment\n}\n"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -3909,12 +3916,12 @@ func TestDefinition_ExposureToTarget(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			serverIn, testOut := io.Pipe()
-			testIn, serverOut := io.Pipe()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			serverIn, testOut := newTestPipe()
+			testIn, serverOut := newTestPipe()
+			ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 			defer cancel()
 			defer testOut.Close()
-			go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+			go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 			br := bufio.NewReader(testIn)
 
 			id := 1
@@ -4003,12 +4010,12 @@ func TestDefinition_ExposureToTarget_QuotedName(t *testing.T) {
 	// L7: }
 	const craftSrc = "actor user Alice\nservice PaySvc {\n  language: golang\n}\nexposure default {\n  to: \"Alice\"\n  through: PaySvc\n}"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -4085,12 +4092,12 @@ func TestIncrementalSync(t *testing.T) {
 	// by replacing chars 11–16 (0-based) on line 0 with "Carol".
 	const initial = "actor user Alice"
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -4169,12 +4176,12 @@ func TestCompletion_ServiceContextsFieldValue(t *testing.T) {
 	const craftSrc = "domain Payments {\n  Auth\n}\nservice PaySvc {\n  contexts: \n}"
 	// Line 4, char 12 = after "contexts: " (10 chars + "  " indent = 12)
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -4252,12 +4259,12 @@ func TestCompletion_ServiceContextsFieldValue_TreePath(t *testing.T) {
 	const craftSrc = "domain Payments {\n  Auth\n  Profile\n}\nservice PaySvc {\n  contexts: Auth \n}"
 	// Line 5 (0-based), char 16 = after "  contexts: Auth " (17 chars, cursor at 16 = after space)
 
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -4328,12 +4335,12 @@ func TestCompletion_ServiceContextsFieldValue_TreePath(t *testing.T) {
 }
 
 func TestDocumentSymbol_RangeEndPositions(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 	br := bufio.NewReader(testIn)
 	id := 1
@@ -4426,12 +4433,12 @@ func TestDocumentSymbol_RangeEndPositions(t *testing.T) {
 }
 
 func TestFoldingRanges_UseCaseAndExposure(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	errCh := make(chan error, 1)
-	go func() { errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
+	go func() { defer serverOut.Close(); errCh <- lsp.Serve(ctx, serverIn, serverOut) }()
 	defer testOut.Close()
 	br := bufio.NewReader(testIn)
 	id := 1
@@ -4535,13 +4542,13 @@ func TestFoldingRanges_UseCaseAndExposure(t *testing.T) {
 // offset would colour the subject's own segments as phrase words and miss the
 // real verb and connector.
 func TestSemanticTokens_QualifiedSubject(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	defer testOut.Close()
 
 	br := bufio.NewReader(testIn)

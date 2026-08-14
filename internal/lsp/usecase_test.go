@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
 	"testing"
 	"time"
 
@@ -33,14 +32,14 @@ use_case "User Login" {
 // TestUseCaseHover verifies that hovering on an action line inside a use-case
 // body returns a hover result describing the resolved actor or domain.
 func TestUseCaseHover(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 
 	br := bufio.NewReader(testIn)
 
@@ -124,14 +123,14 @@ func TestUseCaseHover(t *testing.T) {
 
 // TestUseCaseDocumentSymbol verifies that use_case blocks appear in the outline.
 func TestUseCaseDocumentSymbol(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 
 	br := bufio.NewReader(testIn)
 

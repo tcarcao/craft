@@ -74,13 +74,13 @@ func labelList(items []completionItem) []string {
 }
 
 func TestCompletion_ServiceFields(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -106,13 +106,13 @@ func TestCompletion_ServiceFields(t *testing.T) {
 }
 
 func TestCompletion_LanguageValues(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -139,13 +139,13 @@ func TestCompletion_LanguageValues(t *testing.T) {
 }
 
 func TestCompletion_ContextsField_BCSymbols(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -178,13 +178,13 @@ func TestCompletion_ContextsField_BCSymbols(t *testing.T) {
 }
 
 func TestCompletion_TopLevelKeywords(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -217,13 +217,13 @@ func TestCompletion_TopLevelKeywords(t *testing.T) {
 }
 
 func TestCompletion_UseCase_WhenKeyword(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -248,13 +248,13 @@ func TestCompletion_UseCase_WhenKeyword(t *testing.T) {
 }
 
 func TestCompletion_UseCase_ActionSymbols(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -282,13 +282,13 @@ func TestCompletion_UseCase_ActionSymbols(t *testing.T) {
 }
 
 func TestCompletion_Expose(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
@@ -344,13 +344,13 @@ func TestCompletion_Expose(t *testing.T) {
 }
 
 func TestCompletion_ActorsBlock(t *testing.T) {
-	serverIn, testOut := io.Pipe()
-	testIn, serverOut := io.Pipe()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	serverIn, testOut := newTestPipe()
+	testIn, serverOut := newTestPipe()
+	ctx, cancel := context.WithTimeout(context.Background(), serverLifetime)
 	defer cancel()
 	defer testOut.Close()
 
-	go func() { lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
+	go func() { defer serverOut.Close(); lsp.Serve(ctx, serverIn, serverOut) }() //nolint:errcheck
 	br := bufio.NewReader(testIn)
 
 	id := 1
