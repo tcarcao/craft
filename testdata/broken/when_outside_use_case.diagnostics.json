@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/skipped-construct",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 11,
+        "character": 4
+      },
+      "end": {
+        "line": 13,
+        "character": 1
+      }
+    }
+  }
+]

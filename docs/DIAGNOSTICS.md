@@ -18,7 +18,10 @@ Each entry lists:
 |------|----------|---------|-----------------|--------|
 | `craft/syntax/unexpected-token` | error | Token found where a different token was expected | `unexpected "domain", expected actor type (user/system/service)` | S3 |
 | `craft/syntax/unclosed-block` | error | A `{` was never closed before EOF | `unclosed actors block (missing \`}\`)` | S3 |
-| `craft/syntax/not-yet-implemented` | warning | A top-level construct is recognised but not yet supported by parser v2 | `construct starting with "domain" is not yet supported by parser v2; use --parser=antlr for full support` | S3 |
+| `craft/syntax/not-yet-implemented` | warning | A construct is recognised by the grammar but not yet supported by parser v2. The tool is behind; the file is fine | `a trailing [operation] annotation is not recognised on a line whose phrase contains braces` | S3 |
+| `craft/syntax/skipped-construct` | error | A token could not be placed at all, and the region top-level recovery discarded because of it is absent from the model | `unexpected "when" at top level: lines 6-8 were skipped and are not part of the model` | 2.17.2 |
+
+> **`not-yet-implemented` vs `skipped-construct`.** The two used to share a code, which put a file whose content was being thrown away at the same severity as `event "X" is published but never consumed`. They are opposites: `not-yet-implemented` says the file is fine and the parser will catch up, so it stays advisory; `skipped-construct` says a region of the file is gone from the model and every consumer (`check`, `inspect`, `generate`, LSP) will agree it never existed, so it fails `validate` without `--strict`. Its range spans the whole discarded region, not just the token that triggered recovery.
 
 ---
 

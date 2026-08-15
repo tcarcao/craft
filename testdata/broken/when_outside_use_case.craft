@@ -1,0 +1,14 @@
+actor user Seller
+
+domain Billing {
+  Invoicing
+}
+
+use_case "Settle a seller invoice" {
+    when Seller opens the payments page
+        Invoicing charges the card
+}
+
+    when Seller opens the archive page
+        Invoicing lists the archived positions
+}

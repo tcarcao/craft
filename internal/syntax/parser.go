@@ -9,8 +9,11 @@
 //	component modifiers ([key, key:value]).
 //
 // S8: exposure <name> { to: ... contexts: ... through: ... } blocks.
-// Unsupported top-level keywords emit a recoverable "not-yet-implemented"
-// diagnostic so --parser=v2 is usable on partial files.
+// A construct the grammar recognises but the parser does not implement emits a
+// recoverable "not-yet-implemented" warning, so the parser stays usable on
+// partial files. A token it cannot place at all is different: recovery
+// discards a region of the file, so that emits a "skipped-construct" error
+// covering everything discarded.
 package syntax
 
 import (
@@ -31,6 +34,22 @@ type Parser struct {
 	builder green.GreenNodeBuilder
 	src     string
 	prevEnd green.TextSize // byte offset after last emitted token
+
+	// lastUC records the most recent use_case block that closed cleanly, so a
+	// `when` the parser cannot place at top level can blame the `}` that
+	// closed the block early rather than the `when` it stranded. Zeroed at the
+	// start of every use_case, so a block that bailed to recovery leaves
+	// nothing behind to blame.
+	lastUC closedUseCase
+}
+
+// closedUseCase is the anchor for the stray-`}` hint: the name and lines of a
+// use_case whose closing brace has just been consumed. CloseLine == 0 means no
+// use_case has closed.
+type closedUseCase struct {
+	Name      string
+	OpenLine  int // 1-based line of the `use_case` keyword
+	CloseLine int // 1-based line of the `}` that closed it
 }
 
 // Parse parses src and returns the green root, a LineIndex, and any diagnostics.
@@ -105,8 +124,14 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 	// matching ANTLR's numbering scheme.
 	ucCounter := 0
 
+	// prevWasUseCase gates the stray-`}` hint to a `when` that directly follows
+	// a use_case. Further out the hint would point at a brace the reader has
+	// no reason to suspect.
+	prevWasUseCase := false
+
 	for !p.atEOF() {
 		tok := p.peek()
+		wasUseCase := tok.Type == lexer.TokenKwUseCase
 		switch tok.Type {
 		case lexer.TokenKwImport:
 			diags = append(diags, p.parseImportStatement()...)
@@ -133,11 +158,24 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 		case lexer.TokenKwGlossary:
 			diags = append(diags, p.parseGlossaryBlock()...)
 		default:
-			// Unrecognised top-level token: emit a diagnostic and resync to
-			// the next top-level keyword (island parsing).
-			diags = append(diags, p.diagNotImplemented(tok))
-			p.resyncToTopLevel()
+			// Unrecognised top-level token: resync to the next top-level
+			// keyword (island parsing) and report what that discarded.
+			//
+			// A `[` here is the one case where the grammar is fine and the
+			// parser is behind (a phrase brace makes the trailing annotation
+			// unplaceable), so it keeps the not-yet-implemented warning.
+			// Anything else means the file is ungrammatical and a region of it
+			// is now absent from the model, which is an error.
+			if tok.Value == "[" {
+				diags = append(diags, p.diagNotImplemented(tok))
+				p.resyncToTopLevel()
+			} else {
+				hint := p.strayBraceHint(tok, prevWasUseCase)
+				last := p.resyncToTopLevel()
+				diags = append(diags, p.diagSkippedConstruct(tok, last, hint))
+			}
 		}
+		prevWasUseCase = wasUseCase
 	}
 
 	// Trailing comments are trivia like any other: peek() skips comment
@@ -783,6 +821,10 @@ func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
 	// Attach leading trivia before `use_case`.
 	p.attachTrivia()
 
+	// Any earlier close is stale from here on: if this block bails to recovery
+	// it must not leave a previous block's `}` behind to be blamed.
+	p.lastUC = closedUseCase{}
+
 	ucTok := p.peek()
 	p.consumeAs(SyntaxKindKwUseCase)
 
@@ -831,7 +873,9 @@ func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
 		p.builder.FinishNode()
 		return diags
 	}
+	rbraceTok := p.peek()
 	p.consumeAs(SyntaxKindRBrace)
+	p.lastUC = closedUseCase{Name: name, OpenLine: ucTok.Line, CloseLine: rbraceTok.Line}
 	p.builder.FinishNode()
 	return diags
 }
@@ -1663,18 +1707,25 @@ func tokenToActorType(tok lexer.Token) (string, bool) {
 // or EOF, so the main loop can continue from a clean state. The skipped tokens
 // are wrapped in a SyntaxKindErrorNode so the lossless invariant is preserved
 // and error recovery is visible in the tree.
-func (p *Parser) resyncToTopLevel() {
+//
+// It returns the last token it discarded, which is what lets a caller report
+// the extent of the loss instead of just the token that triggered it. The
+// returned token is TokenEOF when nothing was discarded; most callers have
+// already reported their own diagnostic and ignore it.
+func (p *Parser) resyncToTopLevel() lexer.Token {
+	last := lexer.Token{Type: lexer.TokenEOF}
 	if p.atEOF() || isTopLevelKeyword(p.peek().Type) {
-		return
+		return last
 	}
 	p.builder.StartNode(SyntaxKindErrorNode)
 	for !p.atEOF() {
 		if isTopLevelKeyword(p.peek().Type) {
 			break
 		}
-		p.consume()
+		last = p.consume()
 	}
 	p.builder.FinishNode()
+	return last
 }
 
 // resyncToBlock wraps unrecognised tokens inside a construct in a
@@ -1986,6 +2037,84 @@ func (p *Parser) diagNotImplemented(tok lexer.Token) model.Diagnostic {
 		Severity: model.SeverityWarning,
 		Range:    tokenRange(tok),
 	}
+}
+
+// diagSkippedConstruct reports a top-level token the parser could not place at
+// all, together with the region top-level recovery discarded because of it.
+//
+// This is deliberately separate from diagNotImplemented. That code means "the
+// grammar recognises this, parser v2 does not implement it yet": the tool is
+// behind, the file is fine, and a warning is right. This one means the file is
+// ungrammatical and a region of it is now absent from the model, which every
+// downstream consumer (check, inspect, generate, LSP) will silently agree
+// never existed. That is content loss, so it is an error and `craft validate`
+// fails on it without needing --strict.
+//
+// The range spans the whole discard, not just the offending token. The
+// diagnostic used to point at the four characters of `when` while recovery ate
+// the rest of the block: a reader was told one token was unexpected, not that
+// a block had been deleted.
+func (p *Parser) diagSkippedConstruct(tok, last lexer.Token, hint string) model.Diagnostic {
+	r := tokenRange(tok)
+	endLine := tok.Line
+	if last.Type != lexer.TokenEOF {
+		r.End = p.tokenEndPosition(last)
+		endLine = last.Line
+	}
+
+	extent := fmt.Sprintf("line %d was skipped and is not part of the model", tok.Line)
+	if endLine > tok.Line {
+		extent = fmt.Sprintf("lines %d-%d were skipped and are not part of the model", tok.Line, endLine)
+	}
+
+	msg := fmt.Sprintf("unexpected %q at top level: %s", tok.Value, extent)
+	if hint != "" {
+		msg += "; " + hint
+	}
+	return model.Diagnostic{
+		Code:     "craft/syntax/skipped-construct",
+		Message:  msg,
+		Severity: model.SeverityError,
+		Range:    r,
+	}
+}
+
+// strayBraceHint names the likely cause when a `when` block is stranded at top
+// level. Nobody writes a top-level `when` on purpose; what happens is one
+// extra `}` that closed the use_case early. Pointing at the `when` names the
+// symptom, so point at the brace instead.
+//
+// It fires only when a use_case closed cleanly and nothing else was parsed
+// since. A use_case that bailed to recovery never records a close, so there is
+// no brace to blame and none is guessed at.
+func (p *Parser) strayBraceHint(tok lexer.Token, prevWasUseCase bool) string {
+	if !prevWasUseCase || p.lastUC.CloseLine == 0 {
+		return ""
+	}
+	if tok.Type != lexer.TokenIdent || tok.Value != "when" {
+		return ""
+	}
+	return fmt.Sprintf(
+		"a `when` block belongs inside a use_case, and %q (opened at line %d) was already closed at line %d, so that `}` may be extra",
+		p.lastUC.Name, p.lastUC.OpenLine, p.lastUC.CloseLine)
+}
+
+// tokenEndPosition returns the position one past tok's last character. Columns
+// are rune-based and line-relative, matching tokenRange, so a token whose text
+// spans lines has to restart the column count on its final line.
+func (p *Parser) tokenEndPosition(tok lexer.Token) model.Position {
+	raw := p.rawText(tok)
+	line := lspLine(tok.Line)
+	col := tok.Column - 1
+	if col < 0 {
+		col = 0
+	}
+	if nl := strings.LastIndexByte(raw, '\n'); nl >= 0 {
+		line += strings.Count(raw, "\n")
+		col = 0
+		raw = raw[nl+1:]
+	}
+	return model.Position{Line: line, Character: col + len([]rune(raw))}
 }
 
 // lspLine converts a 1-based source line to a 0-based LSP line number.
