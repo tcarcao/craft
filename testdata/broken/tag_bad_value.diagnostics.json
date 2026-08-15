@@ -1,43 +1,43 @@
 [
   {
-    "code": "craft/syntax/unexpected-token",
+    "code": "craft/syntax/skipped-construct",
     "severity": "error",
-    "range": {
-      "start": {
-        "line": 2,
-        "character": 13
-      },
-      "end": {
-        "line": 2,
-        "character": 14
-      }
-    }
-  },
-  {
-    "code": "craft/syntax/unexpected-token",
-    "severity": "error",
-    "range": {
-      "start": {
-        "line": 2,
-        "character": 13
-      },
-      "end": {
-        "line": 2,
-        "character": 14
-      }
-    }
-  },
-  {
-    "code": "craft/syntax/not-yet-implemented",
-    "severity": "warning",
     "range": {
       "start": {
         "line": 5,
         "character": 2
       },
       "end": {
-        "line": 5,
-        "character": 6
+        "line": 7,
+        "character": 1
+      }
+    }
+  },
+  {
+    "code": "craft/syntax/unexpected-token",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 13
+      },
+      "end": {
+        "line": 2,
+        "character": 14
+      }
+    }
+  },
+  {
+    "code": "craft/syntax/unexpected-token",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 13
+      },
+      "end": {
+        "line": 2,
+        "character": 14
       }
     }
   }
