@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.18.0] — 2026-08-16
+
+**Why a minor version.** `pkg/craft` gains a field and loses nothing: `UseCase.TagValues` is new, `UseCase.Tags` keeps its type and its meaning, so no consumer stops compiling and no existing JSON key changes shape. The DSL gains a construct. Nothing is removed, and the module path stays `github.com/tcarcao/craft/v2`.
+
+### Added
+- **A tag value can be a list.** `channels: web, mobile` now parses, in the same comma-separated shape a service block's `contexts:` already uses: each item is a bare slug (which may carry slashes and hyphens, so `re/renewal-flow` stays one item) or a quoted string, the two mix freely within a list, and a list may wrap across lines. Previously a comma was a parse error and the only way to carry more than one thing was a quoted string the consumer had to split itself.
+- **`UseCase.TagValues`** (`tagValues` in `craft check` JSON) carries the items unjoined, one entry per authored item. `Tags` is unchanged and carries the same value joined with `, `, so nothing already reading it has to move. Both fields are populated for every tag, single values included, so `tagValues` can be read uniformly rather than as a special case.
+  - The two fields are not redundant. `channels: web, mobile` and `channels: "web, mobile"` are indistinguishable in `Tags` and distinct in `TagValues`, which is precisely the ambiguity a single joined string cannot carry. Quote an item to keep a comma inside it.
+- **The `tags` block is documented**, in `docs/page/language/use-cases.md`. It had no documentation anywhere, so the quoted-value form (the only way to write a value with a space before this release) was discoverable only by reading `parseTagStmt`. `docs/GRAMMAR.md` is deliberately not the home for it: that document is frozen at v1 and keyed 1:1 to the removed ANTLR grammar, and does not describe operation annotations either.
+
+### Fixed
+- **A tag statement that fails to parse no longer lands in the model.** `tags { channels: web, mobile }` produced `{"channels": "web", "mobile": ""}` from `craft check`: the value stopped at the comma, recovery re-entered at the comma, and `mobile` was read as a key nobody had written. Every failure path in `parseTagStmt` finished a `SyntaxKindTagStmt` node regardless of how far it got, and the model builder reads such a node as a tag whose value is the empty string.
+  - The diagnostics were correct and at error severity throughout, which is what makes this worth a fix rather than a note: the diagnostic channel and the data channel disagreed, and a tool ingesting `craft check` JSON reads only the second. It received a fabricated tag with nothing marking it synthetic.
+  - A statement that does not parse now closes as a `SyntaxKindErrorNode` instead, so `TagsBlock.Tags()` cannot see it and neither the projection nor the duplicate-tag lint reads it. This covers every failure path, not just the comma one: a key with no `:`, a `:` with no value, and a value the grammar cannot read all now leave nothing behind rather than a tag whose value is a lie.
+  - A dangling comma is reported at the comma and fails its statement, rather than running on. `contexts:` stops silently when the item after a `,` is missing, which for tags would let `channels: web,` followed by `journey: renewal` report two channels, one of them named `journey`.
+- **`craft fmt` was already correct here** and is unchanged: it round-tripped the malformed block byte for byte rather than rewriting it into the fabricated shape. The divergence was confined to the parsed model.
+
 ## [2.17.2] — 2026-08-16
 
 **Why a patch version.** `pkg/craft`'s exported API is unchanged, so nothing stops compiling, and this follows 2.17.1 in treating moved behaviour behind an unmoved API as a patch. Read this one anyway: a diagnostic that was `warning` is now `error` under a new code, so a file that discards content used to exit 0 from `craft validate` and now exits 1. That is the point of the change, and it will fail builds that were previously green.
