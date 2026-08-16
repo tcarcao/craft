@@ -238,6 +238,62 @@ Formatting canonicalises layout only: 2-space indentation, one statement per lin
 
 **Go library API.** `pkg/craft`, the stable public Go API, exposes the annotation as `craft.Operation` (`Verb`, `Payload`, `Text` fields), the recognised verbs as the `craft.OpVerbGET` through `craft.OpVerbQUERY` constants, and `craft.ProtocolVerbs()` returning the same set as a `[]string`.
 
+## Tags
+
+A `use_case` may open with a `tags { }` block: free-form `key: value` metadata carried through to the model and out of `craft check`, for whatever a downstream tool wants to do with it (grouping, filtering, linking to a ticket).
+
+```craft
+use_case "Settle a seller invoice" {
+  tags {
+    journey: re/renewal-flow
+    channels: "web, mobile"
+    owner: billing-team
+  }
+
+  when Seller opens the payments page
+    Invoicing charges the card
+}
+```
+
+A value is a **comma-separated list of one or more items**, the same shape a service block's `contexts:` uses. Each item is either of:
+
+- **A bare item**, which may contain slashes and hyphens, so `re/renewal-flow` is one item rather than three. This is the form for a slug or a qualified reference.
+- **A quoted string**, which may contain anything, including spaces and commas.
+
+The two mix freely within one list, and a list may wrap across lines:
+
+```craft
+tags {
+  channels: web, mobile
+  surfaces: "web app", re/tablet-web
+  regions: eu,
+  us,
+  apac
+}
+```
+
+The block goes before the first `when`. Keys are not interpreted by Craft: a repeated key is last-write-wins and emits `craft/sema/duplicate-tag`.
+
+### Tags in `craft check` output
+
+Each tag appears twice, because one string cannot represent a list without ambiguity:
+
+- **`tags`** carries the value joined with `, `. This is the original single-valued field, unchanged, so anything already reading it keeps working.
+- **`tagValues`** carries the items unjoined, one entry per authored item. Single-valued tags appear here too, as a one-item list, so you can read this field uniformly.
+
+```json
+{
+  "tags":      { "channels": "web, mobile", "note": "one, value" },
+  "tagValues": { "channels": ["web", "mobile"], "note": ["one, value"] }
+}
+```
+
+Those two inputs were `channels: web, mobile` and `note: "one, value"`. They are identical in `tags` and distinct in `tagValues`, which is the reason the second field exists: **quote an item to keep a comma inside it.**
+
+::: warning A comma needs a value after it
+`channels: web,` with nothing following is an error, and so is a comma followed by the next tag key. The whole statement is rejected in that case and the tag does not reach the model at all, rather than silently reporting a truncated list or taking the next key as a value.
+:::
+
 ## Diagnostics
 
 Use-case actions and triggers can emit these:
@@ -248,6 +304,7 @@ Use-case actions and triggers can emit these:
 | `craft/syntax/empty-op-annotation` | error | an action ends in `[]`, an empty operation annotation. |
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at one of exactly four sites: the `sync_action` (`asks`) subject and target, the `async_action` (`notifies`) subject, or the `domain_listen` (`when ... listens`) trigger context. Qualify it as `<domain>/<name>`. It does **not** fire for an internal action's subject or for either side of a `returns` action; an ambiguous name there is not yet checked. |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (an empty segment like `re/ billing` or `re//billing`, or more than two segments like `re/a/b`) in any bounded-context slot: any action's subject, the `asks` target, the `returns` target, or the trigger context. |
+| `craft/sema/duplicate-tag` | warning | the same tag key is set twice in one `use_case`. The last value wins. |
 
 ## Deprecated: Quoted Event Strings
 

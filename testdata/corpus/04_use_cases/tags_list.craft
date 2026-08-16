@@ -1,0 +1,14 @@
+use_case "Renewal" {
+  tags {
+    channels: web, mobile
+    surfaces: "web app", re/tablet-web
+    regions: eu,
+    us,
+    apac
+    journey: re/renewal-flow
+    owner: "team billing"
+  }
+
+  when Customer creates Account
+    Billing notifies "Account Created"
+}
