@@ -1350,19 +1350,40 @@ func (t TagStmt) Value() *SyntaxToken {
 	return t.node.ChildToken(SyntaxKindString)
 }
 
-// ValueText returns the tag's semantic (unquoted) value text, handling both
-// a quoted string (unquoted via stringAwareText, the same path used for
-// other string values) and a bare ref-shaped value (reconstructed via
-// RefDecl.RefText(), the same path used elsewhere in this file for
-// multi-token ref-shaped values — see refAwareText).
+// Values returns the tag's semantic (unquoted) values in document order, one
+// entry per authored list item. A single-valued tag returns a one-element
+// slice. Both item shapes are handled: a quoted string (unquoted via
+// stringAwareText, the same path used for other string values) and a bare
+// ref-shaped value (reconstructed via RefDecl.RefText(), the same path used
+// elsewhere in this file for multi-token ref-shaped values — see
+// refAwareText).
+//
+// The children are walked in order rather than picked out by kind, because a
+// list mixes the two shapes freely and their relative order is the author's.
+func (t TagStmt) Values() []string {
+	var out []string
+	for el := range t.node.ChildrenIter() {
+		switch e := el.(type) {
+		case SyntaxNode:
+			if e.Kind() == SyntaxKindRef {
+				out = append(out, RefDecl{node: e}.RefText())
+			}
+		case SyntaxToken:
+			if e.Kind() == SyntaxKindString {
+				out = append(out, stringAwareText(e))
+			}
+		}
+	}
+	return out
+}
+
+// ValueText returns the tag's value as a single string, joining a list with
+// ", ". This is the form model.UseCase.Tags carries, kept so consumers written
+// against the single-valued shape keep working; it cannot distinguish a
+// two-item list from one value containing a comma, which is what Values is
+// for.
 func (t TagStmt) ValueText() string {
-	if n := t.node.ChildNode(SyntaxKindRef); n != nil {
-		return RefDecl{node: *n}.RefText()
-	}
-	if tok := t.Value(); tok != nil {
-		return stringAwareText(*tok)
-	}
-	return ""
+	return strings.Join(t.Values(), ", ")
 }
 
 // ScenarioDecl is a typed view over a SyntaxKindScenario node.

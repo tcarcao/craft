@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/unexpected-token",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 17
+      },
+      "end": {
+        "line": 2,
+        "character": 18
+      }
+    }
+  }
+]

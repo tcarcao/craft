@@ -944,42 +944,118 @@ func (p *Parser) parseUseCaseTagsBlock() []model.Diagnostic {
 // token. This mirrors the same multi-token-value problem already solved for
 // context_map edge endpoints, notifies/listens events, etc. (see
 // refAwareText in ast.go) and keeps the green tree exactly lossless.
+// The statement's node kind is decided at the end rather than the start. A
+// statement that does not parse is wrapped as SyntaxKindErrorNode instead of
+// SyntaxKindTagStmt, so TagsBlock.Tags() cannot see it and no half-parsed tag
+// reaches the model. Previously every failure path finished a TagStmt node
+// regardless, and `channels: web, mobile` projected as
+// `{"channels": "web", "mobile": ""}`: the tail of a value that failed to
+// parse, promoted to a key nobody wrote. The diagnostics were correct, but
+// consumers of `craft check` read the data channel, not the diagnostic
+// channel. Wrapping retroactively is what Checkpoint/StartNodeAt are for; the
+// tokens are emitted either way, so the tree stays lossless.
 func (p *Parser) parseTagStmt() []model.Diagnostic {
-	p.builder.StartNode(SyntaxKindTagStmt)
+	cp := p.builder.Checkpoint()
 	var diags []model.Diagnostic
+
+	// fail closes the statement as an error region rather than a tag.
+	fail := func() []model.Diagnostic {
+		p.builder.StartNodeAt(cp, SyntaxKindErrorNode)
+		p.builder.FinishNode()
+		return diags
+	}
 
 	keyTok := p.peek()
 	if keyTok.Type != lexer.TokenIdent {
 		diags = append(diags, p.diagUnexpected(keyTok, "a tag key"))
 		p.consumeAs(SyntaxKindError)
-		p.builder.FinishNode()
-		return diags
+		return fail()
 	}
 	p.consumeAs(SyntaxKindIdent)
 
 	if p.peek().Type != lexer.TokenColon {
 		diags = append(diags, p.diagUnexpected(p.peek(), "`:`"))
-		p.builder.FinishNode()
-		return diags
+		return fail()
 	}
 	p.consumeAs(SyntaxKindColon)
 
-	valTok := p.peek()
-	switch {
-	case valTok.Type == lexer.TokenString:
-		p.consumeAs(SyntaxKindString)
-	case valTok.Type == lexer.TokenIdent:
-		// Bare value — reuse parseRef's scanner so a slash/hyphen-bearing
-		// slug like "re/renewal-flow" is captured whole.
-		p.parseRef()
-	default:
-		diags = append(diags, p.diagUnexpected(valTok, "a tag value (identifier, string, or ref)"))
-		p.builder.FinishNode()
-		return diags
+	valueDiags, ok := p.parseTagValueList()
+	diags = append(diags, valueDiags...)
+	if !ok {
+		return fail()
 	}
 
+	p.builder.StartNodeAt(cp, SyntaxKindTagStmt)
 	p.builder.FinishNode()
 	return diags
+}
+
+// parseTagValueList parses `tag_value (',' tag_value)*`, the same comma-list
+// shape `contexts:` and `data-stores:` already use: each item is a quoted
+// string or a bare ref-shaped slug, the two may be mixed, and the list may
+// wrap across lines. A bare item goes through parseRef's scanner so a
+// slash/hyphen-bearing slug like "re/renewal-flow" is one item rather than
+// three.
+//
+// Unlike parseRefList it refuses to run past a dangling comma. That helper
+// stops silently when the item after a `,` is missing, which here would hand
+// the model either a truncated list or, worse, the next statement's key as a
+// value: `channels: web,` followed by `journey: renewal` would report two
+// channels, one of them named journey. A statement that cannot be read whole
+// must not reach the model at all, so this reports and the caller discards it.
+//
+// ok is false when the statement failed; diags explains why.
+func (p *Parser) parseTagValueList() ([]model.Diagnostic, bool) {
+	var diags []model.Diagnostic
+	for {
+		tok := p.peek()
+		switch {
+		case tok.Type == lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case tok.Type == lexer.TokenIdent || isKeywordUsedAsIdent(tok.Type):
+			p.parseRef()
+		default:
+			diags = append(diags, p.diagUnexpected(tok, "a tag value (identifier, string, or ref)"))
+			return diags, false
+		}
+
+		if p.peek().Type != lexer.TokenComma {
+			return diags, true
+		}
+		commaTok := p.peek()
+		p.consumeAs(SyntaxKindComma)
+
+		if !p.startsTagValue() {
+			diags = append(diags, p.diagDanglingTagValue(commaTok))
+			// Consume the offender only when it cannot start the next
+			// statement or close the block, so one typo is reported once.
+			if next := p.peek(); next.Type != lexer.TokenRBrace && !p.startsTagKey() {
+				p.consumeAs(SyntaxKindError)
+			}
+			return diags, false
+		}
+	}
+}
+
+// startsTagValue reports whether the next token can begin a list item. An
+// identifier immediately followed by `:` is the next tag statement, not an
+// item: without that check `channels: web,` followed by `journey: renewal`
+// would read journey as a channel and then fail on its colon.
+func (p *Parser) startsTagValue() bool {
+	tok := p.peek()
+	if tok.Type == lexer.TokenString {
+		return true
+	}
+	if !p.startsTagKey() {
+		return false
+	}
+	return p.peekAt(1).Type != lexer.TokenColon
+}
+
+// startsTagKey reports whether the next token could open a tag statement.
+func (p *Parser) startsTagKey() bool {
+	tok := p.peek()
+	return tok.Type == lexer.TokenIdent || isKeywordUsedAsIdent(tok.Type)
 }
 
 // parseScenario parses one `when <trigger>` clause plus its following action lines.
@@ -2035,6 +2111,19 @@ func (p *Parser) diagNotImplemented(tok lexer.Token) model.Diagnostic {
 		Code:     "craft/syntax/not-yet-implemented",
 		Message:  msg,
 		Severity: model.SeverityWarning,
+		Range:    tokenRange(tok),
+	}
+}
+
+// diagDanglingTagValue reports a comma in a tag value with no value after it.
+// It is reported at the comma rather than at whatever follows, because what
+// follows is usually the next statement and blaming it sends the reader to the
+// wrong line.
+func (p *Parser) diagDanglingTagValue(tok lexer.Token) model.Diagnostic {
+	return model.Diagnostic{
+		Code:     "craft/syntax/unexpected-token",
+		Message:  "a tag value is missing after this comma; drop the comma, or add the next value",
+		Severity: model.SeverityError,
 		Range:    tokenRange(tok),
 	}
 }

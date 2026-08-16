@@ -77,15 +77,21 @@ func ProjectFromTree(root SyntaxNode, li green.LineIndex, sourceURI ...string) *
 		// Duplicate-tag sema warnings are a separate later task; not validated here.
 		if tb := uc.TagsBlock(); tb != nil {
 			tags := map[string]string{}
+			tagValues := map[string][]string{}
 			for _, ts := range tb.Tags() {
 				keyTok := ts.Key()
 				if keyTok == nil {
 					continue
 				}
+				// Both forms of the same tag: the joined string every existing
+				// consumer reads, and the split list that is the only one able
+				// to tell `web, mobile` from `"web, mobile"`.
 				tags[keyTok.Text()] = ts.ValueText()
+				tagValues[keyTok.Text()] = ts.Values()
 			}
 			if len(tags) > 0 {
 				outUC.Tags = tags
+				outUC.TagValues = tagValues
 			}
 		}
 		for _, sc := range uc.Scenarios() {

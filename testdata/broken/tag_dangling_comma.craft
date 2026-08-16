@@ -1,0 +1,9 @@
+use_case "Renewal" {
+  tags {
+    channels: web,
+    journey: renewal
+  }
+
+  when Customer creates Account
+    Billing validates account
+}

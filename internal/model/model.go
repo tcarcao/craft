@@ -118,7 +118,18 @@ type UseCase struct {
 	// Tags holds the key/value pairs from an optional tags { } sub-block
 	// (Slice B). nil when the use_case has no tags block; last-write-wins on
 	// duplicate keys within the block (sema validation is a separate task).
+	//
+	// A tag value is a comma-separated list, and this field carries it joined
+	// with ", " so that every consumer written against the single-valued shape
+	// keeps working unchanged. The joining is lossy in exactly one way:
+	// `channels: web, mobile` and `channels: "web, mobile"` both land here as
+	// `web, mobile`. Read TagValues when that difference matters.
 	Tags map[string]string `json:"tags,omitempty"`
+	// TagValues holds the same tags unjoined, one entry per authored value.
+	// Every key present in Tags is present here, single values included, as a
+	// one-element slice — so a consumer can read this field uniformly rather
+	// than testing which of the two to use. nil exactly when Tags is nil.
+	TagValues map[string][]string `json:"tagValues,omitempty"`
 }
 
 // Scenario is a specific path through a use case.
