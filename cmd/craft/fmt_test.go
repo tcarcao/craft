@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
@@ -37,7 +36,7 @@ func TestRunFmt_FormatsInPlace(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "a.craft", unformattedUseCase)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr: %s", code, errOut.String())
 	}
 
@@ -60,7 +59,7 @@ func TestRunFmt_PreservesFileMode(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr: %s", code, errOut.String())
 	}
 
@@ -77,10 +76,10 @@ func TestRunFmt_IsIdempotent(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "a.craft", unformattedUseCase)
 
 	var out, errOut bytes.Buffer
-	runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut)
+	runFmt([]string{f}, false, fmtOverride{}, &out, &errOut)
 
 	out.Reset()
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("second pass exit code = %d, want 0", code)
 	}
 	if out.Len() != 0 {
@@ -92,7 +91,7 @@ func TestRunFmt_CheckCleanFileExitsZero(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "a.craft", formattedUseCase)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, true, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, true, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstdout: %s\nstderr: %s", code, out.String(), errOut.String())
 	}
 	if out.Len() != 0 || errOut.Len() != 0 {
@@ -106,7 +105,7 @@ func TestRunFmt_CheckUnformattedFileFailsAndNamesIt(t *testing.T) {
 	dirty := writeCraft(t, dir, "dirty.craft", unformattedUseCase)
 
 	var out, errOut bytes.Buffer
-	code := runFmt([]string{clean, dirty}, true, fmtconfig.Config{}, false, &out, &errOut)
+	code := runFmt([]string{clean, dirty}, true, fmtOverride{}, &out, &errOut)
 	if code == 0 {
 		t.Fatalf("exit code = 0, want non-zero\nstdout: %s", out.String())
 	}
@@ -133,7 +132,7 @@ func TestRunFmt_UnparseableFileIsReportedAsSkipped(t *testing.T) {
 
 	for _, check := range []bool{false, true} {
 		var out, errOut bytes.Buffer
-		code := runFmt([]string{f}, check, fmtconfig.Config{}, false, &out, &errOut)
+		code := runFmt([]string{f}, check, fmtOverride{}, &out, &errOut)
 		if code == 0 {
 			t.Errorf("check=%v: exit code = 0, want non-zero", check)
 		}
@@ -155,7 +154,7 @@ func TestRunFmt_IncompleteParseIsReportedAsSkipped(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "phrase-brace.craft", src)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code == 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code == 0 {
 		t.Fatalf("exit code = 0, want non-zero\nstderr: %s", errOut.String())
 	}
 	if !strings.Contains(errOut.String(), "not-yet-implemented") {
@@ -171,7 +170,7 @@ func TestRunFmt_MissingFileIsReported(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nope.craft")
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{missing}, false, fmtconfig.Config{}, false, &out, &errOut); code == 0 {
+	if code := runFmt([]string{missing}, false, fmtOverride{}, &out, &errOut); code == 0 {
 		t.Fatal("exit code = 0, want non-zero for a missing file")
 	}
 	if !strings.Contains(errOut.String(), missing) {
@@ -239,7 +238,7 @@ func TestRunFmt_TrailingCommentIsNotDeleted(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "a.craft", src)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr: %s", code, errOut.String())
 	}
 	got, _ := os.ReadFile(f)
@@ -258,7 +257,7 @@ func TestRunFmt_CommentOnlyFileIsNotTruncated(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "b.craft", src)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0\nstderr: %s", code, errOut.String())
 	}
 	got, _ := os.ReadFile(f)
@@ -292,7 +291,7 @@ func TestRunFmt_NeverWritesUnverifiedOutput(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	runFmt(copied, false, fmtconfig.Config{}, false, &out, &errOut)
+	runFmt(copied, false, fmtOverride{}, &out, &errOut)
 	if strings.Contains(errOut.String(), "would have broken the file") {
 		t.Errorf("formatter produced output that does not reparse:\n%s", errOut.String())
 	}
@@ -300,7 +299,7 @@ func TestRunFmt_NeverWritesUnverifiedOutput(t *testing.T) {
 	// Whatever was written must itself be a fixed point.
 	out.Reset()
 	errOut.Reset()
-	if code := runFmt(copied, true, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt(copied, true, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Errorf("formatted corpus is not a fixed point under --check\nstdout: %s\nstderr: %s",
 			out.String(), errOut.String())
 	}
@@ -427,7 +426,7 @@ func TestRunFmt_PreExistingErrorDoesNotBlockFormatting(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "dup.craft", src)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0 (a pre-existing error must not block formatting)\nstderr: %s", code, errOut.String())
 	}
 	if errOut.Len() != 0 {
@@ -460,7 +459,7 @@ func TestRunFmt_PreExistingErrorSurvivesALineShift(t *testing.T) {
 	f := writeCraft(t, t.TempDir(), "shift.craft", src)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{f}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{f}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, want 0 (a line-shifted pre-existing error must not block formatting)\nstderr: %s", code, errOut.String())
 	}
 	if errOut.Len() != 0 {
@@ -484,7 +483,7 @@ func TestFmtHonoursCraftfmt(t *testing.T) {
 	os.WriteFile(src, []byte("services {\nFoo {\ncontexts: A\n}\n}\n"), 0o644)
 
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{src}, false, fmtconfig.Config{}, false, &out, &errOut); code != 0 {
+	if code := runFmt([]string{src}, false, fmtOverride{}, &out, &errOut); code != 0 {
 		t.Fatalf("runFmt = %d, stderr=%s", code, errOut.String())
 	}
 	got, _ := os.ReadFile(src)
@@ -495,17 +494,16 @@ func TestFmtHonoursCraftfmt(t *testing.T) {
 }
 
 // TestFmtFlagOverridesCraftfmt pins that an explicitly-set flag beats
-// .craftfmt entirely, per the resolution order.
+// .craftfmt for the field it names, per the resolution order.
 func TestFmtFlagOverridesCraftfmt(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".craftfmt"), []byte("indent = 2\n"), 0o644)
 	src := filepath.Join(dir, "a.craft")
 	os.WriteFile(src, []byte("services {\nFoo {\ncontexts: A\n}\n}\n"), 0o644)
 
-	override := fmtconfig.Defaults()
-	override.Indent = 8
+	override := fmtOverride{indent: 8, hasIndent: true}
 	var out, errOut bytes.Buffer
-	if code := runFmt([]string{src}, false, override, true, &out, &errOut); code != 0 {
+	if code := runFmt([]string{src}, false, override, &out, &errOut); code != 0 {
 		t.Fatalf("runFmt = %d", code)
 	}
 	got, _ := os.ReadFile(src)
@@ -517,5 +515,177 @@ func TestFmtFlagOverridesCraftfmt(t *testing.T) {
 	// evidence the flag (not .craftfmt) won.
 	if !strings.Contains(string(got), "\n                contexts: A") {
 		t.Errorf("flag did not override .craftfmt, got\n%q", got)
+	}
+}
+
+// lineContaining returns the first line of content containing marker, or
+// fails the test. It is used to inspect leading whitespace on a specific
+// line without depending on the exact shape of the rest of the document.
+func lineContaining(t *testing.T, content, marker string) string {
+	t.Helper()
+	for _, l := range strings.Split(content, "\n") {
+		if strings.Contains(l, marker) {
+			return l
+		}
+	}
+	t.Fatalf("no line containing %q in\n%s", marker, content)
+	return ""
+}
+
+// TestFmtFlagMergesPerFieldWithCraftfmt is the direct regression test for the
+// review round 1 finding: a flag setting one field used to replace the
+// ENTIRE resolved configuration, silently discarding any other field
+// .craftfmt had set. Here .craftfmt sets continuation_indent, a field no
+// flag names in this run, and the flag sets only indent, a different field.
+// Both must take effect together, from their two different sources, on the
+// same file: TestFmtFlagOverridesCraftfmt alone cannot catch this, because
+// its .craftfmt only ever configures the same field the flag sets.
+func TestFmtFlagMergesPerFieldWithCraftfmt(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".craftfmt"), []byte("continuation_indent = 6\n"), 0o644)
+	src := filepath.Join(dir, "a.craft")
+	os.WriteFile(src, []byte("services {\nF {\ncontexts: A,\nB\n}\n}\n"), 0o644)
+
+	override := fmtOverride{indent: 3, hasIndent: true}
+	var out, errOut bytes.Buffer
+	if code := runFmt([]string{src}, false, override, &out, &errOut); code != 0 {
+		t.Fatalf("runFmt = %d, stderr=%s", code, errOut.String())
+	}
+	got := string(mustReadFile(t, src))
+
+	// F sits at depth 1: indent(3)*1 = 3 spaces. This field came from the
+	// flag; .craftfmt never mentions indent, so this also confirms the flag
+	// is not simply being ignored in favour of .craftfmt.
+	if want := strings.Repeat(" ", 3) + "F {"; lineContaining(t, got, "F {") != want {
+		t.Errorf("indent (from flag) not applied to %q, got %q, want %q", "F {", lineContaining(t, got, "F {"), want)
+	}
+	// contexts sits at depth 2: indent(3)*2 = 6 spaces.
+	if want := strings.Repeat(" ", 6) + "contexts: A,"; lineContaining(t, got, "contexts: A,") != want {
+		t.Errorf("indent (from flag) not applied to the nested line, got %q, want %q", lineContaining(t, got, "contexts: A,"), want)
+	}
+	// B is the wrapped continuation of contexts: indent(3)*depth(2) +
+	// continuation_indent(6, from .craftfmt) = 12 spaces. Getting this right
+	// requires continuation_indent to have survived the merge even though
+	// only --indent was passed on the command line.
+	if want := strings.Repeat(" ", 12) + "B"; lineContaining(t, got, "B") != want {
+		t.Errorf("continuation_indent (from .craftfmt) was not preserved under an unrelated flag, got %q, want %q\nfull output:\n%s", lineContaining(t, got, "B"), want, got)
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	return b
+}
+
+// TestRunFmt_ResolvesPerFileAcrossWorkspaces is the direct pin for per-file
+// resolution: a single runFmt call spanning two directories, each with its
+// own DIFFERENT .craftfmt, must format each file according to its own
+// directory's configuration, not one configuration for the whole batch.
+func TestRunFmt_ResolvesPerFileAcrossWorkspaces(t *testing.T) {
+	root := t.TempDir()
+	wsA := filepath.Join(root, "wsA")
+	wsB := filepath.Join(root, "wsB")
+	if err := os.MkdirAll(wsA, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(wsB, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(wsA, ".craftfmt"), []byte("indent = 2\n"), 0o644)
+	os.WriteFile(filepath.Join(wsB, ".craftfmt"), []byte("indent = 6\n"), 0o644)
+	a := writeCraft(t, wsA, "a.craft", "services {\nFoo {\ncontexts: A\n}\n}\n")
+	b := writeCraft(t, wsB, "b.craft", "services {\nBar {\ncontexts: B\n}\n}\n")
+
+	var out, errOut bytes.Buffer
+	if code := runFmt([]string{a, b}, false, fmtOverride{}, &out, &errOut); code != 0 {
+		t.Fatalf("runFmt = %d, stderr=%s", code, errOut.String())
+	}
+
+	wantA := "services {\n" + strings.Repeat(" ", 2) + "Foo {\n" +
+		strings.Repeat(" ", 4) + "contexts: A\n" +
+		strings.Repeat(" ", 2) + "}\n}\n"
+	if got := string(mustReadFile(t, a)); got != wantA {
+		t.Errorf("wsA (indent=2): got\n%q\nwant\n%q", got, wantA)
+	}
+
+	wantB := "services {\n" + strings.Repeat(" ", 6) + "Bar {\n" +
+		strings.Repeat(" ", 12) + "contexts: B\n" +
+		strings.Repeat(" ", 6) + "}\n}\n"
+	if got := string(mustReadFile(t, b)); got != wantB {
+		t.Errorf("wsB (indent=6): got\n%q\nwant\n%q", got, wantB)
+	}
+}
+
+// TestRunFmt_MalformedCraftfmtOnlyFailsThatWorkspace pins that a resolution
+// failure is scoped to the file(s) under the bad .craftfmt: a good workspace
+// in the same invocation must still be formatted and must not be reported as
+// failed, even though the run as a whole exits non-zero.
+func TestRunFmt_MalformedCraftfmtOnlyFailsThatWorkspace(t *testing.T) {
+	root := t.TempDir()
+	wsGood := filepath.Join(root, "good")
+	wsBad := filepath.Join(root, "bad")
+	if err := os.MkdirAll(wsGood, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(wsBad, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(wsGood, ".craftfmt"), []byte("indent = 2\n"), 0o644)
+	// "indnet" is a typo for "indent"; fmtconfig.Load rejects unknown keys.
+	os.WriteFile(filepath.Join(wsBad, ".craftfmt"), []byte("indnet = 4\n"), 0o644)
+	const badSrc = "services {\nBar {\ncontexts: B\n}\n}\n"
+	good := writeCraft(t, wsGood, "a.craft", "services {\nFoo {\ncontexts: A\n}\n}\n")
+	bad := writeCraft(t, wsBad, "b.craft", badSrc)
+
+	var out, errOut bytes.Buffer
+	code := runFmt([]string{good, bad}, false, fmtOverride{}, &out, &errOut)
+	if code == 0 {
+		t.Fatal("exit code = 0, want non-zero: a malformed .craftfmt must fail the run")
+	}
+	if !strings.Contains(errOut.String(), bad) || !strings.Contains(errOut.String(), "indnet") {
+		t.Errorf("want the bad file and the offending key named on stderr, got %q", errOut.String())
+	}
+	if strings.Contains(errOut.String(), good) {
+		t.Errorf("the good workspace's file must not be reported as failed, got %q", errOut.String())
+	}
+
+	wantGood := "services {\n" + strings.Repeat(" ", 2) + "Foo {\n" +
+		strings.Repeat(" ", 4) + "contexts: A\n" +
+		strings.Repeat(" ", 2) + "}\n}\n"
+	if got := string(mustReadFile(t, good)); got != wantGood {
+		t.Errorf("good workspace was not formatted despite the other workspace's bad .craftfmt\ngot\n%q\nwant\n%q", got, wantGood)
+	}
+	if got := string(mustReadFile(t, bad)); got != badSrc {
+		t.Errorf("bad workspace's file was modified despite the resolution error:\n%q", got)
+	}
+}
+
+// TestFmtCmd_InvalidFlagValueFailsBeforeTouchingFiles pins that a bad flag
+// value is caught before any file is read or written: RunE validates the
+// merged-onto-defaults override and returns the error itself, never reaching
+// runFmt, let alone writing anything.
+func TestFmtCmd_InvalidFlagValueFailsBeforeTouchingFiles(t *testing.T) {
+	dir := t.TempDir()
+	f := writeCraft(t, dir, "a.craft", unformattedUseCase)
+
+	root := newRootCmd()
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"fmt", "--align-trailing-comment", "sometimes", f})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected an error for an invalid --align-trailing-comment value")
+	}
+	if !strings.Contains(err.Error(), "trailing_comment") {
+		t.Errorf("want a validation error mentioning trailing_comment, got %v", err)
+	}
+	got := string(mustReadFile(t, f))
+	if got != unformattedUseCase {
+		t.Errorf("file was modified despite an invalid flag value:\n%q", got)
 	}
 }

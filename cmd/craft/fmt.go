@@ -13,6 +13,46 @@ import (
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
+// fmtOverride carries the subset of formatting fields the user actually set
+// on the command line (cmd.Flags().Changed), one field at a time. This is
+// deliberately not a bare fmtconfig.Config: a Config cannot tell "the user
+// set this to the default value" apart from "the user did not touch this
+// field at all", and resolution must be able to tell those apart, because a
+// single flag must only ever override the field it names. Every other field
+// still comes from .craftfmt (or the built-in defaults, if there is no
+// .craftfmt), never from a flag the user did not pass.
+type fmtOverride struct {
+	indent    int
+	hasIndent bool
+
+	continuationIndent    int
+	hasContinuationIndent bool
+
+	trailingComment    fmtconfig.Scope
+	hasTrailingComment bool
+}
+
+// any reports whether at least one flag was set.
+func (o fmtOverride) any() bool {
+	return o.hasIndent || o.hasContinuationIndent || o.hasTrailingComment
+}
+
+// apply layers the fields the user set on top of cfg (the per-file resolved
+// configuration), field by field, leaving every unset field exactly as cfg
+// had it. cfg is passed by value, so this never mutates the caller's copy.
+func (o fmtOverride) apply(cfg fmtconfig.Config) fmtconfig.Config {
+	if o.hasIndent {
+		cfg.Indent = o.indent
+	}
+	if o.hasContinuationIndent {
+		cfg.ContinuationIndent = o.continuationIndent
+	}
+	if o.hasTrailingComment {
+		cfg.Align.TrailingComment = o.trailingComment
+	}
+	return cfg
+}
+
 func fmtCmd() *cobra.Command {
 	var check bool
 	var indent, contIndent int
@@ -29,16 +69,16 @@ walked, matching validate, inspect and generate; pass a glob such as
 
 Each file is formatted according to the nearest .craftfmt found by walking up
 from that file's own directory, or the built-in defaults if there is none.
-Resolution order, highest wins: an explicitly-set CLI flag, then the nearest
-ancestor .craftfmt, then the defaults. A flag left at its default is not
-considered "set" and never overrides .craftfmt; --indent, --continuation-
-indent and --align-trailing-comment only take effect when passed. When any of
-them is passed, it replaces the whole resolved configuration for every file in
-the run, not just the fields named on the command line.
+Resolution happens per field, per file: --indent, --continuation-indent and
+--align-trailing-comment each override only the field they name, and only
+when the flag is actually passed. A flag left at its default is not
+considered "set" and never overrides .craftfmt; every field a flag does not
+name still comes from that file's own .craftfmt, or the defaults if it has
+none.
 
 A single invocation can span files from more than one workspace (a glob
 covering two directory trees, say), and each file's .craftfmt is resolved
-independently, so they are free to disagree.
+independently, so they are free to disagree, flags aside.
 
 With --check nothing is written. The command lists every file that is not
 already formatted and exits non-zero, which is the CI gate.
@@ -49,7 +89,8 @@ diagnostic that blocked it, and counts as a failure in both modes.
 
 A malformed .craftfmt, an invalid value, or an unknown key is reported
 per-file, on stderr, and counts as a failure rather than silently falling
-back to the defaults.`,
+back to the defaults. This is checked for every file, whether or not a flag
+was also passed, since a flag only ever overrides the field it names.`,
 		Args:         cobra.MinimumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -68,24 +109,29 @@ back to the defaults.`,
 				return fmt.Errorf("no files matched %v", args)
 			}
 
-			cfg := fmtconfig.Defaults()
-			hasOverride := false
+			var override fmtOverride
 			if cmd.Flags().Changed("indent") {
-				cfg.Indent, hasOverride = indent, true
+				override.indent, override.hasIndent = indent, true
 			}
 			if cmd.Flags().Changed("continuation-indent") {
-				cfg.ContinuationIndent, hasOverride = contIndent, true
+				override.continuationIndent, override.hasContinuationIndent = contIndent, true
 			}
 			if cmd.Flags().Changed("align-trailing-comment") {
-				cfg.Align.TrailingComment, hasOverride = fmtconfig.Scope(trailingComment), true
+				override.trailingComment, override.hasTrailingComment = fmtconfig.Scope(trailingComment), true
 			}
-			if hasOverride {
-				if err := cfg.Validate(); err != nil {
+			if override.any() {
+				// Validate the flag values in isolation, against the
+				// defaults, before touching any file: fmtconfig.Validate
+				// checks each field independently (no cross-field rules),
+				// so this catches a bad flag value exactly as reliably as
+				// validating the field's eventual per-file merge would,
+				// without waiting to resolve a single .craftfmt first.
+				if err := override.apply(fmtconfig.Defaults()).Validate(); err != nil {
 					return err
 				}
 			}
 
-			if runFmt(files, check, cfg, hasOverride, cmd.OutOrStdout(), cmd.ErrOrStderr()) != 0 {
+			if runFmt(files, check, override, cmd.OutOrStdout(), cmd.ErrOrStderr()) != 0 {
 				os.Exit(1)
 			}
 			return nil
@@ -110,14 +156,14 @@ back to the defaults.`,
 // filenames without the command calling os.Exit on the test process, the same
 // split runValidate uses.
 //
-// override and hasOverride are the CLI-flag half of resolution: hasOverride is
-// true only when the caller actually set one of --indent, --continuation-indent
-// or --align-trailing-comment (cmd.Flags().Changed), and in that case override
-// wins outright for every file in this run, .craftfmt included. Otherwise each
-// file gets its own fmtconfig.Resolve, because .craftfmt applies per directory,
-// not per invocation: a single glob can legitimately span two workspaces with
-// different configuration.
-func runFmt(files []string, check bool, override fmtconfig.Config, hasOverride bool, out, errOut io.Writer) int {
+// override is the CLI-flag half of resolution. Every file's .craftfmt (or the
+// defaults, if it has none) is resolved unconditionally -- a malformed
+// .craftfmt must be visible regardless of whether any flag was passed -- and
+// then override.apply layers only the fields the user actually set on top,
+// per file. This is deliberately per field, not "override wins outright":
+// a single --indent must not silently discard a .craftfmt's unrelated
+// align.trailing_comment setting.
+func runFmt(files []string, check bool, override fmtOverride, out, errOut io.Writer) int {
 	failed := false
 
 	// resolveCache memoizes fmtconfig.Resolve by directory so a large glob
@@ -156,18 +202,18 @@ func runFmt(files []string, check bool, override fmtconfig.Config, hasOverride b
 			continue
 		}
 
-		cfg := override
-		if !hasOverride {
-			resolved, err := resolveCfg(file)
-			if err != nil {
-				// A malformed .craftfmt must be visible per-file, not
-				// silently treated as "no config" and defaulted.
-				fmt.Fprintf(errOut, "%s: %v\n", file, err)
-				failed = true
-				continue
-			}
-			cfg = resolved
+		resolved, err := resolveCfg(file)
+		if err != nil {
+			// A malformed .craftfmt must be visible per-file, not silently
+			// treated as "no config" and defaulted -- even when a flag was
+			// also passed, since the flag only overrides the field it
+			// names, and every other field still needs this file's own
+			// .craftfmt.
+			fmt.Fprintf(errOut, "%s: %v\n", file, err)
+			failed = true
+			continue
 		}
+		cfg := override.apply(resolved)
 
 		formatted, blocked := lsp.FormatDocumentCheckedWith(string(content), cfg)
 		if blocked != nil {
