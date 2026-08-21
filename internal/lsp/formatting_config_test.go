@@ -204,13 +204,17 @@ func TestFormattingMalformedCraftfmtIsVisibleNotSilent(t *testing.T) {
 	}
 }
 
-// TestDidChangeWatchedFiles_CraftfmtChangeInvalidatesCache drives the
-// invalidation problem end to end: format once (priming any cache), edit
-// .craftfmt on disk exactly as an external tool or the editor itself would,
-// notify DidChangeWatchedFiles as the client's file watcher would, and
-// format again -- the second result must reflect the edit without the
-// server having been restarted.
-func TestDidChangeWatchedFiles_CraftfmtChangeInvalidatesCache(t *testing.T) {
+// TestFormatting_CraftfmtEditTakesEffectWithoutReload is what replaced
+// TestDidChangeWatchedFiles_CraftfmtChangeInvalidatesCache once
+// resolveFmtConfig's per-directory cache was removed (see that function's
+// doc comment). The mechanism changed -- there is no cache left to
+// invalidate, and DidChangeWatchedFiles is now a documented no-op -- but the
+// user-visible property the old test protected must survive unchanged:
+// editing .craftfmt on disk changes what the NEXT format request produces,
+// with no reload, no client notification, and no server restart. This test
+// asserts exactly that, and deliberately never calls
+// DidChangeWatchedFiles, to prove the property no longer depends on it.
+func TestFormatting_CraftfmtEditTakesEffectWithoutReload(t *testing.T) {
 	dir := t.TempDir()
 	craftfmtPath := filepath.Join(dir, fmtconfig.FileName)
 	if err := os.WriteFile(craftfmtPath, []byte("indent = 2\n"), 0o644); err != nil {
@@ -239,13 +243,8 @@ func TestDidChangeWatchedFiles_CraftfmtChangeInvalidatesCache(t *testing.T) {
 	if err := os.WriteFile(craftfmtPath, []byte("indent = 3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DidChangeWatchedFiles(context.Background(), &protocol.DidChangeWatchedFilesParams{
-		Changes: []*protocol.FileEvent{
-			{Type: protocol.FileChangeTypeChanged, URI: uri.File(craftfmtPath)},
-		},
-	}); err != nil {
-		t.Fatalf("DidChangeWatchedFiles: %v", err)
-	}
+	// No DidChangeWatchedFiles call here. That is the point: the property
+	// must hold without one.
 
 	edits, err = s.Formatting(context.Background(), &protocol.DocumentFormattingParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
@@ -254,6 +253,48 @@ func TestDidChangeWatchedFiles_CraftfmtChangeInvalidatesCache(t *testing.T) {
 		t.Fatalf("Formatting (after): %v", err)
 	}
 	if len(edits) == 0 || !strings.Contains(edits[0].NewText, "\n   Foo {") {
-		t.Errorf("cache was not invalidated by DidChangeWatchedFiles, got %+v", edits)
+		t.Errorf(".craftfmt edit was not reflected without a reload, got %+v", edits)
+	}
+}
+
+// TestDidChangeWatchedFiles_IsANoOp pins that the handler required by
+// protocol.Server does nothing observable: it must not error, and a format
+// request right after it must still reflect the .craftfmt already on disk
+// rather than anything the notification's payload claims.
+func TestDidChangeWatchedFiles_IsANoOp(t *testing.T) {
+	dir := t.TempDir()
+	craftfmtPath := filepath.Join(dir, fmtconfig.FileName)
+	if err := os.WriteFile(craftfmtPath, []byte("indent = 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "a.craft")
+	content := "services {\nFoo {\ncontexts: A\n}\n}\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Server{ws: workspace.New(nil), logger: slog.Default()}
+	docURI := string(uri.File(path))
+	s.ws.Open(docURI, content)
+
+	if err := s.DidChangeWatchedFiles(context.Background(), &protocol.DidChangeWatchedFilesParams{
+		Changes: []*protocol.FileEvent{
+			{Type: protocol.FileChangeTypeChanged, URI: uri.File(craftfmtPath)},
+		},
+	}); err != nil {
+		t.Fatalf("DidChangeWatchedFiles: %v", err)
+	}
+	if err := s.DidChangeWatchedFiles(context.Background(), nil); err != nil {
+		t.Fatalf("DidChangeWatchedFiles(nil): %v", err)
+	}
+
+	edits, err := s.Formatting(context.Background(), &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
+	})
+	if err != nil {
+		t.Fatalf("Formatting: %v", err)
+	}
+	if len(edits) == 0 || !strings.Contains(edits[0].NewText, "\n  Foo {") {
+		t.Errorf("expected indent=2 from .craftfmt on disk, got %+v", edits)
 	}
 }

@@ -26,7 +26,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -62,26 +61,6 @@ type Server struct {
 		mu     sync.Mutex
 		timers map[string]*time.Timer
 	}
-
-	// fmtCfg caches fmtconfig.Resolve results per directory. Resolve walks
-	// up the filesystem looking for .craftfmt on every call; this avoids
-	// repeating that walk for every format request in a directory whose
-	// answer is already known. DidChangeWatchedFiles drops the whole cache
-	// whenever a .craftfmt anywhere changes (clearFmtConfigCache), so a
-	// stale entry can never survive a change notification.
-	fmtCfg struct {
-		mu    sync.Mutex
-		cache map[string]fmtCfgCacheEntry
-	}
-}
-
-// fmtCfgCacheEntry is one cached fmtconfig.Resolve outcome: either a valid
-// Config or the error Resolve returned (e.g. a malformed .craftfmt), cached
-// exactly as Resolve returned it so a repeated request for the same
-// directory sees the same outcome without re-reading the file.
-type fmtCfgCacheEntry struct {
-	cfg fmtconfig.Config
-	err error
 }
 
 // lspLine converts a 1-based line to a 0-based LSP line number.
@@ -661,29 +640,31 @@ func (s *Server) DidChangeConfiguration(_ context.Context, _ *protocol.DidChange
 	return nil
 }
 
-// DidChangeWatchedFiles drops the formatting-config cache whenever a
-// .craftfmt anywhere in the workspace is created, changed, or deleted, so an
-// edit made to it -- from the editor or any other tool -- takes effect on
-// the next format request without reloading the window.
+// DidChangeWatchedFiles is a deliberate no-op.
 //
-// The extension's file watcher glob is currently '**/*.craft', which does
-// not match .craftfmt; a later task widens it. Until then this handler is
-// simply never invoked for a .craftfmt change, which is why it cannot yet be
-// exercised end to end through a real client. It is implemented correctly
-// now regardless, so that later change is glob-only.
-func (s *Server) DidChangeWatchedFiles(_ context.Context, params *protocol.DidChangeWatchedFilesParams) error {
-	if params == nil {
-		return nil
-	}
-	for _, ev := range params.Changes {
-		if ev == nil || !strings.HasPrefix(string(ev.URI), "file://") {
-			continue
-		}
-		if filepath.Base(ev.URI.Filename()) == fmtconfig.FileName {
-			s.clearFmtConfigCache()
-			return nil
-		}
-	}
+// It used to drop a per-directory cache of resolveFmtConfig's results
+// whenever a .craftfmt anywhere in the workspace changed. That cache is
+// gone: resolveFmtConfig now calls fmtconfig.Resolve directly on every
+// request, so a .craftfmt edit is visible on the very next format request
+// with nothing to invalidate. See resolveFmtConfig's doc comment for why the
+// cache was removed rather than fixed.
+//
+// The method stays because protocol.Server requires it (it is part of the
+// interface every LSP server implements, not an optional hook this one
+// chose to add), and because a client is free to send this notification
+// unprompted. Nothing here needs to react to it.
+//
+// This also sidesteps a staleness class the cache had regardless of this
+// handler's correctness: it was invalidated only by a client-volunteered
+// didChangeWatchedFiles notification, which this server never requests via
+// dynamic registration, and ServerCapabilities declares no workspace file
+// watching either. The craft-vscode-extension's own file watcher only
+// widened its glob to include .craftfmt (from '**/*.craft' to
+// '**/{*.craft,.craftfmt}') in 0.2.8; before that release, and for any
+// client other than VS Code (nvim, helix, Zed, ...), this notification was
+// simply never sent for a .craftfmt change, so the old cache could go stale
+// for an entire session with no way to invalidate it.
+func (s *Server) DidChangeWatchedFiles(_ context.Context, _ *protocol.DidChangeWatchedFilesParams) error {
 	return nil
 }
 
@@ -1392,8 +1373,8 @@ func (s *Server) Formatting(ctx context.Context, params *protocol.DocumentFormat
 	// the author sees on save. .craftfmt (or the built-in defaults, absent
 	// one) is the only source of truth for indent width; the extension
 	// instead declares craft's width to the editor via
-	// contributes.configurationDefaults (a later task). See
-	// docs/decisions/formatting-configuration.md D6.
+	// contributes.configurationDefaults, shipped in craft-vscode-extension
+	// 0.2.8. See docs/decisions/formatting-configuration.md D6.
 	cfg := fmtconfig.Defaults()
 	if path := documentPath(params.TextDocument.URI); path != "" {
 		resolved, err := s.resolveFmtConfig(path)
@@ -1447,46 +1428,27 @@ func documentPath(u protocol.DocumentURI) string {
 }
 
 // resolveFmtConfig resolves the formatting configuration that applies to the
-// document at path, through the per-directory fmtCfg cache. See the fmtCfg
-// field doc comment and clearFmtConfigCache for the invalidation contract.
-func (s *Server) resolveFmtConfig(path string) (fmtconfig.Config, error) {
-	dir := filepath.Dir(path)
-	if abs, err := filepath.Abs(dir); err == nil {
-		dir = abs
-	}
-
-	s.fmtCfg.mu.Lock()
-	if entry, ok := s.fmtCfg.cache[dir]; ok {
-		s.fmtCfg.mu.Unlock()
-		return entry.cfg, entry.err
-	}
-	s.fmtCfg.mu.Unlock()
-
-	cfg, err := fmtconfig.Resolve(path)
-
-	s.fmtCfg.mu.Lock()
-	if s.fmtCfg.cache == nil {
-		s.fmtCfg.cache = make(map[string]fmtCfgCacheEntry)
-	}
-	s.fmtCfg.cache[dir] = fmtCfgCacheEntry{cfg: cfg, err: err}
-	s.fmtCfg.mu.Unlock()
-
-	return cfg, err
-}
-
-// clearFmtConfigCache drops every cached fmtconfig.Resolve outcome. Called
-// whenever DidChangeWatchedFiles sees a .craftfmt change anywhere.
+// document at path.
 //
-// Wiping everything, rather than just the changed file's own directory, is
-// deliberate: a cached directory's answer can have come from an ANCESTOR
-// .craftfmt (Resolve walks up), so a change to that ancestor can invalidate
-// any number of descendant entries, and tracking which cached answer came
-// from which .craftfmt file is not worth the bookkeeping for an event this
-// rare.
-func (s *Server) clearFmtConfigCache() {
-	s.fmtCfg.mu.Lock()
-	s.fmtCfg.cache = nil
-	s.fmtCfg.mu.Unlock()
+// This used to go through a per-directory cache of fmtconfig.Resolve
+// results, invalidated only when DidChangeWatchedFiles saw a .craftfmt
+// change. That invalidation path depends entirely on the client sending
+// that notification for a .craftfmt file, which this server never asks for:
+// Initialized does not register dynamic file watching, and
+// InitializeResult.Capabilities declares none either. In practice the only
+// client that ever sent it was craft-vscode-extension >= 0.2.8, whose file
+// watcher glob happens to include .craftfmt. Any other client -- an older
+// extension build, nvim, helix, Zed -- could edit .craftfmt and never see
+// the change reflected in the editor for the rest of the session, while
+// `craft fmt` on the same file picked it up immediately: exactly the
+// CLI/LSP divergence this whole configuration design exists to prevent.
+//
+// fmtconfig.Resolve is a handful of os.Stat calls walking up from the
+// document's directory, on a user-initiated, once-per-save operation. That
+// cost does not justify an entire class of staleness, so there is no cache
+// here any more: every request resolves fresh.
+func (s *Server) resolveFmtConfig(path string) (fmtconfig.Config, error) {
+	return fmtconfig.Resolve(path)
 }
 
 // publishConfigError makes a .craftfmt resolution failure visible to the
