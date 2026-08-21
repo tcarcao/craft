@@ -3,14 +3,57 @@ package lsp
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 )
 
-// alignAnnotations column-aligns trailing operation annotations.
-//
-// It runs over the formatter's output rather than over the tree, because
-// alignment is the one decision that needs to see whole lines. It only ever
-// rewrites the run of spaces before a `[`, and never on a line it was told to
-// leave alone, so it cannot change content.
+// cellSplitter splits a line into the text before an alignable cell and the
+// cell. hint is the per-line offset the walker recorded for this cell type:
+// commentEnd for annotations, commentStart for trailing comments.
+type cellSplitter func(line string, hint int) (body, cell string, ok bool)
+
+// annotationMinGap and trailingCommentMinGap are the minGap arguments
+// FormatDocumentCheckedWith passes to alignCells for each cell type. The
+// annotation gap is existing shipped behaviour, pinned by
+// TestAlignAnnotations_AlignsAContiguousRun and friends; the comment gap is
+// what reproduces a hand-aligned column. See "Minimum gap differs by cell
+// type" in docs/decisions/formatting-configuration.md.
+const (
+	annotationMinGap      = 2
+	trailingCommentMinGap = 1
+)
+
+// endsRun reports whether a line terminates an alignment run under a scope.
+// A line already known to be interior never reaches here.
+func endsRun(line string, hasCell bool, scope fmtconfig.Scope) bool {
+	trimmed := strings.TrimSpace(line)
+	switch scope {
+	case fmtconfig.ScopeFile, fmtconfig.ScopeDecl:
+		// Each declaration is aligned separately by the caller, so within one
+		// declaration decl and file behave identically: only a blank line ends
+		// a run.
+		return trimmed == ""
+	case fmtconfig.ScopeBlock:
+		if trimmed == "" {
+			return true
+		}
+		if strings.HasSuffix(trimmed, "{") || strings.HasPrefix(trimmed, "}") {
+			return true
+		}
+		// A comment on its own line ends a run, matching hclwrite.
+		return strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*")
+	case fmtconfig.ScopeStrict:
+		return !hasCell
+	}
+	return true
+}
+
+// alignCells column-aligns one kind of trailing cell: an operation annotation
+// or a trailing comment, depending on which splitter and hint map it is
+// given. It runs over the formatter's output rather than over the tree,
+// because alignment is the one decision that needs to see whole lines. It
+// only ever rewrites the run of spaces before a cell, and never on a line it
+// was told to leave alone, so it cannot change content.
 //
 // Both maps come from writeTokens, and both exist because this pass sees only
 // text. Where a token started and where it stopped is knowledge the walker had
@@ -30,16 +73,29 @@ import (
 // unannotated is what keeps a blank line inside a block comment from splitting
 // an alignment run that the comment merely sits in the middle of.
 //
-// commentEnd gives, per line, the byte offset just past the last comment that
-// ends on it, and is what splitAnnotation needs to tell an annotation from a
-// bracket in comment text. A line absent from it has no comment ending on it,
-// and zero is the right answer for such a line.
+// hints gives, per line, the byte offset the chosen splitter needs: the
+// offset just past the last comment ending on the line for splitAnnotation, or
+// the offset where a trailing comment begins for splitTrailingComment. A line
+// absent from hints has no cell-relevant boundary recorded on it, and zero is
+// the right answer for such a line for either splitter.
 //
-// A run is a stretch of consecutive lines that carry an annotation, plus any
-// unannotated lines between them. A blank line ends a run. That matches the
-// worked examples in docs/decisions/action-operation-brackets.md, where an
-// unannotated action keeps the column rather than splitting it.
-func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) string {
+// scope decides what ends a run beyond a blank line; see endsRun. A run is a
+// stretch of consecutive lines that carry the cell, plus any lines between
+// them the scope says do not end it. Under ScopeBlock, an unannotated action
+// keeps the column rather than splitting it, matching the worked examples in
+// docs/decisions/action-operation-brackets.md.
+//
+// minGap is the minimum number of spaces between the widest body in a run and
+// its cell, passed to columnFor. The two cell types disagree on it: the
+// annotation column is documented and shipped as max(body)+2, while the
+// trailing-comment column is max(body)+1, which is what reproduces a
+// hand-aligned column. Nothing about a line's shape reveals which of the two
+// a caller wants, so this is a parameter rather than something alignCells
+// infers.
+func alignCells(s string, interior map[int]bool, hints map[int]int, split cellSplitter, scope fmtconfig.Scope, minGap int, cfg fmtconfig.Config) string {
+	if scope == fmtconfig.ScopeOff {
+		return s
+	}
 	lines := strings.Split(s, "\n")
 
 	runStart := -1
@@ -47,22 +103,21 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 		if runStart < 0 {
 			return
 		}
-		col := 0
+		widths := make([]int, 0, end-runStart)
 		for i := runStart; i < end; i++ {
 			if interior[i] {
 				continue
 			}
-			if body, _, ok := splitAnnotation(lines[i], commentEnd[i]); ok {
-				if w := utf8.RuneCountInString(body); w+2 > col {
-					col = w + 2
-				}
+			if body, _, ok := split(lines[i], hints[i]); ok {
+				widths = append(widths, utf8.RuneCountInString(body))
 			}
 		}
+		col := columnFor(widths, minGap, cfg)
 		for i := runStart; i < end; i++ {
 			if interior[i] {
 				continue
 			}
-			body, ann, ok := splitAnnotation(lines[i], commentEnd[i])
+			body, cell, ok := split(lines[i], hints[i])
 			if !ok {
 				continue
 			}
@@ -70,7 +125,7 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 			if pad < 1 {
 				pad = 1
 			}
-			lines[i] = body + strings.Repeat(" ", pad) + ann
+			lines[i] = body + strings.Repeat(" ", pad) + cell
 		}
 		runStart = -1
 	}
@@ -79,17 +134,31 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 		if interior[i] {
 			continue
 		}
-		if strings.TrimSpace(line) == "" {
+		_, _, hasCell := split(line, hints[i])
+		if endsRun(line, hasCell, scope) {
 			flush(i)
 			continue
 		}
-		if _, _, ok := splitAnnotation(line, commentEnd[i]); ok && runStart < 0 {
+		if hasCell && runStart < 0 {
 			runStart = i
 		}
 	}
 	flush(len(lines))
 
 	return strings.Join(lines, "\n")
+}
+
+// columnFor picks the alignment column for a run from its body widths and the
+// caller's minimum gap. Task 7 replaces this with a version that excludes
+// width outliers.
+func columnFor(widths []int, minGap int, cfg fmtconfig.Config) int {
+	col := 0
+	for _, w := range widths {
+		if w+minGap > col {
+			col = w + minGap
+		}
+	}
+	return col
 }
 
 // splitAnnotation splits a line into the text before its trailing operation
@@ -126,7 +195,7 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 //
 // A line a comment merely passes through has no comment ENDING on it, so from
 // says nothing useful about it. Those lines are excluded upstream instead, by
-// the interior set alignAnnotations is given.
+// the interior set alignCells is given.
 func splitAnnotation(line string, from int) (body, ann string, ok bool) {
 	trimmed := strings.TrimRight(line, " \t")
 	if !strings.HasSuffix(trimmed, "]") {

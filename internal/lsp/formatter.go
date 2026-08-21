@@ -112,8 +112,35 @@ func FormatDocumentCheckedWith(content string, cfg fmtconfig.Config) (string, *c
 			// by blank lines, and top-level declarations are always joined by
 			// one, so no run could ever have spanned two declarations anyway.
 			var decl strings.Builder
-			interior, commentEnd, _ := writeTokens(&decl, node, cfg)
-			sb.WriteString(alignAnnotations(decl.String(), interior, commentEnd))
+			interior, commentEnd, commentStart := writeTokens(&decl, node, cfg)
+			text := decl.String()
+			// Annotations align first, and this order is load-bearing rather
+			// than incidental. The two passes act on disjoint line sets:
+			// splitAnnotation only accepts a line that ends in `]`, which means
+			// it never accepts a line carrying a trailing comment, and
+			// splitTrailingComment only accepts a line with a recorded comment
+			// start. That disjointness is what keeps commentEnd/commentStart
+			// valid across both passes, since neither pass ever rewrites a line
+			// the other one is about to read.
+			//
+			// Reversing the order breaks that. The comment pass would shift a
+			// line like `A asks B to c  // see note [1]` before the annotation
+			// pass read it, leaving its recorded commentEnd too small — and a
+			// commentEnd that is too small is exactly the direction
+			// splitAnnotation's own doc comment warns about: comment text gets
+			// read as an annotation and the whitespace inside a comment gets
+			// rewritten, which is content corruption rather than a missed
+			// alignment.
+			//
+			// A line carrying both an annotation and a trailing comment is a
+			// separate, documented limitation: splitAnnotation cannot see the
+			// annotation once a trailing comment follows it, so such a line
+			// joins the comment column only and keeps its authored annotation
+			// spacing. See docs/decisions/formatting-configuration.md, "Cell
+			// precedence, and a documented limitation".
+			text = alignCells(text, interior, commentEnd, splitAnnotation, cfg.Align.OpAnnotation, annotationMinGap, cfg)
+			text = alignCells(text, interior, commentStart, splitTrailingComment, cfg.Align.TrailingComment, trailingCommentMinGap, cfg)
+			sb.WriteString(text)
 		}
 	}
 

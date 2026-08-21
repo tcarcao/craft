@@ -3,6 +3,8 @@ package lsp
 import (
 	"strings"
 	"testing"
+
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 )
 
 func TestAlignAnnotations_AlignsAContiguousRun(t *testing.T) {
@@ -16,7 +18,7 @@ func TestAlignAnnotations_AlignsAContiguousRun(t *testing.T) {
 		"    Subscriptions asks Billing for a charge  [POST /v1/charges]\n" +
 		"    Billing asks Gateway to authorize        [POST /pay/v2/authorize]\n" +
 		"}\n"
-	if got := alignAnnotations(in, nil, nil); got != want {
+	if got := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults()); got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
@@ -27,8 +29,8 @@ func TestAlignAnnotations_IsIdempotent(t *testing.T) {
 		"    A asks B for c [POST /v1/x]\n" +
 		"    LongerSubject asks B for c [GET /v1/y]\n" +
 		"}\n"
-	once := alignAnnotations(in, nil, nil)
-	if twice := alignAnnotations(once, nil, nil); once != twice {
+	once := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
+	if twice := alignCells(once, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults()); once != twice {
 		t.Errorf("not idempotent\nonce:\n%s\ntwice:\n%s", once, twice)
 	}
 }
@@ -43,7 +45,7 @@ func TestAlignAnnotations_NonAnnotatedLineDoesNotBreakTheRun(t *testing.T) {
 	// Both annotated lines have the same body width, so the shared column is
 	// that width + 2 and each gets two spaces. The unannotated line is longer
 	// than both and must not widen the column, nor split the run in two.
-	got := alignAnnotations(in, nil, nil)
+	got := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
 	if !strings.Contains(got, "for c  [POST /v1/x]") || !strings.Contains(got, "for e  [GET /v1/y]") {
 		t.Errorf("run was broken by the unannotated line:\n%s", got)
 	}
@@ -57,7 +59,7 @@ func TestAlignAnnotations_BlankLineResetsTheRun(t *testing.T) {
 		"  when B does y\n" +
 		"    A asks C for d [GET /v1/y]\n" +
 		"}\n"
-	got := alignAnnotations(in, nil, nil)
+	got := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
 	if !strings.Contains(got, "for d  [GET /v1/y]") {
 		t.Errorf("second run should align independently:\n%s", got)
 	}
@@ -65,7 +67,7 @@ func TestAlignAnnotations_BlankLineResetsTheRun(t *testing.T) {
 
 func TestAlignAnnotations_LeavesTextWithoutAnnotationsAlone(t *testing.T) {
 	in := "domain re {\n  Billing\n}\n"
-	if got := alignAnnotations(in, nil, nil); got != in {
+	if got := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults()); got != in {
 		t.Errorf("unannotated text changed:\ngot:  %q\nwant: %q", got, in)
 	}
 }
@@ -84,7 +86,7 @@ func TestAlignAnnotations_CommentLineTakesNoPartInTheColumn(t *testing.T) {
 		"}\n"
 	// A line comment runs to end of line, so the walker records its end as the
 	// line's own byte length: every bracket on the line is comment text.
-	got := alignAnnotations(in, nil, map[int]int{2: len(note)})
+	got := alignCells(in, nil, map[int]int{2: len(note)}, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
 	if !strings.Contains(got, "    // a very long explanatory note about [1]\n") {
 		t.Errorf("the comment line was itself rewritten:\n%s", got)
 	}
@@ -102,7 +104,7 @@ func TestAlignAnnotations_BracketInATrailingCommentIsNotAnAnnotation(t *testing.
 		trailing + "\n" +
 		"    LongerSubjectHere asks B for c [GET /v1/y]\n" +
 		"}\n"
-	got := alignAnnotations(in, nil, map[int]int{2: len(trailing)})
+	got := alignCells(in, nil, map[int]int{2: len(trailing)}, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
 	if !strings.Contains(got, "    A asks B for c // see [1]\n") {
 		t.Errorf("a bracket inside a trailing comment was aligned as an annotation:\n%s", got)
 	}
@@ -117,7 +119,7 @@ func TestAlignAnnotations_PathInsideAnAnnotationStillAligns(t *testing.T) {
 		"    A asks B for c [GET http://x/y]\n" +
 		"    LongerSubject asks B for c [GET /v1/y]\n" +
 		"}\n"
-	got := alignAnnotations(in, nil, nil)
+	got := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
 	var cols []int
 	for _, line := range strings.Split(got, "\n") {
 		if i := strings.Index(line, "["); i >= 0 {
@@ -145,7 +147,7 @@ func TestAlignAnnotations_InteriorLinesTakeNoPartInThePass(t *testing.T) {
 		"}\n"
 	// Lines 2 and 3 are the lines the comment token runs off the end of; the
 	// close on line 4 is where it stops, 13 bytes along.
-	got := alignAnnotations(in, map[int]bool{2: true, 3: true}, map[int]int{4: 13})
+	got := alignCells(in, map[int]bool{2: true, 3: true}, map[int]int{4: 13}, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
 	if !strings.Contains(got, "       thing [1]\n") {
 		t.Errorf("an interior line was rewritten:\n%s", got)
 	}
@@ -285,4 +287,127 @@ func TestSplitTrailingComment(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAlignCellsScopes(t *testing.T) {
+	// Two sub-blocks with different natural widths. Under block/strict scope
+	// each gets its own column; under decl/file scope they share one.
+	in := "domains {\n" +
+		"    account {\n" +
+		"        aaaaaaaaaa // one\n" +
+		"        bb // two\n" +
+		"    }\n" +
+		"    ad {\n" +
+		"        cc // three\n" +
+		"    }\n" +
+		"}"
+
+	tests := []struct {
+		scope  fmtconfig.Scope
+		wantCC string
+	}{
+		{fmtconfig.ScopeOff, "        cc // three"},
+		{fmtconfig.ScopeStrict, "        cc // three"},
+		{fmtconfig.ScopeBlock, "        cc // three"},
+		{fmtconfig.ScopeDecl, "        cc         // three"},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.scope), func(t *testing.T) {
+			hints := hintsFor(in)
+			got := alignCells(in, nil, hints, splitTrailingComment, tt.scope, trailingCommentMinGap, fmtconfig.Defaults())
+			line := lineContaining(t, got, "three")
+			if line != tt.wantCC {
+				t.Errorf("scope %s: got %q, want %q", tt.scope, line, tt.wantCC)
+			}
+		})
+	}
+}
+
+// TestCellPrecedence_BothCellsJoinsOnlyTheCommentColumn pins a documented
+// limitation rather than a requirement. splitAnnotation requires a line to
+// end in `]`, so it cannot see an annotation once a trailing comment follows
+// it on the same line. Such a line therefore joins the comment column only,
+// and keeps whatever spacing writeTokens gave the annotation (a single,
+// unaligned space) rather than sharing a column with sibling annotations.
+//
+// This is deliberate, not an oversight: there are zero lines in the repo
+// corpus carrying both cells, so closing the gap (bounding splitAnnotation's
+// search at the comment start, or replacing the two passes with a single
+// two-column aligner) is not worth building for a shape nothing produces. See
+// docs/decisions/formatting-configuration.md, "Cell precedence, and a
+// documented limitation". If this test ever needs to change because such
+// lines start appearing, that change should be deliberate, not silent drift.
+func TestCellPrecedence_BothCellsJoinsOnlyTheCommentColumn(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        A asks B to ccccc  [POST /v1/x]  // note\n" +
+		"        A asks B to d  [GET /y]\n" +
+		"        A asks B to eeeeeeee  // only a comment\n" +
+		"        A asks B to f\n" +
+		"}\n"
+	got := FormatDocument(src)
+
+	both := lineContaining(t, got, "ccccc")
+	annOnly := lineContaining(t, got, "to d")
+	commentOnly := lineContaining(t, got, "eeeeeeee")
+
+	// The comment column is shared between the dual-cell line and the
+	// comment-only line: the trailing-comment pass still sees and aligns it.
+	bothCommentCol := strings.Index(both, "//")
+	commentOnlyCol := strings.Index(commentOnly, "//")
+	if bothCommentCol < 0 || commentOnlyCol < 0 || bothCommentCol != commentOnlyCol {
+		t.Errorf("comment column not shared between the dual-cell line and the comment-only line:\ndual-cell:    %q\ncomment-only: %q", both, commentOnly)
+	}
+
+	// The annotation column is NOT shared with the sibling annotation-only
+	// line: splitAnnotation never saw the dual-cell line's annotation, so it
+	// keeps the single unaligned space writeTokens gave it rather than being
+	// padded out to match "to d  [GET /y]".
+	bothAnnCol := strings.Index(both, "[")
+	annOnlyCol := strings.Index(annOnly, "[")
+	if bothAnnCol < 0 || annOnlyCol < 0 {
+		t.Fatalf("expected both lines to carry an annotation:\ndual-cell: %q\nann-only:  %q", both, annOnly)
+	}
+	if bothAnnCol == annOnlyCol {
+		t.Errorf("annotation column unexpectedly shared with the dual-cell line; the documented limitation says it should not be:\ndual-cell: %q\nann-only:  %q", both, annOnly)
+	}
+	if want := strings.Index(both, "ccccc") + len("ccccc") + 1; bothAnnCol != want {
+		t.Errorf("dual-cell line's annotation spacing was touched: got column %d (%q), want the single unaligned space at %d", bothAnnCol, both, want)
+	}
+}
+
+func TestAlignCellsAlignsWithinABlock(t *testing.T) {
+	in := "domains {\n" +
+		"    account {\n" +
+		"        aaaaaaaaaa // one\n" +
+		"        bb // two\n" +
+		"    }\n" +
+		"}"
+	got := alignCells(in, nil, hintsFor(in), splitTrailingComment, fmtconfig.ScopeBlock, trailingCommentMinGap, fmtconfig.Defaults())
+	if l := lineContaining(t, got, "two"); l != "        bb         // two" {
+		t.Errorf("got %q", l)
+	}
+}
+
+// hintsFor builds the commentStart map the walker would produce, for tests that
+// exercise the aligner directly rather than through the formatter.
+func hintsFor(s string) map[int]int {
+	m := map[int]int{}
+	for i, l := range strings.Split(s, "\n") {
+		if idx := strings.Index(l, "//"); idx > 0 && strings.TrimSpace(l[:idx]) != "" {
+			m[i] = idx
+		}
+	}
+	return m
+}
+
+func lineContaining(t *testing.T, s, sub string) string {
+	t.Helper()
+	for _, l := range strings.Split(s, "\n") {
+		if strings.Contains(l, sub) {
+			return l
+		}
+	}
+	t.Fatalf("no line containing %q in\n%s", sub, s)
+	return ""
 }
