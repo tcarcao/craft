@@ -63,6 +63,21 @@ type Server struct {
 	}
 }
 
+// NewServerForFormatting constructs a *Server carrying only what Formatting
+// needs (ws and logger), with no jsonrpc2 connection.
+//
+// It exists so a caller outside this package can exercise the real
+// textDocument/formatting handler directly, the same direct-call pattern
+// this package's own formatting_config_test.go uses instead of routing
+// through Serve's real jsonrpc2 pipe -- this repo has a documented history
+// of that harness deadlocking. cmd/craft's CLI/LSP formatting equivalence
+// test is the intended caller: it needs the actual Server.Formatting
+// method, not just the FormatDocumentCheckedWith function both call sites
+// happen to share, since that sharing is exactly the invariant under test.
+func NewServerForFormatting(ws *workspace.Workspace, logger *slog.Logger) *Server {
+	return &Server{ws: ws, logger: logger}
+}
+
 // lspLine converts a 1-based line to a 0-based LSP line number.
 func lspLine(line int) uint32 {
 	if line <= 0 {
