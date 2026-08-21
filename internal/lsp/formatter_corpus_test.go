@@ -360,8 +360,12 @@ func TestCorpusPropertiesAcrossConfigs(t *testing.T) {
 				if once != twice {
 					t.Errorf("not idempotent under %+v\nfirst:\n%s\nsecond:\n%s", cfg, once, twice)
 				}
-				assertWhitespaceOnlyChange(t, src, once)
-				assertReparses(t, once)
+				if !assertWhitespaceOnlyChange(t, src, once) {
+					return
+				}
+				if !assertReparses(t, once) {
+					return
+				}
 				assertModelPreserved(t, path, src, once)
 			})
 		}
