@@ -514,7 +514,12 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 			// hand the aligner a false trailing cell. See the paragraph above
 			// writeTokens's signature for the full reasoning, including why
 			// a multi-line block comment is excluded too.
-			if tok.Kind() == syntax.SyntaxKindLineComment || tok.Kind() == syntax.SyntaxKindDocComment {
+			//
+			// The outer isCommentKind guard already narrowed tok.Kind() to
+			// one of the three comment kinds, so excluding block comments
+			// here only needs to rule OUT SyntaxKindBlockComment, not spell
+			// out the other two by name again.
+			if tok.Kind() != syntax.SyntaxKindBlockComment {
 				if commentStart == nil {
 					commentStart = make(map[int]int, 1)
 				}
