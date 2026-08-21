@@ -26,6 +26,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -34,8 +35,10 @@ import (
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 	"go.uber.org/zap"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -59,6 +62,26 @@ type Server struct {
 		mu     sync.Mutex
 		timers map[string]*time.Timer
 	}
+
+	// fmtCfg caches fmtconfig.Resolve results per directory. Resolve walks
+	// up the filesystem looking for .craftfmt on every call; this avoids
+	// repeating that walk for every format request in a directory whose
+	// answer is already known. DidChangeWatchedFiles drops the whole cache
+	// whenever a .craftfmt anywhere changes (clearFmtConfigCache), so a
+	// stale entry can never survive a change notification.
+	fmtCfg struct {
+		mu    sync.Mutex
+		cache map[string]fmtCfgCacheEntry
+	}
+}
+
+// fmtCfgCacheEntry is one cached fmtconfig.Resolve outcome: either a valid
+// Config or the error Resolve returned (e.g. a malformed .craftfmt), cached
+// exactly as Resolve returned it so a repeated request for the same
+// directory sees the same outcome without re-reading the file.
+type fmtCfgCacheEntry struct {
+	cfg fmtconfig.Config
+	err error
 }
 
 // lspLine converts a 1-based line to a 0-based LSP line number.
@@ -630,11 +653,37 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 	return nil
 }
 
+// DidChangeConfiguration is a stub. Formatting configuration comes entirely
+// from .craftfmt (resolved per document; see resolveFmtConfig), never from
+// LSP client configuration, so there is nothing for this handler to react
+// to yet.
 func (s *Server) DidChangeConfiguration(_ context.Context, _ *protocol.DidChangeConfigurationParams) error {
 	return nil
 }
 
-func (s *Server) DidChangeWatchedFiles(_ context.Context, _ *protocol.DidChangeWatchedFilesParams) error {
+// DidChangeWatchedFiles drops the formatting-config cache whenever a
+// .craftfmt anywhere in the workspace is created, changed, or deleted, so an
+// edit made to it -- from the editor or any other tool -- takes effect on
+// the next format request without reloading the window.
+//
+// The extension's file watcher glob is currently '**/*.craft', which does
+// not match .craftfmt; a later task widens it. Until then this handler is
+// simply never invoked for a .craftfmt change, which is why it cannot yet be
+// exercised end to end through a real client. It is implemented correctly
+// now regardless, so that later change is glob-only.
+func (s *Server) DidChangeWatchedFiles(_ context.Context, params *protocol.DidChangeWatchedFilesParams) error {
+	if params == nil {
+		return nil
+	}
+	for _, ev := range params.Changes {
+		if ev == nil || !strings.HasPrefix(string(ev.URI), "file://") {
+			continue
+		}
+		if filepath.Base(ev.URI.Filename()) == fmtconfig.FileName {
+			s.clearFmtConfigCache()
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -1324,7 +1373,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 	return ranges, nil
 }
 
-func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
+func (s *Server) Formatting(ctx context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
 	if params == nil {
 		return nil, nil
 	}
@@ -1332,7 +1381,34 @@ func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormatti
 	if f == nil {
 		return nil, nil
 	}
-	formatted := FormatDocument(f.Content)
+
+	// params.Options (tabSize / insertSpaces) is deliberately never read.
+	// vscode-languageclient's DocumentFormattingFeature sends it on every
+	// format request, but VS Code also ships editor.detectIndentation: true,
+	// which infers tabSize PER FILE from that file's own existing content.
+	// Honouring it would make a 2-space-indented .craft file format at 2 in
+	// the editor and at 4 from `craft fmt` on the CLI -- permanently, with
+	// no error -- and `craft fmt --check` in CI would then contradict what
+	// the author sees on save. .craftfmt (or the built-in defaults, absent
+	// one) is the only source of truth for indent width; the extension
+	// instead declares craft's width to the editor via
+	// contributes.configurationDefaults (a later task). See
+	// docs/decisions/formatting-configuration.md D6.
+	cfg := fmtconfig.Defaults()
+	if path := documentPath(params.TextDocument.URI); path != "" {
+		resolved, err := s.resolveFmtConfig(path)
+		if err != nil {
+			// Visible, not a silent fallback: an author who mistypes a
+			// .craftfmt key must see that formatting stopped working, not
+			// have the file quietly reformatted under the wrong (default)
+			// config with no explanation. See publishConfigError.
+			s.publishConfigError(ctx, params.TextDocument.URI, err)
+			return nil, nil
+		}
+		cfg = resolved
+	}
+
+	formatted, _ := FormatDocumentCheckedWith(f.Content, cfg)
 	if formatted == f.Content {
 		return nil, nil
 	}
@@ -1349,6 +1425,92 @@ func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormatti
 			NewText: formatted,
 		},
 	}, nil
+}
+
+// documentPath converts an LSP document URI to a filesystem path, or ""
+// when the document has no filesystem path at all -- an untitled buffer,
+// whose URI carries the untitled: scheme rather than file:.
+//
+// uri.New treats any string that does not already start with "file://" as a
+// bare relative path and resolves it against the process's working
+// directory, so uri.New("untitled:Untitled-1").Filename() does not come
+// back empty the way a naive caller might expect -- it comes back as a
+// bogus but non-empty path like "<cwd>/untitled:Untitled-1". Checking the
+// scheme ourselves first is what keeps an untitled buffer routed to the
+// "no path" branch instead of into that lookup.
+func documentPath(u protocol.DocumentURI) string {
+	s := string(u)
+	if !strings.HasPrefix(s, "file://") {
+		return ""
+	}
+	return uri.New(s).Filename()
+}
+
+// resolveFmtConfig resolves the formatting configuration that applies to the
+// document at path, through the per-directory fmtCfg cache. See the fmtCfg
+// field doc comment and clearFmtConfigCache for the invalidation contract.
+func (s *Server) resolveFmtConfig(path string) (fmtconfig.Config, error) {
+	dir := filepath.Dir(path)
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+
+	s.fmtCfg.mu.Lock()
+	if entry, ok := s.fmtCfg.cache[dir]; ok {
+		s.fmtCfg.mu.Unlock()
+		return entry.cfg, entry.err
+	}
+	s.fmtCfg.mu.Unlock()
+
+	cfg, err := fmtconfig.Resolve(path)
+
+	s.fmtCfg.mu.Lock()
+	if s.fmtCfg.cache == nil {
+		s.fmtCfg.cache = make(map[string]fmtCfgCacheEntry)
+	}
+	s.fmtCfg.cache[dir] = fmtCfgCacheEntry{cfg: cfg, err: err}
+	s.fmtCfg.mu.Unlock()
+
+	return cfg, err
+}
+
+// clearFmtConfigCache drops every cached fmtconfig.Resolve outcome. Called
+// whenever DidChangeWatchedFiles sees a .craftfmt change anywhere.
+//
+// Wiping everything, rather than just the changed file's own directory, is
+// deliberate: a cached directory's answer can have come from an ANCESTOR
+// .craftfmt (Resolve walks up), so a change to that ancestor can invalidate
+// any number of descendant entries, and tracking which cached answer came
+// from which .craftfmt file is not worth the bookkeeping for an event this
+// rare.
+func (s *Server) clearFmtConfigCache() {
+	s.fmtCfg.mu.Lock()
+	s.fmtCfg.cache = nil
+	s.fmtCfg.mu.Unlock()
+}
+
+// publishConfigError makes a .craftfmt resolution failure visible to the
+// author, instead of silently formatting with the built-in defaults, which
+// would leave a typo in .craftfmt looking as though it had no effect at all.
+//
+// It uses window/showMessage rather than folding the error into the
+// document's diagnostics list: publishDiagnostics already owns one specific
+// diagnostics set (parse + sema) per URI, republished on its own debounce
+// timer by scheduleDiagnostics, and a .craftfmt problem is a different kind
+// of error -- a workspace configuration problem, not a problem with this
+// document's own syntax. Mixing the two would mean the next debounced
+// diagnostics publish (150ms after any keystroke) silently clobbers the
+// config error. A one-shot message is not tied to that lifecycle and is
+// guaranteed to be seen once.
+func (s *Server) publishConfigError(ctx context.Context, docURI protocol.DocumentURI, err error) {
+	msg := fmt.Sprintf("craft: could not resolve .craftfmt for %s: %v", docURI, err)
+	s.logger.Warn("formatting: config resolution failed", "uri", string(docURI), "err", err)
+	if notifyErr := s.conn.Notify(ctx, protocol.MethodWindowShowMessage, &protocol.ShowMessageParams{
+		Type:    protocol.MessageTypeError,
+		Message: msg,
+	}); notifyErr != nil {
+		s.logger.Warn("publishConfigError: notify failed", "uri", string(docURI), "err", notifyErr)
+	}
 }
 
 func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
