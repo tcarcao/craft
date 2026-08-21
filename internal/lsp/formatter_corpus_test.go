@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
@@ -264,4 +266,83 @@ func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
 		t.Error("no file in the corpus is in canonical form; byte-identity is going untested")
 	}
 	t.Logf("%d file(s) already in canonical form and returned byte-identical", identical)
+}
+
+// TestCorpusPropertiesAcrossConfigs asserts the same non-idempotence
+// properties as TestFormatDocument_EveryCraftFileInRepo, but over the
+// cross-product of indent width and trailing-comment alignment scope rather
+// than at the default configuration alone.
+//
+// This is not redundant with the default-only guard. Continuation indent and
+// comment alignment both run over the same lines, and a continuation line
+// carries no comment cell: under ScopeStrict that breaks a comment run,
+// under ScopeBlock it does not. A defect in that interaction only shows up
+// at a specific (indent, scope) pair, and the default configuration is only
+// one point in that space. Idempotence in particular is asserted at every
+// point: a config under which formatting does not converge is exactly the
+// kind of bug this test exists to catch, and it would pass a default-only
+// idempotence check completely undetected.
+//
+// The matrix is 2 indents x 5 scopes = 10 configurations over the whole
+// corpus (currently ~98 files), each doing two format passes. That ran in
+// under two seconds locally alongside the rest of the package, so nothing is
+// bounded or sampled: every file is checked under every configuration.
+func TestCorpusPropertiesAcrossConfigs(t *testing.T) {
+	files := allCraftFiles(t)
+
+	var configs []fmtconfig.Config
+	for _, indent := range []int{2, 4} {
+		for _, scope := range []fmtconfig.Scope{
+			fmtconfig.ScopeOff, fmtconfig.ScopeStrict,
+			fmtconfig.ScopeBlock, fmtconfig.ScopeDecl, fmtconfig.ScopeFile,
+		} {
+			c := fmtconfig.Defaults()
+			c.Indent = indent
+			c.Align.TrailingComment = scope
+			configs = append(configs, c)
+		}
+	}
+	t.Logf("checking %d file(s) across %d configuration(s) (%d total cases)", len(files), len(configs), len(files)*len(configs))
+
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		src := string(raw)
+		for _, cfg := range configs {
+			name := fmt.Sprintf("%s/indent=%d/scope=%s", filepath.Base(path), cfg.Indent, cfg.Align.TrailingComment)
+			t.Run(name, func(t *testing.T) {
+				// A handful of corpus files (testdata/broken/*) have syntax
+				// errors severe enough that the parser cannot place them at
+				// all, at any configuration; the formatter declines to
+				// rewrite those rather than guess, and FormatDocumentWith
+				// returns them unchanged. Checking such a file's declined
+				// output for reparse-clean or idempotence would fail for a
+				// reason that has nothing to do with indent or alignment
+				// scope, so this mirrors
+				// TestFormatDocument_EveryCraftFileInRepo's handling: confirm
+				// the decline was a genuine "too broken to touch" and not the
+				// formatter quietly dropping content, then move on.
+				once, blocked := FormatDocumentCheckedWith(src, cfg)
+				if blocked != nil {
+					if blocked.Code == "craft/internal/formatter-content-drift" {
+						t.Fatalf("contentDrift fired under %+v: the walker would have changed more than whitespace", cfg)
+					}
+					if once != src {
+						t.Fatalf("a file the formatter declined to format must come back byte-identical under %+v\nblocked by: [%s] %s", cfg, blocked.Code, blocked.Message)
+					}
+					return
+				}
+
+				twice := FormatDocumentWith(once, cfg)
+				if once != twice {
+					t.Errorf("not idempotent under %+v\nfirst:\n%s\nsecond:\n%s", cfg, once, twice)
+				}
+				assertWhitespaceOnlyChange(t, src, once)
+				assertReparses(t, once)
+				assertModelPreserved(t, path, src, once)
+			})
+		}
+	}
 }
