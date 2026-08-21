@@ -77,11 +77,11 @@ const maxIndent = 16
 // must produce a diagnostic rather than silently formatting to something
 // surprising, so every caller checks this.
 func (c Config) Validate() error {
-	if c.Indent < 0 || c.Indent > maxIndent {
-		return fmt.Errorf("indent must be between 0 and %d, got %d", maxIndent, c.Indent)
+	if err := validBounded("indent", c.Indent, maxIndent); err != nil {
+		return err
 	}
-	if c.ContinuationIndent < 0 || c.ContinuationIndent > maxIndent {
-		return fmt.Errorf("continuation_indent must be between 0 and %d, got %d", maxIndent, c.ContinuationIndent)
+	if err := validBounded("continuation_indent", c.ContinuationIndent, maxIndent); err != nil {
+		return err
 	}
 	if err := validScope("trailing_comment", c.Align.TrailingComment); err != nil {
 		return err
@@ -104,4 +104,14 @@ func validScope(key string, s Scope) error {
 		return nil
 	}
 	return fmt.Errorf("%s must be one of off, strict, block, file, decl; got %q", key, s)
+}
+
+// validBounded checks that v is within [0, max], for the two integer fields
+// (Indent, ContinuationIndent) that share that bound. See maxIndent's doc
+// comment for why the bound exists.
+func validBounded(key string, v, max int) error {
+	if v < 0 || v > max {
+		return fmt.Errorf("%s must be between 0 and %d, got %d", key, max, v)
+	}
+	return nil
 }

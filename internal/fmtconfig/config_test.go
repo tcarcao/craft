@@ -39,7 +39,9 @@ func TestValidateRejectsBadValues(t *testing.T) {
 		{"negative indent", func(c *Config) { c.Indent = -1 }, "indent"},
 		{"huge indent", func(c *Config) { c.Indent = 17 }, "indent"},
 		{"unknown scope", func(c *Config) { c.Align.TrailingComment = "sometimes" }, "trailing_comment"},
+		{"unknown op_annotation", func(c *Config) { c.Align.OpAnnotation = "sometimes" }, "op_annotation"},
 		{"negative ratio", func(c *Config) { c.Align.OutlierRatio = -1 }, "outlier_ratio"},
+		{"negative outlier_min", func(c *Config) { c.Align.OutlierMin = -1 }, "outlier_min"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
