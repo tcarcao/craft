@@ -437,6 +437,115 @@ func TestAlignCellsAlignsWithinABlock(t *testing.T) {
 	}
 }
 
+func TestColumnForIgnoresOutliers(t *testing.T) {
+	cfg := fmtconfig.Defaults() // ratio 2.5, min 40
+
+	// Mean below outlier_min: the guard is inert and the widest body wins.
+	if got := columnFor([]int{10, 12, 25}, annotationMinGap, cfg); got != 27 {
+		t.Errorf("columnFor(small population) = %d, want 27", got)
+	}
+
+	// Mean above outlier_min with one extreme member: the extreme is
+	// excluded. geomean(50,50,50,50,300) = 71.55, limit = 178.87, so 300 is
+	// out and the four 50s set the column at 50+2.
+	widths := []int{50, 50, 50, 50, 300}
+	if got := columnFor(widths, annotationMinGap, cfg); got != 52 {
+		t.Errorf("columnFor(with outlier) = %d, want 52 (outlier excluded)", got)
+	}
+}
+
+func TestColumnForDisabledGuard(t *testing.T) {
+	cfg := fmtconfig.Defaults()
+	cfg.Align.OutlierRatio = 0
+	widths := []int{50, 50, 50, 50, 300}
+	if got := columnFor(widths, annotationMinGap, cfg); got != 302 {
+		t.Errorf("columnFor(ratio=0) = %d, want 302 (guard disabled, plain max)", got)
+	}
+}
+
+// TestColumnForUsesCallerMinGap proves the guard did not re-hardcode the
+// annotation gap: the same widths and the same excluded outlier, but with
+// minGap = 1 (the trailing-comment gap), must land the column one lower than
+// the minGap = 2 case above.
+func TestColumnForUsesCallerMinGap(t *testing.T) {
+	cfg := fmtconfig.Defaults()
+	widths := []int{50, 50, 50, 50, 300}
+	if got := columnFor(widths, trailingCommentMinGap, cfg); got != 51 {
+		t.Errorf("columnFor(minGap=1) = %d, want 51", got)
+	}
+}
+
+// TestColumnFor_SmallDeviationIsNotAnOutlier pins the concrete case from the
+// task: a 26-wide body in a population averaging ~10 must not be excluded by
+// any ratio test. It survives here because the population's geometric mean
+// (~10.45) never clears OutlierMin (40), so the guard never even computes a
+// ratio against it: this is ordinary variation, not an extreme.
+func TestColumnFor_SmallDeviationIsNotAnOutlier(t *testing.T) {
+	cfg := fmtconfig.Defaults()
+	widths := []int{5, 8, 10, 12, 26}
+	if got := columnFor(widths, annotationMinGap, cfg); got != 28 {
+		t.Errorf("columnFor(small deviation) = %d, want 28 (26 kept, guard inert)", got)
+	}
+}
+
+// TestColumnFor_AllExcludedFallsBackToMaxWidth guards the degenerate case
+// directly: if every width in a run were excluded, columnFor must fall back
+// to the plain max rather than returning zero and collapsing every cell to
+// minGap. With the default ratio (2.5, > 1) this can never actually happen:
+// min <= geomean <= max always, so the smallest member is never excluded.
+// A config with a sub-1 ratio (Validate only rejects negative) forces it:
+// geomean(50,50,50) = 50, limit = 0.5*50 = 25, and every member of the run is
+// above that.
+func TestColumnFor_AllExcludedFallsBackToMaxWidth(t *testing.T) {
+	cfg := fmtconfig.Defaults()
+	cfg.Align.OutlierRatio = 0.5
+	if got := columnFor([]int{50, 50, 50}, annotationMinGap, cfg); got != 52 {
+		t.Errorf("columnFor(every member excluded) = %d, want 52 (fall back to plain max, never zero)", got)
+	}
+}
+
+// TestAlignCells_OutlierGuardIsIdempotent exercises the guard through
+// alignCells rather than columnFor directly, on lines carrying real
+// annotations. It pins two things at once: which lines the guard puts in the
+// column (the four 54-wide bodies, not the 304-wide one), and that running
+// the aligner a second time makes the identical choice. splitAnnotation
+// trims trailing space off the body before measuring it, so the widths
+// columnFor sees on pass two are the same as on pass one regardless of what
+// padding pass one wrote: a line excluded once must stay excluded.
+func TestAlignCells_OutlierGuardIsIdempotent(t *testing.T) {
+	body := func(n int) string { return strings.Repeat("x", n) }
+	in := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    " + body(50) + " [GET /v1/x]\n" +
+		"    " + body(50) + " [GET /v1/x]\n" +
+		"    " + body(50) + " [GET /v1/x]\n" +
+		"    " + body(50) + " [GET /v1/x]\n" +
+		"    " + body(300) + " [GET /v1/x]\n" +
+		"}\n"
+
+	once := alignCells(in, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
+	twice := alignCells(once, nil, nil, splitAnnotation, fmtconfig.ScopeBlock, annotationMinGap, fmtconfig.Defaults())
+	if once != twice {
+		t.Errorf("not idempotent under outlier guard\nonce:\n%s\ntwice:\n%s", once, twice)
+	}
+
+	// The four 54-wide bodies (4 leading spaces + 50 x's) set the column;
+	// the 304-wide outlier is excluded and gets only the minimum gap.
+	wantGap := strings.Repeat(" ", 2)
+	for _, l := range strings.Split(once, "\n") {
+		if strings.HasPrefix(strings.TrimLeft(l, " "), body(50)+" ") {
+			if !strings.Contains(l, body(50)+wantGap+"[GET") {
+				t.Errorf("normal-width line not aligned to the guard's column: %q", l)
+			}
+		}
+		if strings.HasPrefix(strings.TrimLeft(l, " "), body(300)) {
+			if !strings.Contains(l, body(300)+" [GET") || strings.Contains(l, body(300)+"  [GET") {
+				t.Errorf("outlier line should get only the minimum one-space gap: %q", l)
+			}
+		}
+	}
+}
+
 // hintsFor builds the commentStart map the walker would produce, for tests that
 // exercise the aligner directly rather than through the formatter.
 func hintsFor(s string) map[int]int {

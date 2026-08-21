@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -157,11 +158,69 @@ func alignCells(s string, interior map[int]bool, hints map[int]int, split cellSp
 }
 
 // columnFor picks the alignment column for a run from its body widths and the
-// caller's minimum gap. Task 7 replaces this with a version that excludes
-// width outliers.
+// caller's minimum gap. The column is the widest body plus minGap, except
+// that a body far wider than the rest of the run is excluded from setting
+// it. gofmt does the same on its exprList path, comparing against the
+// geometric mean of the run's sizes with a ratio of 2.5 and a floor of 40
+// (cfg.Align.OutlierRatio, cfg.Align.OutlierMin), and rustfmt's opt-in
+// alignment builds the same idea into its threshold. One 300-character line
+// should not push forty 50-character lines out to match it.
+//
+// The guard is deliberately weak. It excludes extremes, not ordinary
+// variation: a 26-wide body in a population averaging 11 is not an outlier
+// by any ratio test, because the mean never clears OutlierMin and the guard
+// stays inert. Bounding ordinary churn is the scope setting's job, not this
+// one's. cfg.Align.OutlierRatio == 0 disables the guard outright and falls
+// back to the plain widest-body-plus-gap rule.
 func columnFor(widths []int, minGap int, cfg fmtconfig.Config) int {
-	col := 0
+	if len(widths) == 0 {
+		return 0
+	}
+	if cfg.Align.OutlierRatio <= 0 {
+		return maxWidthPlusGap(widths, minGap)
+	}
+
+	sum := 0.0
+	n := 0
 	for _, w := range widths {
+		if w <= 0 {
+			continue
+		}
+		sum += math.Log(float64(w))
+		n++
+	}
+	limit := math.Inf(1)
+	if n > 0 {
+		mean := math.Exp(sum / float64(n))
+		if mean > float64(cfg.Align.OutlierMin) {
+			limit = cfg.Align.OutlierRatio * mean
+		}
+	}
+
+	kept := make([]int, 0, len(widths))
+	for _, w := range widths {
+		if float64(w) > limit {
+			continue
+		}
+		kept = append(kept, w)
+	}
+	if len(kept) == 0 {
+		// Every member of the run excluded would zero the column and
+		// collapse every cell to minGap. With the default ratio (> 1) this
+		// cannot happen: the minimum of a positive set never exceeds
+		// ratio*geomean when ratio > 1, since geomean itself never falls
+		// below the minimum. A configured ratio below 1 can force it though,
+		// and a zero column is worse than ignoring the guard for this run.
+		return maxWidthPlusGap(widths, minGap)
+	}
+	return maxWidthPlusGap(kept, minGap)
+}
+
+// maxWidthPlusGap is the guard-free rule columnFor falls back to: the widest
+// body in ws plus minGap.
+func maxWidthPlusGap(ws []int, minGap int) int {
+	col := 0
+	for _, w := range ws {
 		if w+minGap > col {
 			col = w + minGap
 		}
