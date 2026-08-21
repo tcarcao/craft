@@ -1,6 +1,6 @@
 use_case "Balance Check" {
-  when Customer checks balance
-    AccountService asks BalanceService to get current balance
-    BalanceService returns balance information
-    AccountService returns to Customer balance details
+    when Customer checks balance
+        AccountService asks BalanceService to get current balance
+        BalanceService returns balance information
+        AccountService returns to Customer balance details
 }

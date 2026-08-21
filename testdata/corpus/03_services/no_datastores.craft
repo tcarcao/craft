@@ -1,5 +1,5 @@
 services {
-  CommsService {
-    contexts: Notifier
-  }
+    CommsService {
+        contexts: Notifier
+    }
 }

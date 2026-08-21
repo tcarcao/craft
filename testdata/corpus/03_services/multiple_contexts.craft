@@ -1,7 +1,7 @@
 services {
-  PaymentService {
-    contexts: PaymentProcessing, TransactionValidation
-    data-stores: payment_db, fraud_detection_cache
-    language: golang
-  }
+    PaymentService {
+        contexts: PaymentProcessing, TransactionValidation
+        data-stores: payment_db, fraud_detection_cache
+        language: golang
+    }
 }

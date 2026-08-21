@@ -1,9 +1,9 @@
 use_case "Renewal" {
-  tags {
-    journey: a
-    journey: b
-  }
+    tags {
+        journey: a
+        journey: b
+    }
 
-  when Customer creates Account
-    Billing validates account
+    when Customer creates Account
+        Billing validates account
 }

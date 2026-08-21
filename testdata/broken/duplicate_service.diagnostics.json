@@ -3,16 +3,28 @@
     "code": "craft/sema/duplicate-name",
     "severity": "error",
     "range": {
-      "start": { "line": 5, "character": 2 },
-      "end": { "line": 5, "character": 16 }
+      "start": {
+        "line": 5,
+        "character": 4
+      },
+      "end": {
+        "line": 5,
+        "character": 18
+      }
     }
   },
   {
     "code": "craft/sema/unresolved-reference",
     "severity": "error",
     "range": {
-      "start": { "line": 1, "character": 2 },
-      "end": { "line": 1, "character": 16 }
+      "start": {
+        "line": 1,
+        "character": 4
+      },
+      "end": {
+        "line": 1,
+        "character": 18
+      }
     }
   }
 ]

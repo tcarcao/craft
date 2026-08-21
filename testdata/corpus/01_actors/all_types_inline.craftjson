@@ -9,12 +9,12 @@
     {
       "name": "AutomatedJob",
       "type": "system",
-      "line": 2
+      "line": 3
     },
     {
       "name": "ThirdPartyService",
       "type": "service",
-      "line": 3
+      "line": 5
     }
   ]
 }

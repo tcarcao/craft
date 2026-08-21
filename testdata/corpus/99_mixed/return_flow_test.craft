@@ -10,7 +10,7 @@ use_case "Payment Processing with Proper Return Flow" {
 
 use_case "Nested Call Chain" {
     when Admin requests report
-        ReportService asks DatabaseService for data  
+        ReportService asks DatabaseService for data
         DatabaseService asks CacheService to check cache
         CacheService returns cache miss
         DatabaseService queries main database

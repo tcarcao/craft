@@ -9,105 +9,105 @@ use_case "C2C user purchases" {
     when Customer pays for the order
         PaymentProvider confirms payment
         PaymentProvider notifies "PaymentCompleted"
-    
+
     // hello
-    when  Order listens  "PaymentCompleted"
+    when Order listens "PaymentCompleted"
         Order marks the Order as Paid
 }
 
 use_case "VAS scheduled and no VAS in Wallet" {
-  when Business_User schedules VAS
-    VASScheduling asks Wallet to reserve a VAS
-    Wallet creates an unconfirmed VAS reservation
-    Wallet notifies "VAS Addition Request Approved"
-    VASScheduling drafts a VAS schedule
+    when Business_User schedules VAS
+        VASScheduling asks Wallet to reserve a VAS
+        Wallet creates an unconfirmed VAS reservation
+        Wallet notifies "VAS Addition Request Approved"
+        VASScheduling drafts a VAS schedule
 
-  when VASScheduling listens "VAS Addition Request Approved"
-    VASScheduling asks OrderManagement to create an Order
-    OrderManagement notifies "Order Created"
-    OrderManagement marks the Order as payment deferred
-    OrderManagement notifies "Order payment deferred"
+    when VASScheduling listens "VAS Addition Request Approved"
+        VASScheduling asks OrderManagement to create an Order
+        OrderManagement notifies "Order Created"
+        OrderManagement marks the Order as payment deferred
+        OrderManagement notifies "Order payment deferred"
 
-  when OrderFulfilment listens "Order payment deferred"
-    OrderFulfilment asks WalletItemAddition to fulfil the addition request
-    WalletItemAddition asks Wallet to add VAS
-    Wallet notifies "VAS added"
-      
-  when OrderFulfilment listens "VAS added"
-    OrderFulfilment asks OrderManagement to mark the Order as fulfiled
-    OrderManagement notifies "Order completed"
+    when OrderFulfilment listens "Order payment deferred"
+        OrderFulfilment asks WalletItemAddition to fulfil the addition request
+        WalletItemAddition asks Wallet to add VAS
+        Wallet notifies "VAS added"
+
+    when OrderFulfilment listens "VAS added"
+        OrderFulfilment asks OrderManagement to mark the Order as fulfiled
+        OrderManagement notifies "Order completed"
 }
 
 use_case "VAS scheduled and VAS in Wallet" {
-  when Business_User schedules VAS
-    VASScheduling asks Wallet to reserve a VAS
-    Wallet reserves a VAS
-    Wallet notifies "VAS Reserved"
-    VASScheduling creates a VAS schedule
+    when Business_User schedules VAS
+        VASScheduling asks Wallet to reserve a VAS
+        Wallet reserves a VAS
+        Wallet notifies "VAS Reserved"
+        VASScheduling creates a VAS schedule
 }
 
 use_case "VAS unscheduled" {
-  when Business_User unschedules a VAS scheduling
-    VASScheduling asks Wallet to cancel the VAS reservation
-    Wallet cancels VAS reservation
-    Wallet notifies "VAS Reservation Canceled"
-    VASScheduling cancels the VAS schedule
+    when Business_User unschedules a VAS scheduling
+        VASScheduling asks Wallet to cancel the VAS reservation
+        Wallet cancels VAS reservation
+        Wallet notifies "VAS Reservation Canceled"
+        VASScheduling cancels the VAS schedule
 }
 
 use_case "VAS expires" {
-  when CRON identifies a VAS expiring
-    Wallet removes VAS
-    Wallet notifies "VAS Expired"
+    when CRON identifies a VAS expiring
+        Wallet removes VAS
+        Wallet notifies "VAS Expired"
 }
 
 // VAS Renewal
 
 use_case "Purchase VAS schedule and its renewal (ideal scenario)" {
-  when Business_User schedules a VAS
-    OrderMgmt creates an "Order with two items to fulfil: VAS and VAS Subscription"
-    OrderMgmt notifies "Order Created"
-    OrderMgmt marks the Order as payment deferred
-    OrderMgmt notifies "Order payment deferred" 
+    when Business_User schedules a VAS
+        OrderMgmt creates an "Order with two items to fulfil: VAS and VAS Subscription"
+        OrderMgmt notifies "Order Created"
+        OrderMgmt marks the Order as payment deferred
+        OrderMgmt notifies "Order payment deferred"
 
-  when OrderFulfilment listens "Order payment deferred"
-    OrderFulfilment asks VASMgmt to schedule the VAS
-    VASMgmt schedules the VAS for future application
-    VASMgmt notifies "VAS scheduled"
+    when OrderFulfilment listens "Order payment deferred"
+        OrderFulfilment asks VASMgmt to schedule the VAS
+        VASMgmt schedules the VAS for future application
+        VASMgmt notifies "VAS scheduled"
 
-  when OrderFulfilment listens "VAS scheduled"
-    OrderFulfilment asks Subscription to create a VAS Subscription
-    Subscription creates a VAS Subscription with the details
-    OrderFulfilment marks the vas subscription item as Fulfiled
+    when OrderFulfilment listens "VAS scheduled"
+        OrderFulfilment asks Subscription to create a VAS Subscription
+        Subscription creates a VAS Subscription with the details
+        OrderFulfilment marks the vas subscription item as Fulfiled
 }
 
 use_case "Purchase VAS schedule and its renewal (current possible scenario)" {
-  when Business_User schedules a VAS
-    VASMgmt schedules a VAS for future application
-    VASMgmt notifies "VAS scheduled with subscription included"
+    when Business_User schedules a VAS
+        VASMgmt schedules a VAS for future application
+        VASMgmt notifies "VAS scheduled with subscription included"
 
-  when Subscription listens "VAS scheduled with subscription included"
-    Subscription creates a VAS Subscription with the details
+    when Subscription listens "VAS scheduled with subscription included"
+        Subscription creates a VAS Subscription with the details
 }
 
 use_case "Scheduled VAS Applied" {
-  when VASMgmt identifies a scheduled VAS to apply
-    VASMgmt applies a VAS and stores details until when its valid
-    VASMgmt notifies "VAS Applied"
+    when VASMgmt identifies a scheduled VAS to apply
+        VASMgmt applies a VAS and stores details until when its valid
+        VASMgmt notifies "VAS Applied"
 }
 
 use_case "VAS Renewal Flow" {
-  when VASMgmt identifies a VAS expired
-    VASMgmt marks the VAS as expired
-    VASMgmt notifies "VAS expired"
+    when VASMgmt identifies a VAS expired
+        VASMgmt marks the VAS as expired
+        VASMgmt notifies "VAS expired"
 
-  when Subscription listens "VAS expired"
-    Subscription checks if VAS has active associated subscription
-    Subscription asks VASMgmt to "schedule/apply a new VAS"
-    Subscription renews the VAS Subscription with the VAS
-    Susbscription notifies "VAS Subscription Renewed"
+    when Subscription listens "VAS expired"
+        Subscription checks if VAS has active associated subscription
+        Subscription asks VASMgmt to "schedule/apply a new VAS"
+        Subscription renews the VAS Subscription with the VAS
+        Susbscription notifies "VAS Subscription Renewed"
 }
 
 use_case "Stop Auto-Renewal" {
-  when Business_User stops the VAS Auto-Renewal
-    Subscription cancels the subscription
+    when Business_User stops the VAS Auto-Renewal
+        Subscription cancels the subscription
 }

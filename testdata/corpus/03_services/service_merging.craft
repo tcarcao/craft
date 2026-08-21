@@ -1,17 +1,17 @@
 services {
-  UserService {
-    contexts: User, Authentication
-    language: golang
-  }
+    UserService {
+        contexts: User, Authentication
+        language: golang
+    }
 }
 
 services {
-  UserService {
-    contexts: Profile, Settings
-    data-stores: user_db
-  }
-  PaymentService {
-    contexts: Payment
-    language: java
-  }
+    UserService {
+        contexts: Profile, Settings
+        data-stores: user_db
+    }
+    PaymentService {
+        contexts: Payment
+        language: java
+    }
 }

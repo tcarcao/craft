@@ -85,14 +85,16 @@ use_case "One-time VAS — fulfillment through provider apply" {
     when VasApplication listens "RequestVasApplication"
         VasApplication delegates apply through provider translator
         VasApplication notifies "VasApplicationAcknowledged"
-        // VasApplicationAcknowledged -> I know I will have to Apply a VAS and it will happen at some point in the future
+
+    // VasApplicationAcknowledged -> I know I will have to Apply a VAS and it will happen at some point in the future
 
     when VASFulfillment listens "VasApplicationAcknowledged"
         VASFulfillment records correlation for vasFulfillmentId
 
     when VasApplication has applied VAS
         VasApplication notifies "VasApplied"
-        // VasApplied -> a VAS was applied
+
+    // VasApplied -> a VAS was applied
 
     when VASFulfillment listens "VasApplied"
         VASFulfillment advances internal VAS lifecycle for succeeded delivery
