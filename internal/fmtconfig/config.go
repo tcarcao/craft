@@ -9,7 +9,10 @@ package fmtconfig
 import "fmt"
 
 // Scope decides what ends an alignment run. The values are ordered from least
-// to most alignment; see docs/decisions/formatting-configuration.md D2.
+// to most alignment: off < strict < block < file < decl. decl sits at the far
+// end, not next to block: a declaration boundary is rarer than a blank line,
+// so a run that survives blank lines aligns MORE than one that does not. See
+// docs/decisions/formatting-configuration.md D2.
 type Scope string
 
 const (
@@ -21,10 +24,14 @@ const (
 	// ScopeBlock ends a run at a blank line, a `{`, a `}`, or a comment-only
 	// line. Lines that merely lack the cell pass through.
 	ScopeBlock Scope = "block"
-	// ScopeDecl ends a run only at a top-level declaration boundary.
-	ScopeDecl Scope = "decl"
-	// ScopeFile ends a run only at a blank line.
+	// ScopeFile ends a run only at a blank line; unlike ScopeBlock, a brace or
+	// a comment-only line does not.
 	ScopeFile Scope = "file"
+	// ScopeDecl never ends a run. The aligner already runs once per top-level
+	// declaration, so "ends at a declaration boundary" and "never ends" are
+	// the same rule from inside a single call: this is the value that gives
+	// one shared column across an entire declaration, blank lines included.
+	ScopeDecl Scope = "decl"
 )
 
 // AlignConfig is the alignment half of the configuration. The two cell types
@@ -93,8 +100,8 @@ func (c Config) Validate() error {
 
 func validScope(key string, s Scope) error {
 	switch s {
-	case ScopeOff, ScopeStrict, ScopeBlock, ScopeDecl, ScopeFile:
+	case ScopeOff, ScopeStrict, ScopeBlock, ScopeFile, ScopeDecl:
 		return nil
 	}
-	return fmt.Errorf("%s must be one of off, strict, block, decl, file; got %q", key, s)
+	return fmt.Errorf("%s must be one of off, strict, block, file, decl; got %q", key, s)
 }

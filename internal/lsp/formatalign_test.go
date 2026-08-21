@@ -289,35 +289,83 @@ func TestSplitTrailingComment(t *testing.T) {
 	}
 }
 
+// TestSplitTrailingComment_TrailingWhitespaceInsideTheCommentIsStripped pins
+// a new, deliberate behaviour: splitTrailingComment TrimRights the comment
+// cell itself, so trailing whitespace inside a line-comment TOKEN's own tail
+// is dropped. This is end-of-line whitespace in the token's tail, not
+// interior text -- the shipped annotation path already trimmed the same way
+// (splitAnnotation's `trimmed := strings.TrimRight(line, " \t")`) -- but
+// nothing pinned it for the comment cell before this test.
+func TestSplitTrailingComment_TrailingWhitespaceInsideTheCommentIsStripped(t *testing.T) {
+	const line = "    kybc   // rollup: x   "
+	start := strings.Index(line, "//")
+	_, cell, ok := splitTrailingComment(line, start)
+	if !ok {
+		t.Fatalf("expected a trailing comment cell")
+	}
+	if cell != "// rollup: x" {
+		t.Errorf("trailing whitespace inside the comment's own tail should be stripped: got %q", cell)
+	}
+}
+
+// TestAlignCellsScopes exercises all five scopes against one fixture whose
+// three joins each isolate a different scope boundary:
+//
+//   - aaaaaaaaaa/bb are separated by a cell-less content line, which
+//     discriminates strict (ends the run: neither aligns) from block (passes
+//     through: they share a column).
+//   - bb/cc are separated only by a `}`/`{` pair, no blank line, which
+//     discriminates block (a brace ends the run) from file (a brace does not,
+//     so cc joins the aaaaaaaaaa/bb column too).
+//   - cc/d are separated by a blank line, which discriminates file (a blank
+//     line ends even a file-scoped run) from decl (nothing ends a run, since
+//     alignCells is already invoked once per top-level declaration, so d
+//     joins every earlier line's column as well).
+//
+// The five scopes are ordered least to most aligning — off < strict < block
+// < file < decl — and this fixture pins that each step aligns one more join
+// than the last, which is the exact property finding 1's ruling restored:
+// decl and file must diverge on the blank-line join, not agree.
 func TestAlignCellsScopes(t *testing.T) {
-	// Two sub-blocks with different natural widths. Under block/strict scope
-	// each gets its own column; under decl/file scope they share one.
 	in := "domains {\n" +
 		"    account {\n" +
 		"        aaaaaaaaaa // one\n" +
+		"        skip this line\n" +
 		"        bb // two\n" +
 		"    }\n" +
 		"    ad {\n" +
 		"        cc // three\n" +
 		"    }\n" +
+		"\n" +
+		"    xy {\n" +
+		"        d // four\n" +
+		"    }\n" +
 		"}"
 
 	tests := []struct {
 		scope  fmtconfig.Scope
+		wantBB string
 		wantCC string
+		wantD  string
 	}{
-		{fmtconfig.ScopeOff, "        cc // three"},
-		{fmtconfig.ScopeStrict, "        cc // three"},
-		{fmtconfig.ScopeBlock, "        cc // three"},
-		{fmtconfig.ScopeDecl, "        cc         // three"},
+		{fmtconfig.ScopeOff, "        bb // two", "        cc // three", "        d // four"},
+		{fmtconfig.ScopeStrict, "        bb // two", "        cc // three", "        d // four"},
+		{fmtconfig.ScopeBlock, "        bb         // two", "        cc // three", "        d // four"},
+		{fmtconfig.ScopeFile, "        bb         // two", "        cc         // three", "        d // four"},
+		{fmtconfig.ScopeDecl, "        bb         // two", "        cc         // three", "        d          // four"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.scope), func(t *testing.T) {
 			hints := hintsFor(in)
 			got := alignCells(in, nil, hints, splitTrailingComment, tt.scope, trailingCommentMinGap, fmtconfig.Defaults())
-			line := lineContaining(t, got, "three")
-			if line != tt.wantCC {
-				t.Errorf("scope %s: got %q, want %q", tt.scope, line, tt.wantCC)
+			if l := lineContaining(t, got, "two"); l != tt.wantBB {
+				t.Errorf("scope %s: bb line got %q, want %q", tt.scope, l, tt.wantBB)
+			}
+			if l := lineContaining(t, got, "three"); l != tt.wantCC {
+				t.Errorf("scope %s: cc line got %q, want %q", tt.scope, l, tt.wantCC)
+			}
+			if l := lineContaining(t, got, "four"); l != tt.wantD {
+				t.Errorf("scope %s: d line got %q, want %q", tt.scope, l, tt.wantD)
 			}
 		})
 	}

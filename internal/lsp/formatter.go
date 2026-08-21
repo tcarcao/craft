@@ -267,12 +267,11 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // formatter has never seen still round-trips, because nothing here inspects
 // what a token means.
 //
-// It returns two pieces of bookkeeping, both for alignAnnotations, and both
-// for the same reason: that pass is line oriented, so it sees the walker's
-// output only as text and cannot recover where a token began or ended. The
-// walker is the one place that knows both exactly, so it is the place that
-// answers, rather than leaving a downstream pass to guess from the shape of a
-// line.
+// It returns three pieces of bookkeeping, all for alignCells, and all for the
+// same reason: that pass is line oriented, so it sees the walker's output
+// only as text and cannot recover where a token began or ended. The walker is
+// the one place that knows both exactly, so it is the place that answers,
+// rather than leaving a downstream pass to guess from the shape of a line.
 //
 // interior is the set of written line indices that fall INSIDE a token rather
 // than between two of them: every line a multi-line token spans EXCEPT its

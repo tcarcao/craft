@@ -28,10 +28,18 @@ const (
 func endsRun(line string, hasCell bool, scope fmtconfig.Scope) bool {
 	trimmed := strings.TrimSpace(line)
 	switch scope {
-	case fmtconfig.ScopeFile, fmtconfig.ScopeDecl:
-		// Each declaration is aligned separately by the caller, so within one
-		// declaration decl and file behave identically: only a blank line ends
-		// a run.
+	case fmtconfig.ScopeDecl:
+		// alignCells is invoked once per top-level declaration
+		// (formatter.go's decl loop), so the whole input to this call already
+		// IS one declaration: "ends at a declaration boundary" and "never
+		// ends" are the same rule from here. This is what lets decl give one
+		// shared column across an entire domains { } listing even when it
+		// contains blank lines between entries.
+		return false
+	case fmtconfig.ScopeFile:
+		// Unlike decl, a blank line still ends a file-scoped run. Unlike
+		// block, nothing else does: a brace or a comment-only line passes
+		// through.
 		return trimmed == ""
 	case fmtconfig.ScopeBlock:
 		if trimmed == "" {

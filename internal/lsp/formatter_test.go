@@ -403,7 +403,7 @@ func TestFormatDocument_AlignsOpAnnotations(t *testing.T) {
 }
 
 // TestFormatDocument_AlignsAfterMultilineCommentClose covers both directions
-// of the interior-line bookkeeping writeTokens hands to alignAnnotations.
+// of the interior-line bookkeeping writeTokens hands to alignCells.
 //
 // A multi-line block comment is one token carrying newlines. writeTokens
 // used to mark every emitted line after the token's first as interior,
@@ -1119,11 +1119,13 @@ func TestFormatDocument_CommentsSurvive(t *testing.T) {
 // commentTexts check that assertion replaced.
 //
 // Nothing today produces that shape: writeTokens emits every token's Text()
-// verbatim, and alignAnnotations only ever rewrites the run of spaces before
-// a trailing `[...]` annotation, explicitly excluding any line that starts
-// with `//`, `/*`, or `*` from that pass (formatalign.go). This test is the
-// tripwire for the day that stops being true, not a check for a bug that
-// exists now.
+// verbatim, and alignCells only ever rewrites the run of spaces before a
+// cell. Neither splitAnnotation nor splitTrailingComment pattern-matches a
+// line's text to decide whether it is comment; both are handed the walker's
+// own commentEnd/commentStart byte offsets and use those, which is what keeps
+// a comment line's interior spacing out of either pass without needing to
+// recognise `//`, `/*`, or `*` (formatalign.go). This test is the tripwire
+// for the day that stops being true, not a check for a bug that exists now.
 func TestFormatDocument_CommentInternalSpacingSurvives(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1792,5 +1794,91 @@ func TestFormatDocumentWithTwoSpaces(t *testing.T) {
 	want := "services {\n  Foo {\n    contexts: A\n  }\n}\n"
 	if got := FormatDocumentWith(src, cfg); got != want {
 		t.Errorf("FormatDocumentWith() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// TestFormatDocumentCheckedWith_ScopeWiringIsPerCellType pins the only place
+// the new alignment config actually reaches the aligner:
+// FormatDocumentCheckedWith's two alignCells calls
+// (cfg.Align.OpAnnotation -> splitAnnotation, cfg.Align.TrailingComment ->
+// splitTrailingComment). Every other test in this package drives both
+// scopes at their shared default (ScopeBlock), so a swap between the two
+// arguments would pass the whole suite silently; this test exists
+// specifically to fail if that swap ever happens. It was verified by
+// mutation: swapping the two scope arguments at the call site made this test
+// fail, and swapping back made it pass again.
+func TestFormatDocumentCheckedWith_ScopeWiringIsPerCellType(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        A asks B to c [POST /v1/x]\n" +
+		"        A asks LongerName to d [GET /y]\n" +
+		"        A asks B to e // short\n" +
+		"        A asks LongerName to f // this is a longer note\n" +
+		"}\n"
+
+	annCol := func(s string) int { return strings.Index(lineContaining(t, s, "to c"), "[") }
+	annCol2 := func(s string) int { return strings.Index(lineContaining(t, s, "to d"), "[") }
+	comCol := func(s string) int { return strings.Index(lineContaining(t, s, "to e"), "//") }
+	comCol2 := func(s string) int { return strings.Index(lineContaining(t, s, "to f"), "//") }
+
+	t.Run("op_annotation off leaves only the comment column aligned", func(t *testing.T) {
+		cfg := fmtconfig.Defaults()
+		cfg.Align.OpAnnotation = fmtconfig.ScopeOff
+		got := FormatDocumentWith(src, cfg)
+		if annCol(got) == annCol2(got) {
+			t.Errorf("annotation column was aligned despite OpAnnotation=off:\n%s", got)
+		}
+		if comCol(got) != comCol2(got) {
+			t.Errorf("comment column was NOT aligned despite TrailingComment=block (default):\n%s", got)
+		}
+	})
+
+	t.Run("trailing_comment off leaves only the annotation column aligned", func(t *testing.T) {
+		cfg := fmtconfig.Defaults()
+		cfg.Align.TrailingComment = fmtconfig.ScopeOff
+		got := FormatDocumentWith(src, cfg)
+		if annCol(got) != annCol2(got) {
+			t.Errorf("annotation column was NOT aligned despite OpAnnotation=block (default):\n%s", got)
+		}
+		if comCol(got) == comCol2(got) {
+			t.Errorf("comment column was aligned despite TrailingComment=off:\n%s", got)
+		}
+	})
+}
+
+// TestFormatDocumentCheckedWith_CommentOnlyLineSplitsAnAnnotationRun pins a
+// behaviour change from generalising alignAnnotations into alignCells: under
+// ScopeBlock, a comment-only line now ends a run for EITHER cell type, not
+// just the trailing-comment one. Before this task, alignAnnotations's own
+// endsRun equivalent only ended a run at a blank line, so an annotated line,
+// a comment-only line, and another annotated line shared one column. endsRun
+// now treats a comment-only line as a run boundary for annotations too,
+// matching hclwrite and the documented ScopeBlock semantics. Zero lines in
+// the repo corpus hit this shape, so nothing there pins it; this test does,
+// so a future revert is a visible test failure rather than silent drift.
+func TestFormatDocumentCheckedWith_CommentOnlyLineSplitsAnAnnotationRun(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        A asks B to c [POST /v1/x]\n" +
+		"        // an unrelated note\n" +
+		"        A asks LongerName to d [GET /y]\n" +
+		"}\n"
+	got := FormatDocument(src)
+	first := lineContaining(t, got, "to c")
+	second := lineContaining(t, got, "to d")
+	if strings.Index(first, "[") == strings.Index(second, "[") {
+		t.Errorf("a comment-only line should have split the annotation run under ScopeBlock, but the two annotations still share a column:\n%s", got)
+	}
+	// Each side of the split is a run of one, so each still gets the
+	// annotation column's minimum 2-space gap (columnFor's minGap applies
+	// even to a run of one), but the two are no longer padded out to a
+	// SHARED width, which is what the strings.Index check above already
+	// pins; this just confirms neither line grew wider than its own natural
+	// width plus that minimum gap.
+	if first != "        A asks B to c  [POST /v1/x]" {
+		t.Errorf("first annotation should only carry its own 2-space minimum gap, got %q", first)
+	}
+	if second != "        A asks LongerName to d  [GET /y]" {
+		t.Errorf("second annotation should only carry its own 2-space minimum gap, got %q", second)
 	}
 }
