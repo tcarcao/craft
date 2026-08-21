@@ -317,6 +317,18 @@ aligner. Both are real designs; neither is worth carrying for a shape nothing pr
 lines ever appear, the single-pass aligner is the better of the two, because it computes both
 columns from one decomposition and cannot desynchronise offsets between passes.
 
+The missed alignment is not the part a user would actually notice, though; the column drag is.
+Because such a line joins the comment column only, `splitTrailingComment`'s body for it is
+everything before the comment, annotation included, uncorrected for the annotation's own
+spacing. That body is wide -- annotation text plus its bracket -- so in a `ScopeBlock` run
+containing one such line, every OTHER comment in the run is pushed out to match it: the drag
+is on the rest of the block, not on the offending line itself. The outlier guard does not help
+here. It excludes a body far above the run's geometric mean, but it only engages once that mean
+itself exceeds `outlier_min` (40), and ordinary action lines average well under that, so the
+guard never activates for a block this shape would occur in. Zero corpus lines have this shape,
+so nothing observed today is dragged; a hand-written example that adds one is the only way to
+see it.
+
 **Pass order is load-bearing even so.** Annotations align first, trailing comments second, and
 the two passes operate on disjoint line sets: a line `splitAnnotation` accepts ends in `]` and
 therefore carries no trailing comment, while a line carrying a trailing comment is rejected by

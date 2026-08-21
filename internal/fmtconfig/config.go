@@ -35,10 +35,10 @@ const (
 )
 
 // AlignConfig is the alignment half of the configuration. The two cell types
-// carry separate scopes because they genuinely want different ones: the
-// annotation column is documented to survive an unannotated action inside a
-// run, which is ScopeBlock, while ScopeStrict is the right default shape for a
-// comment column in a block whose other lines carry no comment.
+// carry separate scopes because they are independent decisions, even though
+// both currently default to ScopeBlock; see
+// docs/decisions/formatting-configuration.md D2 for the churn-blast-radius
+// measurements behind that default.
 type AlignConfig struct {
 	TrailingComment Scope   `toml:"trailing_comment"`
 	OpAnnotation    Scope   `toml:"op_annotation"`

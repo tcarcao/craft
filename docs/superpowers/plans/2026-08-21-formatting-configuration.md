@@ -10,6 +10,17 @@
 
 **Spec:** `docs/decisions/formatting-configuration.md`
 
+> **Note, final review pass:** every `columnFor` snippet below is shown as
+> `columnFor(widths []int, cfg fmtconfig.Config) int`, the shape it had when this
+> plan was written. The shipped signature is
+> `columnFor(widths []int, minGap int, cfg fmtconfig.Config) int`
+> (`internal/lsp/formatalign.go`): the annotation and trailing-comment columns turned
+> out to want different minimum gaps (`annotationMinGap = 2`,
+> `trailingCommentMinGap = 1`), which is not something `cfg` alone could carry once
+> both cell types shared one `columnFor`. This plan is a historical record of the
+> task breakdown, not re-synced to the final code; treat the code, not this file, as
+> the source of truth for signatures.
+
 ## Global Constraints
 
 - **The token-stream invariant holds throughout.** Every non-whitespace token is written verbatim, exactly once, in document order. The formatter's only freedom is the whitespace between tokens. No task may rewrite token text.

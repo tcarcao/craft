@@ -294,9 +294,19 @@ var digitsInMessage = regexp.MustCompile(`\d+`)
 // shifts an earlier line changes that text even though the error itself is
 // unchanged. Folding every digit run to a single placeholder removes that
 // whole class: two messages that differ only in which line number they quote
-// still key the same, while two messages that differ in what they are
-// actually saying (a different duplicated name, a different diagnostic
-// shape) still key apart, because the name is not digits.
+// now key the same.
+//
+// This is not airtight the other way: a Craft identifier may itself contain
+// digits ("svc1" declared twice vs. "svc2" declared twice both fold to
+// "svc# already declared ..."), so diagKey can, in principle, key two
+// genuinely different duplicate-name errors together. That does not matter
+// here. firstNewError only ever compares diagnostics the parser produced,
+// and this function's caller (runFmt) never introduces or renames an
+// identifier -- formatting changes whitespace and nothing else, guarded
+// separately by contentDrift -- so "two different names, coincidentally
+// folding to the same key" is not a shape a reformat can manufacture. The
+// safety this guard needs is narrower than "keys apart the way messages
+// differ in general," and that narrower property still holds.
 func diagKey(d craft.Diagnostic) string {
 	return d.Code + "\x00" + digitsInMessage.ReplaceAllString(d.Message, "#")
 }
