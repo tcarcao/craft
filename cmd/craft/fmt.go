@@ -8,12 +8,15 @@ import (
 	"regexp"
 
 	"github.com/spf13/cobra"
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/lsp"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 func fmtCmd() *cobra.Command {
 	var check bool
+	var indent, contIndent int
+	var trailingComment string
 
 	cmd := &cobra.Command{
 		Use:   "fmt [files...]",
@@ -24,12 +27,29 @@ Arguments are file paths or glob patterns, including **. Directories are not
 walked, matching validate, inspect and generate; pass a glob such as
 '**/*.craft' to cover a tree.
 
+Each file is formatted according to the nearest .craftfmt found by walking up
+from that file's own directory, or the built-in defaults if there is none.
+Resolution order, highest wins: an explicitly-set CLI flag, then the nearest
+ancestor .craftfmt, then the defaults. A flag left at its default is not
+considered "set" and never overrides .craftfmt; --indent, --continuation-
+indent and --align-trailing-comment only take effect when passed. When any of
+them is passed, it replaces the whole resolved configuration for every file in
+the run, not just the fields named on the command line.
+
+A single invocation can span files from more than one workspace (a glob
+covering two directory trees, say), and each file's .craftfmt is resolved
+independently, so they are free to disagree.
+
 With --check nothing is written. The command lists every file that is not
 already formatted and exits non-zero, which is the CI gate.
 
 A file the parser cannot fully place is never rewritten, because re-rendering
 an incomplete tree loses text. Such a file is reported as skipped, with the
-diagnostic that blocked it, and counts as a failure in both modes.`,
+diagnostic that blocked it, and counts as a failure in both modes.
+
+A malformed .craftfmt, an invalid value, or an unknown key is reported
+per-file, on stderr, and counts as a failure rather than silently falling
+back to the defaults.`,
 		Args:         cobra.MinimumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -48,7 +68,24 @@ diagnostic that blocked it, and counts as a failure in both modes.`,
 				return fmt.Errorf("no files matched %v", args)
 			}
 
-			if runFmt(files, check, cmd.OutOrStdout(), cmd.ErrOrStderr()) != 0 {
+			cfg := fmtconfig.Defaults()
+			hasOverride := false
+			if cmd.Flags().Changed("indent") {
+				cfg.Indent, hasOverride = indent, true
+			}
+			if cmd.Flags().Changed("continuation-indent") {
+				cfg.ContinuationIndent, hasOverride = contIndent, true
+			}
+			if cmd.Flags().Changed("align-trailing-comment") {
+				cfg.Align.TrailingComment, hasOverride = fmtconfig.Scope(trailingComment), true
+			}
+			if hasOverride {
+				if err := cfg.Validate(); err != nil {
+					return err
+				}
+			}
+
+			if runFmt(files, check, cfg, hasOverride, cmd.OutOrStdout(), cmd.ErrOrStderr()) != 0 {
 				os.Exit(1)
 			}
 			return nil
@@ -57,6 +94,12 @@ diagnostic that blocked it, and counts as a failure in both modes.`,
 
 	cmd.Flags().BoolVar(&check, "check", false,
 		"do not write; list files that are not formatted and exit non-zero")
+	cmd.Flags().IntVar(&indent, "indent", 0,
+		"indent width in spaces; overrides .craftfmt")
+	cmd.Flags().IntVar(&contIndent, "continuation-indent", 0,
+		"extra indent for a wrapped list continuation; overrides .craftfmt")
+	cmd.Flags().StringVar(&trailingComment, "align-trailing-comment", "",
+		"trailing comment alignment scope: off, strict, block, file, decl; overrides .craftfmt")
 	return cmd
 }
 
@@ -66,8 +109,38 @@ diagnostic that blocked it, and counts as a failure in both modes.`,
 // It is split out of RunE so tests can assert the exit code and the reported
 // filenames without the command calling os.Exit on the test process, the same
 // split runValidate uses.
-func runFmt(files []string, check bool, out, errOut io.Writer) int {
+//
+// override and hasOverride are the CLI-flag half of resolution: hasOverride is
+// true only when the caller actually set one of --indent, --continuation-indent
+// or --align-trailing-comment (cmd.Flags().Changed), and in that case override
+// wins outright for every file in this run, .craftfmt included. Otherwise each
+// file gets its own fmtconfig.Resolve, because .craftfmt applies per directory,
+// not per invocation: a single glob can legitimately span two workspaces with
+// different configuration.
+func runFmt(files []string, check bool, override fmtconfig.Config, hasOverride bool, out, errOut io.Writer) int {
 	failed := false
+
+	// resolveCache memoizes fmtconfig.Resolve by directory so a large glob
+	// with many files per directory does not re-walk the filesystem looking
+	// for .craftfmt once per file. It is local to this call, so it cannot
+	// outlive a single invocation or leak configuration between them.
+	type cacheEntry struct {
+		cfg fmtconfig.Config
+		err error
+	}
+	resolveCache := make(map[string]cacheEntry)
+	resolveCfg := func(file string) (fmtconfig.Config, error) {
+		dir := filepath.Dir(file)
+		if abs, err := filepath.Abs(dir); err == nil {
+			dir = abs
+		}
+		if entry, ok := resolveCache[dir]; ok {
+			return entry.cfg, entry.err
+		}
+		cfg, err := fmtconfig.Resolve(file)
+		resolveCache[dir] = cacheEntry{cfg, err}
+		return cfg, err
+	}
 
 	for _, file := range files {
 		info, err := os.Stat(file)
@@ -83,7 +156,20 @@ func runFmt(files []string, check bool, out, errOut io.Writer) int {
 			continue
 		}
 
-		formatted, blocked := lsp.FormatDocumentChecked(string(content))
+		cfg := override
+		if !hasOverride {
+			resolved, err := resolveCfg(file)
+			if err != nil {
+				// A malformed .craftfmt must be visible per-file, not
+				// silently treated as "no config" and defaulted.
+				fmt.Fprintf(errOut, "%s: %v\n", file, err)
+				failed = true
+				continue
+			}
+			cfg = resolved
+		}
+
+		formatted, blocked := lsp.FormatDocumentCheckedWith(string(content), cfg)
 		if blocked != nil {
 			// Reported rather than passed over in silence: the file is left on
 			// disk exactly as it was, and a caller told only "nothing changed"
