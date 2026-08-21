@@ -160,6 +160,13 @@ func splitAnnotation(line string, from int) (body, ann string, ok bool) {
 // `A asks B for http://x`, and the lexer already knew. A start of zero means
 // the walker recorded no trailing comment for this line.
 //
+// A non-zero start is stronger than "here is where some comment begins": it
+// is proof the comment at that offset runs all the way to end of line.
+// writeTokens records commentStart only for a line comment or a doc comment,
+// both of which the lexer stops at the next newline, and never for a block
+// comment — so this function never has to check what follows the comment on
+// the line. By the time start is non-zero, there is nothing to check.
+//
 // A comment-only line yields an empty body and ok false. Aligning those would
 // push a whole run out to match a full-width comment, and a comment on its own
 // line is not a cell in the same column as one that follows content.

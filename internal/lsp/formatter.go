@@ -277,14 +277,29 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 //
 // commentStart maps a written line index to the BYTE offset where a trailing
 // comment BEGINS on that line, for splitTrailingComment. It is recorded only
-// for a comment token whose text carries no newline: a `//` line comment runs
-// to end of line by definition, so it is always the last thing there and
-// always a trailing cell. A block comment that spans lines has its start on a
-// line the interior set already excludes, and by the time it closes, line has
-// already been advanced past the newlines it carries, so recording a start
-// there would key a first line's column against a last line's index. A line
-// absent from commentStart has no trailing comment recorded for it, which
-// reads as zero, matching splitTrailingComment's "start of zero means none".
+// for SyntaxKindLineComment and SyntaxKindDocComment: both run to end of line
+// by definition (the lexer stops each at the next '\n'), so either one is
+// always the last thing on its line, and membership in this map is itself
+// proof of that — which is exactly what splitTrailingComment's caller needs
+// and cannot otherwise establish from the text alone.
+//
+// SyntaxKindBlockComment is excluded entirely, even when it opens and closes
+// on the very line it is written: `A /* inline */ asks B for c` has real
+// content after the comment closes, so recording a start for it here would
+// hand the aligner a false trailing cell and the statement would get shredded
+// across a column. Telling that case apart from a genuinely trailing block
+// comment needs lookahead past the close to see whether anything follows,
+// which this walker deliberately does not buy — its design premise is
+// locality, and the accepted cost is that a trailing block comment is never
+// column-aligned and stays at one space. A block comment that spans multiple
+// lines has the same problem twice over: its start line is one interior
+// already excludes, and by the time the token closes, line has advanced past
+// the newlines it carries, so recording a start there would key a first
+// line's column against a last line's index.
+//
+// A line absent from commentStart has no trailing comment recorded for it,
+// which reads as zero, matching splitTrailingComment's "start of zero means
+// none".
 func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Config) (map[int]bool, map[int]int, map[int]int) {
 	braceDepth := 0
 	scenarioDepth := 0
@@ -460,15 +475,20 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 			}
 			commentEnd[line] = col
 
-			// Where a trailing comment BEGINS is what the comment-alignment
-			// pass needs, and it is only meaningful for a comment that does
-			// not span lines: such a comment runs to end of line, so it is
-			// always the last thing there. A comment carrying newlines starts
-			// on a line the interior set already excludes, so recording it
-			// here would be recording a column for a line this pass never
-			// looks at, keyed against the wrong line besides (startLine, not
-			// line, which has already moved past the newlines).
-			if !strings.Contains(tok.Text(), "\n") {
+			// Where a trailing comment BEGINS is what splitTrailingComment
+			// needs, and only a comment kind that is PROVABLY the last thing
+			// on its line can answer that safely. A line comment and a doc
+			// comment both run to end of line by construction (the lexer
+			// stops each at the next newline), so recording one here is not
+			// a guess: nothing can follow it on the same line.
+			//
+			// A block comment is excluded even when it opens and closes on
+			// this same line, because something real can and does follow it
+			// there (`A /* inline */ asks B for c`), and admitting that would
+			// hand the aligner a false trailing cell. See the paragraph above
+			// writeTokens's signature for the full reasoning, including why
+			// a multi-line block comment is excluded too.
+			if tok.Kind() == syntax.SyntaxKindLineComment || tok.Kind() == syntax.SyntaxKindDocComment {
 				if commentStart == nil {
 					commentStart = make(map[int]int, 1)
 				}

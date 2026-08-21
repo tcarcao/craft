@@ -748,19 +748,25 @@ func TestWriteTokens_ReportsWhereTrailingCommentsStart(t *testing.T) {
 	}
 }
 
-// TestWriteTokens_CommentStartOnlyGuardsAgainstNewlines documents a
-// deliberate limitation rather than a bug: commentStart's guard is "does this
-// token's text contain a newline", not "is this comment the last thing on its
-// line". A single-line block comment followed by more real content, such as
-// `A /* inline */ asks B ...`, has no newline in its token text and so is
-// still recorded, even though nothing about it is trailing.
+// TestWriteTokens_CommentStartExcludesBlockComments pins the fix for the
+// defect this map originally shipped with: the guard used to be "does this
+// token's text contain a newline", which admitted a single-line block
+// comment sitting mid-statement. `A /* inline */ asks B for c` has real
+// content after the comment closes, so a recorded start there is a false
+// trailing cell — once something aligns on it, the statement gets shredded
+// across a column, whitespace-only or not.
 //
-// This is safe today because nothing consumes commentStart yet. It is called
-// out here, pinned rather than left to be discovered as a surprise, so that
-// whatever wires commentStart into alignment (splitTrailingComment or its
-// caller) does so knowing an entry is not proof the comment sits at the end
-// of its line.
-func TestWriteTokens_CommentStartOnlyGuardsAgainstNewlines(t *testing.T) {
+// The guard is now the comment's KIND, not its shape: only
+// SyntaxKindLineComment and SyntaxKindDocComment are recorded, because both
+// run to end of line by construction (the lexer stops each at the next
+// newline) and so membership in commentStart is itself proof of that.
+// SyntaxKindBlockComment is excluded outright, even in the single-line case
+// tested here where nothing about the token's own text would tell interior
+// or the old newline guard apart from a genuinely trailing comment. Telling
+// the two apart needs lookahead past the close, which this walker does not
+// buy; see the paragraph above writeTokens's signature for the full
+// reasoning and its accepted cost.
+func TestWriteTokens_CommentStartExcludesBlockComments(t *testing.T) {
 	src := "use_case \"X\" {\n" +
 		"  when U does x\n" +
 		"    A /* inline */ asks B for c [POST /v1/x]\n" +
@@ -780,12 +786,80 @@ func TestWriteTokens_CommentStartOnlyGuardsAgainstNewlines(t *testing.T) {
 	}
 
 	lines := strings.Split(out, "\n")
-	want := map[int]int{2: 10}
+	if _, ok := commentStart[2]; ok {
+		t.Errorf("commentStart recorded a start for a mid-line block comment: %v, over lines:\n%q", commentStart, lines)
+	}
+	if got := lines[2]; !strings.Contains(got, "/* inline */ asks") {
+		t.Errorf("fixture drifted: expected the inline block comment to sit before more content: %q", got)
+	}
+}
+
+// TestWriteTokens_CommentStartRecordsLineAndDocComments is the coverage half
+// of the block-comment exclusion above: proving the kind guard does not
+// over-apply and quietly stop recording the two kinds it is supposed to
+// keep. Both a line comment and a doc comment must still be recorded
+// whether they trail real content or sit alone on their own line — the
+// latter is what confirms the guard is really keyed on kind, not on
+// whatever heuristic (such as "did this line have other content") might be
+// mistaken for it.
+//
+// A trailing doc comment is an unusual shape for a Craft author to write —
+// docs/decisions and the fixtures elsewhere in this file only ever show
+// `///` leading a declaration — but nothing in the grammar forbids it:
+// attachTrivia (internal/syntax/parser.go) treats SyntaxKindDocComment
+// exactly like the other two comment kinds, admitting it wherever trivia may
+// appear. So this is a real fixture, not an invented one; the diags check
+// below is what confirms it parses cleanly rather than merely surviving
+// through error recovery.
+func TestWriteTokens_CommentStartRecordsLineAndDocComments(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A asks B for c   // trailing line comment\n" +
+		"    // standalone line comment\n" +
+		"    A asks B for c   /// trailing doc comment\n" +
+		"    /// standalone doc comment\n" +
+		"    D asks E for f\n" +
+		"}\n"
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("fixture must parse cleanly, got diags: %v", diags)
+	}
+
+	var commentStart map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		_, _, commentStart = writeTokens(&sb, node, fmtconfig.Defaults())
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	// Line 2: line comment trailing content. Line 3: line comment alone.
+	// Line 4: doc comment trailing content. Line 5: doc comment alone.
+	// Line 6 carries no comment at all.
+	want := map[int]int{2: 23, 3: 8, 4: 23, 5: 8}
+
 	if !reflect.DeepEqual(commentStart, want) {
 		t.Errorf("commentStart = %v, want %v, over lines:\n%q", commentStart, want, lines)
 	}
-	if got := lines[2][10:]; !strings.HasPrefix(got, "/*") {
-		t.Errorf("fixture drifted: commentStart's offset does not land on `/*`: %q", got)
+	if got := lines[2][23:]; !strings.HasPrefix(got, "//") {
+		t.Errorf("fixture drifted: line 2's offset does not land on `//`: %q", got)
+	}
+	if got := lines[3][8:]; !strings.HasPrefix(got, "//") {
+		t.Errorf("fixture drifted: line 3's offset does not land on `//`: %q", got)
+	}
+	if got := lines[4][23:]; !strings.HasPrefix(got, "///") {
+		t.Errorf("fixture drifted: line 4's offset does not land on `///`: %q", got)
+	}
+	if got := lines[5][8:]; !strings.HasPrefix(got, "///") {
+		t.Errorf("fixture drifted: line 5's offset does not land on `///`: %q", got)
+	}
+	if _, ok := commentStart[6]; ok {
+		t.Errorf("commentStart recorded a start for a line with no comment on it")
 	}
 }
 
