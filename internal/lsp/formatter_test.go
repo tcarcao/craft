@@ -1277,9 +1277,19 @@ func TestWriteTokens_KeepsTrailingCommentsInPlace(t *testing.T) {
 
 // TestWriteTokens_WrappedColonAndCommaStayInSync pins the field colon and the
 // comma to the same rule: a line break the author wrote after either one
-// survives. This is one fixture wrapping both `contexts:` and its list, so
-// the two branches in separatorFor cannot drift apart again without this
-// test catching it, the way a comma-only fix once did.
+// survives AND hangs at the same continuation column. This is one fixture
+// wrapping both `contexts:` and its list, so the two branches in separatorFor
+// cannot drift apart again without this test catching it, the way a
+// comma-only fix once did.
+//
+// Before hanging continuation indent (Task 4), this asserted a byte-for-byte
+// round trip, because the continuation columns the formatter computed from
+// block depth happened to match what the author had typed. That was the bug
+// this test was inadvertently pinning: a continuation at block depth reads as
+// a sibling statement of `contexts:` rather than part of its value. Now both
+// continuation lines hang one continuation unit past the block indent
+// (8 + 4 = 12 spaces at depth 2 under the defaults), regardless of what the
+// author's own indentation happened to be.
 func TestWriteTokens_WrappedColonAndCommaStayInSync(t *testing.T) {
 	src := "services {\n    S {\n        contexts:\n        Authentication,\n        Profile\n    }\n}\n"
 	gn, _, _ := syntax.Parse(src)
@@ -1291,10 +1301,10 @@ func TestWriteTokens_WrappedColonAndCommaStayInSync(t *testing.T) {
 	}
 	// writeTokens renders one declaration and never appends the document's
 	// final newline (that is FormatDocumentChecked's job, not called here),
-	// so the trailing "\n" is trimmed before the byte-for-byte comparison.
-	want := strings.TrimSuffix(src, "\n")
+	// so the trailing "\n" is trimmed before comparison.
+	want := "services {\n    S {\n        contexts:\n            Authentication,\n            Profile\n    }\n}"
 	if got := sb.String(); got != want {
-		t.Errorf("wrapped contexts list did not round-trip byte-for-byte:\nwant %q\ngot  %q", want, got)
+		t.Errorf("wrapped contexts list did not hang consistently:\nwant %q\ngot  %q", want, got)
 	}
 }
 

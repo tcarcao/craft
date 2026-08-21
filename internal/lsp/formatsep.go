@@ -38,7 +38,14 @@ func indentFor(depth int, cfg fmtconfig.Config) string {
 // token". It cannot be derived here: the token that opens a scenario may be a
 // comment rather than the `when`, and telling those apart needs lookahead to
 // the comment's owner, which separatorFor never sees.
-func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool, cfg fmtconfig.Config) string {
+// continuing is the walker's answer to "is curr a continuation of a property
+// value the author wrapped onto another line, rather than the start of a new
+// statement". It cannot be derived here either, for the same reason: a
+// wrapped `contexts: A,\n B` and two adjacent statements look identical to a
+// function that only ever sees one token pair. It is passed in rather than
+// measured, which is what keeps the continuation column a pure function of
+// depth and cfg. See the block comment at the newline switch below.
+func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool, cfg fmtconfig.Config, continuing bool) string {
 	if prev == nil {
 		return ""
 	}
@@ -158,6 +165,23 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		return "\n" + indentFor(depth, cfg)
 	}
 
+	// A continuation of a wrapped property value hangs one continuation unit
+	// past the block indent, so it cannot be mistaken for a sibling statement.
+	// Block indent, not visual indent aligned under the value: every formatter
+	// that revisited this since 2016 moved the same way, because aligning under
+	// the value re-wraps the whole list when the key is renamed. See
+	// docs/decisions/formatting-configuration.md D4.
+	//
+	// The column is a pure function of depth. Deriving it from the emitted
+	// column of the previous line would move it again whenever that line
+	// shifted, which is a fixed-point failure and has bitten this file twice.
+	contIndent := func() string {
+		if !continuing {
+			return indentFor(depth, cfg)
+		}
+		return indentFor(depth, cfg) + strings.Repeat(" ", cfg.ContinuationIndent)
+	}
+
 	switch strings.Count(gap, "\n") {
 	case 0:
 		if gap == "" {
@@ -166,10 +190,10 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		// Collapse any run of spaces or tabs to one.
 		return " "
 	case 1:
-		return "\n" + indentFor(depth, cfg)
+		return "\n" + contIndent()
 	default:
 		// Two or more newlines is a blank line. Collapse any longer run to one.
-		return "\n\n" + indentFor(depth, cfg)
+		return "\n\n" + contIndent()
 	}
 }
 

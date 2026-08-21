@@ -281,6 +281,12 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	var prev *syntax.SyntaxToken
 	prevLedScenario := false
 
+	// continuing says the token about to be written carries on a property
+	// value the author wrapped onto another line, rather than starting a new
+	// statement. separatorFor cannot work this out: it sees one token pair and
+	// a wrapped `contexts: A,\n B` looks exactly like two statements.
+	continuing := false
+
 	line := 0
 	var interior map[int]bool
 	var commentEnd map[int]int
@@ -354,7 +360,24 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// scenario must not ask for a second.
 		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario
 
-		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario, cfg)
+		// A wrapped value continues only across a line break that follows a
+		// comma or a field colon: `contexts: A,\n B` and `contexts:\n A` both
+		// continue, but `A\n data-stores: X` does not, because nothing before
+		// the break marks a value as unfinished. Checked only when the gap
+		// actually carries a newline, so a same-line comma or colon (already
+		// handled by separatorFor's own tight-spacing rules) never sets it.
+		// The `{`/`}` reset below is unconditional so continuation state can
+		// never leak past a block boundary into an unrelated statement.
+		if strings.Contains(gap, "\n") {
+			continuing = prev != nil &&
+				(prev.Kind() == syntax.SyntaxKindComma ||
+					(prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev)))
+		}
+		if tok.Kind() == syntax.SyntaxKindLBrace || tok.Kind() == syntax.SyntaxKindRBrace {
+			continuing = false
+		}
+
+		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario, cfg, continuing)
 		sb.WriteString(sep)
 		sb.WriteString(tok.Text())
 
