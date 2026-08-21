@@ -251,7 +251,7 @@ git commit -m "feat(fmt): add fmtconfig package with defaults and validation"
 
 **Interfaces:**
 - Consumes: `Config`, `Defaults()`, `Validate()` from Task 1.
-- Produces: `fmtconfig.Load(path string) (Config, string, error)` where `path` is the `.craftfmt` file; `fmtconfig.Find(startDir string) string` returning the nearest ancestor `.craftfmt` or `""`; `fmtconfig.Resolve(filePath string) (Config, error)` combining both and falling back to `Defaults()`.
+- Produces: `fmtconfig.Load(path string) (Config, error)` where `path` is the `.craftfmt` file; `fmtconfig.Find(startDir string) string` returning the nearest ancestor `.craftfmt` or `""`; `fmtconfig.Resolve(filePath string) (Config, error)` combining both and falling back to `Defaults()`.
 
 - [ ] **Step 1: Add the dependency**
 
