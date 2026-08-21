@@ -174,14 +174,22 @@ func assertModelPreserved(t *testing.T, name, src, got string) {
 //     this guard that compared comments by filtering on token kind)
 //  1. the output reparses with zero error diagnostics
 //  2. formatting is idempotent, which is byte-identity on already-formatted
-//     input and the strongest form of it that can hold over a corpus whose
-//     files are deliberately written in non-canonical shapes (4-space indent,
-//     wrapped `contexts:` continuations) to exercise the parser
+//     input. Of the 99 files this walks, 90 already parse cleanly and format
+//     to themselves under the default configuration -- the formatting-
+//     configuration branch canonicalised what used to be a corpus
+//     deliberately written in non-canonical shapes (4-space indent, wrapped
+//     `contexts:` continuations) to exercise the parser under the OLD 2-space
+//     default. Idempotence over those 90 is therefore closer to corroboration
+//     than exercise; TestCorpusPropertiesAcrossConfigs is what actually
+//     exercises this property now, over the (indent, alignment scope) cross
+//     product a single default-config pass here cannot reach.
 //  3. the canonical model is unchanged, which is what catches a renderer that
 //     rewrites meaning rather than spelling
 //
 // A file the parser cannot fully place is not formatted at all, and is
-// asserted to come back byte-identical.
+// asserted to come back byte-identical. That is the remaining 9, all under
+// testdata/broken/*: deliberately non-canonical, but because they do not
+// parse, not because of their indent or layout.
 func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 	for _, file := range allCraftFiles(t) {
 		t.Run(file, func(t *testing.T) {
@@ -237,35 +245,48 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 }
 
 // TestFormatDocument_CanonicalCorpusIsByteIdentical asserts the literal
-// byte-identity property for every file that is already in canonical form.
+// byte-identity property for every file in the repository, strictly: every
+// single one must come back unchanged from FormatDocument under the default
+// configuration.
 //
-// It is separate from the guard above so that the count is visible: if a
-// formatter change starts rewriting files it used to leave alone, this test
-// names them. The corpus is not canonical as a whole and deliberately so, since
-// its non-canonical shapes are parser test surface, so this cannot be asserted
-// over every file without reformatting the corpus.
+// That is not vacuous. It holds two ways at once, and the test does not
+// distinguish them: a genuinely canonical file returns unchanged because
+// nothing needed rewriting (90 of the corpus's 99 files, since the
+// formatting-configuration branch canonicalised what used to be a
+// deliberately non-canonical corpus), and a testdata/broken/* file returns
+// unchanged because FormatDocument declines to touch a file it cannot fully
+// parse (the remaining 9). Both are "byte-identical in, byte-identical out"
+// from this test's point of view, which is exactly the property this guard
+// exists to protect.
+//
+// This used to error only when the identical count was zero, which a single
+// canonical file anywhere in a 99-file corpus would have satisfied even if
+// the other 98 had silently started being rewritten. Asserted strictly, per
+// file, it is the `craft fmt --check` CI gate the ADR listed as out of
+// scope, for free -- and it means a future deliberately-non-canonical
+// fixture will break this test. That is intended: it forces an explicit
+// decision (skip it here, or move it under testdata/broken/*) rather than
+// letting the corpus drift uncanonical in silence.
 func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
-	identical := 0
 	for _, file := range allCraftFiles(t) {
-		raw, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatalf("reading %s: %v", file, err)
-		}
-		src := string(raw)
-		once := FormatDocument(src)
-		if once == src {
-			identical++
-		}
-		// Whatever the input looked like, its formatted form must be a fixed
-		// point: formatting an already-formatted file changes nothing.
-		if twice := FormatDocument(once); twice != once {
-			t.Errorf("%s: formatted form is not a fixed point", file)
-		}
+		t.Run(file, func(t *testing.T) {
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("reading %s: %v", file, err)
+			}
+			src := string(raw)
+			once := FormatDocument(src)
+			if once != src {
+				t.Errorf("%s: not canonical under the default configuration\ngot:\n%s", file, once)
+			}
+			// Whatever the input looked like, its formatted form must be a
+			// fixed point: formatting an already-formatted file changes
+			// nothing.
+			if twice := FormatDocument(once); twice != once {
+				t.Errorf("%s: formatted form is not a fixed point", file)
+			}
+		})
 	}
-	if identical == 0 {
-		t.Error("no file in the corpus is in canonical form; byte-identity is going untested")
-	}
-	t.Logf("%d file(s) already in canonical form and returned byte-identical", identical)
 }
 
 // TestCorpusPropertiesAcrossConfigs asserts the same non-idempotence
