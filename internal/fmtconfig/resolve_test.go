@@ -3,6 +3,7 @@ package fmtconfig
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,52 @@ func TestResolveRejectsUnknownKey(t *testing.T) {
 	write(t, filepath.Join(dir, ".craftfmt"), "indnet = 4\n")
 	if _, err := Resolve(filepath.Join(dir, "x.craft")); err == nil {
 		t.Fatal("Resolve() = nil error, want an unknown-key error; a typo must not silently do nothing")
+	}
+}
+
+// TestLoadReportsEveryUnknownKey pins that a .craftfmt with more than one
+// typo is not limited to reporting the first: md.Undecoded() has the whole
+// list, so a user with two mistakes should learn about both in one run
+// rather than fixing them one at a time across repeated invocations.
+func TestLoadReportsEveryUnknownKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".craftfmt")
+	write(t, path, "indnet = 4\nfooble = 1\n")
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load() = nil error, want an unknown-key error")
+	}
+	if !strings.Contains(err.Error(), "indnet") {
+		t.Errorf("Load() error = %q, want it to mention %q", err, "indnet")
+	}
+	if !strings.Contains(err.Error(), "fooble") {
+		t.Errorf("Load() error = %q, want it to mention %q", err, "fooble")
+	}
+}
+
+// TestLoadUnreadableFile pins that a .craftfmt the process cannot read (as
+// opposed to one that is malformed) is handled by the same wrapped-error
+// path as a decode failure, rather than panicking or being silently treated
+// as "no config".
+func TestLoadUnreadableFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits do not block reads, so this test cannot force the unreadable case")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".craftfmt")
+	write(t, path, "indent = 4\n")
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	defer os.Chmod(path, 0o644) //nolint:errcheck
+
+	if _, err := os.ReadFile(path); err == nil {
+		t.Skip("this filesystem does not enforce permission bits (e.g. running under a container as an unrestricted user); cannot force the unreadable case")
+	}
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load() = nil error, want an error for an unreadable file")
 	}
 }
 
