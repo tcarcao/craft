@@ -465,3 +465,78 @@ func lineWithPrefix(t *testing.T, s, token string) string {
 	t.Fatalf("no line %q in\n%s", token, s)
 	return ""
 }
+
+// TestContinuationIndentDerivesFromConfig pins the continuation column to
+// indent*depth + continuation_indent as a computed value, rather than only
+// checking two similar cases land on the same line (which
+// TestContinuationDoesNotMoveWhenEarlierLineWidens does, and still earns its
+// place: it is the one thing here that rules out visual alignment under the
+// value). Under fmtconfig.Defaults(), Indent and ContinuationIndent are both
+// 4, so no test that only exercises the defaults can tell apart a correct
+// contIndent from one that mistakenly reads cfg.Indent twice. Varying
+// ContinuationIndent independently of a fixed Indent closes that gap: both
+// wrong implementations described above would produce 12 for both cases
+// below, not 10 and then 14.
+func TestContinuationIndentDerivesFromConfig(t *testing.T) {
+	src := "services {\n    F {\n        contexts: A,\n        B\n    }\n}\n"
+	const depth = 2 // services (1) -> F (2), where contexts: lives.
+
+	for _, contIndent := range []int{2, 6} {
+		cfg := fmtconfig.Defaults()
+		cfg.Indent = 4
+		cfg.ContinuationIndent = contIndent
+
+		got := lineWithPrefix(t, FormatDocumentWith(src, cfg), "B")
+		want := strings.Repeat(" ", cfg.Indent*depth+contIndent) + "B"
+		if got != want {
+			t.Errorf("ContinuationIndent=%d: got %q, want %q", contIndent, got, want)
+		}
+	}
+}
+
+// TestWrappedListContinuationSurvivesStandaloneComment guards the shape the
+// brief specifically called out and the first review round found broken: a
+// comment on its own line between the comma and the next value. prev alone
+// would see the comment, not the comma, as the token before B, and B would
+// wrongly fall back to block depth. Both the comment and B must hang at the
+// same continuation column, since the comment does not end the wrapped list.
+func TestWrappedListContinuationSurvivesStandaloneComment(t *testing.T) {
+	src := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A,\n" +
+		"        // note\n" +
+		"        B\n" +
+		"    }\n" +
+		"}\n"
+	want := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A,\n" +
+		"            // note\n" +
+		"            B\n" +
+		"    }\n" +
+		"}\n"
+	if got := FormatDocument(src); got != want {
+		t.Errorf("FormatDocument() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestWrappedListContinuationSurvivesTrailingComment is the second shape from
+// the same review finding: a trailing comment on the comma's own line. B
+// still follows a comma once the comment is skipped, so it must still hang.
+func TestWrappedListContinuationSurvivesTrailingComment(t *testing.T) {
+	src := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A, // why\n" +
+		"        B\n" +
+		"    }\n" +
+		"}\n"
+	want := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A, // why\n" +
+		"            B\n" +
+		"    }\n" +
+		"}\n"
+	if got := FormatDocument(src); got != want {
+		t.Errorf("FormatDocument() =\n%s\nwant\n%s", got, want)
+	}
+}

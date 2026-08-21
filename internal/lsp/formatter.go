@@ -279,6 +279,15 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	scenarioDepth := 0
 	gap := ""
 	var prev *syntax.SyntaxToken
+	// prevReal is prev with comments skipped: the last non-comment,
+	// non-whitespace token written. Continuation state is computed from it
+	// rather than from prev, because a standalone or trailing comment sitting
+	// between a comma (or field colon) and the next value must not look like
+	// the value's own predecessor: `contexts: A,\n// note\nB` and
+	// `contexts: A, // why\nB` both need the comment AND B to keep hanging,
+	// and prev alone would see the comment as prev for B, which carries
+	// neither kind and would wrongly reset continuing to false.
+	var prevReal *syntax.SyntaxToken
 	prevLedScenario := false
 
 	// continuing says the token about to be written carries on a property
@@ -366,12 +375,24 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// the break marks a value as unfinished. Checked only when the gap
 		// actually carries a newline, so a same-line comma or colon (already
 		// handled by separatorFor's own tight-spacing rules) never sets it.
-		// The `{`/`}` reset below is unconditional so continuation state can
-		// never leak past a block boundary into an unrelated statement.
+		// Read from prevReal, not prev, so a comment sitting in the middle of
+		// a wrapped list does not look like the value's own predecessor; see
+		// the comment at prevReal's declaration above.
+		//
+		// This recompute is what actually prevents continuation state from
+		// leaking across a block boundary: a `{` or `}` reached with a
+		// newline in its gap has neither a comma nor a field colon as
+		// prevReal, so continuing is always recomputed false there. The
+		// explicit clear below on `{`/`}` is defensive, not load-bearing —
+		// `}` never even reaches separatorFor's newline switch (formatsep.go's
+		// RBrace rule returns before it), and an `{` immediately after a
+		// comma or colon does not parse, so the one shape the clear would
+		// change cannot occur. It stays anyway as a guard against a future
+		// separatorFor change removing that early return.
 		if strings.Contains(gap, "\n") {
-			continuing = prev != nil &&
-				(prev.Kind() == syntax.SyntaxKindComma ||
-					(prev.Kind() == syntax.SyntaxKindColon && !isRefColon(*prev)))
+			continuing = prevReal != nil &&
+				(prevReal.Kind() == syntax.SyntaxKindComma ||
+					(prevReal.Kind() == syntax.SyntaxKindColon && !isRefColon(*prevReal)))
 		}
 		if tok.Kind() == syntax.SyntaxKindLBrace || tok.Kind() == syntax.SyntaxKindRBrace {
 			continuing = false
@@ -435,6 +456,9 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 
 		cur := tok
 		prev = &cur
+		if !isCommentKind(tok.Kind()) {
+			prevReal = &cur
+		}
 		gap = ""
 		prevLedScenario = leadsScenario
 	}

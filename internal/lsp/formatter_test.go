@@ -1081,16 +1081,27 @@ func TestFormatDocument_TrailingCommentWithoutFinalNewline(t *testing.T) {
 // The token walker has no atomic-ref branch to swallow it: a comment is a
 // token like any other and is written where the author put it. The value that
 // follows keeps the author's line break, which it must, because a line comment
-// runs to end of line and would otherwise swallow the value. It sits at the
-// block's own indent rather than a hanging indent, because the formatter is no
-// longer the one splitting the field across two lines.
+// runs to end of line and would otherwise swallow the value.
+//
+// The value hangs at the continuation column, not the block's own indent.
+// This is the second thing this fixture pins, since Task 4 (hanging
+// continuation indent): a comment sitting between the field colon/comma and
+// the value it introduces must not look like the end of the wrapped value to
+// the walker, so `repo: // note\n  olxeu/realestate` and
+// `contexts: X, // why\n  Y` both need the value AFTER the comment to keep
+// hanging one continuation unit past block depth, exactly as it would
+// without the comment in the way. See
+// TestWrappedListContinuationSurvivesStandaloneComment and
+// TestWrappedListContinuationSurvivesTrailingComment in formatsep_test.go
+// for the isolated regression coverage; this fixture additionally proves the
+// comment itself is not dropped or corrupted by that path.
 func TestFormatDocument_RefAdjacentCommentsSurvive(t *testing.T) {
 	cases := []struct {
 		name string
 		src  string
 	}{
-		{"comment before a field value", "services {\n    A {\n        repo: // note\n        olxeu/realestate\n    }\n}\n"},
-		{"comment inside a list", "services {\n    A {\n        contexts: X, // why\n        Y\n    }\n}\n"},
+		{"comment before a field value", "services {\n    A {\n        repo: // note\n            olxeu/realestate\n    }\n}\n"},
+		{"comment inside a list", "services {\n    A {\n        contexts: X, // why\n            Y\n    }\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
