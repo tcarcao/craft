@@ -504,6 +504,43 @@ func TestColumnFor_AllExcludedFallsBackToMaxWidth(t *testing.T) {
 	}
 }
 
+// TestColumnFor_MinimumNeverExcludedAtDefaultRatio pins, with an assertion
+// rather than only a comment, the claim TestColumnFor_AllExcludedFallsBackToMaxWidth's
+// doc comment makes and then leaves untested: at the default OutlierRatio
+// (2.5, > 1) the all-excluded branch is unreachable, because min <= geomean
+// <= max always holds, so limit = ratio*geomean >= min whenever ratio >= 1.
+//
+// OutlierMin is forced to 0 so the guard actually computes (rather than
+// staying inert because the population mean does not clear it), and the
+// population is deliberately as skewed as columnFor will ever see in
+// practice -- one tiny width against four huge ones -- to make exclusion as
+// aggressive as this guard can be. If the minimum were ever excluded too,
+// columnFor would fall back to the plain max of the WHOLE population
+// (1000+minGap); instead only the four large widths are excluded and the
+// minimum alone survives, giving 1+minGap.
+func TestColumnFor_MinimumNeverExcludedAtDefaultRatio(t *testing.T) {
+	cfg := fmtconfig.Defaults() // ratio 2.5
+	cfg.Align.OutlierMin = 0
+	widths := []int{1, 1000, 1000, 1000, 1000}
+	want := 1 + annotationMinGap
+	if got := columnFor(widths, annotationMinGap, cfg); got != want {
+		t.Errorf("columnFor(skewed, default ratio) = %d, want %d (minimum alone survives; all-excluded fallback never triggers)", got, want)
+	}
+}
+
+// TestColumnFor_EmptyWidthsUnderGuardEnabled pins columnFor's other
+// degenerate input -- no widths at all -- specifically under the
+// guard-enabled path (OutlierRatio > 0), the branch that computes a geomean
+// before ever looking at len(kept). TestColumnForDisabledGuard and the other
+// columnFor tests above only exercise a non-empty population, so this is the
+// one case where n stays 0 and the geomean loop never executes at all.
+func TestColumnFor_EmptyWidthsUnderGuardEnabled(t *testing.T) {
+	cfg := fmtconfig.Defaults() // ratio 2.5, guard enabled
+	if got := columnFor(nil, annotationMinGap, cfg); got != 0 {
+		t.Errorf("columnFor(empty, guard enabled) = %d, want 0", got)
+	}
+}
+
 // TestAlignCells_OutlierGuardIsIdempotent exercises the guard through
 // alignCells rather than columnFor directly, on lines carrying real
 // annotations. It pins two things at once: which lines the guard puts in the
