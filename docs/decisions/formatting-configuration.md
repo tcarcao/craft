@@ -136,8 +136,17 @@ Scope determines what ends a run.
 | `off` | n/a, single space | rustfmt default |
 | `strict` | any line lacking the cell | gofmt, hclwrite |
 | `block` | blank line, `{`, `}`, comment-only line | |
-| `decl` | a top-level declaration boundary | |
-| `file` | blank lines only | |
+| `file` | a blank line, and nothing else | |
+| `decl` | nothing; the column spans the whole declaration | |
+
+Ordered least-aligning to most-aligning. `decl` sits at the far end, not next to `block`: a
+declaration boundary is rarer than a blank line, so a run that survives blank lines aligns
+*more* than one that does not. An earlier draft of this document had `decl` and `file` the
+other way round and described `decl` as breaking at declaration boundaries; since the aligner
+is already invoked once per top-level declaration, "breaks at a declaration boundary" and
+"never breaks" are the same rule, and writing it the first way made `decl` an exact alias of
+`file` that broke at every blank line. `decl` is the value that gives one column across a whole
+`domains { }` listing, which is its entire reason for existing.
 
 `strict` subsumes the brace rule, because `account {` and `}` carry no comment cell. It is
 kept as a distinct value because for a construct where cell-less lines are common inside a
@@ -288,19 +297,41 @@ LSP textDocument/  ─┘   (flags, .craftfmt, defaults;     │
 line-oriented post-pass run per declaration (`formatter.go:100-102`), which is what keeps it
 away from the verbatim `arch` slice (`formatter.go:82-88`).
 
-### Cell precedence
+### Cell precedence, and a documented limitation
 
-A line can carry both cells:
+A line can in principle carry both cells:
 
 ```craft
 Billing asks Ledger to record the entry  [GRPC ledger.Postings/Create]  // legacy path
 ```
 
-Today neither aligner touches it, because `splitAnnotation` requires the line to end in `]`.
-The rule is: the trailing comment is cell 2, the annotation is cell 1, and each is aligned
-independently within its own run. A line carrying an annotation but no comment still
-participates in the annotation run; a line carrying a comment but no annotation still
-participates in the comment run.
+`splitAnnotation` requires the line to end in `]`, so it cannot see an annotation that a
+trailing comment follows. Such a line therefore joins the **comment** column only, and keeps
+whatever spacing its author gave the annotation.
+
+This is a deliberate limitation, not an oversight. There are **zero** such lines in the 99-file
+repo corpus and zero in the workspace registry that motivated this change, so the case is
+hypothetical. Closing it properly would mean either bounding `splitAnnotation`'s search at the
+comment start and reattaching the tail, or replacing the two passes with a single two-column
+aligner. Both are real designs; neither is worth carrying for a shape nothing produces. If such
+lines ever appear, the single-pass aligner is the better of the two, because it computes both
+columns from one decomposition and cannot desynchronise offsets between passes.
+
+**Pass order is load-bearing even so.** Annotations align first, trailing comments second, and
+the two passes operate on disjoint line sets: a line `splitAnnotation` accepts ends in `]` and
+therefore carries no trailing comment, while a line carrying a trailing comment is rejected by
+`splitAnnotation`. That disjointness is what keeps the walker's byte offsets valid across both
+passes. Reversing the order would break it: the comment pass shifts a line such as
+`A asks B to c  // see note [1]`, whose recorded `commentEnd` would then be too small when the
+annotation pass read it, and a `from` that is too small is precisely the direction that makes
+comment text be read as an annotation and whitespace inside a comment rewritten.
+
+### Minimum gap differs by cell type
+
+The annotation column is `max(body) + 2`; the trailing-comment column is `max(body) + 1`. The
+two-space annotation gap is existing shipped behaviour pinned by four tests, and the one-space
+comment gap is what reproduces a hand-aligned column. `alignCells` therefore takes the minimum
+gap as a parameter rather than hardcoding one.
 
 ### Why not text/tabwriter
 
