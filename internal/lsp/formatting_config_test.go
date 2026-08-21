@@ -204,6 +204,140 @@ func TestFormattingMalformedCraftfmtIsVisibleNotSilent(t *testing.T) {
 	}
 }
 
+// TestFormattingBlockedIsVisibleNotSilent pins the LSP counterpart of
+// `craft fmt`'s "skipped, not formatted: <reason>" stderr line (see runFmt
+// in cmd/craft/fmt.go): a document the formatter declines to touch --
+// because it carries an error-severity diagnostic too severe to safely
+// re-render -- must not come back as a silent no-op edit list. The author
+// gets a window/showMessage explaining why, the same mechanism
+// publishConfigError already uses for a bad .craftfmt.
+func TestFormattingBlockedIsVisibleNotSilent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.craft")
+	// Missing `{` after actors: a syntax error, so bailsFormatting declines
+	// (FormatDocumentCheckedWith only sees syntax.Parse's diagnostics, not
+	// sema's -- a purely semantic error like a duplicate name does not
+	// block formatting).
+	content := "actors\n  user Bob\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := &fakeConn{}
+	s := &Server{ws: workspace.New(nil), logger: slog.Default(), conn: conn}
+	docURI := string(uri.File(path))
+	s.ws.Open(docURI, content)
+
+	edits, err := s.Formatting(context.Background(), &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
+	})
+	if err != nil {
+		t.Fatalf("Formatting: %v", err)
+	}
+	if edits != nil {
+		t.Errorf("blocked document should return no edits, got: %+v", edits)
+	}
+	if len(conn.notified) != 1 || conn.notified[0].method != protocol.MethodWindowShowMessage {
+		t.Fatalf("expected exactly one window/showMessage notification, got %+v", conn.notified)
+	}
+	params, ok := conn.notified[0].params.(*protocol.ShowMessageParams)
+	if !ok {
+		t.Fatalf("notification params type = %T, want *protocol.ShowMessageParams", conn.notified[0].params)
+	}
+	if !strings.Contains(params.Message, "not formatted") {
+		t.Errorf("message %q does not explain that formatting was skipped", params.Message)
+	}
+}
+
+// TestFormattingBlockedDoesNotRepeatIdenticalNotification pins the guard
+// against an obnoxious failure mode: a client with files.autoSave:
+// afterDelay re-requests textDocument/formatting on every keystroke-driven
+// save, and a document with a standing parse error would otherwise pop the
+// identical "not formatted" message on every single one until the author
+// fixes it. The SAME block reason on a second request must not notify
+// again; a DIFFERENT reason must.
+func TestFormattingBlockedDoesNotRepeatIdenticalNotification(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.craft")
+	// Missing `{` after actors: craft/syntax/unexpected-token.
+	content := "actors\n  user Bob\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := &fakeConn{}
+	s := &Server{ws: workspace.New(nil), logger: slog.Default(), conn: conn}
+	docURI := string(uri.File(path))
+	s.ws.Open(docURI, content)
+
+	params := &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
+	}
+	if _, err := s.Formatting(context.Background(), params); err != nil {
+		t.Fatalf("Formatting (1st): %v", err)
+	}
+	if _, err := s.Formatting(context.Background(), params); err != nil {
+		t.Fatalf("Formatting (2nd): %v", err)
+	}
+	if len(conn.notified) != 1 {
+		t.Fatalf("identical block reason notified %d time(s) across 2 requests, want 1", len(conn.notified))
+	}
+
+	// A second, DIFFERENT parse error (an unclosed use_case block) must
+	// notify again: it is not the same reason repeating.
+	content2 := "use_case \"X\" {\n  when U does x\n    A asks B\n"
+	s.ws.Open(docURI, content2)
+	if _, err := s.Formatting(context.Background(), params); err != nil {
+		t.Fatalf("Formatting (3rd, different reason): %v", err)
+	}
+	if len(conn.notified) != 2 {
+		t.Fatalf("a different block reason was not notified: got %d notification(s), want 2\n%+v", len(conn.notified), conn.notified)
+	}
+}
+
+// TestFormattingBlockedNotificationClearsOnSuccess pins that fixing the file
+// and then reintroducing the SAME error is treated as new, not swallowed by
+// the dedup: a successful format in between must forget the remembered
+// reason.
+func TestFormattingBlockedNotificationClearsOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.craft")
+	// Missing `{` after actors: craft/syntax/unexpected-token.
+	broken := "actors\n  user Bob\n"
+	if err := os.WriteFile(path, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := &fakeConn{}
+	s := &Server{ws: workspace.New(nil), logger: slog.Default(), conn: conn}
+	docURI := string(uri.File(path))
+	params := &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
+	}
+
+	s.ws.Open(docURI, broken)
+	if _, err := s.Formatting(context.Background(), params); err != nil {
+		t.Fatalf("Formatting (broken): %v", err)
+	}
+	if len(conn.notified) != 1 {
+		t.Fatalf("first block notified %d time(s), want 1", len(conn.notified))
+	}
+
+	fixed := "actors {\n    user Bob\n}\n"
+	s.ws.Open(docURI, fixed)
+	if _, err := s.Formatting(context.Background(), params); err != nil {
+		t.Fatalf("Formatting (fixed): %v", err)
+	}
+
+	s.ws.Open(docURI, broken)
+	if _, err := s.Formatting(context.Background(), params); err != nil {
+		t.Fatalf("Formatting (broken again): %v", err)
+	}
+	if len(conn.notified) != 2 {
+		t.Fatalf("the same reason recurring after a fix was not notified: got %d notification(s), want 2", len(conn.notified))
+	}
+}
+
 // TestFormatting_CraftfmtEditTakesEffectWithoutReload is what replaced
 // TestDidChangeWatchedFiles_CraftfmtChangeInvalidatesCache once
 // resolveFmtConfig's per-directory cache was removed (see that function's

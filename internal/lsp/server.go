@@ -61,6 +61,15 @@ type Server struct {
 		mu     sync.Mutex
 		timers map[string]*time.Timer
 	}
+
+	// dedup state for publishFormatBlocked: the code+message key of the last
+	// "declined to format" reason shown per document URI, so an editor that
+	// re-requests formatting on every autosave does not repeat the identical
+	// popup on every keystroke-driven save until the file is fixed.
+	formatBlocked struct {
+		mu   sync.Mutex
+		last map[string]string
+	}
 }
 
 // NewServerForFormatting constructs a *Server carrying only what Formatting
@@ -1404,7 +1413,22 @@ func (s *Server) Formatting(ctx context.Context, params *protocol.DocumentFormat
 		cfg = resolved
 	}
 
-	formatted, _ := FormatDocumentCheckedWith(f.Content, cfg)
+	formatted, blocked := FormatDocumentCheckedWith(f.Content, cfg)
+	if blocked != nil {
+		// Visible, not silent: `craft fmt` already reports "skipped, not
+		// formatted: <reason>" on stderr for the identical decision (see
+		// runFmt in cmd/craft/fmt.go). Returning no edits here without also
+		// surfacing that reason would leave an editor user staring at a save
+		// that silently did nothing, with no way to learn why short of
+		// running the CLI separately on the same file.
+		s.publishFormatBlocked(ctx, params.TextDocument.URI, blocked)
+		return nil, nil
+	}
+	// The document parses cleanly enough to format now: clear any
+	// previously remembered block reason for it, so if the SAME reason
+	// recurs later (fixed, then broken again the same way) it is treated as
+	// new rather than swallowed by publishFormatBlocked's dedup.
+	s.clearFormatBlocked(params.TextDocument.URI)
 	if formatted == f.Content {
 		return nil, nil
 	}
@@ -1488,6 +1512,54 @@ func (s *Server) publishConfigError(ctx context.Context, docURI protocol.Documen
 	}); notifyErr != nil {
 		s.logger.Warn("publishConfigError: notify failed", "uri", string(docURI), "err", notifyErr)
 	}
+}
+
+// publishFormatBlocked makes it visible, via the same window/showMessage
+// mechanism as publishConfigError, when the formatter declined to format a
+// document -- the LSP counterpart of the "skipped, not formatted: <reason>"
+// line `craft fmt` writes to stderr for the same decision. Without this, an
+// editor user who saves a file the formatter cannot safely rewrite sees
+// nothing at all: no edit, no error, no explanation.
+//
+// The reason is deduplicated per document URI: a client with
+// files.autoSave: afterDelay can re-request formatting on every
+// keystroke-driven save, and a file with a standing parse error would
+// otherwise repeat the identical popup on every one of them until the
+// author fixes it. Only a NEW or CHANGED reason -- a different diagnostic
+// code or message -- gets a fresh notification; the same reason back to
+// back is suppressed.
+func (s *Server) publishFormatBlocked(ctx context.Context, docURI protocol.DocumentURI, diag *craft.Diagnostic) {
+	key := diag.Code + "\x00" + diag.Message
+
+	s.formatBlocked.mu.Lock()
+	if s.formatBlocked.last == nil {
+		s.formatBlocked.last = make(map[string]string)
+	}
+	repeat := s.formatBlocked.last[string(docURI)] == key
+	s.formatBlocked.last[string(docURI)] = key
+	s.formatBlocked.mu.Unlock()
+
+	s.logger.Warn("formatting: declined", "uri", string(docURI), "code", diag.Code, "msg", diag.Message)
+	if repeat {
+		return
+	}
+
+	msg := fmt.Sprintf("craft: %s: skipped, not formatted: %s [%s]", docURI, diag.Message, diag.Code)
+	if notifyErr := s.conn.Notify(ctx, protocol.MethodWindowShowMessage, &protocol.ShowMessageParams{
+		Type:    protocol.MessageTypeWarning,
+		Message: msg,
+	}); notifyErr != nil {
+		s.logger.Warn("publishFormatBlocked: notify failed", "uri", string(docURI), "err", notifyErr)
+	}
+}
+
+// clearFormatBlocked forgets any block reason remembered for docURI, so a
+// later occurrence of the same reason (fixed, then broken again the same
+// way) is not treated as a repeat by publishFormatBlocked's dedup.
+func (s *Server) clearFormatBlocked(docURI protocol.DocumentURI) {
+	s.formatBlocked.mu.Lock()
+	delete(s.formatBlocked.last, string(docURI))
+	s.formatBlocked.mu.Unlock()
 }
 
 func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
