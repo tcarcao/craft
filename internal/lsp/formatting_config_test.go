@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
@@ -335,6 +336,67 @@ func TestFormattingBlockedNotificationClearsOnSuccess(t *testing.T) {
 	}
 	if len(conn.notified) != 2 {
 		t.Fatalf("the same reason recurring after a fix was not notified: got %d notification(s), want 2", len(conn.notified))
+	}
+}
+
+// TestFormattingBlockedNotificationClearsOnCloseReopen pins the lifecycle
+// case TestFormattingBlockedNotificationClearsOnSuccess cannot reach: that
+// test never closes the document, so it only proves the dedup entry is
+// cleared by a SUCCESSFUL format in between. Closing a still-broken
+// document and reopening it is a different path entirely -- there is no
+// intervening success to clear anything -- and from the user's point of
+// view, reopening a file is a fresh encounter with it. If the dedup entry
+// survived the close, the reopened document's first Formatting request
+// would be silently suppressed as a "repeat" of a reason the user was never
+// told about in this session, exactly the silence item 10 exists to
+// replace with an explanation. DidClose and DidOpen both clear the entry
+// (see their comments for why both, not just one); this test only needs to
+// drive the close/reopen sequence to prove the observable behaviour holds,
+// not which of the two call sites did the clearing.
+func TestFormattingBlockedNotificationClearsOnCloseReopen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.craft")
+	// Missing `{` after actors: craft/syntax/unexpected-token.
+	broken := "actors\n  user Bob\n"
+	if err := os.WriteFile(path, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := &fakeConn{}
+	s := &Server{ws: workspace.New(nil), logger: slog.Default(), conn: conn}
+	s.debounce.timers = make(map[string]*time.Timer)
+	docURI := string(uri.File(path))
+	fmtParams := &protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
+	}
+
+	s.ws.Open(docURI, broken)
+	if _, err := s.Formatting(context.Background(), fmtParams); err != nil {
+		t.Fatalf("Formatting (before close): %v", err)
+	}
+	if len(conn.notified) != 1 {
+		t.Fatalf("first block notified %d time(s), want 1", len(conn.notified))
+	}
+
+	if err := s.DidClose(context.Background(), &protocol.DidCloseTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.DocumentURI(docURI)},
+	}); err != nil {
+		t.Fatalf("DidClose: %v", err)
+	}
+	if err := s.DidOpen(context.Background(), &protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{URI: protocol.DocumentURI(docURI), Text: broken},
+	}); err != nil {
+		t.Fatalf("DidOpen: %v", err)
+	}
+
+	// Still broken, same reason as before -- but this is a fresh session
+	// with the document from the user's point of view, so it must notify
+	// again, not be suppressed as a repeat.
+	if _, err := s.Formatting(context.Background(), fmtParams); err != nil {
+		t.Fatalf("Formatting (after reopen): %v", err)
+	}
+	if len(conn.notified) != 2 {
+		t.Fatalf("reopening a document still blocked by the same reason was suppressed: got %d notification(s), want 2", len(conn.notified))
 	}
 }
 

@@ -701,6 +701,15 @@ func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocu
 		return nil
 	}
 	s.ws.Close(string(params.TextDocument.URI))
+	// Forget any remembered "declined to format" reason for this document.
+	// Without this, formatBlocked.last grows without bound over a long-lived
+	// session (a leak), and worse: a file blocked with reason X, closed
+	// without being fixed, then reopened later still carrying reason X,
+	// would have its stale entry intact -- so the reopened document's first
+	// Formatting request would be suppressed as a repeat by
+	// publishFormatBlocked's dedup, even though the user has never been
+	// told about it in THIS session. See publishFormatBlocked.
+	s.clearFormatBlocked(params.TextDocument.URI)
 	// Re-publish diagnostics for all remaining files: closing a domain file
 	// can resolve or create unresolved-reference diagnostics in service files.
 	for _, f := range s.ws.AllFiles() {
@@ -715,6 +724,15 @@ func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocume
 	}
 	uri := string(params.TextDocument.URI)
 	s.ws.Open(uri, params.TextDocument.Text)
+	// Also cleared here, not just in DidClose: this is belt-and-suspenders
+	// for the same staleness, not a second bug. Clearing on open makes "an
+	// open document's dedup entry reflects only its current session" true
+	// by construction -- it no longer depends on every close path reliably
+	// firing DidClose first (a client that reloads a buffer without an
+	// intervening close/open pair some editors are known to special-case,
+	// or a future code path that opens a document some other way) -- rather
+	// than by reasoning about DidClose's coverage.
+	s.clearFormatBlocked(params.TextDocument.URI)
 	s.notifyLogTrace(ctx, fmt.Sprintf("didOpen: parsed %s", uri))
 	s.scheduleDiagnostics(ctx, uri)
 	return nil
