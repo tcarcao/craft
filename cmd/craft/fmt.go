@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/spf13/cobra"
 	"github.com/tcarcao/craft/v2/internal/lsp"
@@ -142,35 +143,55 @@ func runFmt(files []string, check bool, out, errOut io.Writer) int {
 	return 0
 }
 
-// firstNewError returns the first error-severity diagnostic in diags that is
-// not already present in orig, or nil if formatting introduced nothing new.
+// digitsInMessage matches every run of digits in a diagnostic message, so
+// diagKey can fold out embedded line numbers before comparing.
+var digitsInMessage = regexp.MustCompile(`\d+`)
+
+// diagKey is the identity firstNewError compares on: Code plus message
+// SHAPE, not Range and not the raw message.
 //
-// "Present" is diagnostic identity, and identity here is Code+Message, not
-// Range. Range is exactly what formatting is allowed to move: indent width
-// shifts every nested token's column, and top-level declarations are forced
-// onto a single blank line regardless of how many the author wrote, which can
-// shift line numbers too. Keying on Range would make the guard fire on
-// legitimate whitespace movement instead of on an actual new defect.
+// Range is exactly what formatting is allowed to move: indent width shifts
+// every nested token's column, and top-level declarations are forced onto a
+// single blank line regardless of how many the author wrote, which can shift
+// line numbers too. Keying on Range would make the guard fire on legitimate
+// whitespace movement instead of on an actual new defect.
 //
-// Message is not perfectly stable either: craft/sema/duplicate-name embeds a
-// line number in its own text ("already declared (first seen at line N)"),
-// so a reformat that also shifts an EARLIER line could in principle change a
-// pre-existing error's message and make this treat it as new. That failure
-// mode is conservative, not unsafe: it refuses to format a file it could
-// safely have formatted, rather than silently reporting formatting damage
-// that was not there. That is the direction this guard is allowed to err in.
+// The raw Message is not safe either, for the same reason one layer down:
+// craft/sema/duplicate-name embeds the FIRST occurrence's line number in its
+// own text ("already declared (first seen at line N)"), so a reformat that
+// shifts an earlier line changes that text even though the error itself is
+// unchanged. Folding every digit run to a single placeholder removes that
+// whole class: two messages that differ only in which line number they quote
+// still key the same, while two messages that differ in what they are
+// actually saying (a different duplicated name, a different diagnostic
+// shape) still key apart, because the name is not digits.
+func diagKey(d craft.Diagnostic) string {
+	return d.Code + "\x00" + digitsInMessage.ReplaceAllString(d.Message, "#")
+}
+
+// firstNewError returns the first error-severity diagnostic in diags whose
+// count, keyed by diagKey, exceeds how many times that key appears in orig,
+// or nil if formatting introduced nothing new.
+//
+// Counting rather than set membership matters if a single formatting pass
+// ever multiplied an existing error (a walker bug duplicating a token, say):
+// under set membership one occurrence in orig would make the same key look
+// "already present" no matter how many more copies diags carried, and every
+// one of them would be waved through.
 func firstNewError(diags, orig []craft.Diagnostic) *craft.Diagnostic {
-	origErrs := make(map[string]bool, len(orig))
+	budget := make(map[string]int, len(orig))
 	for _, d := range orig {
 		if d.Severity == craft.SeverityError {
-			origErrs[d.Code+"\x00"+d.Message] = true
+			budget[diagKey(d)]++
 		}
 	}
 	for i := range diags {
 		if diags[i].Severity != craft.SeverityError {
 			continue
 		}
-		if origErrs[diags[i].Code+"\x00"+diags[i].Message] {
+		key := diagKey(diags[i])
+		if budget[key] > 0 {
+			budget[key]--
 			continue
 		}
 		return &diags[i]

@@ -321,8 +321,33 @@ func TestFirstNewError_IgnoresPreExisting(t *testing.T) {
 	}
 }
 
+// TestFirstNewError_IgnoresPreExistingDespiteLineNumberShift is the reason
+// diagKey folds digits out of the message rather than comparing it raw.
+// craft/sema/duplicate-name embeds the FIRST occurrence's line number in its
+// own message text, and formatting is free to shift that line (collapsing a
+// run of blank lines above it to the one every top-level declaration pair
+// gets, for instance): the error is the same error, but its message text
+// differs between the pre-format and post-format parse. Without digit
+// folding this reports a pre-existing error as new; this test is what pins
+// that it must not.
+func TestFirstNewError_IgnoresPreExistingDespiteLineNumberShift(t *testing.T) {
+	orig := []craft.Diagnostic{{
+		Code:     "craft/sema/duplicate-name",
+		Message:  `actor "Alice" already declared (first seen at line 5)`,
+		Severity: craft.SeverityError,
+	}}
+	formatted := []craft.Diagnostic{{
+		Code:     "craft/sema/duplicate-name",
+		Message:  `actor "Alice" already declared (first seen at line 3)`,
+		Severity: craft.SeverityError,
+	}}
+	if got := firstNewError(formatted, orig); got != nil {
+		t.Errorf("firstNewError() = %+v, want nil: same Code and message shape, differing only in a digit, must count as pre-existing", got)
+	}
+}
+
 // TestFirstNewError_ReportsAGenuinelyNewOne is the other half: an
-// error-severity diagnostic with no Code+Message match in orig must still be
+// error-severity diagnostic with no key match in orig must still be
 // reported. This is exercised directly on firstNewError with a synthetic
 // diagnostic rather than through a full craft-fmt round trip.
 //
@@ -334,14 +359,9 @@ func TestFirstNewError_IgnoresPreExisting(t *testing.T) {
 // the same situation contentDrift itself documents ("No known real input
 // reaches it anymore") and the same reason TestContentDrift_RefusesToLoseContent
 // exercises it directly rather than end to end. This test follows that
-// precedent for firstNewError.
-//
-// TestRunFmt_ReparseGuardStillFiresOnALineShift below exercises the guard
-// end to end on a real, honestly-constructed input, but that input trips the
-// guard via the DOCUMENTED conservative edge case (a pre-existing error's own
-// message text embeds a line number that formatting's blank-line
-// normalisation shifts), not via a genuinely new defect. Both are covered so
-// this is not a gap, just not the same claim.
+// precedent for firstNewError. Digit-folding does not change this: a
+// genuinely different diagnostic (a different duplicated name, a different
+// code) still differs outside the digits it strips, so it still keys apart.
 func TestFirstNewError_ReportsAGenuinelyNewOne(t *testing.T) {
 	orig := []craft.Diagnostic{}
 	brandNew := craft.Diagnostic{
@@ -356,6 +376,36 @@ func TestFirstNewError_ReportsAGenuinelyNewOne(t *testing.T) {
 	}
 	if got.Code != brandNew.Code || got.Message != brandNew.Message {
 		t.Errorf("firstNewError() = %+v, want %+v", *got, brandNew)
+	}
+}
+
+// TestFirstNewError_CountsRatherThanSetMembership pins the multiset fix: a
+// key present once in orig must only absorb ONE matching occurrence in
+// diags, not every occurrence. Under set membership a single pre-existing
+// error would make an unbounded number of the "same" error in the output
+// look pre-existing too, which is exactly the shape a formatter bug that
+// duplicated an error-carrying construct would need to hide behind.
+//
+// This is a direct unit test of firstNewError, not an end-to-end one: the
+// reviewer verified the multiplied-error shape is currently unreachable
+// through craft fmt (contentDrift's whitespace-squashed byte-for-byte
+// comparison means a walker bug duplicating a token cannot reach this guard,
+// and no sema diagnostic here depends on whitespace), so there is no real
+// .craft input to drive this through runFmt today.
+func TestFirstNewError_CountsRatherThanSetMembership(t *testing.T) {
+	one := craft.Diagnostic{
+		Code:     "craft/sema/duplicate-name",
+		Message:  `service "UserService" already declared (first seen at line 2)`,
+		Severity: craft.SeverityError,
+	}
+	orig := []craft.Diagnostic{one}
+	diags := []craft.Diagnostic{one, one, one}
+	got := firstNewError(diags, orig)
+	if got == nil {
+		t.Fatal("firstNewError() = nil, want the third occurrence reported: orig only accounts for one")
+	}
+	if got.Code != one.Code || got.Message != one.Message {
+		t.Errorf("firstNewError() = %+v, want a copy of %+v", *got, one)
 	}
 }
 
@@ -391,37 +441,35 @@ func TestRunFmt_PreExistingErrorDoesNotBlockFormatting(t *testing.T) {
 	}
 }
 
-// TestRunFmt_ReparseGuardStillFiresOnALineShift is the safety-net check: the
-// guard must still refuse a file when the reformatted content's diagnostics
-// do not match the original's. This is a real, non-fabricated input, not a
-// forced formatter bug (see the note on TestFirstNewError_ReportsAGenuinelyNewOne
-// for why a formatter-bug trigger could not be constructed): "Zero" is
-// followed by three blank lines before the first "Alice", so the author's
-// spacing is not already canonical, and formatting collapses those three
-// blank lines to the one every top-level declaration pair gets. That moves
-// the first "Alice" from line 5 to line 3, and craft/sema/duplicate-name's
-// own message embeds the first occurrence's line number, so the formatted
-// diagnostic's message no longer matches the original's byte for byte. The
-// guard's Code+Message identity is deliberately conservative (see the
-// firstNewError doc comment in fmt.go), and this is that conservatism
-// firing on a real input, not a bug in the guard.
-func TestRunFmt_ReparseGuardStillFiresOnALineShift(t *testing.T) {
+// TestRunFmt_PreExistingErrorSurvivesALineShift is round 2's fix, pinned end
+// to end. This is the exact input round 1's TestRunFmt_ReparseGuardStillFiresOnALineShift
+// used, and that test asserted the guard's false refusal on it as CORRECT
+// behaviour: "Zero" is followed by three blank lines before the first
+// "Alice", so formatting collapses them to the one every top-level
+// declaration pair gets, which moves the first "Alice" from line 5 to line
+// 3. craft/sema/duplicate-name's message embeds that line number, so the
+// pre-format and post-format messages differ in exactly one digit. Ruling
+// (round 2): formatting introduced nothing here, so the file must be
+// formatted and the pre-existing duplicate-name error left alone, the same
+// as TestRunFmt_PreExistingErrorDoesNotBlockFormatting above but with the
+// line-shift wrinkle that motivated diagKey's digit folding.
+func TestRunFmt_PreExistingErrorSurvivesALineShift(t *testing.T) {
 	const src = "actor user Zero\n\n\n\nactor user Alice\nactor user Alice\n"
+	const want = "actor user Zero\n\nactor user Alice\n\nactor user Alice\n"
 	f := writeCraft(t, t.TempDir(), "shift.craft", src)
 
 	var out, errOut bytes.Buffer
-	code := runFmt([]string{f}, false, &out, &errOut)
-	if code == 0 {
-		t.Fatalf("exit code = 0, want non-zero: the guard should have fired\nstdout: %s", out.String())
+	if code := runFmt([]string{f}, false, &out, &errOut); code != 0 {
+		t.Fatalf("exit code = %d, want 0 (a line-shifted pre-existing error must not block formatting)\nstderr: %s", code, errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "would have broken the file") {
-		t.Errorf("want the reparse-guard message, got %q", errOut.String())
+	if errOut.Len() != 0 {
+		t.Errorf("a pre-existing error must not be reported as formatting damage, got stderr=%q", errOut.String())
 	}
 	got, err := os.ReadFile(f)
 	if err != nil {
 		t.Fatalf("re-reading %s: %v", f, err)
 	}
-	if string(got) != src {
-		t.Errorf("a file the guard refused must be left byte-identical\nwant:\n%s\ngot:\n%s", src, got)
+	if string(got) != want {
+		t.Errorf("file not formatted despite a pre-existing, line-shifted sema error\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }
