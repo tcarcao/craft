@@ -1297,17 +1297,23 @@ Expected: FAIL, `too many arguments in call to runFmt`
 Change the signature to `runFmt(files []string, check bool, override fmtconfig.Config, hasOverride bool, out, errOut io.Writer) int`. Per file:
 
 ```go
-		cfg := override
-		if !hasOverride {
-			resolved, err := fmtconfig.Resolve(file)
-			if err != nil {
-				fmt.Fprintf(errOut, "%s: %v\n", file, err)
-				failed = true
-				continue
-			}
-			cfg = resolved
+		// Resolve .craftfmt for EVERY file, whether or not flags were set, then
+		// layer only the flags the user actually named on top. Swapping in a
+		// Defaults()-seeded override wholesale would let `--indent 4` silently
+		// discard a .craftfmt's trailing_comment, and would skip opening the
+		// file at all so a malformed one went unreported.
+		cfg, err := fmtconfig.Resolve(file)
+		if err != nil {
+			fmt.Fprintf(errOut, "%s: %v\n", file, err)
+			failed = true
+			continue
 		}
+		applyOverrides(&cfg, set)
 ```
+
+where `set` records which flags were `Changed` and `applyOverrides` assigns only those
+fields. Per file, per field.
+
 
 then pass `cfg` to `lsp.FormatDocumentCheckedWith`. Add the flags:
 
