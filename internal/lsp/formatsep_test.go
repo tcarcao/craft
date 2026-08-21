@@ -341,22 +341,6 @@ func TestSeparatorFor_RefColonStaysTight(t *testing.T) {
 	}
 }
 
-// TestIndentFor pins the basic depth-to-width mapping. It is specifically
-// about indent width, so it pins its own cfg rather than relying on
-// whatever fmtconfig.Defaults() happens to return, so a future change to the
-// default cannot silently change what this test asserts.
-func TestIndentFor(t *testing.T) {
-	cfg := fmtconfig.Defaults()
-	for depth, want := range map[int]string{0: "", 1: "    ", 3: "            "} {
-		if got := indentFor(depth, cfg); got != want {
-			t.Errorf("indentFor(%d) = %q, want %q", depth, got, want)
-		}
-	}
-	if got := indentFor(-1, cfg); got != "" {
-		t.Errorf("indentFor(-1) = %q, want empty (must not panic)", got)
-	}
-}
-
 // TestSeparatorFor_LBraceForcesNewlineAfter pins the block-boundary rule: a
 // `{` forces a break after it whatever the author wrote, which is what
 // expands a minified declaration instead of leaving it gap-driven.
@@ -394,14 +378,26 @@ func TestSeparatorFor_RBraceForcesNewlineBefore(t *testing.T) {
 	t.Fatal("no RBrace found")
 }
 
-// TestIndentForRespectsConfig pins indentFor to the configured width rather
-// than a hardcoded one, and confirms the zero-floor still holds once depth is
-// no longer the only input.
+// TestIndentForRespectsConfig pins both the basic depth-to-width mapping and
+// that indentFor uses the configured width rather than a hardcoded one, and
+// confirms the zero-floor still holds once depth is no longer the only
+// input. This absorbed the former TestIndentFor, whose depth-1/depth-3
+// cases duplicated what this test already covers at depth 2 (indentFor has
+// no depth-specific branching, so one non-trivial depth under each config
+// is exactly as strong as three) once its own doc comment's claim of
+// pinning "its own cfg rather than ... fmtconfig.Defaults()" turned out to
+// be false: the test body called fmtconfig.Defaults() directly.
 func TestIndentForRespectsConfig(t *testing.T) {
 	four := fmtconfig.Defaults()
 	two := fmtconfig.Defaults()
 	two.Indent = 2
 
+	if got := indentFor(1, four); got != "    " {
+		t.Errorf("indentFor(1, indent=4) = %q, want 4 spaces", got)
+	}
+	if got := indentFor(3, four); got != "            " {
+		t.Errorf("indentFor(3, indent=4) = %q, want 12 spaces", got)
+	}
 	if got := indentFor(2, four); got != "        " {
 		t.Errorf("indentFor(2, indent=4) = %q, want 8 spaces", got)
 	}
@@ -412,7 +408,7 @@ func TestIndentForRespectsConfig(t *testing.T) {
 		t.Errorf("indentFor(0) = %q, want empty", got)
 	}
 	if got := indentFor(-1, four); got != "" {
-		t.Errorf("indentFor(-1) = %q, want empty (floors at zero)", got)
+		t.Errorf("indentFor(-1) = %q, want empty (must not panic, floors at zero)", got)
 	}
 }
 
