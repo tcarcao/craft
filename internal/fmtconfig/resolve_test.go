@@ -38,6 +38,35 @@ func TestResolveFindsNearestAncestor(t *testing.T) {
 	}
 }
 
+func TestResolveKeepsUntouchedAlignDefaults(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, ".craftfmt"), "[align]\ntrailing_comment = \"strict\"\n")
+
+	got, err := Resolve(filepath.Join(dir, "x.craft"))
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Align.TrailingComment != ScopeStrict {
+		t.Errorf("Align.TrailingComment = %q, want %q (set key took effect)", got.Align.TrailingComment, ScopeStrict)
+	}
+	want := Defaults()
+	if got.Align.OpAnnotation != want.Align.OpAnnotation {
+		t.Errorf("Align.OpAnnotation = %q, want %q (untouched sibling keeps default)", got.Align.OpAnnotation, want.Align.OpAnnotation)
+	}
+	if got.Align.OutlierRatio != want.Align.OutlierRatio {
+		t.Errorf("Align.OutlierRatio = %v, want %v (untouched sibling keeps default)", got.Align.OutlierRatio, want.Align.OutlierRatio)
+	}
+	if got.Align.OutlierMin != want.Align.OutlierMin {
+		t.Errorf("Align.OutlierMin = %d, want %d (untouched sibling keeps default)", got.Align.OutlierMin, want.Align.OutlierMin)
+	}
+	if got.Indent != want.Indent {
+		t.Errorf("Indent = %d, want %d (untouched top-level field keeps default)", got.Indent, want.Indent)
+	}
+	if got.ContinuationIndent != want.ContinuationIndent {
+		t.Errorf("ContinuationIndent = %d, want %d (untouched top-level field keeps default)", got.ContinuationIndent, want.ContinuationIndent)
+	}
+}
+
 func TestResolveRejectsMalformedFile(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, ".craftfmt"), "indent = = 4\n")
