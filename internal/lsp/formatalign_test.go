@@ -255,3 +255,34 @@ func TestSplitAnnotation_TheCommentEndIsTheExactBoundary(t *testing.T) {
 		t.Errorf("a `[` before the comment's end is comment text: %q", line)
 	}
 }
+
+// TestSplitTrailingComment pins splitTrailingComment's contract on its own,
+// the same way TestSplitAnnotation_* pins splitAnnotation's: start is handed
+// down by the walker rather than worked out here, a comment-only line yields
+// no cell (it is not sitting in the same column as one that follows content),
+// and a start of zero means the walker recorded no trailing comment for the
+// line at all.
+func TestSplitTrailingComment(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		start    int
+		wantBody string
+		wantCell string
+		wantOK   bool
+	}{
+		{"simple", "    kybc   // rollup: x", 11, "    kybc", "// rollup: x", true},
+		{"no comment", "    kybc", 0, "", "", false},
+		{"comment only line", "    // a note", 4, "", "", false},
+		{"start zero means none", "    kybc // x", 0, "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, cell, ok := splitTrailingComment(tt.line, tt.start)
+			if ok != tt.wantOK || body != tt.wantBody || cell != tt.wantCell {
+				t.Errorf("splitTrailingComment(%q, %d) = (%q, %q, %v), want (%q, %q, %v)",
+					tt.line, tt.start, body, cell, ok, tt.wantBody, tt.wantCell, tt.wantOK)
+			}
+		})
+	}
+}

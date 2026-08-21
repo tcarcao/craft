@@ -148,3 +148,32 @@ func splitAnnotation(line string, from int) (body, ann string, ok bool) {
 	}
 	return body, trimmed[open:], true
 }
+
+// splitTrailingComment splits a line into the text before its trailing comment
+// and the comment itself. ok is false when the line carries no trailing comment
+// cell.
+//
+// start is the byte offset where the comment token begins, as recorded by
+// writeTokens. Like splitAnnotation's `from`, this function does not work it
+// out for itself, and for the same reason: pattern-matching `//` cannot tell a
+// comment from the `//` inside a narrative phrase such as
+// `A asks B for http://x`, and the lexer already knew. A start of zero means
+// the walker recorded no trailing comment for this line.
+//
+// A comment-only line yields an empty body and ok false. Aligning those would
+// push a whole run out to match a full-width comment, and a comment on its own
+// line is not a cell in the same column as one that follows content.
+func splitTrailingComment(line string, start int) (body, cell string, ok bool) {
+	if start <= 0 || start > len(line) {
+		return "", "", false
+	}
+	body = strings.TrimRight(line[:start], " \t")
+	if body == "" {
+		return "", "", false
+	}
+	cell = strings.TrimRight(line[start:], " \t")
+	if cell == "" {
+		return "", "", false
+	}
+	return body, cell, true
+}

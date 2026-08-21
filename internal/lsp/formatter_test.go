@@ -663,7 +663,7 @@ func TestWriteTokens_ReportsWhereCommentTextStops(t *testing.T) {
 			continue
 		}
 		var sb strings.Builder
-		interior, commentEnd = writeTokens(&sb, node, fmtconfig.Defaults())
+		interior, commentEnd, _ = writeTokens(&sb, node, fmtconfig.Defaults())
 		out = sb.String()
 	}
 
@@ -686,6 +686,106 @@ func TestWriteTokens_ReportsWhereCommentTextStops(t *testing.T) {
 	}
 	if got := lines[4][:19]; !strings.HasSuffix(got, "*/") {
 		t.Errorf("the block comment's end does not land just past its close: %q", got)
+	}
+}
+
+// TestWriteTokens_ReportsWhereTrailingCommentsStart pins commentStart
+// directly, the same way TestWriteTokens_ReportsWhereCommentTextStops pins
+// commentEnd. Nothing consumes commentStart yet — alignCells arrives in a
+// later task — so this is the only place its correctness is established;
+// a map that is silently wrong here would surface only as a confusing
+// alignment bug once something finally reads it.
+//
+// The three lines exercise the three shapes there are: a `//` line comment
+// trailing real content is recorded, at the byte offset where it begins. A
+// block comment that spans lines is recorded on NEITHER of the two lines it
+// touches: not its first (which interior already excludes), and not its
+// last (line has already moved past the newlines the token carries by the
+// time it is written, so recording there would key a first-line column
+// against a last-line index). A line with no comment at all is simply
+// absent, which reads as zero — splitTrailingComment's "none" answer.
+func TestWriteTokens_ReportsWhereTrailingCommentsStart(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A asks B for c   // rollup: note\n" +
+		"    /* nöte\n" +
+		"    see // hère */ A asks B to c  [GET /x]\n" +
+		"    D asks E for f\n" +
+		"}\n"
+	gn, _, _ := syntax.Parse(src)
+
+	var commentStart map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		_, _, commentStart = writeTokens(&sb, node, fmtconfig.Defaults())
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	// Line 2 carries the trailing line comment; 3 and 4 are the two lines the
+	// multi-line block comment touches, and 5 carries no comment at all.
+	want := map[int]int{2: 23}
+
+	if !reflect.DeepEqual(commentStart, want) {
+		t.Errorf("commentStart = %v, want %v, over lines:\n%q", commentStart, want, lines)
+	}
+	if got := lines[2][23:]; !strings.HasPrefix(got, "//") {
+		t.Errorf("fixture drifted: commentStart's offset does not land on `//`: %q", got)
+	}
+	if _, ok := commentStart[3]; ok {
+		t.Errorf("commentStart recorded a start for the block comment's first line, which interior already excludes")
+	}
+	if _, ok := commentStart[4]; ok {
+		t.Errorf("commentStart recorded a start for the block comment's last line, keyed against the wrong line")
+	}
+	if _, ok := commentStart[5]; ok {
+		t.Errorf("commentStart recorded a start for a line with no comment on it")
+	}
+}
+
+// TestWriteTokens_CommentStartOnlyGuardsAgainstNewlines documents a
+// deliberate limitation rather than a bug: commentStart's guard is "does this
+// token's text contain a newline", not "is this comment the last thing on its
+// line". A single-line block comment followed by more real content, such as
+// `A /* inline */ asks B ...`, has no newline in its token text and so is
+// still recorded, even though nothing about it is trailing.
+//
+// This is safe today because nothing consumes commentStart yet. It is called
+// out here, pinned rather than left to be discovered as a surprise, so that
+// whatever wires commentStart into alignment (splitTrailingComment or its
+// caller) does so knowing an entry is not proof the comment sits at the end
+// of its line.
+func TestWriteTokens_CommentStartOnlyGuardsAgainstNewlines(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A /* inline */ asks B for c [POST /v1/x]\n" +
+		"}\n"
+	gn, _, _ := syntax.Parse(src)
+
+	var commentStart map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		_, _, commentStart = writeTokens(&sb, node, fmtconfig.Defaults())
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	want := map[int]int{2: 10}
+	if !reflect.DeepEqual(commentStart, want) {
+		t.Errorf("commentStart = %v, want %v, over lines:\n%q", commentStart, want, lines)
+	}
+	if got := lines[2][10:]; !strings.HasPrefix(got, "/*") {
+		t.Errorf("fixture drifted: commentStart's offset does not land on `/*`: %q", got)
 	}
 }
 

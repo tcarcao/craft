@@ -112,7 +112,7 @@ func FormatDocumentCheckedWith(content string, cfg fmtconfig.Config) (string, *c
 			// by blank lines, and top-level declarations are always joined by
 			// one, so no run could ever have spanned two declarations anyway.
 			var decl strings.Builder
-			interior, commentEnd := writeTokens(&decl, node, cfg)
+			interior, commentEnd, _ := writeTokens(&decl, node, cfg)
 			sb.WriteString(alignAnnotations(decl.String(), interior, commentEnd))
 		}
 	}
@@ -274,7 +274,18 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // the line's length and every bracket on the line falls before it. A block
 // comment closing partway along a line yields the offset just past its `*/`,
 // which is exactly where ordinary content resumes.
-func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Config) (map[int]bool, map[int]int) {
+//
+// commentStart maps a written line index to the BYTE offset where a trailing
+// comment BEGINS on that line, for splitTrailingComment. It is recorded only
+// for a comment token whose text carries no newline: a `//` line comment runs
+// to end of line by definition, so it is always the last thing there and
+// always a trailing cell. A block comment that spans lines has its start on a
+// line the interior set already excludes, and by the time it closes, line has
+// already been advanced past the newlines it carries, so recording a start
+// there would key a first line's column against a last line's index. A line
+// absent from commentStart has no trailing comment recorded for it, which
+// reads as zero, matching splitTrailingComment's "start of zero means none".
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Config) (map[int]bool, map[int]int, map[int]int) {
 	braceDepth := 0
 	scenarioDepth := 0
 	gap := ""
@@ -299,6 +310,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	line := 0
 	var interior map[int]bool
 	var commentEnd map[int]int
+	var commentStart map[int]int
 
 	// col is the byte length of the output line currently being built, over
 	// everything this walker has written. It is tracked incrementally rather
@@ -404,6 +416,14 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 
 		line += strings.Count(sep, "\n")
 		advance(sep)
+
+		// The token's own start, captured before either advance below moves
+		// col past its text or line past any newlines it carries. This is the
+		// only point at which both are simultaneously "where this token
+		// begins" rather than "where it ends" or "where the token after it
+		// begins".
+		startCol, startLine := col, line
+
 		if n := strings.Count(tok.Text(), "\n"); n > 0 {
 			// Every line this token runs off the end of is interior: its own
 			// first line (line) and each line in between. Only the last line
@@ -439,6 +459,21 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 				commentEnd = make(map[int]int, 1)
 			}
 			commentEnd[line] = col
+
+			// Where a trailing comment BEGINS is what the comment-alignment
+			// pass needs, and it is only meaningful for a comment that does
+			// not span lines: such a comment runs to end of line, so it is
+			// always the last thing there. A comment carrying newlines starts
+			// on a line the interior set already excludes, so recording it
+			// here would be recording a column for a line this pass never
+			// looks at, keyed against the wrong line besides (startLine, not
+			// line, which has already moved past the newlines).
+			if !strings.Contains(tok.Text(), "\n") {
+				if commentStart == nil {
+					commentStart = make(map[int]int, 1)
+				}
+				commentStart[startLine] = startCol
+			}
 		}
 
 		if tok.Kind() == syntax.SyntaxKindLBrace {
@@ -463,7 +498,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		prevLedScenario = leadsScenario
 	}
 
-	return interior, commentEnd
+	return interior, commentEnd, commentStart
 }
 
 // nextRealTokenIsWhen reports whether the first token after i that carries
