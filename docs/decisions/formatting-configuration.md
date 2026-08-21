@@ -236,7 +236,7 @@ matters for a tool whose entire subject is whitespace, and no dependency beyond
 `BurntSushi/toml`.
 
 ```toml
-indent = 4                   # 2 | 4 | "tab"
+indent = 4                   # integer, 0-16
 continuation_indent = 4
 
 [align]
