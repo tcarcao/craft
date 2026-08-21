@@ -1,6 +1,6 @@
 # Formatting Configuration and Cell Alignment
 
-**Status:** Accepted, not yet implemented
+**Status:** Implemented
 **Date:** 2026-08-21
 **Amends:** `docs/decisions/token-stream-formatter.md`, which listed "changing indent width"
 under "Out of scope" and fixed alignment policy to operation annotations only.
@@ -414,6 +414,18 @@ not match `.craftfmt`, and the server's `DidChangeWatchedFiles` and `DidChangeCo
 handlers are both `return nil` stubs (`internal/lsp/server.go:633-639`). Without widening the
 glob and implementing the handler, editing `.craftfmt` has no effect until the window
 reloads, and stale cached config silently produces the wrong indentation. This is in scope.
+
+> **Amended 2026-08-21, final review pass.** The mitigation actually shipped is not
+> "cache plus a watcher that invalidates it" -- that design only ever protects a client
+> that both widens its glob to `.craftfmt` AND registers for the notification, which as
+> of this amendment was true only for `craft-vscode-extension >= 0.2.8`; any other
+> client (an older extension build, nvim, helix, Zed) would still read stale config for
+> an entire session. `resolveFmtConfig` (`internal/lsp/server.go`) has no cache at all:
+> every formatting request calls `fmtconfig.Resolve` fresh, which is a handful of
+> `os.Stat` calls on a user-initiated, once-per-save operation. `DidChangeWatchedFiles`
+> is now a documented no-op, kept only because `protocol.Server` requires the method to
+> exist. This closes the staleness class for every client, not just one extension
+> version, at a cost judged not worth avoiding for this call frequency.
 
 **Non-local state in `separatorFor`.** D4 adds the first parameter that is not a property of
 the adjacent token pair. If a second such parameter is ever needed, that is the signal the

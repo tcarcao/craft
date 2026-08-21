@@ -343,6 +343,16 @@ Recorded because each was seriously considered and each failure mode is informat
   turn the gate green would cost coverage to buy nothing. The guard test asserts what
   actually matters, on every file: formatting changes whitespace and nothing else.
 
+  > **Amended 2026-08-21 by `docs/decisions/formatting-configuration.md`.** That
+  > "costs nothing" call was wrong once indent became configurable: the branch that
+  > made indent width and comment alignment configurable also canonicalised the
+  > corpus, and it cost measurably. 2-space files went from 47 to 9, files missing a
+  > trailing newline went from 17 to 4, and today `craft fmt --check` across all 99
+  > `.craft` files in the repository reports exactly 9 non-canonical, every one of
+  > them a `testdata/broken/*` fixture the formatter declines to touch because it
+  > does not parse cleanly. The corpus is canonical now; the deliberate
+  > non-canonical surface that remains is `testdata/broken/*` alone.
+
 ## Known limitation: braces in a phrase disable the annotation on that line
 
 A balanced `{...}` in an action's phrase and a trailing `[...]` annotation on the same
