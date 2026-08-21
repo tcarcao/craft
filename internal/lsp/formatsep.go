@@ -3,6 +3,7 @@ package lsp
 import (
 	"strings"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
@@ -10,11 +11,16 @@ import (
 // unbalanced `}` only produces a warning-severity diagnostic, so it can reach
 // the formatter with depth already at zero, and strings.Repeat panics on a
 // negative count.
-func indentFor(depth int) string {
+//
+// Width comes from the configuration rather than being fixed, because a
+// workspace's existing files are the thing being formatted and half the known
+// corpus is 4-space. Config.Validate bounds the width, so the multiplication
+// here cannot be driven to exhaustion by a file on disk.
+func indentFor(depth int, cfg fmtconfig.Config) string {
 	if depth < 1 {
 		return ""
 	}
-	return strings.Repeat("  ", depth)
+	return strings.Repeat(" ", cfg.Indent*depth)
 }
 
 // separatorFor returns the whitespace to emit before curr.
@@ -32,7 +38,14 @@ func indentFor(depth int) string {
 // token". It cannot be derived here: the token that opens a scenario may be a
 // comment rather than the `when`, and telling those apart needs lookahead to
 // the comment's owner, which separatorFor never sees.
-func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool) string {
+// continuing is the walker's answer to "is curr a continuation of a property
+// value the author wrapped onto another line, rather than the start of a new
+// statement". It cannot be derived here either, for the same reason: a
+// wrapped `contexts: A,\n B` and two adjacent statements look identical to a
+// function that only ever sees one token pair. It is passed in rather than
+// measured, which is what keeps the continuation column a pure function of
+// depth and cfg. See the block comment at the newline switch below.
+func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool, cfg fmtconfig.Config, continuing bool) string {
 	if prev == nil {
 		return ""
 	}
@@ -112,10 +125,10 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		return " "
 	}
 	if prev.Kind() == syntax.SyntaxKindLBrace {
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
 	}
 	if curr.Kind() == syntax.SyntaxKindRBrace {
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
 	}
 
 	// A scenario always gets a blank line before it, even if the author wrote
@@ -135,7 +148,7 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// the second, once the newline was in the gap, so formatting was not
 	// idempotent for that shape.
 	if startsScenario && depth == 1 {
-		return "\n\n" + indentFor(depth)
+		return "\n\n" + indentFor(depth, cfg)
 	}
 
 	// The fourth brace rule, and the mirror of `curr == RBrace` above: a `}`
@@ -149,7 +162,24 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// plain newline and the scenario's blank line only appeared on a second
 	// pass. The scenario rule above carries the full account.
 	if prev.Kind() == syntax.SyntaxKindRBrace && !strings.Contains(gap, "\n") {
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
+	}
+
+	// A continuation of a wrapped property value hangs one continuation unit
+	// past the block indent, so it cannot be mistaken for a sibling statement.
+	// Block indent, not visual indent aligned under the value: every formatter
+	// that revisited this since 2016 moved the same way, because aligning under
+	// the value re-wraps the whole list when the key is renamed. See
+	// docs/decisions/formatting-configuration.md D4.
+	//
+	// The column is a pure function of depth. Deriving it from the emitted
+	// column of the previous line would move it again whenever that line
+	// shifted, which is a fixed-point failure and has bitten this file twice.
+	contIndent := func() string {
+		if !continuing {
+			return indentFor(depth, cfg)
+		}
+		return indentFor(depth, cfg) + strings.Repeat(" ", cfg.ContinuationIndent)
 	}
 
 	switch strings.Count(gap, "\n") {
@@ -160,10 +190,10 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		// Collapse any run of spaces or tabs to one.
 		return " "
 	case 1:
-		return "\n" + indentFor(depth)
+		return "\n" + contIndent()
 	default:
 		// Two or more newlines is a blank line. Collapse any longer run to one.
-		return "\n\n" + indentFor(depth)
+		return "\n\n" + contIndent()
 	}
 }
 
@@ -177,7 +207,12 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 // (a single newline between them) must stay back to back, and a blank line
 // the author put between them must survive as one. There is no depth to
 // indent for: this only ever fires at brace depth zero.
-func rootGapSeparator(gap string) string {
+//
+// cfg is unused today: nothing here indents. It is threaded anyway so every
+// site in the whitespace policy takes the same configuration, rather than
+// this one function being the exception a future change to root-level
+// spacing would have to notice and fix up.
+func rootGapSeparator(gap string, cfg fmtconfig.Config) string {
 	switch strings.Count(gap, "\n") {
 	case 0:
 		return " "

@@ -1,11 +1,11 @@
 services {
-  UserService {
-    contexts: User, Authentication, Domain, Service
-    language: golang
-  }
-  ActorService {
-    contexts: Actor, Actors
-    data-stores: actor_db
-    language: java
-  }
+    UserService {
+        contexts: User, Authentication, Domain, Service
+        language: golang
+    }
+    ActorService {
+        contexts: Actor, Actors
+        data-stores: actor_db
+        language: java
+    }
 }

@@ -1,11 +1,11 @@
 use_case "Login" {
-  when User submits credentials
-    AuthService validates credentials
-    AuthService notifies "User Logged In"
+    when User submits credentials
+        AuthService validates credentials
+        AuthService notifies "User Logged In"
 }
 
 use_case "Logout" {
-  when User requests logout
-    AuthService invalidates session
-    AuthService notifies "User Logged Out"
+    when User requests logout
+        AuthService invalidates session
+        AuthService notifies "User Logged Out"
 }

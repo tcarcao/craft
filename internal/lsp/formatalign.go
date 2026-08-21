@@ -1,16 +1,68 @@
 package lsp
 
 import (
+	"math"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 )
 
-// alignAnnotations column-aligns trailing operation annotations.
-//
-// It runs over the formatter's output rather than over the tree, because
-// alignment is the one decision that needs to see whole lines. It only ever
-// rewrites the run of spaces before a `[`, and never on a line it was told to
-// leave alone, so it cannot change content.
+// cellSplitter splits a line into the text before an alignable cell and the
+// cell. hint is the per-line offset the walker recorded for this cell type:
+// commentEnd for annotations, commentStart for trailing comments.
+type cellSplitter func(line string, hint int) (body, cell string, ok bool)
+
+// annotationMinGap and trailingCommentMinGap are the minGap arguments
+// FormatDocumentCheckedWith passes to alignCells for each cell type. The
+// annotation gap is existing shipped behaviour, pinned by
+// TestAlignAnnotations_AlignsAContiguousRun and friends; the comment gap is
+// what reproduces a hand-aligned column. See "Minimum gap differs by cell
+// type" in docs/decisions/formatting-configuration.md.
+const (
+	annotationMinGap      = 2
+	trailingCommentMinGap = 1
+)
+
+// endsRun reports whether a line terminates an alignment run under a scope.
+// A line already known to be interior never reaches here.
+func endsRun(line string, hasCell bool, scope fmtconfig.Scope) bool {
+	trimmed := strings.TrimSpace(line)
+	switch scope {
+	case fmtconfig.ScopeDecl:
+		// alignCells is invoked once per top-level declaration
+		// (formatter.go's decl loop), so the whole input to this call already
+		// IS one declaration: "ends at a declaration boundary" and "never
+		// ends" are the same rule from here. This is what lets decl give one
+		// shared column across an entire domains { } listing even when it
+		// contains blank lines between entries.
+		return false
+	case fmtconfig.ScopeFile:
+		// Unlike decl, a blank line still ends a file-scoped run. Unlike
+		// block, nothing else does: a brace or a comment-only line passes
+		// through.
+		return trimmed == ""
+	case fmtconfig.ScopeBlock:
+		if trimmed == "" {
+			return true
+		}
+		if strings.HasSuffix(trimmed, "{") || strings.HasPrefix(trimmed, "}") {
+			return true
+		}
+		// A comment on its own line ends a run, matching hclwrite.
+		return strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*")
+	case fmtconfig.ScopeStrict:
+		return !hasCell
+	}
+	return true
+}
+
+// alignCells column-aligns one kind of trailing cell: an operation annotation
+// or a trailing comment, depending on which splitter and hint map it is
+// given. It runs over the formatter's output rather than over the tree,
+// because alignment is the one decision that needs to see whole lines. It
+// only ever rewrites the run of spaces before a cell, and never on a line it
+// was told to leave alone, so it cannot change content.
 //
 // Both maps come from writeTokens, and both exist because this pass sees only
 // text. Where a token started and where it stopped is knowledge the walker had
@@ -30,16 +82,29 @@ import (
 // unannotated is what keeps a blank line inside a block comment from splitting
 // an alignment run that the comment merely sits in the middle of.
 //
-// commentEnd gives, per line, the byte offset just past the last comment that
-// ends on it, and is what splitAnnotation needs to tell an annotation from a
-// bracket in comment text. A line absent from it has no comment ending on it,
-// and zero is the right answer for such a line.
+// hints gives, per line, the byte offset the chosen splitter needs: the
+// offset just past the last comment ending on the line for splitAnnotation, or
+// the offset where a trailing comment begins for splitTrailingComment. A line
+// absent from hints has no cell-relevant boundary recorded on it, and zero is
+// the right answer for such a line for either splitter.
 //
-// A run is a stretch of consecutive lines that carry an annotation, plus any
-// unannotated lines between them. A blank line ends a run. That matches the
-// worked examples in docs/decisions/action-operation-brackets.md, where an
-// unannotated action keeps the column rather than splitting it.
-func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) string {
+// scope decides what ends a run beyond a blank line; see endsRun. A run is a
+// stretch of consecutive lines that carry the cell, plus any lines between
+// them the scope says do not end it. Under ScopeBlock, an unannotated action
+// keeps the column rather than splitting it, matching the worked examples in
+// docs/decisions/action-operation-brackets.md.
+//
+// minGap is the minimum number of spaces between the widest body in a run and
+// its cell, passed to columnFor. The two cell types disagree on it: the
+// annotation column is documented and shipped as max(body)+2, while the
+// trailing-comment column is max(body)+1, which is what reproduces a
+// hand-aligned column. Nothing about a line's shape reveals which of the two
+// a caller wants, so this is a parameter rather than something alignCells
+// infers.
+func alignCells(s string, interior map[int]bool, hints map[int]int, split cellSplitter, scope fmtconfig.Scope, minGap int, cfg fmtconfig.Config) string {
+	if scope == fmtconfig.ScopeOff {
+		return s
+	}
 	lines := strings.Split(s, "\n")
 
 	runStart := -1
@@ -47,22 +112,21 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 		if runStart < 0 {
 			return
 		}
-		col := 0
+		widths := make([]int, 0, end-runStart)
 		for i := runStart; i < end; i++ {
 			if interior[i] {
 				continue
 			}
-			if body, _, ok := splitAnnotation(lines[i], commentEnd[i]); ok {
-				if w := utf8.RuneCountInString(body); w+2 > col {
-					col = w + 2
-				}
+			if body, _, ok := split(lines[i], hints[i]); ok {
+				widths = append(widths, utf8.RuneCountInString(body))
 			}
 		}
+		col := columnFor(widths, minGap, cfg)
 		for i := runStart; i < end; i++ {
 			if interior[i] {
 				continue
 			}
-			body, ann, ok := splitAnnotation(lines[i], commentEnd[i])
+			body, cell, ok := split(lines[i], hints[i])
 			if !ok {
 				continue
 			}
@@ -70,7 +134,7 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 			if pad < 1 {
 				pad = 1
 			}
-			lines[i] = body + strings.Repeat(" ", pad) + ann
+			lines[i] = body + strings.Repeat(" ", pad) + cell
 		}
 		runStart = -1
 	}
@@ -79,17 +143,89 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 		if interior[i] {
 			continue
 		}
-		if strings.TrimSpace(line) == "" {
+		_, _, hasCell := split(line, hints[i])
+		if endsRun(line, hasCell, scope) {
 			flush(i)
 			continue
 		}
-		if _, _, ok := splitAnnotation(line, commentEnd[i]); ok && runStart < 0 {
+		if hasCell && runStart < 0 {
 			runStart = i
 		}
 	}
 	flush(len(lines))
 
 	return strings.Join(lines, "\n")
+}
+
+// columnFor picks the alignment column for a run from its body widths and the
+// caller's minimum gap. The column is the widest body plus minGap, except
+// that a body far wider than the rest of the run is excluded from setting
+// it. gofmt does the same on its exprList path, comparing against the
+// geometric mean of the run's sizes with a ratio of 2.5 and a floor of 40
+// (cfg.Align.OutlierRatio, cfg.Align.OutlierMin), and rustfmt's opt-in
+// alignment builds the same idea into its threshold. One 300-character line
+// should not push forty 50-character lines out to match it.
+//
+// The guard is deliberately weak. It excludes extremes, not ordinary
+// variation: a 26-wide body in a population averaging 11 is not an outlier
+// by any ratio test, because the mean never clears OutlierMin and the guard
+// stays inert. Bounding ordinary churn is the scope setting's job, not this
+// one's. cfg.Align.OutlierRatio == 0 disables the guard outright and falls
+// back to the plain widest-body-plus-gap rule.
+func columnFor(widths []int, minGap int, cfg fmtconfig.Config) int {
+	if len(widths) == 0 {
+		return 0
+	}
+	if cfg.Align.OutlierRatio <= 0 {
+		return maxWidthPlusGap(widths, minGap)
+	}
+
+	sum := 0.0
+	n := 0
+	for _, w := range widths {
+		if w <= 0 {
+			continue
+		}
+		sum += math.Log(float64(w))
+		n++
+	}
+	limit := math.Inf(1)
+	if n > 0 {
+		mean := math.Exp(sum / float64(n))
+		if mean > float64(cfg.Align.OutlierMin) {
+			limit = cfg.Align.OutlierRatio * mean
+		}
+	}
+
+	kept := make([]int, 0, len(widths))
+	for _, w := range widths {
+		if float64(w) > limit {
+			continue
+		}
+		kept = append(kept, w)
+	}
+	if len(kept) == 0 {
+		// Every member of the run excluded would zero the column and
+		// collapse every cell to minGap. With the default ratio (> 1) this
+		// cannot happen: the minimum of a positive set never exceeds
+		// ratio*geomean when ratio > 1, since geomean itself never falls
+		// below the minimum. A configured ratio below 1 can force it though,
+		// and a zero column is worse than ignoring the guard for this run.
+		return maxWidthPlusGap(widths, minGap)
+	}
+	return maxWidthPlusGap(kept, minGap)
+}
+
+// maxWidthPlusGap is the guard-free rule columnFor falls back to: the widest
+// body in ws plus minGap.
+func maxWidthPlusGap(ws []int, minGap int) int {
+	col := 0
+	for _, w := range ws {
+		if w+minGap > col {
+			col = w + minGap
+		}
+	}
+	return col
 }
 
 // splitAnnotation splits a line into the text before its trailing operation
@@ -126,7 +262,7 @@ func alignAnnotations(s string, interior map[int]bool, commentEnd map[int]int) s
 //
 // A line a comment merely passes through has no comment ENDING on it, so from
 // says nothing useful about it. Those lines are excluded upstream instead, by
-// the interior set alignAnnotations is given.
+// the interior set alignCells is given.
 func splitAnnotation(line string, from int) (body, ann string, ok bool) {
 	trimmed := strings.TrimRight(line, " \t")
 	if !strings.HasSuffix(trimmed, "]") {
@@ -147,4 +283,40 @@ func splitAnnotation(line string, from int) (body, ann string, ok bool) {
 		return "", "", false
 	}
 	return body, trimmed[open:], true
+}
+
+// splitTrailingComment splits a line into the text before its trailing comment
+// and the comment itself. ok is false when the line carries no trailing comment
+// cell.
+//
+// start is the byte offset where the comment token begins, as recorded by
+// writeTokens. Like splitAnnotation's `from`, this function does not work it
+// out for itself, and for the same reason: pattern-matching `//` cannot tell a
+// comment from the `//` inside a narrative phrase such as
+// `A asks B for http://x`, and the lexer already knew. A start of zero means
+// the walker recorded no trailing comment for this line.
+//
+// A non-zero start is stronger than "here is where some comment begins": it
+// is proof the comment at that offset runs all the way to end of line.
+// writeTokens records commentStart only for a line comment or a doc comment,
+// both of which the lexer stops at the next newline, and never for a block
+// comment — so this function never has to check what follows the comment on
+// the line. By the time start is non-zero, there is nothing to check.
+//
+// A comment-only line yields an empty body and ok false. Aligning those would
+// push a whole run out to match a full-width comment, and a comment on its own
+// line is not a cell in the same column as one that follows content.
+func splitTrailingComment(line string, start int) (body, cell string, ok bool) {
+	if start <= 0 || start > len(line) {
+		return "", "", false
+	}
+	body = strings.TrimRight(line[:start], " \t")
+	if body == "" {
+		return "", "", false
+	}
+	cell = strings.TrimRight(line[start:], " \t")
+	if cell == "" {
+		return "", "", false
+	}
+	return body, cell, true
 }

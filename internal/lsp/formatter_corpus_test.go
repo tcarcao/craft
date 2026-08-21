@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
@@ -108,6 +110,46 @@ func stripPositions(v any) any {
 	}
 }
 
+// assertWhitespaceOnlyChange asserts that got is src with only whitespace
+// changed, checked byte-for-byte with all whitespace stripped from both
+// sides. It reports whether the assertion held, so a caller that treats this
+// as a prerequisite for the checks that follow can stop early exactly as
+// TestFormatDocument_EveryCraftFileInRepo always has.
+func assertWhitespaceOnlyChange(t *testing.T, src, got string) bool {
+	t.Helper()
+	if squashWhitespace(src) != squashWhitespace(got) {
+		t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", src, got)
+		return false
+	}
+	return true
+}
+
+// assertReparses asserts that got reparses with zero error diagnostics. It
+// reports whether the assertion held, for the same early-stop reason as
+// assertWhitespaceOnlyChange.
+func assertReparses(t *testing.T, got string) bool {
+	t.Helper()
+	_, _, diags := syntax.Parse(got)
+	for _, d := range diags {
+		if d.Severity == craft.SeverityError {
+			t.Errorf("formatted output does not parse: [%s] %s\n%s", d.Code, d.Message, got)
+			return false
+		}
+	}
+	return true
+}
+
+// assertModelPreserved asserts that the canonical model of got matches the
+// canonical model of src, position fields aside. name is passed through to
+// modelOf for parse error messages; a file path is the natural choice.
+func assertModelPreserved(t *testing.T, name, src, got string) {
+	t.Helper()
+	before, after := modelOf(t, name, src), modelOf(t, name, got)
+	if !reflect.DeepEqual(before, after) {
+		t.Errorf("formatting changed the canonical model\noutput:\n%s", got)
+	}
+}
+
 // TestFormatDocument_EveryCraftFileInRepo is the guard that makes `craft fmt`
 // safe to ship as a bulk rewriter.
 //
@@ -132,14 +174,22 @@ func stripPositions(v any) any {
 //     this guard that compared comments by filtering on token kind)
 //  1. the output reparses with zero error diagnostics
 //  2. formatting is idempotent, which is byte-identity on already-formatted
-//     input and the strongest form of it that can hold over a corpus whose
-//     files are deliberately written in non-canonical shapes (4-space indent,
-//     wrapped `contexts:` continuations) to exercise the parser
+//     input. Of the 99 files this walks, 90 already parse cleanly and format
+//     to themselves under the default configuration -- the formatting-
+//     configuration branch canonicalised what used to be a corpus
+//     deliberately written in non-canonical shapes (4-space indent, wrapped
+//     `contexts:` continuations) to exercise the parser under the OLD 2-space
+//     default. Idempotence over those 90 is therefore closer to corroboration
+//     than exercise; TestCorpusPropertiesAcrossConfigs is what actually
+//     exercises this property now, over the (indent, alignment scope) cross
+//     product a single default-config pass here cannot reach.
 //  3. the canonical model is unchanged, which is what catches a renderer that
 //     rewrites meaning rather than spelling
 //
 // A file the parser cannot fully place is not formatted at all, and is
-// asserted to come back byte-identical.
+// asserted to come back byte-identical. That is the remaining 9, all under
+// testdata/broken/*: deliberately non-canonical, but because they do not
+// parse, not because of their indent or layout.
 func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 	for _, file := range allCraftFiles(t) {
 		t.Run(file, func(t *testing.T) {
@@ -174,18 +224,13 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 			// whitespace inside a token's own text too, so it cannot see a
 			// change to the spacing INSIDE a single comment (see
 			// TestFormatDocument_CommentInternalSpacingSurvives).
-			if squashWhitespace(src) != squashWhitespace(got) {
-				t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", src, got)
+			if !assertWhitespaceOnlyChange(t, src, got) {
 				return
 			}
 
 			// 1. reparses clean
-			_, _, diags := syntax.Parse(got)
-			for _, d := range diags {
-				if d.Severity == craft.SeverityError {
-					t.Errorf("formatted output does not parse: [%s] %s\n%s", d.Code, d.Message, got)
-					return
-				}
+			if !assertReparses(t, got) {
+				return
 			}
 
 			// 2. idempotent
@@ -194,42 +239,135 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 			}
 
 			// 3. model preserved
-			before, after := modelOf(t, file, src), modelOf(t, file, got)
-			if !reflect.DeepEqual(before, after) {
-				t.Errorf("formatting changed the canonical model\noutput:\n%s", got)
-			}
+			assertModelPreserved(t, file, src, got)
 		})
 	}
 }
 
 // TestFormatDocument_CanonicalCorpusIsByteIdentical asserts the literal
-// byte-identity property for every file that is already in canonical form.
+// byte-identity property for every file in the repository, strictly: every
+// single one must come back unchanged from FormatDocument under the default
+// configuration.
 //
-// It is separate from the guard above so that the count is visible: if a
-// formatter change starts rewriting files it used to leave alone, this test
-// names them. The corpus is not canonical as a whole and deliberately so, since
-// its non-canonical shapes are parser test surface, so this cannot be asserted
-// over every file without reformatting the corpus.
+// That is not vacuous. It holds two ways at once, and the test does not
+// distinguish them: a genuinely canonical file returns unchanged because
+// nothing needed rewriting (90 of the corpus's 99 files, since the
+// formatting-configuration branch canonicalised what used to be a
+// deliberately non-canonical corpus), and a testdata/broken/* file returns
+// unchanged because FormatDocument declines to touch a file it cannot fully
+// parse (the remaining 9). Both are "byte-identical in, byte-identical out"
+// from this test's point of view, which is exactly the property this guard
+// exists to protect.
+//
+// This used to error only when the identical count was zero, which a single
+// canonical file anywhere in a 99-file corpus would have satisfied even if
+// the other 98 had silently started being rewritten. Asserted strictly, per
+// file, it is the `craft fmt --check` CI gate the ADR listed as out of
+// scope, for free -- and it means a future deliberately-non-canonical
+// fixture will break this test. That is intended: it forces an explicit
+// decision (skip it here, or move it under testdata/broken/*) rather than
+// letting the corpus drift uncanonical in silence.
 func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
-	identical := 0
 	for _, file := range allCraftFiles(t) {
-		raw, err := os.ReadFile(file)
+		t.Run(file, func(t *testing.T) {
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("reading %s: %v", file, err)
+			}
+			src := string(raw)
+			once := FormatDocument(src)
+			if once != src {
+				t.Errorf("%s: not canonical under the default configuration\ngot:\n%s", file, once)
+			}
+			// Whatever the input looked like, its formatted form must be a
+			// fixed point: formatting an already-formatted file changes
+			// nothing.
+			if twice := FormatDocument(once); twice != once {
+				t.Errorf("%s: formatted form is not a fixed point", file)
+			}
+		})
+	}
+}
+
+// TestCorpusPropertiesAcrossConfigs asserts the same non-idempotence
+// properties as TestFormatDocument_EveryCraftFileInRepo, but over the
+// cross-product of indent width and trailing-comment alignment scope rather
+// than at the default configuration alone.
+//
+// This is not redundant with the default-only guard. Continuation indent and
+// comment alignment both run over the same lines, and a continuation line
+// carries no comment cell: under ScopeStrict that breaks a comment run,
+// under ScopeBlock it does not. A defect in that interaction only shows up
+// at a specific (indent, scope) pair, and the default configuration is only
+// one point in that space. Idempotence in particular is asserted at every
+// point: a config under which formatting does not converge is exactly the
+// kind of bug this test exists to catch, and it would pass a default-only
+// idempotence check completely undetected.
+//
+// The matrix is 2 indents x 5 scopes = 10 configurations over the whole
+// corpus (currently 99 files), each doing two format passes. That ran in
+// about a second standalone, so nothing is bounded or sampled: every file is
+// checked under every configuration.
+func TestCorpusPropertiesAcrossConfigs(t *testing.T) {
+	files := allCraftFiles(t)
+
+	var configs []fmtconfig.Config
+	for _, indent := range []int{2, 4} {
+		for _, scope := range []fmtconfig.Scope{
+			fmtconfig.ScopeOff, fmtconfig.ScopeStrict,
+			fmtconfig.ScopeBlock, fmtconfig.ScopeDecl, fmtconfig.ScopeFile,
+		} {
+			c := fmtconfig.Defaults()
+			c.Indent = indent
+			c.Align.TrailingComment = scope
+			configs = append(configs, c)
+		}
+	}
+	t.Logf("checking %d file(s) across %d configuration(s) (%d total cases)", len(files), len(configs), len(files)*len(configs))
+
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("reading %s: %v", file, err)
+			t.Fatalf("reading %s: %v", path, err)
 		}
 		src := string(raw)
-		once := FormatDocument(src)
-		if once == src {
-			identical++
-		}
-		// Whatever the input looked like, its formatted form must be a fixed
-		// point: formatting an already-formatted file changes nothing.
-		if twice := FormatDocument(once); twice != once {
-			t.Errorf("%s: formatted form is not a fixed point", file)
+		for _, cfg := range configs {
+			name := fmt.Sprintf("%s/indent=%d/scope=%s", filepath.Base(path), cfg.Indent, cfg.Align.TrailingComment)
+			t.Run(name, func(t *testing.T) {
+				// A handful of corpus files (testdata/broken/*) have syntax
+				// errors severe enough that the parser cannot place them at
+				// all, at any configuration; the formatter declines to
+				// rewrite those rather than guess, and FormatDocumentWith
+				// returns them unchanged. Checking such a file's declined
+				// output for reparse-clean or idempotence would fail for a
+				// reason that has nothing to do with indent or alignment
+				// scope, so this mirrors
+				// TestFormatDocument_EveryCraftFileInRepo's handling: confirm
+				// the decline was a genuine "too broken to touch" and not the
+				// formatter quietly dropping content, then move on.
+				once, blocked := FormatDocumentCheckedWith(src, cfg)
+				if blocked != nil {
+					if blocked.Code == "craft/internal/formatter-content-drift" {
+						t.Fatalf("contentDrift fired under %+v: the walker would have changed more than whitespace", cfg)
+					}
+					if once != src {
+						t.Fatalf("a file the formatter declined to format must come back byte-identical under %+v\nblocked by: [%s] %s", cfg, blocked.Code, blocked.Message)
+					}
+					return
+				}
+
+				twice := FormatDocumentWith(once, cfg)
+				if once != twice {
+					t.Errorf("not idempotent under %+v\nfirst:\n%s\nsecond:\n%s", cfg, once, twice)
+				}
+				if !assertWhitespaceOnlyChange(t, src, once) {
+					return
+				}
+				if !assertReparses(t, once) {
+					return
+				}
+				assertModelPreserved(t, path, src, once)
+			})
 		}
 	}
-	if identical == 0 {
-		t.Error("no file in the corpus is in canonical form; byte-identity is going untested")
-	}
-	t.Logf("%d file(s) already in canonical form and returned byte-identical", identical)
 }

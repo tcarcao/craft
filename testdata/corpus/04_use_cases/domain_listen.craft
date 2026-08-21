@@ -1,9 +1,9 @@
 use_case "Order Processing" {
-  when Customer places order
-    OrderService validates order details
-    OrderService notifies "Order Placed"
+    when Customer places order
+        OrderService validates order details
+        OrderService notifies "Order Placed"
 
-  when Inventory listens "Order Placed"
-    Inventory checks stock availability
-    Inventory notifies "Stock Reserved"
+    when Inventory listens "Order Placed"
+        Inventory checks stock availability
+        Inventory notifies "Stock Reserved"
 }

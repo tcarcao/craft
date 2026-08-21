@@ -1,17 +1,17 @@
 services {
-  CanaryService {
-    contexts: CanaryContext
-    language: golang
-    deployment: canary
-  }
-  BlueGreenService {
-    contexts: BlueGreenContext
-    language: java
-    deployment: blue_green
-  }
-  RollingService {
-    contexts: RollingContext
-    language: python
-    deployment: rolling
-  }
+    CanaryService {
+        contexts: CanaryContext
+        language: golang
+        deployment: canary
+    }
+    BlueGreenService {
+        contexts: BlueGreenContext
+        language: java
+        deployment: blue_green
+    }
+    RollingService {
+        contexts: RollingContext
+        language: python
+        deployment: rolling
+    }
 }

@@ -34,8 +34,10 @@ import (
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 	"go.uber.org/zap"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -59,6 +61,30 @@ type Server struct {
 		mu     sync.Mutex
 		timers map[string]*time.Timer
 	}
+
+	// dedup state for publishFormatBlocked: the code+message key of the last
+	// "declined to format" reason shown per document URI, so an editor that
+	// re-requests formatting on every autosave does not repeat the identical
+	// popup on every keystroke-driven save until the file is fixed.
+	formatBlocked struct {
+		mu   sync.Mutex
+		last map[string]string
+	}
+}
+
+// NewServerForFormatting constructs a *Server carrying only what Formatting
+// needs (ws and logger), with no jsonrpc2 connection.
+//
+// It exists so a caller outside this package can exercise the real
+// textDocument/formatting handler directly, the same direct-call pattern
+// this package's own formatting_config_test.go uses instead of routing
+// through Serve's real jsonrpc2 pipe -- this repo has a documented history
+// of that harness deadlocking. cmd/craft's CLI/LSP formatting equivalence
+// test is the intended caller: it needs the actual Server.Formatting
+// method, not just the FormatDocumentCheckedWith function both call sites
+// happen to share, since that sharing is exactly the invariant under test.
+func NewServerForFormatting(ws *workspace.Workspace, logger *slog.Logger) *Server {
+	return &Server{ws: ws, logger: logger}
 }
 
 // lspLine converts a 1-based line to a 0-based LSP line number.
@@ -630,10 +656,38 @@ func (s *Server) DidChange(ctx context.Context, params *protocol.DidChangeTextDo
 	return nil
 }
 
+// DidChangeConfiguration is a stub. Formatting configuration comes entirely
+// from .craftfmt (resolved per document; see resolveFmtConfig), never from
+// LSP client configuration, so there is nothing for this handler to react
+// to yet.
 func (s *Server) DidChangeConfiguration(_ context.Context, _ *protocol.DidChangeConfigurationParams) error {
 	return nil
 }
 
+// DidChangeWatchedFiles is a deliberate no-op.
+//
+// It used to drop a per-directory cache of resolveFmtConfig's results
+// whenever a .craftfmt anywhere in the workspace changed. That cache is
+// gone: resolveFmtConfig now calls fmtconfig.Resolve directly on every
+// request, so a .craftfmt edit is visible on the very next format request
+// with nothing to invalidate. See resolveFmtConfig's doc comment for why the
+// cache was removed rather than fixed.
+//
+// The method stays because protocol.Server requires it (it is part of the
+// interface every LSP server implements, not an optional hook this one
+// chose to add), and because a client is free to send this notification
+// unprompted. Nothing here needs to react to it.
+//
+// This also sidesteps a staleness class the cache had regardless of this
+// handler's correctness: it was invalidated only by a client-volunteered
+// didChangeWatchedFiles notification, which this server never requests via
+// dynamic registration, and ServerCapabilities declares no workspace file
+// watching either. The craft-vscode-extension's own file watcher only
+// widened its glob to include .craftfmt (from '**/*.craft' to
+// '**/{*.craft,.craftfmt}') in 0.2.8; before that release, and for any
+// client other than VS Code (nvim, helix, Zed, ...), this notification was
+// simply never sent for a .craftfmt change, so the old cache could go stale
+// for an entire session with no way to invalidate it.
 func (s *Server) DidChangeWatchedFiles(_ context.Context, _ *protocol.DidChangeWatchedFilesParams) error {
 	return nil
 }
@@ -647,6 +701,15 @@ func (s *Server) DidClose(ctx context.Context, params *protocol.DidCloseTextDocu
 		return nil
 	}
 	s.ws.Close(string(params.TextDocument.URI))
+	// Forget any remembered "declined to format" reason for this document.
+	// Without this, formatBlocked.last grows without bound over a long-lived
+	// session (a leak), and worse: a file blocked with reason X, closed
+	// without being fixed, then reopened later still carrying reason X,
+	// would have its stale entry intact -- so the reopened document's first
+	// Formatting request would be suppressed as a repeat by
+	// publishFormatBlocked's dedup, even though the user has never been
+	// told about it in THIS session. See publishFormatBlocked.
+	s.clearFormatBlocked(params.TextDocument.URI)
 	// Re-publish diagnostics for all remaining files: closing a domain file
 	// can resolve or create unresolved-reference diagnostics in service files.
 	for _, f := range s.ws.AllFiles() {
@@ -661,6 +724,15 @@ func (s *Server) DidOpen(ctx context.Context, params *protocol.DidOpenTextDocume
 	}
 	uri := string(params.TextDocument.URI)
 	s.ws.Open(uri, params.TextDocument.Text)
+	// Also cleared here, not just in DidClose: this is belt-and-suspenders
+	// for the same staleness, not a second bug. Clearing on open makes "an
+	// open document's dedup entry reflects only its current session" true
+	// by construction -- it no longer depends on every close path reliably
+	// firing DidClose first (a client that reloads a buffer without an
+	// intervening close/open pair some editors are known to special-case,
+	// or a future code path that opens a document some other way) -- rather
+	// than by reasoning about DidClose's coverage.
+	s.clearFormatBlocked(params.TextDocument.URI)
 	s.notifyLogTrace(ctx, fmt.Sprintf("didOpen: parsed %s", uri))
 	s.scheduleDiagnostics(ctx, uri)
 	return nil
@@ -1324,7 +1396,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 	return ranges, nil
 }
 
-func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
+func (s *Server) Formatting(ctx context.Context, params *protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
 	if params == nil {
 		return nil, nil
 	}
@@ -1332,7 +1404,49 @@ func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormatti
 	if f == nil {
 		return nil, nil
 	}
-	formatted := FormatDocument(f.Content)
+
+	// params.Options (tabSize / insertSpaces) is deliberately never read.
+	// vscode-languageclient's DocumentFormattingFeature sends it on every
+	// format request, but VS Code also ships editor.detectIndentation: true,
+	// which infers tabSize PER FILE from that file's own existing content.
+	// Honouring it would make a 2-space-indented .craft file format at 2 in
+	// the editor and at 4 from `craft fmt` on the CLI -- permanently, with
+	// no error -- and `craft fmt --check` in CI would then contradict what
+	// the author sees on save. .craftfmt (or the built-in defaults, absent
+	// one) is the only source of truth for indent width; the extension
+	// instead declares craft's width to the editor via
+	// contributes.configurationDefaults, shipped in craft-vscode-extension
+	// 0.2.8. See docs/decisions/formatting-configuration.md D6.
+	cfg := fmtconfig.Defaults()
+	if path := documentPath(params.TextDocument.URI); path != "" {
+		resolved, err := s.resolveFmtConfig(path)
+		if err != nil {
+			// Visible, not a silent fallback: an author who mistypes a
+			// .craftfmt key must see that formatting stopped working, not
+			// have the file quietly reformatted under the wrong (default)
+			// config with no explanation. See publishConfigError.
+			s.publishConfigError(ctx, params.TextDocument.URI, err)
+			return nil, nil
+		}
+		cfg = resolved
+	}
+
+	formatted, blocked := FormatDocumentCheckedWith(f.Content, cfg)
+	if blocked != nil {
+		// Visible, not silent: `craft fmt` already reports "skipped, not
+		// formatted: <reason>" on stderr for the identical decision (see
+		// runFmt in cmd/craft/fmt.go). Returning no edits here without also
+		// surfacing that reason would leave an editor user staring at a save
+		// that silently did nothing, with no way to learn why short of
+		// running the CLI separately on the same file.
+		s.publishFormatBlocked(ctx, params.TextDocument.URI, blocked)
+		return nil, nil
+	}
+	// The document parses cleanly enough to format now: clear any
+	// previously remembered block reason for it, so if the SAME reason
+	// recurs later (fixed, then broken again the same way) it is treated as
+	// new rather than swallowed by publishFormatBlocked's dedup.
+	s.clearFormatBlocked(params.TextDocument.URI)
 	if formatted == f.Content {
 		return nil, nil
 	}
@@ -1349,6 +1463,121 @@ func (s *Server) Formatting(_ context.Context, params *protocol.DocumentFormatti
 			NewText: formatted,
 		},
 	}, nil
+}
+
+// documentPath converts an LSP document URI to a filesystem path, or ""
+// when the document has no filesystem path at all -- an untitled buffer,
+// whose URI carries the untitled: scheme rather than file:.
+//
+// uri.New treats any string that does not already start with "file://" as a
+// bare relative path and resolves it against the process's working
+// directory, so uri.New("untitled:Untitled-1").Filename() does not come
+// back empty the way a naive caller might expect -- it comes back as a
+// bogus but non-empty path like "<cwd>/untitled:Untitled-1". Checking the
+// scheme ourselves first is what keeps an untitled buffer routed to the
+// "no path" branch instead of into that lookup.
+func documentPath(u protocol.DocumentURI) string {
+	s := string(u)
+	if !strings.HasPrefix(s, "file://") {
+		return ""
+	}
+	return uri.New(s).Filename()
+}
+
+// resolveFmtConfig resolves the formatting configuration that applies to the
+// document at path.
+//
+// This used to go through a per-directory cache of fmtconfig.Resolve
+// results, invalidated only when DidChangeWatchedFiles saw a .craftfmt
+// change. That invalidation path depends entirely on the client sending
+// that notification for a .craftfmt file, which this server never asks for:
+// Initialized does not register dynamic file watching, and
+// InitializeResult.Capabilities declares none either. In practice the only
+// client that ever sent it was craft-vscode-extension >= 0.2.8, whose file
+// watcher glob happens to include .craftfmt. Any other client -- an older
+// extension build, nvim, helix, Zed -- could edit .craftfmt and never see
+// the change reflected in the editor for the rest of the session, while
+// `craft fmt` on the same file picked it up immediately: exactly the
+// CLI/LSP divergence this whole configuration design exists to prevent.
+//
+// fmtconfig.Resolve is a handful of os.Stat calls walking up from the
+// document's directory, on a user-initiated, once-per-save operation. That
+// cost does not justify an entire class of staleness, so there is no cache
+// here any more: every request resolves fresh.
+func (s *Server) resolveFmtConfig(path string) (fmtconfig.Config, error) {
+	return fmtconfig.Resolve(path)
+}
+
+// publishConfigError makes a .craftfmt resolution failure visible to the
+// author, instead of silently formatting with the built-in defaults, which
+// would leave a typo in .craftfmt looking as though it had no effect at all.
+//
+// It uses window/showMessage rather than folding the error into the
+// document's diagnostics list: publishDiagnostics already owns one specific
+// diagnostics set (parse + sema) per URI, republished on its own debounce
+// timer by scheduleDiagnostics, and a .craftfmt problem is a different kind
+// of error -- a workspace configuration problem, not a problem with this
+// document's own syntax. Mixing the two would mean the next debounced
+// diagnostics publish (150ms after any keystroke) silently clobbers the
+// config error. A one-shot message is not tied to that lifecycle and is
+// guaranteed to be seen once.
+func (s *Server) publishConfigError(ctx context.Context, docURI protocol.DocumentURI, err error) {
+	msg := fmt.Sprintf("craft: could not resolve .craftfmt for %s: %v", docURI, err)
+	s.logger.Warn("formatting: config resolution failed", "uri", string(docURI), "err", err)
+	if notifyErr := s.conn.Notify(ctx, protocol.MethodWindowShowMessage, &protocol.ShowMessageParams{
+		Type:    protocol.MessageTypeError,
+		Message: msg,
+	}); notifyErr != nil {
+		s.logger.Warn("publishConfigError: notify failed", "uri", string(docURI), "err", notifyErr)
+	}
+}
+
+// publishFormatBlocked makes it visible, via the same window/showMessage
+// mechanism as publishConfigError, when the formatter declined to format a
+// document -- the LSP counterpart of the "skipped, not formatted: <reason>"
+// line `craft fmt` writes to stderr for the same decision. Without this, an
+// editor user who saves a file the formatter cannot safely rewrite sees
+// nothing at all: no edit, no error, no explanation.
+//
+// The reason is deduplicated per document URI: a client with
+// files.autoSave: afterDelay can re-request formatting on every
+// keystroke-driven save, and a file with a standing parse error would
+// otherwise repeat the identical popup on every one of them until the
+// author fixes it. Only a NEW or CHANGED reason -- a different diagnostic
+// code or message -- gets a fresh notification; the same reason back to
+// back is suppressed.
+func (s *Server) publishFormatBlocked(ctx context.Context, docURI protocol.DocumentURI, diag *craft.Diagnostic) {
+	key := diag.Code + "\x00" + diag.Message
+
+	s.formatBlocked.mu.Lock()
+	if s.formatBlocked.last == nil {
+		s.formatBlocked.last = make(map[string]string)
+	}
+	repeat := s.formatBlocked.last[string(docURI)] == key
+	s.formatBlocked.last[string(docURI)] = key
+	s.formatBlocked.mu.Unlock()
+
+	s.logger.Warn("formatting: declined", "uri", string(docURI), "code", diag.Code, "msg", diag.Message)
+	if repeat {
+		return
+	}
+
+	msg := fmt.Sprintf("craft: %s: skipped, not formatted: %s [%s]", docURI, diag.Message, diag.Code)
+	if notifyErr := s.conn.Notify(ctx, protocol.MethodWindowShowMessage, &protocol.ShowMessageParams{
+		Type:    protocol.MessageTypeWarning,
+		Message: msg,
+	}); notifyErr != nil {
+		s.logger.Warn("publishFormatBlocked: notify failed", "uri", string(docURI), "err", notifyErr)
+	}
+}
+
+// clearFormatBlocked forgets any block reason remembered for docURI, so a
+// later occurrence of the same reason (fixed, then broken again the same
+// way) is not treated as a repeat by publishFormatBlocked's dedup.
+func (s *Server) clearFormatBlocked(docURI protocol.DocumentURI) {
+	s.formatBlocked.mu.Lock()
+	delete(s.formatBlocked.last, string(docURI))
+	s.formatBlocked.mu.Unlock()
 }
 
 func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {

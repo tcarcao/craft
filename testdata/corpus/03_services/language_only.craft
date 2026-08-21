@@ -1,6 +1,6 @@
 services {
-  ReportService {
-    contexts: ReportGeneration
-    language: python
-  }
+    ReportService {
+        contexts: ReportGeneration
+        language: python
+    }
 }

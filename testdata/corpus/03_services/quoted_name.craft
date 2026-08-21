@@ -1,6 +1,6 @@
 services {
-  "Order Service" {
-    contexts: OrderManagement, OrderFulfilment
-    data-stores: posgres
-  }
+    "Order Service" {
+        contexts: OrderManagement, OrderFulfilment
+        data-stores: posgres
+    }
 }

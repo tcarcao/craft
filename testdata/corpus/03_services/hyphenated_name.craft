@@ -1,6 +1,6 @@
 services {
-  service-re-go-vas {
-    contexts: VASScheduling
-    data-stores: posgres, dynamodb
-  }
+    service-re-go-vas {
+        contexts: VASScheduling
+        data-stores: posgres, dynamodb
+    }
 }

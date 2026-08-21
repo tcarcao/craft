@@ -5,26 +5,40 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
-// FormatDocument formats a Craft DSL source string to canonical form:
+// FormatDocument formats a Craft DSL source string to canonical form under
+// the built-in defaults:
 //   - top-level declarations separated by a blank line
-//   - block content indented 2 spaces per level
+//   - block content indented per fmtconfig.Defaults().Indent spaces per level
 //   - colons: no space before, one space after
 //   - commas: no space before, one space after
-//   - use_case blocks formatted with 2-space when / 4-space actions / blank line between scenarios
+//   - use_case blocks formatted with when at scenario indent / actions one
+//     level deeper / blank line between scenarios
 //   - arch blocks preserved verbatim (free-form component chain syntax)
 func FormatDocument(content string) string {
-	out, _ := FormatDocumentChecked(content)
+	return FormatDocumentWith(content, fmtconfig.Defaults())
+}
+
+// FormatDocumentWith is FormatDocument under an explicit configuration.
+func FormatDocumentWith(content string, cfg fmtconfig.Config) string {
+	out, _ := FormatDocumentCheckedWith(content, cfg)
 	return out
 }
 
-// FormatDocumentChecked is FormatDocument plus the reason it declined to
-// format.
+// FormatDocumentChecked is FormatDocumentCheckedWith under the built-in
+// defaults.
+func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
+	return FormatDocumentCheckedWith(content, fmtconfig.Defaults())
+}
+
+// FormatDocumentCheckedWith is FormatDocumentWith plus the reason it declined
+// to format.
 //
-// FormatDocument returns its input unchanged when the parse produced a
+// FormatDocumentWith returns its input unchanged when the parse produced a
 // diagnostic too severe to re-render from, which a caller holding only the
 // returned string cannot tell apart from "already formatted". `craft fmt`
 // needs that distinction: silently leaving a broken file untouched, or
@@ -32,7 +46,7 @@ func FormatDocument(content string) string {
 //
 // The second result is nil when the document was formatted, and otherwise the
 // diagnostic that blocked it.
-func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
+func FormatDocumentCheckedWith(content string, cfg fmtconfig.Config) (string, *craft.Diagnostic) {
 	gn, _, diags := syntax.Parse(content)
 	for _, d := range diags {
 		if bailsFormatting(d) {
@@ -62,7 +76,7 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 				}
 				if isCommentKind(tok.Kind()) {
 					if !first {
-						sb.WriteString(rootGapSeparator(gap))
+						sb.WriteString(rootGapSeparator(gap, cfg))
 					}
 					first = false
 					sb.WriteString(tok.Text())
@@ -98,8 +112,35 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			// by blank lines, and top-level declarations are always joined by
 			// one, so no run could ever have spanned two declarations anyway.
 			var decl strings.Builder
-			interior, commentEnd := writeTokens(&decl, node)
-			sb.WriteString(alignAnnotations(decl.String(), interior, commentEnd))
+			interior, commentEnd, commentStart := writeTokens(&decl, node, cfg)
+			text := decl.String()
+			// Annotations align first, and this order is load-bearing rather
+			// than incidental. The two passes act on disjoint line sets:
+			// splitAnnotation only accepts a line that ends in `]`, which means
+			// it never accepts a line carrying a trailing comment, and
+			// splitTrailingComment only accepts a line with a recorded comment
+			// start. That disjointness is what keeps commentEnd/commentStart
+			// valid across both passes, since neither pass ever rewrites a line
+			// the other one is about to read.
+			//
+			// Reversing the order breaks that. The comment pass would shift a
+			// line like `A asks B to c  // see note [1]` before the annotation
+			// pass read it, leaving its recorded commentEnd too small — and a
+			// commentEnd that is too small is exactly the direction
+			// splitAnnotation's own doc comment warns about: comment text gets
+			// read as an annotation and the whitespace inside a comment gets
+			// rewritten, which is content corruption rather than a missed
+			// alignment.
+			//
+			// A line carrying both an annotation and a trailing comment is a
+			// separate, documented limitation: splitAnnotation cannot see the
+			// annotation once a trailing comment follows it, so such a line
+			// joins the comment column only and keeps its authored annotation
+			// spacing. See docs/decisions/formatting-configuration.md, "Cell
+			// precedence, and a documented limitation".
+			text = alignCells(text, interior, commentEnd, splitAnnotation, cfg.Align.OpAnnotation, annotationMinGap, cfg)
+			text = alignCells(text, interior, commentStart, splitTrailingComment, cfg.Align.TrailingComment, trailingCommentMinGap, cfg)
+			sb.WriteString(text)
 		}
 	}
 
@@ -226,12 +267,11 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // formatter has never seen still round-trips, because nothing here inspects
 // what a token means.
 //
-// It returns two pieces of bookkeeping, both for alignAnnotations, and both
-// for the same reason: that pass is line oriented, so it sees the walker's
-// output only as text and cannot recover where a token began or ended. The
-// walker is the one place that knows both exactly, so it is the place that
-// answers, rather than leaving a downstream pass to guess from the shape of a
-// line.
+// It returns three pieces of bookkeeping, all for alignCells, and all for the
+// same reason: that pass is line oriented, so it sees the walker's output
+// only as text and cannot recover where a token began or ended. The walker is
+// the one place that knows both exactly, so it is the place that answers,
+// rather than leaving a downstream pass to guess from the shape of a line.
 //
 // interior is the set of written line indices that fall INSIDE a token rather
 // than between two of them: every line a multi-line token spans EXCEPT its
@@ -260,16 +300,58 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // the line's length and every bracket on the line falls before it. A block
 // comment closing partway along a line yields the offset just past its `*/`,
 // which is exactly where ordinary content resumes.
-func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map[int]int) {
+//
+// commentStart maps a written line index to the BYTE offset where a trailing
+// comment BEGINS on that line, for splitTrailingComment. It is recorded only
+// for SyntaxKindLineComment and SyntaxKindDocComment: both run to end of line
+// by definition (the lexer stops each at the next '\n'), so either one is
+// always the last thing on its line, and membership in this map is itself
+// proof of that — which is exactly what splitTrailingComment's caller needs
+// and cannot otherwise establish from the text alone.
+//
+// SyntaxKindBlockComment is excluded entirely, even when it opens and closes
+// on the very line it is written: `A /* inline */ asks B for c` has real
+// content after the comment closes, so recording a start for it here would
+// hand the aligner a false trailing cell and the statement would get shredded
+// across a column. Telling that case apart from a genuinely trailing block
+// comment needs lookahead past the close to see whether anything follows,
+// which this walker deliberately does not buy — its design premise is
+// locality, and the accepted cost is that a trailing block comment is never
+// column-aligned and stays at one space. A block comment that spans multiple
+// lines has the same problem twice over: its start line is one interior
+// already excludes, and by the time the token closes, line has advanced past
+// the newlines it carries, so recording a start there would key a first
+// line's column against a last line's index.
+//
+// A line absent from commentStart has no trailing comment recorded for it,
+// which reads as zero, matching splitTrailingComment's "start of zero means
+// none".
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Config) (map[int]bool, map[int]int, map[int]int) {
 	braceDepth := 0
 	scenarioDepth := 0
 	gap := ""
 	var prev *syntax.SyntaxToken
+	// prevReal is prev with comments skipped: the last non-comment,
+	// non-whitespace token written. Continuation state is computed from it
+	// rather than from prev, because a standalone or trailing comment sitting
+	// between a comma (or field colon) and the next value must not look like
+	// the value's own predecessor: `contexts: A,\n// note\nB` and
+	// `contexts: A, // why\nB` both need the comment AND B to keep hanging,
+	// and prev alone would see the comment as prev for B, which carries
+	// neither kind and would wrongly reset continuing to false.
+	var prevReal *syntax.SyntaxToken
 	prevLedScenario := false
+
+	// continuing says the token about to be written carries on a property
+	// value the author wrapped onto another line, rather than starting a new
+	// statement. separatorFor cannot work this out: it sees one token pair and
+	// a wrapped `contexts: A,\n B` looks exactly like two statements.
+	continuing := false
 
 	line := 0
 	var interior map[int]bool
 	var commentEnd map[int]int
+	var commentStart map[int]int
 
 	// col is the byte length of the output line currently being built, over
 	// everything this walker has written. It is tracked incrementally rather
@@ -340,12 +422,49 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map
 		// scenario must not ask for a second.
 		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario
 
-		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario)
+		// A wrapped value continues only across a line break that follows a
+		// comma or a field colon: `contexts: A,\n B` and `contexts:\n A` both
+		// continue, but `A\n data-stores: X` does not, because nothing before
+		// the break marks a value as unfinished. Checked only when the gap
+		// actually carries a newline, so a same-line comma or colon (already
+		// handled by separatorFor's own tight-spacing rules) never sets it.
+		// Read from prevReal, not prev, so a comment sitting in the middle of
+		// a wrapped list does not look like the value's own predecessor; see
+		// the comment at prevReal's declaration above.
+		//
+		// This recompute is what actually prevents continuation state from
+		// leaking across a block boundary: a `{` or `}` reached with a
+		// newline in its gap has neither a comma nor a field colon as
+		// prevReal, so continuing is always recomputed false there. The
+		// explicit clear below on `{`/`}` is defensive, not load-bearing —
+		// `}` never even reaches separatorFor's newline switch (formatsep.go's
+		// RBrace rule returns before it), and an `{` immediately after a
+		// comma or colon does not parse, so the one shape the clear would
+		// change cannot occur. It stays anyway as a guard against a future
+		// separatorFor change removing that early return.
+		if strings.Contains(gap, "\n") {
+			continuing = prevReal != nil &&
+				(prevReal.Kind() == syntax.SyntaxKindComma ||
+					(prevReal.Kind() == syntax.SyntaxKindColon && !isRefColon(*prevReal)))
+		}
+		if tok.Kind() == syntax.SyntaxKindLBrace || tok.Kind() == syntax.SyntaxKindRBrace {
+			continuing = false
+		}
+
+		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario, cfg, continuing)
 		sb.WriteString(sep)
 		sb.WriteString(tok.Text())
 
 		line += strings.Count(sep, "\n")
 		advance(sep)
+
+		// The token's own start, captured before either advance below moves
+		// col past its text or line past any newlines it carries. This is the
+		// only point at which both are simultaneously "where this token
+		// begins" rather than "where it ends" or "where the token after it
+		// begins".
+		startCol, startLine := col, line
+
 		if n := strings.Count(tok.Text(), "\n"); n > 0 {
 			// Every line this token runs off the end of is interior: its own
 			// first line (line) and each line in between. Only the last line
@@ -381,6 +500,31 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map
 				commentEnd = make(map[int]int, 1)
 			}
 			commentEnd[line] = col
+
+			// Where a trailing comment BEGINS is what splitTrailingComment
+			// needs, and only a comment kind that is PROVABLY the last thing
+			// on its line can answer that safely. A line comment and a doc
+			// comment both run to end of line by construction (the lexer
+			// stops each at the next newline), so recording one here is not
+			// a guess: nothing can follow it on the same line.
+			//
+			// A block comment is excluded even when it opens and closes on
+			// this same line, because something real can and does follow it
+			// there (`A /* inline */ asks B for c`), and admitting that would
+			// hand the aligner a false trailing cell. See the paragraph above
+			// writeTokens's signature for the full reasoning, including why
+			// a multi-line block comment is excluded too.
+			//
+			// The outer isCommentKind guard already narrowed tok.Kind() to
+			// one of the three comment kinds, so excluding block comments
+			// here only needs to rule OUT SyntaxKindBlockComment, not spell
+			// out the other two by name again.
+			if tok.Kind() != syntax.SyntaxKindBlockComment {
+				if commentStart == nil {
+					commentStart = make(map[int]int, 1)
+				}
+				commentStart[startLine] = startCol
+			}
 		}
 
 		if tok.Kind() == syntax.SyntaxKindLBrace {
@@ -398,11 +542,14 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map
 
 		cur := tok
 		prev = &cur
+		if !isCommentKind(tok.Kind()) {
+			prevReal = &cur
+		}
 		gap = ""
 		prevLedScenario = leadsScenario
 	}
 
-	return interior, commentEnd
+	return interior, commentEnd, commentStart
 }
 
 // nextRealTokenIsWhen reports whether the first token after i that carries

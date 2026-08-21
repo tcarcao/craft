@@ -1,6 +1,6 @@
 services {
-  SubscriptionsApi {
-    catalog_ref: subscriptions-api
-    catalog_ref: subscriptions-api-2
-  }
+    SubscriptionsApi {
+        catalog_ref: subscriptions-api
+        catalog_ref: subscriptions-api-2
+    }
 }

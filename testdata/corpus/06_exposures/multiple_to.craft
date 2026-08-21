@@ -1,4 +1,5 @@
 actor user Business_User
+
 actor user Customer_Support
 
 exposure default {

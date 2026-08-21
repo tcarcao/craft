@@ -1,9 +1,9 @@
 use_case "User Login" {
-  when Customer logs in
-    Auth validates credentials
+    when Customer logs in
+        Auth validates credentials
 }
 
 use_case "User Login" {
-  when Customer logs in again
-    Auth validates again
+    when Customer logs in again
+        Auth validates again
 }

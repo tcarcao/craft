@@ -1,8 +1,10 @@
 package lsp
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
@@ -29,7 +31,7 @@ func sepTok(t *testing.T, src string, idx int) syntax.SyntaxToken {
 
 func TestSeparatorFor_FirstTokenHasNoSeparator(t *testing.T) {
 	curr := sepTok(t, "domain re {\n  Billing\n}\n", 0)
-	if got := separatorFor(nil, "", curr, 0, false); got != "" {
+	if got := separatorFor(nil, "", curr, 0, false, fmtconfig.Defaults(), false); got != "" {
 		t.Errorf("separatorFor(nil, ...) = %q, want empty", got)
 	}
 }
@@ -38,8 +40,8 @@ func TestSeparatorFor_GapWithNewlineBreaksTheLine(t *testing.T) {
 	src := "domain re {\n  Billing\n}\n"
 	prev := sepTok(t, src, 2) // {
 	curr := sepTok(t, src, 3) // Billing
-	if got := separatorFor(&prev, "\n  ", curr, 1, false); got != "\n  " {
-		t.Errorf("got %q, want %q", got, "\n  ")
+	if got := separatorFor(&prev, "\n  ", curr, 1, false, fmtconfig.Defaults(), false); got != "\n    " {
+		t.Errorf("got %q, want %q", got, "\n    ")
 	}
 }
 
@@ -52,7 +54,7 @@ func TestSeparatorFor_BlankLineRunCollapsesToOne(t *testing.T) {
 	src := "domain re {\n  Billing\n\n\n\n  Invoicing\n}\n"
 	prev := sepTok(t, src, 3)
 	curr := sepTok(t, src, 4)
-	if got := separatorFor(&prev, "\n\n\n\n", curr, 1, false); got != "\n\n  " {
+	if got := separatorFor(&prev, "\n\n\n\n", curr, 1, false, fmtconfig.Defaults(), false); got != "\n\n    " {
 		t.Errorf("got %q, want one blank line then indent", got)
 	}
 }
@@ -61,7 +63,7 @@ func TestSeparatorFor_SameLineRunOfSpacesCollapsesToOne(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x\n}\n"
 	prev := sepTok(t, src, 4)
 	curr := sepTok(t, src, 5)
-	if got := separatorFor(&prev, "     ", curr, 2, false); got != " " {
+	if got := separatorFor(&prev, "     ", curr, 2, false, fmtconfig.Defaults(), false); got != " " {
 		t.Errorf("got %q, want a single space", got)
 	}
 }
@@ -86,7 +88,7 @@ func TestSeparatorFor_AdjacentTokensStayAdjacent(t *testing.T) {
 	if !found {
 		t.Fatal("no / token found in a qualified ref")
 	}
-	if got := separatorFor(&prev, "", curr, 2, false); got != "" {
+	if got := separatorFor(&prev, "", curr, 2, false, fmtconfig.Defaults(), false); got != "" {
 		t.Errorf("got %q, want empty so re/billing stays joined", got)
 	}
 }
@@ -99,7 +101,7 @@ func TestSeparatorFor_OneSpaceBeforeAnOpeningBrace(t *testing.T) {
 	src := "service Foo{contexts: A}\n"
 	prev := sepTok(t, src, 1) // Foo
 	curr := sepTok(t, src, 2) // {
-	if got := separatorFor(&prev, "", curr, 0, false); got != " " {
+	if got := separatorFor(&prev, "", curr, 0, false, fmtconfig.Defaults(), false); got != " " {
 		t.Errorf("got %q, want a single space so `service Foo{` becomes `service Foo {`", got)
 	}
 }
@@ -111,7 +113,7 @@ func TestSeparatorFor_AuthorBraceOnItsOwnLineSurvives(t *testing.T) {
 	src := "service Foo\n{\n  contexts: A\n}\n"
 	prev := sepTok(t, src, 1) // Foo
 	curr := sepTok(t, src, 2) // {
-	if got := separatorFor(&prev, "\n", curr, 0, false); got != "\n" {
+	if got := separatorFor(&prev, "\n", curr, 0, false, fmtconfig.Defaults(), false); got != "\n" {
 		t.Errorf("got %q, want the author's line break preserved", got)
 	}
 }
@@ -124,7 +126,7 @@ func TestSeparatorFor_NewLineAfterAClosingBrace(t *testing.T) {
 	src := "domains{Auth{Login}Commerce{Cart}}\n"
 	prev := sepTok(t, src, 5) // } closing Auth
 	curr := sepTok(t, src, 6) // Commerce
-	if got := separatorFor(&prev, "", curr, 1, false); got != "\n  " {
+	if got := separatorFor(&prev, "", curr, 1, false, fmtconfig.Defaults(), false); got != "\n    " {
 		t.Errorf("got %q, want a newline and one level of indent", got)
 	}
 }
@@ -135,7 +137,7 @@ func TestSeparatorFor_BlankLineAfterAClosingBraceSurvives(t *testing.T) {
 	src := "domains {\n  Auth {\n    Login\n  }\n\n  Commerce {\n    Cart\n  }\n}\n"
 	prev := sepTok(t, src, 5) // } closing Auth
 	curr := sepTok(t, src, 6) // Commerce
-	if got := separatorFor(&prev, "\n\n  ", curr, 1, false); got != "\n\n  " {
+	if got := separatorFor(&prev, "\n\n  ", curr, 1, false, fmtconfig.Defaults(), false); got != "\n\n    " {
 		t.Errorf("got %q, want the author's blank line preserved", got)
 	}
 }
@@ -154,7 +156,7 @@ func TestSeparatorFor_SeveralStatementsOnOneLineStayThere(t *testing.T) {
 	src := "actors{user Alice system Bot}\n"
 	prev := sepTok(t, src, 3) // Alice
 	curr := sepTok(t, src, 4) // system
-	if got := separatorFor(&prev, " ", curr, 1, false); got != " " {
+	if got := separatorFor(&prev, " ", curr, 1, false, fmtconfig.Defaults(), false); got != " " {
 		t.Errorf("got %q, want a single space: statement boundaries are not inferred", got)
 	}
 }
@@ -181,7 +183,7 @@ func TestSeparatorFor_TrailingCommaOrColonDoesNotDefeatTheBraceBreak(t *testing.
 			if curr.Kind() != syntax.SyntaxKindRBrace {
 				t.Fatalf("fixture drift: token %d is %q, want `}`", tc.idx+1, curr.Text())
 			}
-			if got := separatorFor(&prev, "", curr, 1, false); got != "\n  " {
+			if got := separatorFor(&prev, "", curr, 1, false, fmtconfig.Defaults(), false); got != "\n    " {
 				t.Errorf("after %q: got %q, want the forced break before `}`", prev.Text(), got)
 			}
 		})
@@ -192,7 +194,7 @@ func TestSeparatorFor_TrailingCommaOrColonDoesNotDefeatTheBraceBreak(t *testing.
 // the document level, which is where it was visible.
 func TestFormatDocument_TrailingCommaBeforeBraceStillExpands(t *testing.T) {
 	got := FormatDocument("services{Foo{contexts:A,}}")
-	want := "services {\n  Foo {\n    contexts: A,\n  }\n}\n"
+	want := "services {\n    Foo {\n        contexts: A,\n    }\n}\n"
 	if got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
@@ -211,7 +213,7 @@ func TestSeparatorFor_NoSpaceBeforeColonOrComma(t *testing.T) {
 				continue
 			}
 			prev := toks[i-1]
-			if got := separatorFor(&prev, " ", toks[i], 2, false); got != "" {
+			if got := separatorFor(&prev, " ", toks[i], 2, false, fmtconfig.Defaults(), false); got != "" {
 				t.Errorf("before %q: got %q, want empty", want, got)
 			}
 			break
@@ -236,7 +238,7 @@ func TestSeparatorFor_FieldColonGetsOneSpaceAfter(t *testing.T) {
 				break
 			}
 		}
-		if got := separatorFor(&toks[i], "", next, 2, false); got != " " {
+		if got := separatorFor(&toks[i], "", next, 2, false, fmtconfig.Defaults(), false); got != " " {
 			t.Errorf("after a field colon: got %q, want one space", got)
 		}
 		return
@@ -270,18 +272,18 @@ func TestSeparatorFor_ScenarioAlwaysGetsABlankLine(t *testing.T) {
 	// Both are scenario starts as far as the walker is concerned. The first is
 	// held back by prev being `{`, not by startsScenario.
 	prevOfFirst := prevSignificant(toks, firstWhen)
-	if got := separatorFor(prevOfFirst, "\n  ", toks[firstWhen], 1, true); got != "\n  " {
+	if got := separatorFor(prevOfFirst, "\n  ", toks[firstWhen], 1, true, fmtconfig.Defaults(), false); got != "\n    " {
 		t.Errorf("first when: got %q, want a plain newline (it opens the body)", got)
 	}
 
 	prevOfSecond := prevSignificant(toks, secondWhen)
-	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1, true); got != "\n\n  " {
+	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1, true, fmtconfig.Defaults(), false); got != "\n\n    " {
 		t.Errorf("second when: got %q, want a blank line before the scenario", got)
 	}
 
 	// A `when` whose leading comment already opened the scenario asks for no
 	// second blank line, which is what startsScenario=false expresses.
-	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1, false); got != "\n  " {
+	if got := separatorFor(prevOfSecond, "\n  ", toks[secondWhen], 1, false, fmtconfig.Defaults(), false); got != "\n    " {
 		t.Errorf("when after its own leading comment: got %q, want a plain newline", got)
 	}
 }
@@ -334,19 +336,8 @@ func TestSeparatorFor_RefColonStaysTight(t *testing.T) {
 	}
 
 	// The ref colon must NOT get a space after it, so adjacent tokens stay joined
-	if got := separatorFor(&toks[refColonIdx], "", nextTok, 1, false); got != "" {
+	if got := separatorFor(&toks[refColonIdx], "", nextTok, 1, false, fmtconfig.Defaults(), false); got != "" {
 		t.Errorf("after ref colon: got %q, want empty so bc:billing stays joined", got)
-	}
-}
-
-func TestIndentFor(t *testing.T) {
-	for depth, want := range map[int]string{0: "", 1: "  ", 3: "      "} {
-		if got := indentFor(depth); got != want {
-			t.Errorf("indentFor(%d) = %q, want %q", depth, got, want)
-		}
-	}
-	if got := indentFor(-1); got != "" {
-		t.Errorf("indentFor(-1) = %q, want empty (must not panic)", got)
 	}
 }
 
@@ -361,7 +352,7 @@ func TestSeparatorFor_LBraceForcesNewlineAfter(t *testing.T) {
 		if toks[i-1].Kind() != syntax.SyntaxKindLBrace {
 			continue
 		}
-		if got := separatorFor(&toks[i-1], "", toks[i], 1, false); got != "\n  " {
+		if got := separatorFor(&toks[i-1], "", toks[i], 1, false, fmtconfig.Defaults(), false); got != "\n    " {
 			t.Errorf("after {: got %q, want a newline plus indent", got)
 		}
 		return
@@ -379,10 +370,169 @@ func TestSeparatorFor_RBraceForcesNewlineBefore(t *testing.T) {
 		if toks[i].Kind() != syntax.SyntaxKindRBrace {
 			continue
 		}
-		if got := separatorFor(&toks[i-1], "", toks[i], 0, false); got != "\n" {
+		if got := separatorFor(&toks[i-1], "", toks[i], 0, false, fmtconfig.Defaults(), false); got != "\n" {
 			t.Errorf("before }: got %q, want a newline at depth 0", got)
 		}
 		return
 	}
 	t.Fatal("no RBrace found")
+}
+
+// TestIndentForRespectsConfig pins both the basic depth-to-width mapping and
+// that indentFor uses the configured width rather than a hardcoded one, and
+// confirms the zero-floor still holds once depth is no longer the only
+// input. This absorbed the former TestIndentFor, whose depth-1/depth-3
+// cases duplicated what this test already covers at depth 2 (indentFor has
+// no depth-specific branching, so one non-trivial depth under each config
+// is exactly as strong as three) once its own doc comment's claim of
+// pinning "its own cfg rather than ... fmtconfig.Defaults()" turned out to
+// be false: the test body called fmtconfig.Defaults() directly.
+func TestIndentForRespectsConfig(t *testing.T) {
+	four := fmtconfig.Defaults()
+	two := fmtconfig.Defaults()
+	two.Indent = 2
+
+	if got := indentFor(1, four); got != "    " {
+		t.Errorf("indentFor(1, indent=4) = %q, want 4 spaces", got)
+	}
+	if got := indentFor(3, four); got != "            " {
+		t.Errorf("indentFor(3, indent=4) = %q, want 12 spaces", got)
+	}
+	if got := indentFor(2, four); got != "        " {
+		t.Errorf("indentFor(2, indent=4) = %q, want 8 spaces", got)
+	}
+	if got := indentFor(2, two); got != "    " {
+		t.Errorf("indentFor(2, indent=2) = %q, want 4 spaces", got)
+	}
+	if got := indentFor(0, four); got != "" {
+		t.Errorf("indentFor(0) = %q, want empty", got)
+	}
+	if got := indentFor(-1, four); got != "" {
+		t.Errorf("indentFor(-1) = %q, want empty (must not panic, floors at zero)", got)
+	}
+}
+
+func TestWrappedListContinuationHangs(t *testing.T) {
+	src := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A, B,\n" +
+		"        C, D\n" +
+		"    }\n" +
+		"}\n"
+	want := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A, B,\n" +
+		"            C, D\n" +
+		"    }\n" +
+		"}\n"
+	if got := FormatDocument(src); got != want {
+		t.Errorf("FormatDocument() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestContinuationIndentIsIdempotent(t *testing.T) {
+	src := "services {\n    Foo {\n        contexts: A, B,\n        C\n    }\n}\n"
+	once := FormatDocument(src)
+	twice := FormatDocument(once)
+	if once != twice {
+		t.Errorf("not idempotent:\nonce:\n%s\ntwice:\n%s", once, twice)
+	}
+}
+
+func TestContinuationDoesNotMoveWhenEarlierLineWidens(t *testing.T) {
+	// The continuation column must come from depth, never from the measured
+	// column of the line above. Widening the key must not move it.
+	narrow := FormatDocument("services {\n    F {\n        contexts: A,\n        B\n    }\n}\n")
+	wide := FormatDocument("services {\n    F {\n        data-stores: A,\n        B\n    }\n}\n")
+	narrowCont := lineWithPrefix(t, narrow, "B")
+	wideCont := lineWithPrefix(t, wide, "B")
+	if narrowCont != wideCont {
+		t.Errorf("continuation moved with key width: %q vs %q", narrowCont, wideCont)
+	}
+}
+
+func lineWithPrefix(t *testing.T, s, token string) string {
+	t.Helper()
+	for _, l := range strings.Split(s, "\n") {
+		if strings.TrimSpace(l) == token {
+			return l
+		}
+	}
+	t.Fatalf("no line %q in\n%s", token, s)
+	return ""
+}
+
+// TestContinuationIndentDerivesFromConfig pins the continuation column to
+// indent*depth + continuation_indent as a computed value, rather than only
+// checking two similar cases land on the same line (which
+// TestContinuationDoesNotMoveWhenEarlierLineWidens does, and still earns its
+// place: it is the one thing here that rules out visual alignment under the
+// value). Under fmtconfig.Defaults(), Indent and ContinuationIndent are both
+// 4, so no test that only exercises the defaults can tell apart a correct
+// contIndent from one that mistakenly reads cfg.Indent twice. Varying
+// ContinuationIndent independently of a fixed Indent closes that gap: both
+// wrong implementations described above would produce 12 for both cases
+// below, not 10 and then 14.
+func TestContinuationIndentDerivesFromConfig(t *testing.T) {
+	src := "services {\n    F {\n        contexts: A,\n        B\n    }\n}\n"
+	const depth = 2 // services (1) -> F (2), where contexts: lives.
+
+	for _, contIndent := range []int{2, 6} {
+		cfg := fmtconfig.Defaults()
+		cfg.Indent = 4
+		cfg.ContinuationIndent = contIndent
+
+		got := lineWithPrefix(t, FormatDocumentWith(src, cfg), "B")
+		want := strings.Repeat(" ", cfg.Indent*depth+contIndent) + "B"
+		if got != want {
+			t.Errorf("ContinuationIndent=%d: got %q, want %q", contIndent, got, want)
+		}
+	}
+}
+
+// TestWrappedListContinuationSurvivesStandaloneComment guards the shape the
+// brief specifically called out and the first review round found broken: a
+// comment on its own line between the comma and the next value. prev alone
+// would see the comment, not the comma, as the token before B, and B would
+// wrongly fall back to block depth. Both the comment and B must hang at the
+// same continuation column, since the comment does not end the wrapped list.
+func TestWrappedListContinuationSurvivesStandaloneComment(t *testing.T) {
+	src := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A,\n" +
+		"        // note\n" +
+		"        B\n" +
+		"    }\n" +
+		"}\n"
+	want := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A,\n" +
+		"            // note\n" +
+		"            B\n" +
+		"    }\n" +
+		"}\n"
+	if got := FormatDocument(src); got != want {
+		t.Errorf("FormatDocument() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestWrappedListContinuationSurvivesTrailingComment is the second shape from
+// the same review finding: a trailing comment on the comma's own line. B
+// still follows a comma once the comment is skipped, so it must still hang.
+func TestWrappedListContinuationSurvivesTrailingComment(t *testing.T) {
+	src := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A, // why\n" +
+		"        B\n" +
+		"    }\n" +
+		"}\n"
+	want := "services {\n" +
+		"    Foo {\n" +
+		"        contexts: A, // why\n" +
+		"            B\n" +
+		"    }\n" +
+		"}\n"
+	if got := FormatDocument(src); got != want {
+		t.Errorf("FormatDocument() =\n%s\nwant\n%s", got, want)
+	}
 }

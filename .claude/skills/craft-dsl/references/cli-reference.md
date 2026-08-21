@@ -161,15 +161,20 @@ craft inspect docs/payments.craft --format json | jq '.services'
 craft fmt <files...> [flags]
 ```
 
-Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies 2-space indent, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations across each contiguous run.
+Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies a 4-space indent by default, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations and trailing `//` comments, each aligned across its own contiguous run (default scope `block`: a run ends at a blank line, a `{`, a `}`, or a comment-only line).
 
-Comments stay where the author put them, including a trailing comment at the end of an action line. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+Comments stay on the line the author put them, including a trailing comment at the end of an action line, though its column may shift to align with others in the same block. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved, and its continuation hangs at block indent plus `continuation_indent` (default 4) rather than resetting to block depth. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+
+Indent width, continuation indent, and comment alignment scope are configurable per file via the nearest ancestor `.craftfmt` (TOML), or overridden per invocation with the flags below; a flag overrides only the field it names, and only when actually passed.
 
 If a file has a parse error too severe to re-render from, `craft fmt` leaves it untouched and reports it as skipped rather than silently rewriting it or reporting it as clean.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--check` | false | Write nothing; name each unformatted file and exit non-zero |
+| `--indent` | unset (falls back to `.craftfmt`, or 4) | Indent width in spaces; overrides `.craftfmt` |
+| `--continuation-indent` | unset (falls back to `.craftfmt`, or 4) | Extra indent for a wrapped list continuation; overrides `.craftfmt` |
+| `--align-trailing-comment` | unset (falls back to `.craftfmt`, or `block`) | Trailing comment alignment scope: `off`, `strict`, `block`, `file`, `decl`; overrides `.craftfmt` |
 
 **Examples:**
 ```bash
@@ -179,6 +184,32 @@ craft fmt --check "docs/**/*.craft"  # CI gate: exits 1 if any file is unformatt
 ```
 
 Arguments are paths or globs (`**` supported). Directories are not walked: `craft fmt docs/` is an error, use `craft fmt "docs/**/*.craft"`.
+
+**`.craftfmt` reference.** A TOML file, resolved by walking up from each formatted file's own directory to the nearest ancestor that has one; absent one, the built-in defaults apply. The CLI and the language server resolve and apply it identically, so `craft fmt` and format-on-save never disagree. An unknown key is an error, not a silent no-op.
+
+| Key | Type | Default | Legal values |
+|-----|------|---------|---------------|
+| `indent` | integer | `4` | `0`-`16` |
+| `continuation_indent` | integer | `4` | `0`-`16` |
+| `align.trailing_comment` | string | `"block"` | `"off"`, `"strict"`, `"block"`, `"file"`, `"decl"` |
+| `align.op_annotation` | string | `"block"` | `"off"`, `"strict"`, `"block"`, `"file"`, `"decl"` |
+| `align.outlier_ratio` | float | `2.5` | `>= 0`; `0` disables the guard |
+| `align.outlier_min` | integer | `40` | `>= 0` |
+
+```toml
+indent = 4
+continuation_indent = 4
+
+[align]
+trailing_comment = "block"
+op_annotation    = "block"
+outlier_ratio    = 2.5
+outlier_min      = 40
+```
+
+Only `indent`, `continuation_indent`, and `align.trailing_comment` have a CLI flag (`--indent`, `--continuation-indent`, `--align-trailing-comment` above); `align.op_annotation`, `align.outlier_ratio`, and `align.outlier_min` are `.craftfmt`-only, with no flag equivalent.
+
+A workspace choosing a non-default `indent` should also set `editor.tabSize` in its own `[craft]` VS Code settings. The extension pins `editor.tabSize: 4` via `contributes.configurationDefaults`, and `.craftfmt` is read only by the language server's formatter, not by the editor's typing/autoindent behaviour — nothing reconciles the two automatically. This is self-healing on save (format-on-save rewrites to the configured indent regardless of what was just typed), but until then the editor indents new lines at its own `editor.tabSize`, not `.craftfmt`'s `indent`.
 
 ---
 

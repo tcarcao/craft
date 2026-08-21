@@ -1,18 +1,18 @@
 services {
-  SubscriptionsApi {
-    contexts: Subscriptions
-    catalog_ref: subscriptions-api
-    repo: olxeu/realestate/subscriptions
-  }
+    SubscriptionsApi {
+        contexts: Subscriptions
+        catalog_ref: subscriptions-api
+        repo: olxeu/realestate/subscriptions
+    }
 }
 
 context_map {
-  re/billing customer_supplier re/vas
-  re/billing partnership re/subscriptions
+    re/billing customer_supplier re/vas
+    re/billing partnership re/subscriptions
 }
 
 use_case "Renewal with typed refs and flexible prose" {
-  when Subscriptions listens vas.VasApplied
-    Subscriptions asks re/billing for a fresh charge attempt (1! & 2!) [POST /v1/charges]
-    Subscriptions notifies vas.VasFulfilled  // TODO: confirm subject
+    when Subscriptions listens vas.VasApplied
+        Subscriptions asks re/billing for a fresh charge attempt (1! & 2!)  [POST /v1/charges]
+        Subscriptions notifies vas.VasFulfilled // TODO: confirm subject
 }

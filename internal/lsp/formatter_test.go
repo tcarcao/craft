@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
@@ -21,13 +22,13 @@ func TestFormatDocument_DomainsBlock(t *testing.T) {
 
 	checks := []string{
 		"domains {",
-		"\n  Auth {",
-		"\n    Login",
-		"\n    Register",
-		"\n  }",
-		"\n  Commerce {",
-		"\n    Cart",
-		"\n    Checkout",
+		"\n    Auth {",
+		"\n        Login",
+		"\n        Register",
+		"\n    }",
+		"\n    Commerce {",
+		"\n        Cart",
+		"\n        Checkout",
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
@@ -42,8 +43,8 @@ func TestFormatDocument_ServiceFields(t *testing.T) {
 
 	checks := []string{
 		"service Foo {",
-		"\n  language: golang",
-		"\n  contexts: Auth, Profile",
+		"\n    language: golang",
+		"\n    contexts: Auth, Profile",
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
@@ -58,8 +59,8 @@ func TestFormatDocument_ActorsBlock(t *testing.T) {
 
 	checks := []string{
 		"actors {",
-		"\n  user Alice",
-		"\n  system Bot",
+		"\n    user Alice",
+		"\n    system Bot",
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
@@ -114,10 +115,10 @@ func TestFormatDocument_UseCaseFormatted(t *testing.T) {
 	got := FormatDocument(input)
 	checks := []string{
 		"use_case \"Registration\" {",
-		"\n  when Actor initiates x\n",
-		"\n    Auth validates email\n",
-		"\n\n  when Actor does y\n",
-		"\n    Auth validates token\n",
+		"\n    when Actor initiates x\n",
+		"\n        Auth validates email\n",
+		"\n\n    when Actor does y\n",
+		"\n        Auth validates token\n",
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
@@ -143,8 +144,8 @@ func TestFormatDocument_QuotedServiceNameRoundTrip(t *testing.T) {
 	got := FormatDocument(input)
 	checks := []string{
 		`service "Order Service" {`,
-		"\n  language: golang",
-		"\n  contexts: Cart, Checkout",
+		"\n    language: golang",
+		"\n    contexts: Cart, Checkout",
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
@@ -283,52 +284,52 @@ func TestFormatDocument_UseCaseRoundTrip(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"sync action", "use_case \"X\" {\n  when User creates Account\n    Auth asks DB to check email\n}\n"},
+		{"sync action", "use_case \"X\" {\n    when User creates Account\n        Auth asks DB to check email\n}\n"},
 		// Single-line runs align to their own length + 2, i.e. two spaces
 		// before "[". These two fixtures were single-space before the
 		// alignment pass existed; they are updated here to their new
 		// canonical (already-aligned) form so this guard keeps asserting
 		// byte-identical output instead of being weakened.
-		{"sync action with annotation", "use_case \"X\" {\n  when U does x\n    Auth asks DB to check email  [POST /v1/check]\n}\n"},
-		{"async action with typed event ref", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded\n}\n"},
-		{"async action with legacy quoted event", "use_case \"X\" {\n  when U does x\n    Billing notifies \"Order Created\"\n}\n"},
-		{"async action with annotation", "use_case \"X\" {\n  when U does x\n    Billing notifies billing.ChargeSucceeded  [GRPC Pay]\n}\n"},
+		{"sync action with annotation", "use_case \"X\" {\n    when U does x\n        Auth asks DB to check email  [POST /v1/check]\n}\n"},
+		{"async action with typed event ref", "use_case \"X\" {\n    when U does x\n        Billing notifies billing.ChargeSucceeded\n}\n"},
+		{"async action with legacy quoted event", "use_case \"X\" {\n    when U does x\n        Billing notifies \"Order Created\"\n}\n"},
+		{"async action with annotation", "use_case \"X\" {\n    when U does x\n        Billing notifies billing.ChargeSucceeded  [GRPC Pay]\n}\n"},
 		// Multi-line run, already column-aligned: the shorter second line is
 		// padded out to the longer first line's column + 2. Byte-identical
 		// output here is what proves alignment is a no-op on already-aligned
 		// input, not just on single-annotation lines.
-		{"multi-line run already aligned", "use_case \"X\" {\n  when CRON detects a failed charge\n" +
-			"    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
-			"    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n}\n"},
+		{"multi-line run already aligned", "use_case \"X\" {\n    when CRON detects a failed charge\n" +
+			"        Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
+			"        Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n}\n"},
 		// A non-annotated action line inside the run is left un-padded, but it
 		// does not reset the alignment column for the annotated lines that
 		// follow it: the whole scenario's action block is one run.
-		{"non-annotated action inside run does not break alignment", "use_case \"X\" {\n  when CRON detects a failed charge\n" +
-			"    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
-			"    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n" +
-			"    Billing asks Ledger to record the entry\n" +
-			"    Gateway returns to Billing the authorization result    [200 AuthorizationResult]\n}\n"},
-		{"return action with target", "use_case \"X\" {\n  when U does x\n    Auth returns to User charge result\n}\n"},
-		{"return action without target", "use_case \"X\" {\n  when U does x\n    Auth returns charge result\n}\n"},
-		{"internal action", "use_case \"X\" {\n  when U does x\n    Auth validates email format\n}\n"},
-		{"internal action with connector", "use_case \"X\" {\n  when U does x\n    Wallet creates an unconfirmed reservation\n}\n"},
-		{"qualified refs in every slot", "use_case \"X\" {\n  when re/billing listens vas.VasApplied\n" +
-			"    re/billing asks re/ledger to record the entry\n" +
-			"    re/billing notifies billing.ChargeSucceeded\n" +
-			"    re/subscriptions returns to re/billing charge result\n" +
-			"    re/billing validates invoice format\n}\n"},
-		{"event trigger", "use_case \"X\" {\n  when \"SomeEvent\"\n    A does x\n}\n"},
-		{"cron trigger", "use_case \"X\" {\n  when cron \"0 * * * *\"\n    A does x\n}\n"},
-		{"periodic trigger", "use_case \"X\" {\n  when every \"1h\"\n    A does x\n}\n"},
-		{"legacy quoted listens event", "use_case \"X\" {\n  when Billing listens \"Charged\"\n    A does x\n}\n"},
+		{"non-annotated action inside run does not break alignment", "use_case \"X\" {\n    when CRON detects a failed charge\n" +
+			"        Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
+			"        Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n" +
+			"        Billing asks Ledger to record the entry\n" +
+			"        Gateway returns to Billing the authorization result    [200 AuthorizationResult]\n}\n"},
+		{"return action with target", "use_case \"X\" {\n    when U does x\n        Auth returns to User charge result\n}\n"},
+		{"return action without target", "use_case \"X\" {\n    when U does x\n        Auth returns charge result\n}\n"},
+		{"internal action", "use_case \"X\" {\n    when U does x\n        Auth validates email format\n}\n"},
+		{"internal action with connector", "use_case \"X\" {\n    when U does x\n        Wallet creates an unconfirmed reservation\n}\n"},
+		{"qualified refs in every slot", "use_case \"X\" {\n    when re/billing listens vas.VasApplied\n" +
+			"        re/billing asks re/ledger to record the entry\n" +
+			"        re/billing notifies billing.ChargeSucceeded\n" +
+			"        re/subscriptions returns to re/billing charge result\n" +
+			"        re/billing validates invoice format\n}\n"},
+		{"event trigger", "use_case \"X\" {\n    when \"SomeEvent\"\n        A does x\n}\n"},
+		{"cron trigger", "use_case \"X\" {\n    when cron \"0 * * * *\"\n        A does x\n}\n"},
+		{"periodic trigger", "use_case \"X\" {\n    when every \"1h\"\n        A does x\n}\n"},
+		{"legacy quoted listens event", "use_case \"X\" {\n    when Billing listens \"Charged\"\n        A does x\n}\n"},
 		// Trigger phrases carry free text, so they must survive punctuation
 		// that a space-joined token walk would pull apart. Without these the
 		// fixture set is all punctuation-free and cannot fail on the trigger
 		// side at all.
-		{"trigger phrase with tight punctuation", "use_case \"X\" {\n  when User creates (1! & 2!)\n    A does x\n}\n"},
-		{"trigger phrase with slash", "use_case \"X\" {\n  when User does and/or something\n    A does x\n}\n"},
-		{"trigger phrase with comma", "use_case \"X\" {\n  when User creates Account, quickly\n    A does x\n}\n"},
-		{"trigger phrase with qualified actor and punctuation", "use_case \"X\" {\n  when re/billing creates (1! & 2!)\n    A does x\n}\n"},
+		{"trigger phrase with tight punctuation", "use_case \"X\" {\n    when User creates (1! & 2!)\n        A does x\n}\n"},
+		{"trigger phrase with slash", "use_case \"X\" {\n    when User does and/or something\n        A does x\n}\n"},
+		{"trigger phrase with comma", "use_case \"X\" {\n    when User creates Account, quickly\n        A does x\n}\n"},
+		{"trigger phrase with qualified actor and punctuation", "use_case \"X\" {\n    when re/billing creates (1! & 2!)\n        A does x\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -379,10 +380,10 @@ func TestFormatDocument_AlignsOpAnnotations(t *testing.T) {
 }
 `
 	want := `use_case "Retry" {
-  when CRON detects a failed charge
-    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
-    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
-    Billing asks Ledger to record the entry
+    when CRON detects a failed charge
+        Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
+        Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+        Billing asks Ledger to record the entry
 }
 `
 	got := formatSource(t, src)
@@ -402,7 +403,7 @@ func TestFormatDocument_AlignsOpAnnotations(t *testing.T) {
 }
 
 // TestFormatDocument_AlignsAfterMultilineCommentClose covers both directions
-// of the interior-line bookkeeping writeTokens hands to alignAnnotations.
+// of the interior-line bookkeeping writeTokens hands to alignCells.
 //
 // A multi-line block comment is one token carrying newlines. writeTokens
 // used to mark every emitted line after the token's first as interior,
@@ -544,7 +545,7 @@ func TestFormatDocument_AlignsAfterMultilineCommentClose(t *testing.T) {
 					"     */\n" +
 					"    A asks B to aaaaaaaaaaaaaaaaaaaa  [POST /v1/a]\n" +
 					"}\n",
-				"    A asks B to c /* see [1]",
+				"        A asks B to c /* see [1]",
 			},
 		}
 		for _, tc := range cases {
@@ -662,13 +663,13 @@ func TestWriteTokens_ReportsWhereCommentTextStops(t *testing.T) {
 			continue
 		}
 		var sb strings.Builder
-		interior, commentEnd = writeTokens(&sb, node)
+		interior, commentEnd, _ = writeTokens(&sb, node, fmtconfig.Defaults())
 		out = sb.String()
 	}
 
 	lines := strings.Split(out, "\n")
 	// Line 2 is the line comment, which runs to end of line: its end is the
-	// line's BYTE length, 26, not its rune count of 23.
+	// line's BYTE length, 30, not its rune count of 27.
 	// Line 3 opens the block comment and the token runs off the end of it.
 	// Line 4 is where that token stops, 19 bytes along, just past the `*/`.
 	wantEnd := map[int]int{2: len(lines[2]), 4: 19}
@@ -680,11 +681,185 @@ func TestWriteTokens_ReportsWhereCommentTextStops(t *testing.T) {
 	if !reflect.DeepEqual(interior, wantInterior) {
 		t.Errorf("interior = %v, want %v", interior, wantInterior)
 	}
-	if len(lines[2]) != 26 || utf8.RuneCountInString(lines[2]) != 23 {
+	if len(lines[2]) != 30 || utf8.RuneCountInString(lines[2]) != 27 {
 		t.Errorf("fixture drifted: line 2 is %q", lines[2])
 	}
 	if got := lines[4][:19]; !strings.HasSuffix(got, "*/") {
 		t.Errorf("the block comment's end does not land just past its close: %q", got)
+	}
+}
+
+// TestWriteTokens_ReportsWhereTrailingCommentsStart pins commentStart
+// directly, the same way TestWriteTokens_ReportsWhereCommentTextStops pins
+// commentEnd. Nothing consumes commentStart yet — alignCells arrives in a
+// later task — so this is the only place its correctness is established;
+// a map that is silently wrong here would surface only as a confusing
+// alignment bug once something finally reads it.
+//
+// The three lines exercise the three shapes there are: a `//` line comment
+// trailing real content is recorded, at the byte offset where it begins. A
+// block comment that spans lines is recorded on NEITHER of the two lines it
+// touches: not its first (which interior already excludes), and not its
+// last (line has already moved past the newlines the token carries by the
+// time it is written, so recording there would key a first-line column
+// against a last-line index). A line with no comment at all is simply
+// absent, which reads as zero — splitTrailingComment's "none" answer.
+func TestWriteTokens_ReportsWhereTrailingCommentsStart(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A asks B for c   // rollup: note\n" +
+		"    /* nöte\n" +
+		"    see // hère */ A asks B to c  [GET /x]\n" +
+		"    D asks E for f\n" +
+		"}\n"
+	gn, _, _ := syntax.Parse(src)
+
+	var commentStart map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		_, _, commentStart = writeTokens(&sb, node, fmtconfig.Defaults())
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	// Line 2 carries the trailing line comment; 3 and 4 are the two lines the
+	// multi-line block comment touches, and 5 carries no comment at all.
+	want := map[int]int{2: 23}
+
+	if !reflect.DeepEqual(commentStart, want) {
+		t.Errorf("commentStart = %v, want %v, over lines:\n%q", commentStart, want, lines)
+	}
+	if got := lines[2][23:]; !strings.HasPrefix(got, "//") {
+		t.Errorf("fixture drifted: commentStart's offset does not land on `//`: %q", got)
+	}
+	if _, ok := commentStart[3]; ok {
+		t.Errorf("commentStart recorded a start for the block comment's first line, which interior already excludes")
+	}
+	if _, ok := commentStart[4]; ok {
+		t.Errorf("commentStart recorded a start for the block comment's last line, keyed against the wrong line")
+	}
+	if _, ok := commentStart[5]; ok {
+		t.Errorf("commentStart recorded a start for a line with no comment on it")
+	}
+}
+
+// TestWriteTokens_CommentStartExcludesBlockComments pins the fix for the
+// defect this map originally shipped with: the guard used to be "does this
+// token's text contain a newline", which admitted a single-line block
+// comment sitting mid-statement. `A /* inline */ asks B for c` has real
+// content after the comment closes, so a recorded start there is a false
+// trailing cell — once something aligns on it, the statement gets shredded
+// across a column, whitespace-only or not.
+//
+// The guard is now the comment's KIND, not its shape: only
+// SyntaxKindLineComment and SyntaxKindDocComment are recorded, because both
+// run to end of line by construction (the lexer stops each at the next
+// newline) and so membership in commentStart is itself proof of that.
+// SyntaxKindBlockComment is excluded outright, even in the single-line case
+// tested here where nothing about the token's own text would tell interior
+// or the old newline guard apart from a genuinely trailing comment. Telling
+// the two apart needs lookahead past the close, which this walker does not
+// buy; see the paragraph above writeTokens's signature for the full
+// reasoning and its accepted cost.
+func TestWriteTokens_CommentStartExcludesBlockComments(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A /* inline */ asks B for c [POST /v1/x]\n" +
+		"}\n"
+	gn, _, _ := syntax.Parse(src)
+
+	var commentStart map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		_, _, commentStart = writeTokens(&sb, node, fmtconfig.Defaults())
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	if _, ok := commentStart[2]; ok {
+		t.Errorf("commentStart recorded a start for a mid-line block comment: %v, over lines:\n%q", commentStart, lines)
+	}
+	if got := lines[2]; !strings.Contains(got, "/* inline */ asks") {
+		t.Errorf("fixture drifted: expected the inline block comment to sit before more content: %q", got)
+	}
+}
+
+// TestWriteTokens_CommentStartRecordsLineAndDocComments is the coverage half
+// of the block-comment exclusion above: proving the kind guard does not
+// over-apply and quietly stop recording the two kinds it is supposed to
+// keep. Both a line comment and a doc comment must still be recorded
+// whether they trail real content or sit alone on their own line — the
+// latter is what confirms the guard is really keyed on kind, not on
+// whatever heuristic (such as "did this line have other content") might be
+// mistaken for it.
+//
+// A trailing doc comment is an unusual shape for a Craft author to write —
+// docs/decisions and the fixtures elsewhere in this file only ever show
+// `///` leading a declaration — but nothing in the grammar forbids it:
+// attachTrivia (internal/syntax/parser.go) treats SyntaxKindDocComment
+// exactly like the other two comment kinds, admitting it wherever trivia may
+// appear. So this is a real fixture, not an invented one; the diags check
+// below is what confirms it parses cleanly rather than merely surviving
+// through error recovery.
+func TestWriteTokens_CommentStartRecordsLineAndDocComments(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"  when U does x\n" +
+		"    A asks B for c   // trailing line comment\n" +
+		"    // standalone line comment\n" +
+		"    A asks B for c   /// trailing doc comment\n" +
+		"    /// standalone doc comment\n" +
+		"    D asks E for f\n" +
+		"}\n"
+	gn, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("fixture must parse cleanly, got diags: %v", diags)
+	}
+
+	var commentStart map[int]int
+	var out string
+	for el := range syntax.Root(gn).ChildrenIter() {
+		node, ok := el.(syntax.SyntaxNode)
+		if !ok {
+			continue
+		}
+		var sb strings.Builder
+		_, _, commentStart = writeTokens(&sb, node, fmtconfig.Defaults())
+		out = sb.String()
+	}
+
+	lines := strings.Split(out, "\n")
+	// Line 2: line comment trailing content. Line 3: line comment alone.
+	// Line 4: doc comment trailing content. Line 5: doc comment alone.
+	// Line 6 carries no comment at all.
+	want := map[int]int{2: 23, 3: 8, 4: 23, 5: 8}
+
+	if !reflect.DeepEqual(commentStart, want) {
+		t.Errorf("commentStart = %v, want %v, over lines:\n%q", commentStart, want, lines)
+	}
+	if got := lines[2][23:]; !strings.HasPrefix(got, "//") {
+		t.Errorf("fixture drifted: line 2's offset does not land on `//`: %q", got)
+	}
+	if got := lines[3][8:]; !strings.HasPrefix(got, "//") {
+		t.Errorf("fixture drifted: line 3's offset does not land on `//`: %q", got)
+	}
+	if got := lines[4][23:]; !strings.HasPrefix(got, "///") {
+		t.Errorf("fixture drifted: line 4's offset does not land on `///`: %q", got)
+	}
+	if got := lines[5][8:]; !strings.HasPrefix(got, "///") {
+		t.Errorf("fixture drifted: line 5's offset does not land on `///`: %q", got)
+	}
+	if _, ok := commentStart[6]; ok {
+		t.Errorf("commentStart recorded a start for a line with no comment on it")
 	}
 }
 
@@ -745,11 +920,11 @@ func TestFormatDocument_NonAnnotatedActionInsideRunKeepsAlignment(t *testing.T) 
 }
 `
 	want := `use_case "Retry" {
-  when CRON detects a failed charge
-    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
-    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
-    Billing asks Ledger to record the entry
-    Gateway returns to Billing the authorization result    [200 AuthorizationResult]
+    when CRON detects a failed charge
+        Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]
+        Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]
+        Billing asks Ledger to record the entry
+        Gateway returns to Billing the authorization result    [200 AuthorizationResult]
 }
 `
 	got := formatSource(t, src)
@@ -765,7 +940,7 @@ func TestFormatDocument_NonAnnotatedActionInsideRunKeepsAlignment(t *testing.T) 
 // scenario with no operation annotations at all must format identically to
 // how it did before the alignment pass existed.
 func TestFormatDocument_NoAnnotationsUnaffected(t *testing.T) {
-	src := "use_case \"X\" {\n  when U does x\n    Auth asks DB to check email\n    Auth validates the result\n}\n"
+	src := "use_case \"X\" {\n    when U does x\n        Auth asks DB to check email\n        Auth validates the result\n}\n"
 	got := formatSource(t, src)
 	if got != src {
 		t.Errorf("annotation-free scenario must be unchanged\nwant: %q\ngot:  %q", src, got)
@@ -808,7 +983,7 @@ func TestFormatDocument_PhraseBraceIsNotReformatted(t *testing.T) {
 // parses cleanly and takes part in alignment as normal.
 func TestFormatDocument_TemplatedPathStillAligns(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x\n    A asks B for c [POST /v1/accounts/{id}/charges]\n}\n"
-	want := "use_case \"X\" {\n  when U does x\n    A asks B for c  [POST /v1/accounts/{id}/charges]\n}\n"
+	want := "use_case \"X\" {\n    when U does x\n        A asks B for c  [POST /v1/accounts/{id}/charges]\n}\n"
 	got := formatSource(t, src)
 	if got != want {
 		t.Errorf("format mismatch\nwant:\n%s\ngot:\n%s", want, got)
@@ -856,11 +1031,11 @@ func TestFormatDocument_ContextMapRoundTrip(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"bare endpoints", "context_map re {\n  billing customer_supplier vas\n  billing anticorruption_layer subscriptions\n  billing partnership vas\n}\n"},
-		{"qualified endpoints", "context_map {\n  re/billing separate_ways legacy/reporting\n}\n"},
+		{"bare endpoints", "context_map re {\n    billing customer_supplier vas\n    billing anticorruption_layer subscriptions\n    billing partnership vas\n}\n"},
+		{"qualified endpoints", "context_map {\n    re/billing separate_ways legacy/reporting\n}\n"},
 		{"empty block", "context_map {\n}\n"},
-		{"comment between edges", "context_map re {\n  // upstream first\n  billing customer_supplier vas\n  billing partnership subscriptions\n}\n"},
-		{"comment above block", "// strategic view\ncontext_map re {\n  billing partnership vas\n}\n"},
+		{"comment between edges", "context_map re {\n    // upstream first\n    billing customer_supplier vas\n    billing partnership subscriptions\n}\n"},
+		{"comment above block", "// strategic view\ncontext_map re {\n    billing partnership vas\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -876,9 +1051,9 @@ func TestFormatDocument_GlossaryRoundTrip(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"two-segment terms", "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n  billing/dunning contrasts subscriptions/dunning\n}\n"},
-		{"three-segment terms", "glossary {\n  re/billing/Invoice distinct_from legacy/reporting/Invoice\n}\n"},
-		{"comment between relations", "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n  // the dunning pair is not the same concept\n  billing/dunning contrasts subscriptions/dunning\n}\n"},
+		{"two-segment terms", "glossary re {\n    billing/Invoice same_as subscriptions/Invoice\n    billing/dunning contrasts subscriptions/dunning\n}\n"},
+		{"three-segment terms", "glossary {\n    re/billing/Invoice distinct_from legacy/reporting/Invoice\n}\n"},
+		{"comment between relations", "glossary re {\n    billing/Invoice same_as subscriptions/Invoice\n    // the dunning pair is not the same concept\n    billing/dunning contrasts subscriptions/dunning\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -899,10 +1074,10 @@ func TestFormatDocument_QualifiedFieldValuesSurvive(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"service repo", "services {\n  SubscriptionsApi {\n    contexts: Subscriptions\n    catalog_ref: subscriptions-api\n    repo: olxeu/realestate/subscriptions\n  }\n}\n"},
-		{"service contexts list", "services {\n  A {\n    contexts: X, Y\n    data-stores: db1, db2\n    language: golang\n  }\n}\n"},
-		{"exposure fields", "exposure api {\n  to: Business_User\n  through: gateway\n}\n"},
-		{"domain bounded contexts", "domain re {\n  billing\n  vas\n}\n"},
+		{"service repo", "services {\n    SubscriptionsApi {\n        contexts: Subscriptions\n        catalog_ref: subscriptions-api\n        repo: olxeu/realestate/subscriptions\n    }\n}\n"},
+		{"service contexts list", "services {\n    A {\n        contexts: X, Y\n        data-stores: db1, db2\n        language: golang\n    }\n}\n"},
+		{"exposure fields", "exposure api {\n    to: Business_User\n    through: gateway\n}\n"},
+		{"domain bounded contexts", "domain re {\n    billing\n    vas\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -920,12 +1095,12 @@ func TestFormatDocument_CommentsSurvive(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"above a top-level block", "// leading\nservices {\n  A {\n    contexts: X\n  }\n}\n"},
-		{"inside a nested block", "services {\n  // about A\n  A {\n    // about contexts\n    contexts: X\n  }\n}\n"},
-		{"above a use_case", "// this is a comment\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
-		{"above a scenario", "use_case \"X\" {\n  // first flow\n  when U does x\n    A asks B for c\n}\n"},
-		{"above an action", "use_case \"X\" {\n  when U does x\n    // why this call\n    A asks B for c\n}\n"},
-		{"after the last action", "use_case \"X\" {\n  when U does x\n    A asks B for c\n    // TODO: confirm subject\n}\n"},
+		{"above a top-level block", "// leading\nservices {\n    A {\n        contexts: X\n    }\n}\n"},
+		{"inside a nested block", "services {\n    // about A\n    A {\n        // about contexts\n        contexts: X\n    }\n}\n"},
+		{"above a use_case", "// this is a comment\nuse_case \"X\" {\n    when U does x\n        A asks B for c\n}\n"},
+		{"above a scenario", "use_case \"X\" {\n    // first flow\n    when U does x\n        A asks B for c\n}\n"},
+		{"above an action", "use_case \"X\" {\n    when U does x\n        // why this call\n        A asks B for c\n}\n"},
+		{"after the last action", "use_case \"X\" {\n    when U does x\n        A asks B for c\n        // TODO: confirm subject\n}\n"},
 		{"doc comment", "/// documented\nactor user Alice\n"},
 	}
 	for _, tc := range cases {
@@ -944,18 +1119,20 @@ func TestFormatDocument_CommentsSurvive(t *testing.T) {
 // commentTexts check that assertion replaced.
 //
 // Nothing today produces that shape: writeTokens emits every token's Text()
-// verbatim, and alignAnnotations only ever rewrites the run of spaces before
-// a trailing `[...]` annotation, explicitly excluding any line that starts
-// with `//`, `/*`, or `*` from that pass (formatalign.go). This test is the
-// tripwire for the day that stops being true, not a check for a bug that
-// exists now.
+// verbatim, and alignCells only ever rewrites the run of spaces before a
+// cell. Neither splitAnnotation nor splitTrailingComment pattern-matches a
+// line's text to decide whether it is comment; both are handed the walker's
+// own commentEnd/commentStart byte offsets and use those, which is what keeps
+// a comment line's interior spacing out of either pass without needing to
+// recognise `//`, `/*`, or `*` (formatalign.go). This test is the tripwire
+// for the day that stops being true, not a check for a bug that exists now.
 func TestFormatDocument_CommentInternalSpacingSurvives(t *testing.T) {
 	cases := []struct {
 		name string
 		src  string
 	}{
-		{"line comment", "use_case \"X\" {\n  when U does x\n    A notifies a.B // hello  world\n}\n"},
-		{"block comment", "/* hello  world */\nuse_case \"X\" {\n  when U does x\n    A asks B for c\n}\n"},
+		{"line comment", "use_case \"X\" {\n    when U does x\n        A notifies a.B // hello  world\n}\n"},
+		{"block comment", "/* hello  world */\nuse_case \"X\" {\n    when U does x\n        A asks B for c\n}\n"},
 		// A multi-line block comment is ONE token carrying newlines, so the
 		// alignment pass, which works on lines, sees its interior lines with no
 		// idea they are inside a token. An interior line that ends in `]` is the
@@ -964,11 +1141,11 @@ func TestFormatDocument_CommentInternalSpacingSurvives(t *testing.T) {
 		// dragged the real annotation's column with it.
 		{"multi-line block comment with a bracketed interior line",
 			"use_case \"X\" {\n" +
-				"  when U does x\n" +
-				"    /* note\n" +
+				"    when U does x\n" +
+				"        /* note\n" +
 				"       thing [1]\n" +
 				"       end */\n" +
-				"    A asks B for c  [POST /v1/x]\n" +
+				"        A asks B for c  [POST /v1/x]\n" +
 				"}\n"},
 	}
 	for _, tc := range cases {
@@ -984,14 +1161,14 @@ func TestFormatDocument_CommentInternalSpacingSurvives(t *testing.T) {
 // straight past it and the whole block was deleted.
 func TestFormatDocument_TagsBlockSurvives(t *testing.T) {
 	src := "use_case \"Renewal\" {\n" +
-		"  tags {\n" +
-		"    journey: re/renewal-flow\n" +
-		"    owner: \"team billing\"\n" +
-		"    tier: gold\n" +
-		"  }\n" +
+		"    tags {\n" +
+		"        journey: re/renewal-flow\n" +
+		"        owner: \"team billing\"\n" +
+		"        tier: gold\n" +
+		"    }\n" +
 		"\n" +
-		"  when Customer creates Account\n" +
-		"    Billing notifies \"Account Created\"\n" +
+		"    when Customer creates Account\n" +
+		"        Billing notifies \"Account Created\"\n" +
 		"}\n"
 	assertFormatIsFaithful(t, src)
 }
@@ -1026,9 +1203,9 @@ func TestFormatDocument_CommentOnlyBlockBodies(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"use_case", "use_case \"X\" {\n  // nothing modelled yet\n}\n"},
-		{"context_map", "context_map re {\n  // no edges agreed yet\n}\n"},
-		{"glossary", "glossary {\n  // terms pending\n}\n"},
+		{"use_case", "use_case \"X\" {\n    // nothing modelled yet\n}\n"},
+		{"context_map", "context_map re {\n    // no edges agreed yet\n}\n"},
+		{"glossary", "glossary {\n    // terms pending\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1080,16 +1257,27 @@ func TestFormatDocument_TrailingCommentWithoutFinalNewline(t *testing.T) {
 // The token walker has no atomic-ref branch to swallow it: a comment is a
 // token like any other and is written where the author put it. The value that
 // follows keeps the author's line break, which it must, because a line comment
-// runs to end of line and would otherwise swallow the value. It sits at the
-// block's own indent rather than a hanging indent, because the formatter is no
-// longer the one splitting the field across two lines.
+// runs to end of line and would otherwise swallow the value.
+//
+// The value hangs at the continuation column, not the block's own indent.
+// This is the second thing this fixture pins, since Task 4 (hanging
+// continuation indent): a comment sitting between the field colon/comma and
+// the value it introduces must not look like the end of the wrapped value to
+// the walker, so `repo: // note\n  olxeu/realestate` and
+// `contexts: X, // why\n  Y` both need the value AFTER the comment to keep
+// hanging one continuation unit past block depth, exactly as it would
+// without the comment in the way. See
+// TestWrappedListContinuationSurvivesStandaloneComment and
+// TestWrappedListContinuationSurvivesTrailingComment in formatsep_test.go
+// for the isolated regression coverage; this fixture additionally proves the
+// comment itself is not dropped or corrupted by that path.
 func TestFormatDocument_RefAdjacentCommentsSurvive(t *testing.T) {
 	cases := []struct {
 		name string
 		src  string
 	}{
-		{"comment before a field value", "services {\n  A {\n    repo: // note\n    olxeu/realestate\n  }\n}\n"},
-		{"comment inside a list", "services {\n  A {\n    contexts: X, // why\n    Y\n  }\n}\n"},
+		{"comment before a field value", "services {\n    A {\n        repo: // note\n            olxeu/realestate\n    }\n}\n"},
+		{"comment inside a list", "services {\n    A {\n        contexts: X, // why\n            Y\n    }\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1160,7 +1348,7 @@ func TestContentDrift_RefusesToLoseContent(t *testing.T) {
 // inputs that genuinely differ in content (the drift code). The test below
 // only pins that the former trigger no longer fires.
 func TestFormatDocumentChecked_UnterminatedStringFixtureNoLongerDrifts(t *testing.T) {
-	src := "use_case \"X\" {\n  when U does x A notifies \"Oops\n}\n"
+	src := "use_case \"X\" {\n    when U does x A notifies \"Oops\n}\n"
 
 	if _, _, diags := syntax.Parse(src); len(diags) != 0 {
 		t.Fatalf("fixture no longer parses cleanly: %+v", diags)
@@ -1223,7 +1411,7 @@ func TestWriteTokens_PreservesEveryNonWhitespaceToken(t *testing.T) {
 		var sb strings.Builder
 		for el := range root.ChildrenIter() {
 			if node, ok := el.(syntax.SyntaxNode); ok {
-				writeTokens(&sb, node)
+				writeTokens(&sb, node, fmtconfig.Defaults())
 			}
 		}
 
@@ -1250,7 +1438,7 @@ func TestWriteTokens_KeepsAuthorLineBreaks(t *testing.T) {
 	var sb strings.Builder
 	for el := range syntax.Root(gn).ChildrenIter() {
 		if node, ok := el.(syntax.SyntaxNode); ok {
-			writeTokens(&sb, node)
+			writeTokens(&sb, node, fmtconfig.Defaults())
 		}
 	}
 	if !strings.Contains(sb.String(), "A,\n") {
@@ -1265,7 +1453,7 @@ func TestWriteTokens_KeepsTrailingCommentsInPlace(t *testing.T) {
 	var sb strings.Builder
 	for el := range syntax.Root(gn).ChildrenIter() {
 		if node, ok := el.(syntax.SyntaxNode); ok {
-			writeTokens(&sb, node)
+			writeTokens(&sb, node, fmtconfig.Defaults())
 		}
 	}
 	out := sb.String()
@@ -1276,24 +1464,34 @@ func TestWriteTokens_KeepsTrailingCommentsInPlace(t *testing.T) {
 
 // TestWriteTokens_WrappedColonAndCommaStayInSync pins the field colon and the
 // comma to the same rule: a line break the author wrote after either one
-// survives. This is one fixture wrapping both `contexts:` and its list, so
-// the two branches in separatorFor cannot drift apart again without this
-// test catching it, the way a comma-only fix once did.
+// survives AND hangs at the same continuation column. This is one fixture
+// wrapping both `contexts:` and its list, so the two branches in separatorFor
+// cannot drift apart again without this test catching it, the way a
+// comma-only fix once did.
+//
+// Before hanging continuation indent (Task 4), this asserted a byte-for-byte
+// round trip, because the continuation columns the formatter computed from
+// block depth happened to match what the author had typed. That was the bug
+// this test was inadvertently pinning: a continuation at block depth reads as
+// a sibling statement of `contexts:` rather than part of its value. Now both
+// continuation lines hang one continuation unit past the block indent
+// (8 + 4 = 12 spaces at depth 2 under the defaults), regardless of what the
+// author's own indentation happened to be.
 func TestWriteTokens_WrappedColonAndCommaStayInSync(t *testing.T) {
-	src := "services {\n  S {\n    contexts:\n    Authentication,\n    Profile\n  }\n}\n"
+	src := "services {\n    S {\n        contexts:\n        Authentication,\n        Profile\n    }\n}\n"
 	gn, _, _ := syntax.Parse(src)
 	var sb strings.Builder
 	for el := range syntax.Root(gn).ChildrenIter() {
 		if node, ok := el.(syntax.SyntaxNode); ok {
-			writeTokens(&sb, node)
+			writeTokens(&sb, node, fmtconfig.Defaults())
 		}
 	}
 	// writeTokens renders one declaration and never appends the document's
 	// final newline (that is FormatDocumentChecked's job, not called here),
-	// so the trailing "\n" is trimmed before the byte-for-byte comparison.
-	want := strings.TrimSuffix(src, "\n")
+	// so the trailing "\n" is trimmed before comparison.
+	want := "services {\n    S {\n        contexts:\n            Authentication,\n            Profile\n    }\n}"
 	if got := sb.String(); got != want {
-		t.Errorf("wrapped contexts list did not round-trip byte-for-byte:\nwant %q\ngot  %q", want, got)
+		t.Errorf("wrapped contexts list did not hang consistently:\nwant %q\ngot  %q", want, got)
 	}
 }
 
@@ -1307,11 +1505,11 @@ func TestWriteTokens_ScenarioBodyIndentsDeeper(t *testing.T) {
 	var sb strings.Builder
 	for el := range syntax.Root(gn).ChildrenIter() {
 		if node, ok := el.(syntax.SyntaxNode); ok {
-			writeTokens(&sb, node)
+			writeTokens(&sb, node, fmtconfig.Defaults())
 		}
 	}
 	got := sb.String()
-	for _, want := range []string{"\n  when U does x", "\n    A asks B for c", "\n  when V does y", "\n    D asks E for f"} {
+	for _, want := range []string{"\n    when U does x", "\n        A asks B for c", "\n    when V does y", "\n        D asks E for f"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
@@ -1330,14 +1528,14 @@ func TestWriteTokens_ExpandsMinifiedDeclaration(t *testing.T) {
 	var sb strings.Builder
 	for el := range syntax.Root(gn).ChildrenIter() {
 		if node, ok := el.(syntax.SyntaxNode); ok {
-			writeTokens(&sb, node)
+			writeTokens(&sb, node, fmtconfig.Defaults())
 		}
 	}
 	got := sb.String()
 	// `Foo {` with the space, not `Foo{`. The original assertion here was
 	// written before the `curr == LBrace` mirror existed and encoded its
 	// absence, so it certified a half-expanded declaration as correct.
-	if !strings.Contains(got, "Foo {\n  contexts: A\n}") {
+	if !strings.Contains(got, "Foo {\n    contexts: A\n}") {
 		t.Errorf("minified declaration did not expand:\n%q", got)
 	}
 }
@@ -1379,7 +1577,7 @@ func TestFormatDocument_ClosingBraceBeforeWhenIsIdempotent(t *testing.T) {
 	if once != twice {
 		t.Errorf("formatting is not idempotent for `}when`\nfirst:\n%s\nsecond:\n%s", once, twice)
 	}
-	if !strings.Contains(once, "  }\n\n  when U does x") {
+	if !strings.Contains(once, "    }\n\n    when U does x") {
 		t.Errorf("a scenario after a tags block must still get its blank line:\n%s", once)
 	}
 }
@@ -1422,18 +1620,18 @@ func TestFormatDocument_CommentAboveANonFirstScenario(t *testing.T) {
 	}{
 		{
 			"one comment",
-			"use_case \"X\" {\n  when A does x\n    P does y\n\n  // second flow\n  when B does z\n    Q does w\n}\n",
+			"use_case \"X\" {\n    when A does x\n        P does y\n\n    // second flow\n    when B does z\n        Q does w\n}\n",
 		},
 		{
 			// Every comment in the run looks past the others to the same
 			// `when`, so the whole run attaches to that scenario and only the
 			// first of them takes the blank line.
 			"a run of comments",
-			"use_case \"X\" {\n  when A does x\n    P does y\n\n  // a\n  // b\n  when B does z\n    Q does w\n}\n",
+			"use_case \"X\" {\n    when A does x\n        P does y\n\n    // a\n    // b\n    when B does z\n        Q does w\n}\n",
 		},
 		{
 			"block comment",
-			"use_case \"X\" {\n  when A does x\n    P does y\n\n  /* second flow */\n  when B does z\n    Q does w\n}\n",
+			"use_case \"X\" {\n    when A does x\n        P does y\n\n    /* second flow */\n    when B does z\n        Q does w\n}\n",
 		},
 	}
 	for _, tc := range cases {
@@ -1450,7 +1648,7 @@ func TestFormatDocument_CommentAboveANonFirstScenario(t *testing.T) {
 func TestFormatDocument_ScenarioBlankLineMovesAboveTheComment(t *testing.T) {
 	src := "use_case \"X\" {\n  when A does x\n    P does y\n  // note\n  when B does z\n    Q does w\n}\n"
 	got := formatSource(t, src)
-	if !strings.Contains(got, "    P does y\n\n  // note\n  when B does z") {
+	if !strings.Contains(got, "        P does y\n\n    // note\n    when B does z") {
 		t.Errorf("the scenario blank line should sit above the comment:\n%s", got)
 	}
 	if again := formatSource(t, got); again != got {
@@ -1464,7 +1662,7 @@ func TestFormatDocument_ScenarioBlankLineMovesAboveTheComment(t *testing.T) {
 // comment at the end of a scenario body has a `}` after it, not a `when`, so it
 // belongs to the body it closes and keeps action indent.
 func TestFormatDocument_TrailingCommentKeepsActionIndent(t *testing.T) {
-	src := "use_case \"X\" {\n  when A does x\n    P does y\n    // done here\n}\n"
+	src := "use_case \"X\" {\n    when A does x\n        P does y\n        // done here\n}\n"
 	assertFormatIsFaithful(t, src)
 }
 
@@ -1481,7 +1679,7 @@ func TestFormatDocument_TrailingCommentKeepsActionIndent(t *testing.T) {
 // No file in the repo has this shape, which is why the corpus guard stays green
 // either way. It is asserted here instead.
 func TestFormatDocument_TrailingCommentBeforeAScenarioStaysPut(t *testing.T) {
-	src := "use_case \"X\" {\n  when A does x\n    P does y // note\n\n  when B does z\n    Q does w\n}\n"
+	src := "use_case \"X\" {\n    when A does x\n        P does y // note\n\n    when B does z\n        Q does w\n}\n"
 	assertFormatIsFaithful(t, src)
 }
 
@@ -1499,13 +1697,13 @@ func TestFormatDocument_TrailingCommentIndentation(t *testing.T) {
 		},
 		{
 			name: "trailing comment after decl",
-			src:  "domain re {\n  Billing\n}\n\n// trail\n",
-			want: "domain re {\n  Billing\n}\n\n// trail\n",
+			src:  "domain re {\n    Billing\n}\n\n// trail\n",
+			want: "domain re {\n    Billing\n}\n\n// trail\n",
 		},
 		{
 			name: "indented trailing block comment",
-			src:  "domain re {\n  Billing\n}\n\n/* a\n   b */\n",
-			want: "domain re {\n  Billing\n}\n\n/* a\n   b */\n",
+			src:  "domain re {\n    Billing\n}\n\n/* a\n   b */\n",
+			want: "domain re {\n    Billing\n}\n\n/* a\n   b */\n",
 		},
 	}
 	for _, c := range cases {
@@ -1574,5 +1772,164 @@ func TestFormatDocument_UnterminatedBlockCommentIsAFixedPoint(t *testing.T) {
 			}
 			assertContentPreserved(t, tc.src, once)
 		})
+	}
+}
+
+// TestFormatDocumentDefaultsToFourSpaces pins FormatDocument to
+// fmtconfig.Defaults(), whose Indent is 4.
+func TestFormatDocumentDefaultsToFourSpaces(t *testing.T) {
+	src := "services {\nFoo {\ncontexts: A\n}\n}\n"
+	want := "services {\n    Foo {\n        contexts: A\n    }\n}\n"
+	if got := FormatDocument(src); got != want {
+		t.Errorf("FormatDocument() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// TestFormatDocumentWithTwoSpaces pins FormatDocumentWith to an explicit,
+// non-default configuration.
+func TestFormatDocumentWithTwoSpaces(t *testing.T) {
+	cfg := fmtconfig.Defaults()
+	cfg.Indent = 2
+	src := "services {\nFoo {\ncontexts: A\n}\n}\n"
+	want := "services {\n  Foo {\n    contexts: A\n  }\n}\n"
+	if got := FormatDocumentWith(src, cfg); got != want {
+		t.Errorf("FormatDocumentWith() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// TestFormatDocumentCheckedWith_ScopeWiringIsPerCellType pins the only place
+// the new alignment config actually reaches the aligner:
+// FormatDocumentCheckedWith's two alignCells calls
+// (cfg.Align.OpAnnotation -> splitAnnotation, cfg.Align.TrailingComment ->
+// splitTrailingComment). Every other test in this package drives both
+// scopes at their shared default (ScopeBlock), so a swap between the two
+// arguments would pass the whole suite silently; this test exists
+// specifically to fail if that swap ever happens. It was verified by
+// mutation: swapping the two scope arguments at the call site made this test
+// fail, and swapping back made it pass again.
+func TestFormatDocumentCheckedWith_ScopeWiringIsPerCellType(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        A asks B to c [POST /v1/x]\n" +
+		"        A asks LongerName to d [GET /y]\n" +
+		"        A asks B to e // short\n" +
+		"        A asks LongerName to f // this is a longer note\n" +
+		"}\n"
+
+	annCol := func(s string) int { return strings.Index(lineContaining(t, s, "to c"), "[") }
+	annCol2 := func(s string) int { return strings.Index(lineContaining(t, s, "to d"), "[") }
+	comCol := func(s string) int { return strings.Index(lineContaining(t, s, "to e"), "//") }
+	comCol2 := func(s string) int { return strings.Index(lineContaining(t, s, "to f"), "//") }
+
+	t.Run("op_annotation off leaves only the comment column aligned", func(t *testing.T) {
+		cfg := fmtconfig.Defaults()
+		cfg.Align.OpAnnotation = fmtconfig.ScopeOff
+		got := FormatDocumentWith(src, cfg)
+		if annCol(got) == annCol2(got) {
+			t.Errorf("annotation column was aligned despite OpAnnotation=off:\n%s", got)
+		}
+		if comCol(got) != comCol2(got) {
+			t.Errorf("comment column was NOT aligned despite TrailingComment=block (default):\n%s", got)
+		}
+	})
+
+	t.Run("trailing_comment off leaves only the annotation column aligned", func(t *testing.T) {
+		cfg := fmtconfig.Defaults()
+		cfg.Align.TrailingComment = fmtconfig.ScopeOff
+		got := FormatDocumentWith(src, cfg)
+		if annCol(got) != annCol2(got) {
+			t.Errorf("annotation column was NOT aligned despite OpAnnotation=block (default):\n%s", got)
+		}
+		if comCol(got) == comCol2(got) {
+			t.Errorf("comment column was aligned despite TrailingComment=off:\n%s", got)
+		}
+	})
+}
+
+// TestFormatDocumentCheckedWith_CommentOnlyLineSplitsAnAnnotationRun pins a
+// behaviour change from generalising alignAnnotations into alignCells: under
+// ScopeBlock, a comment-only line now ends a run for EITHER cell type, not
+// just the trailing-comment one. Before this task, alignAnnotations's own
+// endsRun equivalent only ended a run at a blank line, so an annotated line,
+// a comment-only line, and another annotated line shared one column. endsRun
+// now treats a comment-only line as a run boundary for annotations too,
+// matching hclwrite and the documented ScopeBlock semantics. Zero lines in
+// the repo corpus hit this shape, so nothing there pins it; this test does,
+// so a future revert is a visible test failure rather than silent drift.
+func TestFormatDocumentCheckedWith_CommentOnlyLineSplitsAnAnnotationRun(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        A asks B to c [POST /v1/x]\n" +
+		"        // an unrelated note\n" +
+		"        A asks LongerName to d [GET /y]\n" +
+		"}\n"
+	got := FormatDocument(src)
+	first := lineContaining(t, got, "to c")
+	second := lineContaining(t, got, "to d")
+	if strings.Index(first, "[") == strings.Index(second, "[") {
+		t.Errorf("a comment-only line should have split the annotation run under ScopeBlock, but the two annotations still share a column:\n%s", got)
+	}
+	// Each side of the split is a run of one, so each still gets the
+	// annotation column's minimum 2-space gap (columnFor's minGap applies
+	// even to a run of one), but the two are no longer padded out to a
+	// SHARED width, which is what the strings.Index check above already
+	// pins; this just confirms neither line grew wider than its own natural
+	// width plus that minimum gap.
+	if first != "        A asks B to c  [POST /v1/x]" {
+		t.Errorf("first annotation should only carry its own 2-space minimum gap, got %q", first)
+	}
+	if second != "        A asks LongerName to d  [GET /y]" {
+		t.Errorf("second annotation should only carry its own 2-space minimum gap, got %q", second)
+	}
+}
+
+// TestFormatDocumentCheckedWith_AnnotationsAlignBeforeTrailingComments pins
+// the pass order in FormatDocumentCheckedWith: the annotation pass
+// (splitAnnotation) must run on the untouched text before the trailing-comment
+// pass (splitTrailingComment) ever pads a line. See the "Annotations align
+// first" comment above the two alignCells calls in formatter.go.
+//
+// Both passes read from a hints map (commentEnd / commentStart) that
+// writeTokens computes once, as byte offsets into the ORIGINAL unpadded line.
+// Padding a line shifts everything after the inserted spaces to the right, so
+// a pass that runs on already-padded text is reading stale offsets into text
+// that has moved.
+//
+// That is harmless when the comment pass runs second: it does not care where
+// a bracket is, only where the comment token started, which annotation
+// alignment never moves. It is NOT harmless the other way around. Reversing
+// the order pads the line first, shifting a trailing comment's `[...]` to the
+// right of the recorded commentEnd. splitAnnotation's guard
+// (`open < from`) exists precisely to reject a bracket that lives inside
+// comment text, but it is now comparing a shifted position against a stale
+// offset, so the guard passes when it should not: the annotation pass reads
+// "[1]" inside "// note [1]" as an annotation cell and pads the space in
+// front of it, rewriting whitespace INSIDE the comment. contentDrift cannot
+// catch this because it compares whitespace-squashed strings.
+//
+// go test ./... stays green under the swap: no other test pins the exact
+// column width the comment pass produces on a line that also contains a
+// bracket. This test does, by asserting the literal formatted bytes rather
+// than just a parsed shape. Verified by mutation: swapping the two alignCells
+// calls in formatter.go made this test fail with
+// `P does y                                  // note  [1]` (an extra space
+// before the bracket, inside the comment); swapping back restored the pass.
+func TestFormatDocumentCheckedWith_AnnotationsAlignBeforeTrailingComments(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        LongerServiceName does something entirely // first note\n" +
+		"        P does y // note [1]\n" +
+		"}\n"
+	want := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        LongerServiceName does something entirely // first note\n" +
+		"        P does y                                  // note [1]\n" +
+		"}\n"
+	got := formatSource(t, src)
+	if got != want {
+		t.Errorf("format mismatch (pass order or comment padding changed)\nwant:\n%q\ngot:\n%q", want, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
 	}
 }
