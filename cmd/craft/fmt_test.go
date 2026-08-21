@@ -16,9 +16,9 @@ const unformattedUseCase = "use_case \"Retry\" {\n" +
 	"}\n"
 
 const formattedUseCase = "use_case \"Retry\" {\n" +
-	"  when CRON detects a failed charge\n" +
-	"    Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
-	"    Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n" +
+	"    when CRON detects a failed charge\n" +
+	"        Subscriptions asks Billing for a fresh charge attempt  [POST /v1/charges]\n" +
+	"        Billing asks Gateway to authorize the card             [POST /pay/v2/authorize]\n" +
 	"}\n"
 
 func writeCraft(t *testing.T, dir, name, content string) string {

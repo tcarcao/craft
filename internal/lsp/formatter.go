@@ -5,26 +5,40 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
-// FormatDocument formats a Craft DSL source string to canonical form:
+// FormatDocument formats a Craft DSL source string to canonical form under
+// the built-in defaults:
 //   - top-level declarations separated by a blank line
-//   - block content indented 2 spaces per level
+//   - block content indented per fmtconfig.Defaults().Indent spaces per level
 //   - colons: no space before, one space after
 //   - commas: no space before, one space after
-//   - use_case blocks formatted with 2-space when / 4-space actions / blank line between scenarios
+//   - use_case blocks formatted with when at scenario indent / actions one
+//     level deeper / blank line between scenarios
 //   - arch blocks preserved verbatim (free-form component chain syntax)
 func FormatDocument(content string) string {
-	out, _ := FormatDocumentChecked(content)
+	return FormatDocumentWith(content, fmtconfig.Defaults())
+}
+
+// FormatDocumentWith is FormatDocument under an explicit configuration.
+func FormatDocumentWith(content string, cfg fmtconfig.Config) string {
+	out, _ := FormatDocumentCheckedWith(content, cfg)
 	return out
 }
 
-// FormatDocumentChecked is FormatDocument plus the reason it declined to
-// format.
+// FormatDocumentChecked is FormatDocumentCheckedWith under the built-in
+// defaults.
+func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
+	return FormatDocumentCheckedWith(content, fmtconfig.Defaults())
+}
+
+// FormatDocumentCheckedWith is FormatDocumentWith plus the reason it declined
+// to format.
 //
-// FormatDocument returns its input unchanged when the parse produced a
+// FormatDocumentWith returns its input unchanged when the parse produced a
 // diagnostic too severe to re-render from, which a caller holding only the
 // returned string cannot tell apart from "already formatted". `craft fmt`
 // needs that distinction: silently leaving a broken file untouched, or
@@ -32,7 +46,7 @@ func FormatDocument(content string) string {
 //
 // The second result is nil when the document was formatted, and otherwise the
 // diagnostic that blocked it.
-func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
+func FormatDocumentCheckedWith(content string, cfg fmtconfig.Config) (string, *craft.Diagnostic) {
 	gn, _, diags := syntax.Parse(content)
 	for _, d := range diags {
 		if bailsFormatting(d) {
@@ -62,7 +76,7 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 				}
 				if isCommentKind(tok.Kind()) {
 					if !first {
-						sb.WriteString(rootGapSeparator(gap))
+						sb.WriteString(rootGapSeparator(gap, cfg))
 					}
 					first = false
 					sb.WriteString(tok.Text())
@@ -98,7 +112,7 @@ func FormatDocumentChecked(content string) (string, *craft.Diagnostic) {
 			// by blank lines, and top-level declarations are always joined by
 			// one, so no run could ever have spanned two declarations anyway.
 			var decl strings.Builder
-			interior, commentEnd := writeTokens(&decl, node)
+			interior, commentEnd := writeTokens(&decl, node, cfg)
 			sb.WriteString(alignAnnotations(decl.String(), interior, commentEnd))
 		}
 	}
@@ -260,7 +274,7 @@ func isCommentKind(k syntax.SyntaxKind) bool {
 // the line's length and every bracket on the line falls before it. A block
 // comment closing partway along a line yields the offset just past its `*/`,
 // which is exactly where ordinary content resumes.
-func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map[int]int) {
+func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Config) (map[int]bool, map[int]int) {
 	braceDepth := 0
 	scenarioDepth := 0
 	gap := ""
@@ -340,7 +354,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode) (map[int]bool, map
 		// scenario must not ask for a second.
 		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario
 
-		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario)
+		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario, cfg)
 		sb.WriteString(sep)
 		sb.WriteString(tok.Text())
 

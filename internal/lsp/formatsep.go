@@ -3,6 +3,7 @@ package lsp
 import (
 	"strings"
 
+	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
@@ -10,11 +11,16 @@ import (
 // unbalanced `}` only produces a warning-severity diagnostic, so it can reach
 // the formatter with depth already at zero, and strings.Repeat panics on a
 // negative count.
-func indentFor(depth int) string {
+//
+// Width comes from the configuration rather than being fixed, because a
+// workspace's existing files are the thing being formatted and half the known
+// corpus is 4-space. Config.Validate bounds the width, so the multiplication
+// here cannot be driven to exhaustion by a file on disk.
+func indentFor(depth int, cfg fmtconfig.Config) string {
 	if depth < 1 {
 		return ""
 	}
-	return strings.Repeat("  ", depth)
+	return strings.Repeat(" ", cfg.Indent*depth)
 }
 
 // separatorFor returns the whitespace to emit before curr.
@@ -32,7 +38,7 @@ func indentFor(depth int) string {
 // token". It cannot be derived here: the token that opens a scenario may be a
 // comment rather than the `when`, and telling those apart needs lookahead to
 // the comment's owner, which separatorFor never sees.
-func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool) string {
+func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken, depth int, startsScenario bool, cfg fmtconfig.Config) string {
 	if prev == nil {
 		return ""
 	}
@@ -112,10 +118,10 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		return " "
 	}
 	if prev.Kind() == syntax.SyntaxKindLBrace {
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
 	}
 	if curr.Kind() == syntax.SyntaxKindRBrace {
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
 	}
 
 	// A scenario always gets a blank line before it, even if the author wrote
@@ -135,7 +141,7 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// the second, once the newline was in the gap, so formatting was not
 	// idempotent for that shape.
 	if startsScenario && depth == 1 {
-		return "\n\n" + indentFor(depth)
+		return "\n\n" + indentFor(depth, cfg)
 	}
 
 	// The fourth brace rule, and the mirror of `curr == RBrace` above: a `}`
@@ -149,7 +155,7 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 	// plain newline and the scenario's blank line only appeared on a second
 	// pass. The scenario rule above carries the full account.
 	if prev.Kind() == syntax.SyntaxKindRBrace && !strings.Contains(gap, "\n") {
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
 	}
 
 	switch strings.Count(gap, "\n") {
@@ -160,10 +166,10 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 		// Collapse any run of spaces or tabs to one.
 		return " "
 	case 1:
-		return "\n" + indentFor(depth)
+		return "\n" + indentFor(depth, cfg)
 	default:
 		// Two or more newlines is a blank line. Collapse any longer run to one.
-		return "\n\n" + indentFor(depth)
+		return "\n\n" + indentFor(depth, cfg)
 	}
 }
 
@@ -177,7 +183,12 @@ func separatorFor(prev *syntax.SyntaxToken, gap string, curr syntax.SyntaxToken,
 // (a single newline between them) must stay back to back, and a blank line
 // the author put between them must survive as one. There is no depth to
 // indent for: this only ever fires at brace depth zero.
-func rootGapSeparator(gap string) string {
+//
+// cfg is unused today: nothing here indents. It is threaded anyway so every
+// site in the whitespace policy takes the same configuration, rather than
+// this one function being the exception a future change to root-level
+// spacing would have to notice and fix up.
+func rootGapSeparator(gap string, cfg fmtconfig.Config) string {
 	switch strings.Count(gap, "\n") {
 	case 0:
 		return " "
