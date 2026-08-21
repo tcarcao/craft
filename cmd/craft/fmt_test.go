@@ -664,6 +664,97 @@ func TestRunFmt_MalformedCraftfmtOnlyFailsThatWorkspace(t *testing.T) {
 	}
 }
 
+// TestFmtCmd_FlagsWireThroughCobraToTheOutput is the direct regression test
+// for two flag-wiring mutations that survive every other test in this file:
+// every other override-merge test (TestFmtFlagOverridesCraftfmt,
+// TestFmtFlagMergesPerFieldWithCraftfmt, ...) constructs fmtOverride{} by
+// hand, so none of them exercises the `cmd.Flags().Changed(...)` gate in
+// fmtCmd's RunE, or the assignment that copies each flag variable into the
+// override struct. This test drives --indent and --continuation-indent
+// through an actual cobra.Command via root.SetArgs, the same path
+// `craft fmt` takes from a shell.
+//
+// It also passes a RELATIVE file path (just the basename, with the process
+// cwd changed into the file's directory), which is the shape a real
+// invocation like `craft fmt *.craft` from a workspace root actually takes.
+// fmtconfig.Resolve's relative-path branch (filepath.Abs(dir) against the
+// process cwd) otherwise has no automated coverage: every other test in this
+// package passes an absolute path built from t.TempDir().
+//
+// Two mutations were verified against this test and reverted:
+//   - `cmd.Flags().Changed("indent")` replaced with `indent != 0`: caught by
+//     TestFmtCmd_IndentZeroFlagAppliesThroughCobra below, since a mutant gate
+//     like that treats an explicit `--indent 0` as unset.
+//   - `override.continuationIndent, override.hasContinuationIndent =
+//     contIndent, true` replaced with `= indent, true`: caught here, because
+//     --indent and --continuation-indent are given different values below.
+func TestFmtCmd_FlagsWireThroughCobraToTheOutput(t *testing.T) {
+	dir := t.TempDir()
+	writeCraft(t, dir, "a.craft", "services {\nF {\ncontexts: A,\nB\n}\n}\n")
+	t.Chdir(dir)
+
+	root := newRootCmd()
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"fmt", "--indent", "2", "--continuation-indent", "8", "a.craft"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("fmt: %v\n%s", err, buf.String())
+	}
+
+	got, err := os.ReadFile("a.craft")
+	if err != nil {
+		t.Fatalf("reading a.craft: %v", err)
+	}
+	// F: indent(2) * depth(1) = 2 spaces.
+	// contexts: indent(2) * depth(2) = 4 spaces.
+	// B is the wrapped continuation of contexts: indent(2)*depth(2) +
+	// continuation_indent(8) = 12 spaces. If continuation-indent's flag value
+	// were silently replaced by indent's (2), this would be 4+2=6 instead.
+	want := "services {\n" +
+		"  F {\n" +
+		"    contexts: A,\n" +
+		"            B\n" +
+		"  }\n" +
+		"}\n"
+	if string(got) != want {
+		t.Errorf("flags did not wire through cobra as expected\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// TestFmtCmd_IndentZeroFlagAppliesThroughCobra pins that an explicit
+// `--indent 0` is honoured, not treated as "flag not passed". `indent` is an
+// int flag whose zero value coincides with a legal configuration value (see
+// fmtconfig.Config.Validate, which accepts 0), so the RunE gate MUST be
+// cmd.Flags().Changed("indent"), never a check on the flag variable's value
+// such as `indent != 0`. A .craftfmt with a non-zero indent is present so
+// that a mutant gate which treats --indent 0 as unset would visibly fall
+// back to it instead of producing zero-indent output.
+func TestFmtCmd_IndentZeroFlagAppliesThroughCobra(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".craftfmt"), []byte("indent = 4\n"), 0o644)
+	writeCraft(t, dir, "a.craft", "services {\nF {\ncontexts: A\n}\n}\n")
+	t.Chdir(dir)
+
+	root := newRootCmd()
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"fmt", "--indent", "0", "a.craft"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("fmt: %v\n%s", err, buf.String())
+	}
+
+	got, err := os.ReadFile("a.craft")
+	if err != nil {
+		t.Fatalf("reading a.craft: %v", err)
+	}
+	want := "services {\nF {\ncontexts: A\n}\n}\n"
+	if string(got) != want {
+		t.Errorf("--indent 0 was not honoured (fell back to .craftfmt's indent=4?)\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}
+
 // TestFmtCmd_InvalidFlagValueFailsBeforeTouchingFiles pins that a bad flag
 // value is caught before any file is read or written: RunE validates the
 // merged-onto-defaults override and returns the error itself, never reaching
