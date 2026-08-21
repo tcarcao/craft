@@ -284,9 +284,9 @@ func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
 // idempotence check completely undetected.
 //
 // The matrix is 2 indents x 5 scopes = 10 configurations over the whole
-// corpus (currently ~98 files), each doing two format passes. That ran in
-// under two seconds locally alongside the rest of the package, so nothing is
-// bounded or sampled: every file is checked under every configuration.
+// corpus (currently 99 files), each doing two format passes. That ran in
+// about a second standalone, so nothing is bounded or sampled: every file is
+// checked under every configuration.
 func TestCorpusPropertiesAcrossConfigs(t *testing.T) {
 	files := allCraftFiles(t)
 
