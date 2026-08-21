@@ -108,6 +108,46 @@ func stripPositions(v any) any {
 	}
 }
 
+// assertWhitespaceOnlyChange asserts that got is src with only whitespace
+// changed, checked byte-for-byte with all whitespace stripped from both
+// sides. It reports whether the assertion held, so a caller that treats this
+// as a prerequisite for the checks that follow can stop early exactly as
+// TestFormatDocument_EveryCraftFileInRepo always has.
+func assertWhitespaceOnlyChange(t *testing.T, src, got string) bool {
+	t.Helper()
+	if squashWhitespace(src) != squashWhitespace(got) {
+		t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", src, got)
+		return false
+	}
+	return true
+}
+
+// assertReparses asserts that got reparses with zero error diagnostics. It
+// reports whether the assertion held, for the same early-stop reason as
+// assertWhitespaceOnlyChange.
+func assertReparses(t *testing.T, got string) bool {
+	t.Helper()
+	_, _, diags := syntax.Parse(got)
+	for _, d := range diags {
+		if d.Severity == craft.SeverityError {
+			t.Errorf("formatted output does not parse: [%s] %s\n%s", d.Code, d.Message, got)
+			return false
+		}
+	}
+	return true
+}
+
+// assertModelPreserved asserts that the canonical model of got matches the
+// canonical model of src, position fields aside. name is passed through to
+// modelOf for parse error messages; a file path is the natural choice.
+func assertModelPreserved(t *testing.T, name, src, got string) {
+	t.Helper()
+	before, after := modelOf(t, name, src), modelOf(t, name, got)
+	if !reflect.DeepEqual(before, after) {
+		t.Errorf("formatting changed the canonical model\noutput:\n%s", got)
+	}
+}
+
 // TestFormatDocument_EveryCraftFileInRepo is the guard that makes `craft fmt`
 // safe to ship as a bulk rewriter.
 //
@@ -174,18 +214,13 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 			// whitespace inside a token's own text too, so it cannot see a
 			// change to the spacing INSIDE a single comment (see
 			// TestFormatDocument_CommentInternalSpacingSurvives).
-			if squashWhitespace(src) != squashWhitespace(got) {
-				t.Errorf("formatting changed more than whitespace\nin:\n%s\nout:\n%s", src, got)
+			if !assertWhitespaceOnlyChange(t, src, got) {
 				return
 			}
 
 			// 1. reparses clean
-			_, _, diags := syntax.Parse(got)
-			for _, d := range diags {
-				if d.Severity == craft.SeverityError {
-					t.Errorf("formatted output does not parse: [%s] %s\n%s", d.Code, d.Message, got)
-					return
-				}
+			if !assertReparses(t, got) {
+				return
 			}
 
 			// 2. idempotent
@@ -194,10 +229,7 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 			}
 
 			// 3. model preserved
-			before, after := modelOf(t, file, src), modelOf(t, file, got)
-			if !reflect.DeepEqual(before, after) {
-				t.Errorf("formatting changed the canonical model\noutput:\n%s", got)
-			}
+			assertModelPreserved(t, file, src, got)
 		})
 	}
 }
