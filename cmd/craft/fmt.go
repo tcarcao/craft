@@ -244,6 +244,16 @@ func runFmt(files []string, check bool, override fmtOverride, out, errOut io.Wri
 		// lie, and would mean a single bad file blocks `craft fmt` from ever
 		// normalising it. firstNewError is what tells "this was already
 		// broken" apart from "formatting broke this".
+		//
+		// The parse error from this first call is deliberately discarded.
+		// If parsing the ORIGINAL content fails outright, origDiags comes
+		// back empty, so firstNewError's budget starts at zero and any
+		// error-severity diagnostic surfaced by parsing the formatted output
+		// below is reported as new -- which collapses this guard back to the
+		// old any-error-fails behaviour for that one file. That is the safe
+		// direction (this can only make the guard more conservative, never
+		// less), so it is left as a silent fallback rather than surfaced as
+		// its own failure mode.
 		_, origDiags, _ := craft.Parse(file, content)
 		if _, diags, err := craft.Parse(file, []byte(formatted)); err != nil {
 			fmt.Fprintf(errOut, "%s: skipped, formatted output could not be reparsed: %v\n", file, err)

@@ -402,7 +402,7 @@ func TestFirstNewError_CountsRatherThanSetMembership(t *testing.T) {
 	diags := []craft.Diagnostic{one, one, one}
 	got := firstNewError(diags, orig)
 	if got == nil {
-		t.Fatal("firstNewError() = nil, want the third occurrence reported: orig only accounts for one")
+		t.Fatal("firstNewError() = nil, want the second occurrence reported: orig only accounts for one")
 	}
 	if got.Code != one.Code || got.Message != one.Message {
 		t.Errorf("firstNewError() = %+v, want a copy of %+v", *got, one)
