@@ -161,15 +161,20 @@ craft inspect docs/payments.craft --format json | jq '.services'
 craft fmt <files...> [flags]
 ```
 
-Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies 2-space indent, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations across each contiguous run.
+Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies a 4-space indent by default, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations and trailing `//` comments, each across each contiguous run (default scope `block`: a run ends at a blank line, a `{`, a `}`, or a comment-only line).
 
-Comments stay where the author put them, including a trailing comment at the end of an action line. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+Comments stay on the line the author put them, including a trailing comment at the end of an action line, though its column may shift to align with others in the same block. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved, and its continuation hangs at block indent plus `continuation_indent` (default 4) rather than resetting to block depth. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+
+Indent width, continuation indent, and comment alignment scope are configurable per file via the nearest ancestor `.craftfmt` (TOML), or overridden per invocation with the flags below; a flag overrides only the field it names, and only when actually passed.
 
 If a file has a parse error too severe to re-render from, `craft fmt` leaves it untouched and reports it as skipped rather than silently rewriting it or reporting it as clean.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--check` | false | Write nothing; name each unformatted file and exit non-zero |
+| `--indent` | unset (falls back to `.craftfmt`, or 4) | Indent width in spaces; overrides `.craftfmt` |
+| `--continuation-indent` | unset (falls back to `.craftfmt`, or 4) | Extra indent for a wrapped list continuation; overrides `.craftfmt` |
+| `--align-trailing-comment` | unset (falls back to `.craftfmt`, or `block`) | Trailing comment alignment scope: `off`, `strict`, `block`, `file`, `decl`; overrides `.craftfmt` |
 
 **Examples:**
 ```bash

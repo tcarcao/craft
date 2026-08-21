@@ -332,6 +332,12 @@ that bail-out stays in front of the walker.
 
 ## Out of scope
 
+> **Amended 2026-08-21 by `docs/decisions/formatting-configuration.md`.** Indent width,
+> trailing-comment alignment, and continuation indent are now configurable. The invariant
+> above is unchanged: the formatter still writes every non-whitespace token verbatim,
+> exactly once, in document order, and configuration only widens what it may choose for the
+> whitespace between them.
+
 - making `craft fmt --check` clean on the corpus
 - changing indent width, or any style decision not listed under Behaviour changes
 - LSP navigation for qualified names, which is tracked separately
