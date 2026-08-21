@@ -1882,3 +1882,54 @@ func TestFormatDocumentCheckedWith_CommentOnlyLineSplitsAnAnnotationRun(t *testi
 		t.Errorf("second annotation should only carry its own 2-space minimum gap, got %q", second)
 	}
 }
+
+// TestFormatDocumentCheckedWith_AnnotationsAlignBeforeTrailingComments pins
+// the pass order in FormatDocumentCheckedWith: the annotation pass
+// (splitAnnotation) must run on the untouched text before the trailing-comment
+// pass (splitTrailingComment) ever pads a line. See the "Annotations align
+// first" comment above the two alignCells calls in formatter.go.
+//
+// Both passes read from a hints map (commentEnd / commentStart) that
+// writeTokens computes once, as byte offsets into the ORIGINAL unpadded line.
+// Padding a line shifts everything after the inserted spaces to the right, so
+// a pass that runs on already-padded text is reading stale offsets into text
+// that has moved.
+//
+// That is harmless when the comment pass runs second: it does not care where
+// a bracket is, only where the comment token started, which annotation
+// alignment never moves. It is NOT harmless the other way around. Reversing
+// the order pads the line first, shifting a trailing comment's `[...]` to the
+// right of the recorded commentEnd. splitAnnotation's guard
+// (`open < from`) exists precisely to reject a bracket that lives inside
+// comment text, but it is now comparing a shifted position against a stale
+// offset, so the guard passes when it should not: the annotation pass reads
+// "[1]" inside "// note [1]" as an annotation cell and pads the space in
+// front of it, rewriting whitespace INSIDE the comment. contentDrift cannot
+// catch this because it compares whitespace-squashed strings.
+//
+// go test ./... stays green under the swap: no other test pins the exact
+// column width the comment pass produces on a line that also contains a
+// bracket. This test does, by asserting the literal formatted bytes rather
+// than just a parsed shape. Verified by mutation: swapping the two alignCells
+// calls in formatter.go made this test fail with
+// `P does y                                  // note  [1]` (an extra space
+// before the bracket, inside the comment); swapping back restored the pass.
+func TestFormatDocumentCheckedWith_AnnotationsAlignBeforeTrailingComments(t *testing.T) {
+	src := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        LongerServiceName does something entirely // first note\n" +
+		"        P does y // note [1]\n" +
+		"}\n"
+	want := "use_case \"X\" {\n" +
+		"    when A does b\n" +
+		"        LongerServiceName does something entirely // first note\n" +
+		"        P does y                                  // note [1]\n" +
+		"}\n"
+	got := formatSource(t, src)
+	if got != want {
+		t.Errorf("format mismatch (pass order or comment padding changed)\nwant:\n%q\ngot:\n%q", want, got)
+	}
+	if again := formatSource(t, got); again != got {
+		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
