@@ -531,7 +531,7 @@ func TestVAS_MermaidC4Renders(t *testing.T) {
 	}
 	doc := analysis.File("", string(src)).Doc
 
-	mermaidSrc, err := visualizer.New().GenerateC4Mermaid(doc, visualizer.C4ModeBoundaries, false)
+	mermaidSrc, err := visualizer.New().GenerateC4Mermaid(doc, nil, nil, visualizer.C4ModeBoundaries, false)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}

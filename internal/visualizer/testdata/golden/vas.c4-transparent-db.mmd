@@ -1,0 +1,33 @@
+C4Container
+    title Container Diagram - Architecture (transparent mode)
+    System_Ext(CRON, "CRON", "External system")
+    System_Ext(FulfillmentTimer, "FulfillmentTimer", "External system")
+    System_Ext(VasLifecycleTimer, "VasLifecycleTimer", "External system")
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(VasApplicationServiceA_boundary, "VasApplicationServiceA") {
+        Container(VasApplicationServiceA_Application, "VasApplicationServiceA Application", "Go Application", "Core business logic for VasApplicationServiceA domains: VasApplication")
+    }
+    System_Boundary(VasManagementService_boundary, "VasManagementService") {
+        Container(VasManagementService_Application, "VasManagementService Application", "Go Application", "Core business logic for VasManagementService domains: VASScheduler, VASFulfillment, VasLifecycle")
+    }
+    Rel(CRON, VasManagementService_Application, "Triggers")
+    Rel(FulfillmentTimer, VasManagementService_Application, "Triggers")
+    Rel(VasLifecycleTimer, VasManagementService_Application, "Triggers")
+    Rel(VasManagementService_Application, Event_Queue, "VASReadyForFulfillment", "Event Publishing")
+    Rel(VasManagementService_Application, Event_Queue, "RequestVasApplication", "Event Publishing")
+    Rel(VasApplicationServiceA_Application, Event_Queue, "VasApplicationAcknowledged", "Event Publishing")
+    Rel(VasApplicationServiceA_Application, Event_Queue, "VasApplied", "Event Publishing")
+    Rel(VasManagementService_Application, Event_Queue, "VasFulfilled", "Event Publishing")
+    Rel(VasApplicationServiceA_Application, Event_Queue, "VasApplicationFailed", "Event Publishing")
+    Rel(VasManagementService_Application, Event_Queue, "VasFulfillmentFailed", "Event Publishing")
+    Rel(VasManagementService_Application, Event_Queue, "VasFulfillmentTimedOut", "Event Publishing")
+    Rel(VasManagementService_Application, Event_Queue, "RequestEndOfVasApplication", "Event Publishing")
+    Rel(VasApplicationServiceA_Application, Event_Queue, "VasApplicationEnded", "Event Publishing")
+    Rel(Event_Queue, VasApplicationServiceA_Application, "RequestVasApplication", "Event Delivery")
+    Rel(Event_Queue, VasManagementService_Application, "VasApplicationAcknowledged", "Event Delivery")
+    Rel(Event_Queue, VasManagementService_Application, "VasApplied", "Event Delivery")
+    Rel(Event_Queue, VasManagementService_Application, "VasApplicationFailed", "Event Delivery")
+    Rel(Event_Queue, VasApplicationServiceA_Application, "RequestEndOfVasApplication", "Event Delivery")
+    Rel(Event_Queue, VasManagementService_Application, "VasApplicationEnded", "Event Delivery")

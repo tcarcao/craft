@@ -1,0 +1,23 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+Person(Admin, "Admin", "External user")
+Person(User, "User", "External user")
+
+
+@enduml

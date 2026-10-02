@@ -35,12 +35,42 @@ func goldenModels(t *testing.T) map[string]string {
 
 // goldenRenders lists every view × backend; each renders a resolved model.
 var goldenRenders = map[string]func(doc *craft.CraftDoc) string{
-	"flow.puml":         func(d *craft.CraftDoc) string { return plantuml.Flow(view.BuildFlow(d, interaction.Derive(d))) },
-	"flow.mmd":          func(d *craft.CraftDoc) string { return mermaid.Flow(view.BuildFlow(d, interaction.Derive(d))) },
-	"architecture.puml": func(d *craft.CraftDoc) string { return plantuml.Architecture(view.BuildArchitecture(d, interaction.Derive(d))) },
-	"architecture.mmd":  func(d *craft.CraftDoc) string { return mermaid.Architecture(view.BuildArchitecture(d, interaction.Derive(d))) },
-	"sequence.puml":     func(d *craft.CraftDoc) string { return plantuml.Sequence(view.BuildSequence(d, interaction.Derive(d))) },
-	"sequence.mmd":      func(d *craft.CraftDoc) string { return mermaid.Sequence(view.BuildSequence(d, interaction.Derive(d))) },
+	"flow.puml": func(d *craft.CraftDoc) string { return plantuml.Flow(view.BuildFlow(d, interaction.Derive(d))) },
+	"flow.mmd":  func(d *craft.CraftDoc) string { return mermaid.Flow(view.BuildFlow(d, interaction.Derive(d))) },
+	"architecture.puml": func(d *craft.CraftDoc) string {
+		return plantuml.Architecture(view.BuildArchitecture(d, interaction.Derive(d)))
+	},
+	"architecture.mmd": func(d *craft.CraftDoc) string {
+		return mermaid.Architecture(view.BuildArchitecture(d, interaction.Derive(d)))
+	},
+	"sequence.puml": func(d *craft.CraftDoc) string { return plantuml.Sequence(view.BuildSequence(d, interaction.Derive(d))) },
+	"sequence.mmd":  func(d *craft.CraftDoc) string { return mermaid.Sequence(view.BuildSequence(d, interaction.Derive(d))) },
+	"c4-boundaries.puml": func(d *craft.CraftDoc) string {
+		return plantuml.C4(c4View(d, nil, nil, C4ModeBoundaries, false))
+	},
+	"c4-boundaries.mmd": func(d *craft.CraftDoc) string {
+		return mermaid.C4(c4View(d, nil, nil, C4ModeBoundaries, false))
+	},
+	"c4-transparent-db.puml": func(d *craft.CraftDoc) string {
+		return plantuml.C4(c4View(d, nil, nil, C4ModeTransparent, true))
+	},
+	"c4-transparent-db.mmd": func(d *craft.CraftDoc) string {
+		return mermaid.C4(c4View(d, nil, nil, C4ModeTransparent, true))
+	},
+	"c4-focus.puml": func(d *craft.CraftDoc) string {
+		return plantuml.C4(c4View(d, firstService(d), nil, C4ModeBoundaries, true))
+	},
+	"c4-focus.mmd": func(d *craft.CraftDoc) string {
+		return mermaid.C4(c4View(d, firstService(d), nil, C4ModeBoundaries, true))
+	},
+}
+
+// firstService focuses a C4 golden on the model's first service, if any.
+func firstService(d *craft.CraftDoc) []string {
+	if len(d.Services) == 0 {
+		return nil
+	}
+	return []string{d.Services[0].Name}
 }
 
 // TestGolden renders every model through every view and backend, and checks

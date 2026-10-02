@@ -1,0 +1,66 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+System_Ext(CRON, "CRON", "External system")
+System_Ext(FulfillmentTimer, "FulfillmentTimer", "External system")
+System_Ext(VasLifecycleTimer, "VasLifecycleTimer", "External system")
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(VasApplicationServiceA_boundary, "VasApplicationServiceA") {
+    Container_Boundary(VasApplicationServiceA_VasApplication_Domain_boundary, "VasApplication Domain") {
+        Container(VasApplication, "VasApplication", "Go Application", "VasApplication [Context]", $sprite="go")
+    }
+}
+
+System_Boundary(VasManagementService_boundary, "VasManagementService") {
+    Container_Boundary(VasManagementService_VASScheduler_Domain_boundary, "VASScheduler Domain") {
+        Container(VASScheduler, "VASScheduler", "Go Application", "VASScheduler [Context]", $sprite="go")
+    }
+    Container_Boundary(VasManagementService_VASFulfillment_Domain_boundary, "VASFulfillment Domain") {
+        Container(VASFulfillment, "VASFulfillment", "Go Application", "VASFulfillment [Context]", $sprite="go")
+    }
+    Container_Boundary(VasManagementService_VasLifecycle_Domain_boundary, "VasLifecycle Domain") {
+        Container(VasLifecycle, "VasLifecycle", "Go Application", "VasLifecycle [Context]", $sprite="go")
+    }
+}
+
+Rel(CRON, VASScheduler, "Triggers")
+Rel(FulfillmentTimer, VASFulfillment, "Triggers")
+Rel(VasLifecycleTimer, VASFulfillment, "Triggers")
+Rel(VASScheduler, Event_Queue, "VASReadyForFulfillment", "Event Publishing")
+Rel(VASFulfillment, Event_Queue, "RequestVasApplication", "Event Publishing")
+Rel(VasApplication, Event_Queue, "VasApplicationAcknowledged", "Event Publishing")
+Rel(VasApplication, Event_Queue, "VasApplied", "Event Publishing")
+Rel(VASFulfillment, Event_Queue, "VasFulfilled", "Event Publishing")
+Rel(VasApplication, Event_Queue, "VasApplicationFailed", "Event Publishing")
+Rel(VASFulfillment, Event_Queue, "VasFulfillmentFailed", "Event Publishing")
+Rel(VASFulfillment, Event_Queue, "VasFulfillmentTimedOut", "Event Publishing")
+Rel(VASFulfillment, Event_Queue, "RequestEndOfVasApplication", "Event Publishing")
+Rel(VasApplication, Event_Queue, "VasApplicationEnded", "Event Publishing")
+Rel(Event_Queue, VasApplication, "RequestVasApplication", "Event Delivery")
+Rel(Event_Queue, VASFulfillment, "VasApplicationAcknowledged", "Event Delivery")
+Rel(Event_Queue, VASFulfillment, "VasApplied", "Event Delivery")
+Rel(Event_Queue, VASFulfillment, "VasApplicationFailed", "Event Delivery")
+Rel(Event_Queue, VasApplication, "RequestEndOfVasApplication", "Event Delivery")
+Rel(Event_Queue, VasLifecycle, "VasApplicationEnded", "Event Delivery")
+
+@enduml

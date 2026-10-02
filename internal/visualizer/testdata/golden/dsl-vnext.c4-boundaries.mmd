@@ -1,0 +1,12 @@
+C4Container
+    title Container Diagram - Architecture (boundaries mode)
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(SubscriptionsApi_boundary, "SubscriptionsApi") {
+        Container_Boundary(SubscriptionsApi_Subscriptions_Domain_boundary, "Subscriptions Domain") {
+            Container(Subscriptions, "Subscriptions", "Application", "Subscriptions [Context]")
+        }
+    }
+    Rel(Subscriptions, Event_Queue, "vas.VasFulfilled", "Event Publishing")
+    Rel(Event_Queue, Subscriptions, "vas.VasApplied", "Event Delivery")

@@ -1,0 +1,46 @@
+C4Container
+    title Container Diagram - Architecture (boundaries mode)
+    Person(CRON, "CRON", "External user")
+    Person(Customer, "Customer", "External user")
+    Person(TransactionValidation, "TransactionValidation", "External user")
+    System_Boundary(AccountService_boundary, "AccountService") {
+        Container_Boundary(AccountService_AccountManagement_Domain_boundary, "AccountManagement Domain") {
+            Container(AccountManagement, "AccountManagement", "Java Application", "AccountManagement [Context]")
+        }
+        Container_Boundary(AccountService_BalanceTracking_Domain_boundary, "BalanceTracking Domain") {
+            Container(BalanceTracking, "BalanceTracking", "Java Application", "BalanceTracking [Context]")
+        }
+    }
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(NotificationService_boundary, "NotificationService") {
+        Container_Boundary(NotificationService_CustomerNotification_Domain_boundary, "CustomerNotification Domain") {
+            Container(CustomerNotification, "CustomerNotification", "Python Application", "CustomerNotification [Context]")
+        }
+    }
+    System_Boundary(PaymentService_boundary, "PaymentService") {
+        Container_Boundary(PaymentService_PaymentProcessing_Domain_boundary, "PaymentProcessing Domain") {
+            Container(PaymentProcessing, "PaymentProcessing", "Go Application", "PaymentProcessing [Context]")
+        }
+        Container_Boundary(PaymentService_TransactionValidation_Domain_boundary, "TransactionValidation Domain") {
+            Container(TransactionValidation, "TransactionValidation", "Go Application", "TransactionValidation [Context]")
+        }
+    }
+    Rel(Customer, PaymentProcessing, "Triggers")
+    Rel(Customer, AccountManagement, "Triggers")
+    Rel(TransactionValidation, TransactionValidation, "Triggers")
+    Rel(CRON, PaymentProcessing, "Triggers")
+    Rel(PaymentProcessing, AccountManagement, "to verify source account", "Service API")
+    Rel(PaymentProcessing, BalanceTracking, "to reserve funds", "Service API")
+    Rel(PaymentProcessing, AccountManagement, "to verify destination account", "Service API")
+    Rel(TransactionValidation, AccountManagement, "to freeze account", "Service API")
+    Rel(PaymentProcessing, AccountManagement, "to get scheduled payments", "Service API")
+    Rel(BalanceTracking, Event_Queue, "Funds Reserved", "Event Publishing")
+    Rel(PaymentProcessing, Event_Queue, "Transfer Completed", "Event Publishing")
+    Rel(TransactionValidation, Event_Queue, "Account Frozen", "Event Publishing")
+    Rel(CustomerNotification, Event_Queue, "bank security team", "Event Publishing")
+    Rel(PaymentProcessing, Event_Queue, "Scheduled Payments Processed", "Event Publishing")
+    Rel(Event_Queue, PaymentProcessing, "Funds Reserved", "Event Delivery")
+    Rel(Event_Queue, CustomerNotification, "Transfer Completed", "Event Delivery")
+    Rel(Event_Queue, CustomerNotification, "Account Frozen", "Event Delivery")

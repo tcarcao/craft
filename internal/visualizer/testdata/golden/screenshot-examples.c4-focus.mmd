@@ -1,0 +1,85 @@
+C4Container
+    title Container Diagram - Architecture (boundaries mode)
+    Person(Business_User, "Business_User", "External user")
+    Enterprise_Boundary(NotificationService_boundary, "NotificationService") {
+        Container_Boundary(NotificationService_EmailNotifier_Domain_boundary, "EmailNotifier Domain") {
+            Container_Ext(EmailNotifier, "EmailNotifier", "Python Application", "EmailNotifier [Context]")
+        }
+        Container_Boundary(NotificationService_SMSNotifier_Domain_boundary, "SMSNotifier Domain") {
+            Container_Ext(SMSNotifier, "SMSNotifier", "Python Application", "SMSNotifier [Context]")
+        }
+        Container_Boundary(NotificationService_PushNotifier_Domain_boundary, "PushNotifier Domain") {
+            Container_Ext(PushNotifier, "PushNotifier", "Python Application", "PushNotifier [Context]")
+        }
+        ContainerDb_Ext(NotificationService_rabbitmq, "NotificationService_rabbitmq", "Database", "Stores rabbitmq data")
+    }
+    Enterprise_Boundary(OrderService_boundary, "OrderService") {
+        Container_Boundary(OrderService_OrderManagement_Domain_boundary, "OrderManagement Domain") {
+            Container_Ext(OrderManagement, "OrderManagement", "TypeScript Application", "OrderManagement [Context]")
+        }
+        Container_Boundary(OrderService_Payment_Domain_boundary, "Payment Domain") {
+            Container_Ext(Payment, "Payment", "TypeScript Application", "Payment [Context]")
+        }
+        Container_Boundary(OrderService_Shipping_Domain_boundary, "Shipping Domain") {
+            Container_Ext(Shipping, "Shipping", "TypeScript Application", "Shipping [Context]")
+        }
+        ContainerDb_Ext(OrderService_postgresql, "OrderService_postgresql", "PostgreSQL Database", "Stores postgresql data")
+        ContainerDb_Ext(OrderService_kafka, "OrderService_kafka", "Database", "Stores kafka data")
+    }
+    Enterprise_Boundary(ProductService_boundary, "ProductService") {
+        Container_Boundary(ProductService_Catalog_Domain_boundary, "Catalog Domain") {
+            Container_Ext(Catalog, "Catalog", "Java Application", "Catalog [Context]")
+        }
+        Container_Boundary(ProductService_Inventory_Domain_boundary, "Inventory Domain") {
+            Container_Ext(Inventory, "Inventory", "Java Application", "Inventory [Context]")
+        }
+        Container_Boundary(ProductService_Pricing_Domain_boundary, "Pricing Domain") {
+            Container_Ext(Pricing, "Pricing", "Java Application", "Pricing [Context]")
+        }
+        ContainerDb_Ext(ProductService_postgresql, "ProductService_postgresql", "PostgreSQL Database", "Stores postgresql data")
+        ContainerDb_Ext(ProductService_redis, "ProductService_redis", "Redis Cache", "Stores redis data")
+    }
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(Gateway_boundary, "Gateway") {
+        Container(APIGateway, "APIGateway", "Gateway", "Gateway composed by: LoadBalancer → APIGateway | Modifiers: LoadBalancer[ssl:true], APIGateway[type:nginx]")
+    }
+    System_Boundary(Presentation_boundary, "Presentation") {
+        Container(WebApp, "WebApp", "React Frontend", " [framework:react, ssl:true]")
+        Container(MobileApp, "MobileApp", "Flutter Frontend", " [framework:flutter]")
+    }
+    System_Boundary(UserService_boundary, "UserService") {
+        Container_Boundary(UserService_Authentication_Domain_boundary, "Authentication Domain") {
+            Container(Authentication, "Authentication", "Go Application", "Authentication [Context]")
+        }
+        Container_Boundary(UserService_Profile_Domain_boundary, "Profile Domain") {
+            Container(Profile, "Profile", "Go Application", "Profile [Context]")
+        }
+        Container_Boundary(UserService_Preferences_Domain_boundary, "Preferences Domain") {
+            Container(Preferences, "Preferences", "Go Application", "Preferences [Context]")
+        }
+        ContainerDb(UserService_postgresql, "UserService_postgresql", "PostgreSQL Database", "Stores postgresql data")
+    }
+    Rel(Business_User, WebApp, "Uses")
+    Rel(Business_User, MobileApp, "Uses")
+    Rel(WebApp, APIGateway, "API Requests", "HTTPS/REST")
+    Rel(MobileApp, APIGateway, "API Requests", "HTTPS/REST")
+    Rel(APIGateway, OrderManagement, "Routes OrderManagement requests", "HTTP/gRPC")
+    Rel(APIGateway, Catalog, "Routes Catalog requests", "HTTP/gRPC")
+    Rel(APIGateway, Inventory, "Routes Inventory requests", "HTTP/gRPC")
+    Rel(APIGateway, Authentication, "Routes Authentication requests", "HTTP/gRPC")
+    Rel(Authentication, Event_Queue, "UserRegistered", "Event Publishing")
+    Rel(Payment, Event_Queue, "PaymentCompleted", "Event Publishing")
+    Rel(OrderManagement, Event_Queue, "OrderConfirmed", "Event Publishing")
+    Rel(Inventory, Event_Queue, "StockLevelsUpdated", "Event Publishing")
+    Rel(Catalog, Event_Queue, "CatalogUpdated", "Event Publishing")
+    Rel(OrderManagement, Event_Queue, "OrderUpdated", "Event Publishing")
+    Rel(Authentication, Event_Queue, "PasswordChanged", "Event Publishing")
+    Rel(Event_Queue, Profile, "UserRegistered", "Event Delivery")
+    Rel(Event_Queue, OrderManagement, "PaymentCompleted", "Event Delivery")
+    Rel(Event_Queue, EmailNotifier, "OrderConfirmed", "Event Delivery")
+    Rel(Event_Queue, Catalog, "StockLevelsUpdated", "Event Delivery")
+    Rel(Event_Queue, PushNotifier, "CatalogUpdated", "Event Delivery")
+    Rel(Event_Queue, EmailNotifier, "OrderUpdated", "Event Delivery")
+    Rel(Event_Queue, EmailNotifier, "PasswordChanged", "Event Delivery")

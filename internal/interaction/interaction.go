@@ -76,6 +76,9 @@ type Interaction struct {
 	Label     string
 	Operation *model.Operation
 	Site      Site
+	// Targeted is true for a Response written with an explicit `to` target,
+	// as opposed to one sent back to the caller found on the call stack.
+	Targeted bool
 }
 
 // Derive lists every interaction of doc in source order: use case, scenario,
@@ -177,7 +180,7 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 			it.Kind = Response
 			switch {
 			case a.TargetContext != "":
-				it.To = endpoint(a.TargetContext, a.To)
+				it.To, it.Targeted = endpoint(a.TargetContext, a.To), true
 			case len(callStack) > 0:
 				it.To = callStack[len(callStack)-1]
 				callStack = callStack[:len(callStack)-1]

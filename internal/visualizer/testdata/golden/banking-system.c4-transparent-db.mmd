@@ -1,0 +1,44 @@
+C4Container
+    title Container Diagram - Architecture (transparent mode)
+    Person(CRON, "CRON", "External user")
+    Person(Customer, "Customer", "External user")
+    Person(TransactionValidation, "TransactionValidation", "External user")
+    System_Boundary(AccountService_boundary, "AccountService") {
+        Container(AccountService_Application, "AccountService Application", "Java Application", "Core business logic for AccountService domains: AccountManagement, BalanceTracking")
+        ContainerDb(AccountService_account_db, "AccountService_account_db", "Database", "Stores account_db data")
+        ContainerDb(AccountService_transaction_log, "AccountService_transaction_log", "Database", "Stores transaction_log data")
+    }
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(NotificationService_boundary, "NotificationService") {
+        Container(NotificationService_Application, "NotificationService Application", "Python Application", "Core business logic for NotificationService domains: CustomerNotification")
+        ContainerDb(NotificationService_notification_queue, "NotificationService_notification_queue", "Database", "Stores notification_queue data")
+    }
+    System_Boundary(PaymentService_boundary, "PaymentService") {
+        Container(PaymentService_Application, "PaymentService Application", "Go Application", "Core business logic for PaymentService domains: PaymentProcessing, TransactionValidation")
+        ContainerDb(PaymentService_payment_db, "PaymentService_payment_db", "Database", "Stores payment_db data")
+        ContainerDb(PaymentService_fraud_detection_cache, "PaymentService_fraud_detection_cache", "Redis Cache", "Stores fraud_detection_cache data")
+    }
+    Rel(Customer, PaymentService_Application, "Triggers")
+    Rel(Customer, AccountService_Application, "Triggers")
+    Rel(TransactionValidation, PaymentService_Application, "Triggers")
+    Rel(CRON, PaymentService_Application, "Triggers")
+    Rel(PaymentService_Application, AccountService_Application, "to verify source account", "Service API")
+    Rel(PaymentService_Application, AccountService_Application, "to reserve funds", "Service API")
+    Rel(PaymentService_Application, AccountService_Application, "to verify destination account", "Service API")
+    Rel(PaymentService_Application, AccountService_Application, "to freeze account", "Service API")
+    Rel(PaymentService_Application, AccountService_Application, "to get scheduled payments", "Service API")
+    Rel(AccountService_Application, AccountService_account_db, "Reads/Writes data", "Database Protocol")
+    Rel(AccountService_Application, AccountService_transaction_log, "Reads/Writes data", "Database Protocol")
+    Rel(PaymentService_Application, PaymentService_payment_db, "Reads/Writes data", "Database Protocol")
+    Rel(PaymentService_Application, PaymentService_fraud_detection_cache, "Reads/Writes data", "Database Protocol")
+    Rel(NotificationService_Application, NotificationService_notification_queue, "Reads/Writes data", "Database Protocol")
+    Rel(AccountService_Application, Event_Queue, "Funds Reserved", "Event Publishing")
+    Rel(PaymentService_Application, Event_Queue, "Transfer Completed", "Event Publishing")
+    Rel(PaymentService_Application, Event_Queue, "Account Frozen", "Event Publishing")
+    Rel(NotificationService_Application, Event_Queue, "bank security team", "Event Publishing")
+    Rel(PaymentService_Application, Event_Queue, "Scheduled Payments Processed", "Event Publishing")
+    Rel(Event_Queue, PaymentService_Application, "Funds Reserved", "Event Delivery")
+    Rel(Event_Queue, NotificationService_Application, "Transfer Completed", "Event Delivery")
+    Rel(Event_Queue, NotificationService_Application, "Account Frozen", "Event Delivery")

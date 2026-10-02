@@ -1,7 +1,6 @@
-package visualizer
+package view
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 )
@@ -51,23 +50,13 @@ func lookupLanguage(language string) (serviceLanguage, bool) {
 	return serviceLanguage{}, false
 }
 
-func (g *C4DiagramGenerator) getServiceTechnology(language string) string {
+// serviceTechnology is the container technology label for a service language.
+func serviceTechnology(language string) string {
 	if language == "" {
 		return "Application"
 	}
 	if l, ok := lookupLanguage(language); ok {
 		return l.technology
 	}
-	return fmt.Sprintf("%s Application", strings.Title(language))
-}
-
-// getServiceIcon returns the C4 sprite attribute for a service language.
-func (g *C4DiagramGenerator) getServiceIcon(language string) string {
-	if language == "" {
-		return ""
-	}
-	if l, ok := lookupLanguage(language); ok {
-		return fmt.Sprintf(", $sprite=%q", l.sprite)
-	}
-	return ", $sprite=\"code\""
+	return title(language) + " Application"
 }

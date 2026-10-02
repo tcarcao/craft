@@ -22,13 +22,9 @@ func (v *Visualizer) GenerateSequenceDiagramMermaid(doc *craft.CraftDoc, mode Do
 	return mermaid.Sequence(view.BuildSequence(doc, interaction.Derive(doc))), nil
 }
 
-// GenerateC4Mermaid renders a Craft C4 diagram as Mermaid source using the
-// experimental c4Diagram syntax. Sprites are dropped (Mermaid C4 doesn't
-// support them) — see docs/superpowers/specs/2026-05-14-mermaid-output-mode-design.md
-// for the fallback policy.
-func (v *Visualizer) GenerateC4Mermaid(doc *craft.CraftDoc, c4Mode C4GenerationMode, showDatabases bool) (string, error) {
-	// c4Mode is accepted for parity with the PlantUML side, but Mermaid C4
-	// has no boundaries/transparent distinction.
-	_ = c4Mode
-	return mermaid.C4(doc, showDatabases)
+// GenerateC4Mermaid renders a C4 container diagram as Mermaid source. It draws
+// the same view as the PlantUML side — focus, boundaries mode and databases
+// included — without sprites, which Mermaid C4 cannot show.
+func (v *Visualizer) GenerateC4Mermaid(doc *craft.CraftDoc, focusServices, focusContexts []string, c4Mode C4GenerationMode, showDatabases bool) (string, error) {
+	return mermaid.C4(c4View(doc, focusServices, focusContexts, c4Mode, showDatabases)), nil
 }

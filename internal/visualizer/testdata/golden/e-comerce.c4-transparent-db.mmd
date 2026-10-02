@@ -1,0 +1,46 @@
+C4Container
+    title Container Diagram - Architecture (transparent mode)
+    Person(Business_User, "Business_User", "External user")
+    Person(CRON, "CRON", "External user")
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(Order_Service_boundary, "Order Service") {
+        Container(Order_Service_Application, "Order Service Application", "Application", "Core business logic for Order Service domains: OrderManagement, OrderFulfilment")
+        ContainerDb(Order_Service_posgres, "Order Service_posgres", "Database", "Stores posgres data")
+    }
+    System_Boundary(WalletService_boundary, "WalletService") {
+        Container(WalletService_Application, "WalletService Application", "Go Application", "Core business logic for WalletService domains: Wallet, WalletItemPurchase, WalletItemAddition")
+        ContainerDb(WalletService_posgres, "WalletService_posgres", "Database", "Stores posgres data")
+        ContainerDb(WalletService_redis, "WalletService_redis", "Redis Cache", "Stores redis data")
+    }
+    System_Boundary(service_re_go_vas_boundary, "service-re-go-vas") {
+        Container(service_re_go_vas_Application, "service-re-go-vas Application", "Application", "Core business logic for service-re-go-vas domains: VASScheduling")
+        ContainerDb(service_re_go_vas_posgres, "service-re-go-vas_posgres", "Database", "Stores posgres data")
+        ContainerDb(service_re_go_vas_dynamodb, "service-re-go-vas_dynamodb", "Database", "Stores dynamodb data")
+    }
+    Rel(Business_User, WalletService_Application, "Triggers")
+    Rel(Business_User, service_re_go_vas_Application, "Triggers")
+    Rel(CRON, WalletService_Application, "Triggers")
+    Rel(WalletService_Application, Order_Service_Application, "to create an Order", "Service API")
+    Rel(Order_Service_Application, WalletService_Application, "to fulfil the addition request", "Service API")
+    Rel(service_re_go_vas_Application, WalletService_Application, "to reserve a VAS", "Service API")
+    Rel(service_re_go_vas_Application, Order_Service_Application, "to create an Order", "Service API")
+    Rel(service_re_go_vas_Application, WalletService_Application, "to cancel the VAS reservation", "Service API")
+    Rel(WalletService_Application, WalletService_posgres, "Reads/Writes data", "Database Protocol")
+    Rel(WalletService_Application, WalletService_redis, "Reads/Writes data", "Database Protocol")
+    Rel(Order_Service_Application, Order_Service_posgres, "Reads/Writes data", "Database Protocol")
+    Rel(service_re_go_vas_Application, service_re_go_vas_posgres, "Reads/Writes data", "Database Protocol")
+    Rel(service_re_go_vas_Application, service_re_go_vas_dynamodb, "Reads/Writes data", "Database Protocol")
+    Rel(WalletService_Application, Event_Queue, "VAS Addition Request Approved", "Event Publishing")
+    Rel(Order_Service_Application, Event_Queue, "Order Created", "Event Publishing")
+    Rel(Order_Service_Application, Event_Queue, "Order payment deferred", "Event Publishing")
+    Rel(WalletService_Application, Event_Queue, "VAS added", "Event Publishing")
+    Rel(Order_Service_Application, Event_Queue, "Order completed", "Event Publishing")
+    Rel(WalletService_Application, Event_Queue, "VAS Reserved", "Event Publishing")
+    Rel(WalletService_Application, Event_Queue, "VAS Reservation Canceled", "Event Publishing")
+    Rel(WalletService_Application, Event_Queue, "VAS Expired", "Event Publishing")
+    Rel(Event_Queue, WalletService_Application, "VAS Addition Request Approved", "Event Delivery")
+    Rel(Event_Queue, Order_Service_Application, "Order payment deferred", "Event Delivery")
+    Rel(Event_Queue, Order_Service_Application, "VAS added", "Event Delivery")
+    Rel(Event_Queue, service_re_go_vas_Application, "VAS Addition Request Approved", "Event Delivery")
