@@ -1,6 +1,6 @@
 # Diagram pipeline deepening
 
-Status: accepted (2026-10-02). Implementation is staged; see "Delivery".
+Status: accepted and implemented (2026-10-02); see "Delivery".
 
 An architecture review of the path from `.craft` text to diagrams found that
 sema's name resolution never reached the model the diagrams read, and that
@@ -102,3 +102,11 @@ One branch per step, each with a green test suite:
 3. Interactions and views (12–15).
 4. Render entry point (16–18).
 5. Remaining vocabulary (19).
+
+All six steps landed on 2026-10-02. One planned item was dropped: the
+formatter's `splitAnnotation` finds an annotation as the last `[` up to a
+closing `]` by text, and was to read the tree instead. The grammar does not
+allow brackets nested inside an annotation (it is a parse error, and the
+formatter refuses such files), so the text rule and the parser agree on every
+file the formatter touches; rewriting a heavily tested path with no failing
+case was not worth it.

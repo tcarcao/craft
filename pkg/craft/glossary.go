@@ -1,8 +1,8 @@
 package craft
 
-import "github.com/tcarcao/craft/v2/internal/syntax"
+import "github.com/tcarcao/craft/v2/internal/lang"
 
 // GlossaryVerbs returns all glossary relationship verbs supported by the language.
 func GlossaryVerbs() []string {
-	return syntax.GlossaryVerbs()
+	return lang.GlossaryVerbs()
 }

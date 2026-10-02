@@ -1,6 +1,6 @@
 # Craft — Architecture (v0.1 migration target)
 
-> **Note (2026-10):** §1 reflects the current package layout. The ANTLR parser, `internal/ast` and `internal/processor` are gone. The staged refactor in `docs/decisions/diagram-pipeline-deepening.md` adds `internal/analysis`, `internal/interaction` and `internal/lang`; this doc will be updated as each lands.
+> **Note (2026-10):** §1 reflects the current package layout. The ANTLR parser, `internal/ast` and `internal/processor` are gone; `internal/analysis`, `internal/interaction` and `internal/lang` came with `docs/decisions/diagram-pipeline-deepening.md`. §2's layer diagram predates them and is historical.
 
 > **Status:** Draft — P0.7 deliverable of the LSP migration (`docs/decisions/lsp-migration-plan.md`).
 > **Scope:** the Go package layout, layer rules, and runtime invariants that the hand-written parser + LSP must satisfy. Derived from source-plan decisions Q1–Q15 and tracer-bullets decisions Q1–Q23.

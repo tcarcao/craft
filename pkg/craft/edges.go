@@ -1,12 +1,12 @@
 package craft
 
-import "github.com/tcarcao/craft/v2/internal/syntax"
+import "github.com/tcarcao/craft/v2/internal/lang"
 
-type EdgeClass = syntax.EdgeClass
+type EdgeClass = lang.EdgeClass
 
 const (
-	EdgeDirectional = syntax.EdgeDirectional
-	EdgeSymmetric   = syntax.EdgeSymmetric
+	EdgeDirectional = lang.EdgeDirectional
+	EdgeSymmetric   = lang.EdgeSymmetric
 )
 
 // EdgeVerbInfo describes a single context_map relationship verb: its class,
@@ -21,32 +21,32 @@ type EdgeVerbInfo struct {
 	Symmetric      bool
 }
 
-func toEdgeVerbInfo(m syntax.EdgeVerbMeta) EdgeVerbInfo {
+func toEdgeVerbInfo(v lang.EdgeVerb) EdgeVerbInfo {
 	return EdgeVerbInfo{
-		Verb:           m.Verb,
-		Class:          m.Class,
-		UpstreamRole:   m.UpstreamRole,
-		DownstreamRole: m.DownstreamRole,
-		Symmetric:      m.Class == EdgeSymmetric,
+		Verb:           v.Verb,
+		Class:          v.Class,
+		UpstreamRole:   v.UpstreamRole,
+		DownstreamRole: v.DownstreamRole,
+		Symmetric:      v.Symmetric(),
 	}
 }
 
-// EdgeVerbs returns metadata for all context_map relationship verbs, in the
-// same order as the internal edgeKeywords table.
+// EdgeVerbs returns metadata for all context_map relationship verbs, in
+// presentation order (directional patterns first).
 func EdgeVerbs() []EdgeVerbInfo {
-	metas := syntax.EdgeVerbMetas()
-	infos := make([]EdgeVerbInfo, 0, len(metas))
-	for _, m := range metas {
-		infos = append(infos, toEdgeVerbInfo(m))
+	verbs := lang.EdgeVerbs()
+	infos := make([]EdgeVerbInfo, 0, len(verbs))
+	for _, v := range verbs {
+		infos = append(infos, toEdgeVerbInfo(v))
 	}
 	return infos
 }
 
 // LookupEdgeVerb returns the metadata for verb, and whether it was found.
 func LookupEdgeVerb(verb string) (EdgeVerbInfo, bool) {
-	m, ok := syntax.LookupEdgeVerbMeta(verb)
+	v, ok := lang.LookupEdgeVerb(verb)
 	if !ok {
 		return EdgeVerbInfo{}, false
 	}
-	return toEdgeVerbInfo(m), true
+	return toEdgeVerbInfo(v), true
 }
