@@ -1,5 +1,7 @@
 # Communication Graph — implementation plan (step 3)
 
+Status: done (2026-10-02).
+
 Implements rulings 12–15 of `docs/decisions/diagram-pipeline-deepening.md`.
 Input: the resolved `CraftDoc` (steps 1–2). Output: every diagram drawn from
 one derivation of "who talks to whom", through views both backends read.

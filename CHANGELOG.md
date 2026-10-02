@@ -20,6 +20,19 @@
 - **`craft/sema/bc-in-multiple-services`** (warning): a bounded context listed by two services. A bounded context belongs to one service; the first declaration keeps it.
 - **`craft/sema/duplicate-name` warns about a domain declared in more than one file.** The second declaration was dropped without a word before. A repeat within one file is still an error.
 
+### Changed — diagrams
+Every diagram is now drawn from one derivation of who talks to whom, through views that the PlantUML and Mermaid writers both read. Output changes for every model; the rules below are now the same in both backends.
+- **Event delivery pairs every publisher with every listener.** PlantUML used to pick the last publisher and Mermaid the first. An event nobody in the model publishes arrives from an `External` node.
+- **Returns are drawn everywhere.** A `returns` without `to` goes back to the caller on the scenario's call stack (the triggering actor at the bottom), else to `External`.
+- **Labels carry the whole action text**, connector included (`to charge the card`), in every view, C4 relations too.
+- **Step numbers count drawn edges only**, so a detailed domain diagram reads 1, 2, 3 without gaps.
+- **Actors are typed nodes** in detailed domain and sequence diagrams, wherever they appear (a sync target that is a declared actor is no longer drawn as a domain frame); a bounded context in a trigger's actor slot is never drawn as an actor.
+- **A sequence diagram delivers an event from its publisher** when the publisher already appears in that use case, instead of an anonymous inbound arrow.
+- **Mermaid C4 matches PlantUML C4**: focus, boundaries mode, databases, presentation and gateway layers, sync and return relations, and an event queue only when something publishes. `GenerateC4Mermaid` takes the focus lists.
+- **A call to a data store draws a `Database Query` relation** to its owner's database in C4 boundaries mode. The hard-coded `"Database"` target is gone; `examples/user-management.craft` now asks `user_db`.
+- **Names are safe in diagram source.** Identifiers derive from labels with deterministic de-duplication, so a qualified name such as `re/billing` no longer produces invalid PlantUML; a bounded context displays its bare name unless two drawn contexts share it.
+- **Output is deterministic**, including domain and C4 boundaries-mode diagrams that used to depend on map order.
+
 ### Fixed
 - **`--focus-context` alone no longer marks every service external** in C4 diagrams. A service that hosts a focused context counts as focused.
 - **Service languages match by whole word.** `javascript` no longer gets the Java icon, and `django` or `mongo` no longer resolve to Go.
@@ -27,6 +40,8 @@
 
 ### Internal
 - New `internal/analysis` holds the whole pipeline (parse, project, collect symbols, merge, resolve, lint). `pkg/craft`, the LSP workspace, the CLI and the server all call it. The document projection moved out of `internal/syntax`.
+- New `internal/interaction` derives every communication once; `internal/visualizer/view` turns it into per-diagram views; `internal/visualizer/plantuml` and `mermaid` only write them. The old per-backend generators (including the 70-method `C4DiagramGenerator`) are gone, and the context-map consistency lints read the same interactions. `model.Action` gains `Column`; `model.Trigger` gains `Line` and `Column`.
+- Diagram output is covered by Go golden tests (`go test ./internal/visualizer -update`) for every mixed-corpus model, view and backend; `scripts/check-visualize-baselines.sh` and `testdata/visualize-baseline` are retired.
 - `internal/parser_diff` is now `internal/corpustest`. `internal/processor`, the Graphviz renderer and the unreachable C4 context/component views were removed. See `docs/decisions/diagram-pipeline-deepening.md`.
 
 ## [2.19.0] — 2026-08-21

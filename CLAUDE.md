@@ -25,7 +25,9 @@ internal/
   workspace/    Multi-file store, per-file parse cache, URI index
   lsp/          LSP protocol handlers
   fmtconfig/    Formatter configuration
-  visualizer/   PlantUML / Mermaid diagram generators (C4, domain, sequence)
+  lang/         Fixed language vocabulary: action, trigger and participant kinds
+  interaction/  Derives every communication of a resolved model once (diagrams + context-map lints read it)
+  visualizer/   Diagram entry points; view/ builds what each diagram shows, plantuml/ and mermaid/ write it
   analysis/     Per-file + workspace analysis: parse → project → resolve → lint → CraftDoc + diagnostics
   corpustest/   Corpus acceptance suite (Harness A: .craftjson goldens, Harness C: diagnostics goldens)
 pkg/

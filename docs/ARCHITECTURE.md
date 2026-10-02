@@ -23,7 +23,9 @@ internal/
   workspace/              multi-file store, per-file parse cache, URI index
   lsp/                    LSP protocol handlers; depends on sema + workspace
   fmtconfig/              formatter configuration
-  visualizer/             diagram generator (consumes CraftDoc)
+  lang/                   fixed language vocabulary (action/trigger/participant kinds)
+  interaction/            derives every communication of a resolved CraftDoc once
+  visualizer/             Render entry points; view/ (what each diagram shows), plantuml/ + mermaid/ (writers)
   analysis/               per-file + workspace analysis → merged CraftDoc + diagnostics (all callers use it)
   corpustest/             corpus acceptance suite (Harness A + Harness C)
 pkg/
@@ -31,7 +33,6 @@ pkg/
 testdata/
   corpus/                 acceptance corpus (valid inputs + .craftjson goldens)
   broken/                 hand-authored broken inputs + .diagnostics.json
-  visualize-baseline/     PlantUML snapshots for regression check
 ```
 
 ---
