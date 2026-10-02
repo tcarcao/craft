@@ -1,5 +1,7 @@
 package syntax
 
+import "github.com/tcarcao/craft/v2/internal/lang"
+
 // View accessors used to build the document model (internal/analysis). They
 // answer positional, token-level questions so that model building never has to
 // index into a node's flat token slice itself.
@@ -43,7 +45,7 @@ func (t TriggerDecl) EventRef() string {
 // for a quoted string or a plain name. Other action kinds return "".
 func (a ActionDecl) ObjectRef() string {
 	switch a.Kind() {
-	case "sync_action", "async_action":
+	case lang.ActionSync, lang.ActionAsync:
 		if elems := significantElements(a.node); len(elems) >= 3 {
 			return refIfWrapped(elems[2])
 		}
@@ -61,18 +63,18 @@ func (a ActionDecl) DescriptionConnector() string {
 	tokens := a.Tokens()
 	i := slotEndIndex(a)
 	switch a.Kind() {
-	case "sync_action":
+	case lang.ActionSync:
 		if i < len(tokens) {
 			tok := tokens[i]
 			if tok.Kind() == SyntaxKindKwTo || (tok.Kind() == SyntaxKindIdent && tok.Text() == "for") {
 				return tok.Text()
 			}
 		}
-	case "return_action", "internal_action":
+	case lang.ActionReturn, lang.ActionInternal:
 		if i < len(tokens) && isConnectorWord(tokens[i].Text()) {
 			return tokens[i].Text()
 		}
-		if a.Kind() == "return_action" {
+		if a.Kind() == lang.ActionReturn {
 			return ""
 		}
 	}

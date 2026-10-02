@@ -66,7 +66,8 @@ func File(name, src string) FileResult {
 
 // Result is the workspace stage's output.
 type Result struct {
-	// Doc is the merged document of every file.
+	// Doc is the merged document of every file, with every use-case
+	// participant and service context resolved (model.Participant).
 	Doc        *model.CraftDoc
 	Symbols    sema.WorkspaceSymbols
 	Resolution sema.ResolutionMap
@@ -106,6 +107,7 @@ func Workspace(files []FileResult) Result {
 		rm, resolveDiags := sema.AnalyzeWorkspace(perFileSyms, ws)
 		lintDiags := sema.LintWorkspace(perFileTrees, ws, perFileLIs)
 		res.Symbols, res.Resolution = ws, rm
+		resolveParticipants(res.Doc, ws)
 
 		wsDiags := append(append(mergeDiags, resolveDiags...), lintDiags...)
 		res.WorkspaceDiagnostics = sortDiagnostics(wsDiags)

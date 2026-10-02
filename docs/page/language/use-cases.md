@@ -167,7 +167,7 @@ Inventory updates stock levels
 <domain> <verb> [connector] <phrase>
 ```
 
-The subject also accepts a qualified `<domain>/<name>` reference: `re/billing validates the event`. A `kind:` prefix is not accepted. Only `asks` and `notifies` subjects are checked for ambiguity: `craft/sema/ambiguous-bc` does not fire for an internal action's subject (see [Diagnostics](#diagnostics) below).
+The subject also accepts a qualified `<domain>/<name>` reference: `re/billing validates the event`. A `kind:` prefix is not accepted.
 
 **Use when:** A domain does something internally without calling other domains.
 
@@ -190,6 +190,19 @@ Gateway returns to Payment the transaction result
 The subject and the `to` target both accept a qualified `<domain>/<name>` reference: `re/subscriptions returns to re/billing charge result`. A `kind:` prefix is not accepted in either slot.
 
 **Use when:** A domain returns data, especially in response to an `asks` action.
+
+## How Names Resolve
+
+Every name in a participant slot (an action's subject, the `asks` or `returns` target, the trigger's actor or listening context) is resolved against the whole model, all files of the folder together. First match wins:
+
+1. a qualified `<domain>/<name>` names that bounded context, or nothing;
+2. a bare name declared as a bounded context in exactly one domain;
+3. a bare bounded-context name declared in two or more domains is **ambiguous**: it resolves to nothing and `craft/sema/ambiguous-bc` reports it;
+4. a domain, then a service, then an actor, then a **data store** declared in some service's `data-stores:`.
+
+A data store is a valid target, so `Authentication asks user_db to check email uniqueness` draws an edge to the service that owns `user_db`. Diagrams, `craft validate` and the language server all use this one order, and `craft check` records the result on each action (`from`, `to`) and trigger (`subject`) as `{kind, id, service}`: `kind` is `bounded_context`, `domain`, `service`, `actor` or `data_store`; `id` is `<domain>/<bc>` for a bounded context; `service` is the service that deploys it.
+
+A bounded context belongs to one service. Listing it in two services' `contexts:` raises `craft/sema/bc-in-multiple-services` (warning), and the first declaration keeps it.
 
 ## Operation Annotations
 
@@ -302,7 +315,7 @@ Use-case actions and triggers can emit these:
 |------|----------|------|
 | `craft/syntax/kind-prefix-in-target` | error | a `kind:` prefix (`bc:`, `domain:`, `service:`, `term:`) is written in a bounded-context slot: the subject of any action (`asks`, `notifies`, `returns`, or an internal action), the `asks` target, the `returns` target, or the `when ... listens` trigger context. Write `Billing` or `re/billing` instead. |
 | `craft/syntax/empty-op-annotation` | error | an action ends in `[]`, an empty operation annotation. |
-| `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at one of exactly four sites: the `sync_action` (`asks`) subject and target, the `async_action` (`notifies`) subject, or the `domain_listen` (`when ... listens`) trigger context. Qualify it as `<domain>/<name>`. It does **not** fire for an internal action's subject or for either side of a `returns` action; an ambiguous name there is not yet checked. |
+| `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, in any participant slot: any action's subject, the `asks` or `returns` target, or the trigger's actor or listening context. Qualify it as `<domain>/<name>`. |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (an empty segment like `re/ billing` or `re//billing`, or more than two segments like `re/a/b`) in any bounded-context slot: any action's subject, the `asks` target, the `returns` target, or the trigger context. |
 | `craft/sema/duplicate-tag` | warning | the same tag key is set twice in one `use_case`. The last value wins. |
 

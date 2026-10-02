@@ -2,6 +2,7 @@ package corpustest_test
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/tcarcao/craft/v2/internal/analysis"
 )
+
+var update = flag.Bool("update", false, "rewrite the corpus .craftjson goldens from the current output")
 
 func TestHarnessA_V2vsGoldens(t *testing.T) {
 	corpusRoot := "../../testdata/corpus"
@@ -46,14 +49,26 @@ func TestHarnessA_V2vsGoldens(t *testing.T) {
 				return
 			}
 
-			// No file name, so the goldens carry no sourceUri.
+			// Each corpus file is analyzed as a model of one file — exactly what
+			// craft.Parse returns — so the goldens show the resolved document
+			// consumers see. No file name, so they carry no sourceUri.
 			file := analysis.File("", string(content))
 			for _, d := range file.Diagnostics {
 				if d.Severity == "error" && !strings.HasPrefix(d.Code, "craft/sema/") {
 					t.Errorf("unexpected parse error for %s: [%s] %s", craftFile, d.Code, d.Message)
 				}
 			}
-			doc := file.Doc
+			doc := analysis.Workspace([]analysis.FileResult{file}).Doc
+
+			if *update {
+				out, err := json.MarshalIndent(doc, "", "  ")
+				if err != nil {
+					t.Fatalf("json.MarshalIndent failed for %s: %v", craftFile, err)
+				}
+				if err := os.WriteFile(goldenFile, append(out, '\n'), 0o644); err != nil {
+					t.Fatalf("writing golden %s: %v", goldenFile, err)
+				}
+			}
 
 			gotBytes, err := json.Marshal(doc)
 			if err != nil {

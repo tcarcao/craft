@@ -11,7 +11,10 @@
       ],
       "language": "golang",
       "deployment": {},
-      "line": 7
+      "line": 7,
+      "contextIds": [
+        "Monetization/Wallet"
+      ]
     },
     {
       "name": "OrderService",
@@ -23,7 +26,10 @@
       ],
       "language": "golang",
       "deployment": {},
-      "line": 12
+      "line": 12,
+      "contextIds": [
+        "Monetization/OrderManagement"
+      ]
     }
   ],
   "useCases": [],

@@ -245,12 +245,12 @@ func shapesOf(t *testing.T, src string) []scenarioShape {
 		for _, sc := range uc.Scenarios() {
 			tr := sc.Trigger()
 			shape := scenarioShape{trigger: triggerShape{
-				kind: tr.Kind(), actor: tr.ActorName(), context: tr.ContextName(),
+				kind: string(tr.Kind()), actor: tr.ActorName(), context: tr.ContextName(),
 				event: tr.EventValue(), phrase: tr.PhraseText(), eventQuoted: tr.EventIsString(),
 			}}
 			for _, a := range sc.Actions() {
 				shape.actions = append(shape.actions, actionShape{
-					kind: a.Kind(), subject: a.SubjectName(), target: a.TargetName(),
+					kind: string(a.Kind()), subject: a.SubjectName(), target: a.TargetName(),
 					event: a.EventValue(), connector: a.ConnectorValue(),
 					phrase: a.PhraseText(), op: a.OpText(), eventQuoted: a.EventIsString(),
 				})

@@ -80,7 +80,7 @@ services {
 use_case "User Registration" {
   when Business_User creates Account
     Authentication validates email format
-    Authentication asks Database to check email uniqueness  [POST /v1/users/check-email]
+    Authentication asks user_db to check email uniqueness  [POST /v1/users/check-email]
     Profile creates user profile
     Authentication notifies "User Registered"
 }

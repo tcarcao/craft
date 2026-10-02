@@ -27,7 +27,15 @@
               "connector": "for",
               "phrase": "a fresh charge attempt",
               "description": "Subscriptions asks Billing for a fresh charge attempt",
-              "line": 9
+              "line": 9,
+              "from": {
+                "kind": "bounded_context",
+                "id": "re/Subscriptions"
+              },
+              "to": {
+                "kind": "bounded_context",
+                "id": "re/Billing"
+              }
             },
             {
               "id": "action_3",
@@ -43,7 +51,11 @@
               "connector": "to",
               "phrase": "authorize the card",
               "description": "Billing asks Gateway to authorize the card",
-              "line": 10
+              "line": 10,
+              "from": {
+                "kind": "bounded_context",
+                "id": "re/Billing"
+              }
             },
             {
               "id": "action_4",
@@ -59,7 +71,15 @@
               "connector": "to",
               "phrase": "record the entry",
               "description": "Billing asks Ledger to record the entry",
-              "line": 11
+              "line": 11,
+              "from": {
+                "kind": "bounded_context",
+                "id": "re/Billing"
+              },
+              "to": {
+                "kind": "bounded_context",
+                "id": "re/Ledger"
+              }
             },
             {
               "id": "action_5",
@@ -73,7 +93,11 @@
               "connector": "the",
               "phrase": "authorization result",
               "description": "Gateway returns authorization result to Billing",
-              "line": 12
+              "line": 12,
+              "to": {
+                "kind": "bounded_context",
+                "id": "re/Billing"
+              }
             },
             {
               "id": "action_6",
@@ -87,7 +111,11 @@
                 "text": "TOPIC billing.v1.charge-succeeded"
               },
               "description": "Billing notifies \"billing.ChargeSucceeded\"",
-              "line": 13
+              "line": 13,
+              "from": {
+                "kind": "bounded_context",
+                "id": "re/Billing"
+              }
             },
             {
               "id": "action_7",
@@ -112,7 +140,11 @@
               "connector": "to",
               "phrase": "log the outcome",
               "description": "Subscriptions asks Audit to log the outcome",
-              "line": 15
+              "line": 15,
+              "from": {
+                "kind": "bounded_context",
+                "id": "re/Subscriptions"
+              }
             },
             {
               "id": "action_9",
@@ -127,7 +159,11 @@
               "connector": "for",
               "phrase": "a reconciliation",
               "description": "Subscriptions asks Legacy for a reconciliation",
-              "line": 16
+              "line": 16,
+              "from": {
+                "kind": "bounded_context",
+                "id": "re/Subscriptions"
+              }
             }
           ]
         },
@@ -155,7 +191,11 @@
               "connector": "to",
               "phrase": "record a duplicate-charge audit entry",
               "description": "re/billing asks Ledger to record a duplicate-charge audit entry",
-              "line": 19
+              "line": 19,
+              "to": {
+                "kind": "bounded_context",
+                "id": "re/Ledger"
+              }
             }
           ]
         }

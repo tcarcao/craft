@@ -1,6 +1,7 @@
 package sema
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/model"
@@ -198,12 +199,45 @@ domain ops {
 
 use_case "X" {
   when Subscriptions listens "Charged"
-    Billing validates charge
+    re/Billing validates charge
 }`
 	for _, d := range analyzeSingleFileForTest(t, src) {
 		if d.Code == "craft/sema/ambiguous-bc" {
 			t.Errorf("unambiguous listens context must not be ambiguous, got %+v", d)
 		}
+	}
+}
+
+// Every participant slot reaches the model, so an ambiguous name is reported
+// wherever it appears: an internal action's subject, both sides of a return,
+// and an external trigger's subject — not only the slots that pair events.
+func TestAmbiguousBC_EveryParticipantSlot(t *testing.T) {
+	src := `domain re {
+  Billing
+  Ledger
+}
+
+domain ops {
+  Billing
+  Ledger
+}
+
+use_case "X" {
+  when Billing starts run
+    Billing validates charge
+    Ledger returns to Billing the result
+}`
+	var lines []int
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/sema/ambiguous-bc" {
+			lines = append(lines, d.Range.Start.Line)
+		}
+	}
+	// 0-based lines: trigger subject (11), internal subject (12), return
+	// subject and return target (13, twice).
+	want := []int{11, 12, 13, 13}
+	if fmt.Sprint(lines) != fmt.Sprint(want) {
+		t.Errorf("ambiguous-bc at lines %v, want %v", lines, want)
 	}
 }
 

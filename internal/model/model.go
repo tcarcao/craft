@@ -4,6 +4,8 @@
 // re-exports them as the stable public API.
 package model
 
+import "github.com/tcarcao/craft/v2/internal/lang"
+
 // CraftDoc is the parser-agnostic canonical representation of a parsed .craft file.
 // It is re-exported from pkg/craft as the stable public API type; see that
 // package's stability contract.
@@ -92,6 +94,10 @@ type Service struct {
 	// Repo is the source repository reference (a repo slug, not a file path).
 	Repo string `json:"repo,omitempty"`
 	Line int    `json:"line,omitempty"`
+	// ContextIDs holds, position for position with Contexts, each entry's
+	// canonical identity: "<domain>/<bc>" for a bounded context, the name for
+	// a domain, "" when it does not resolve. Nil when no entry resolves.
+	ContextIDs []string `json:"contextIds,omitempty"`
 }
 
 // DeploymentStrategy describes how a service is deployed.
@@ -154,15 +160,42 @@ type Trigger struct {
 	// carries the value either way, for existing consumers.
 	Ref         string `json:"ref,omitempty"`
 	Description string `json:"description"`
+	// Subject is what the trigger's actor (external) or context (domain
+	// listen) resolves to across the whole model. Nil when it does not
+	// resolve, and for event triggers.
+	Subject *Participant `json:"subject,omitempty"`
 }
 
-// TriggerType classifies the origin of a scenario trigger.
-type TriggerType string
+// Participant is the resolved identity behind a name used in a use case. It is
+// filled in by workspace analysis, so it reflects every file of the model.
+type Participant struct {
+	Kind ParticipantKind `json:"kind"`
+	// ID is the canonical name: "<domain>/<bc>" for a bounded context, the
+	// declared name for anything else.
+	ID string `json:"id"`
+	// Service is the service that deploys a bounded context or owns a data
+	// store, or the service itself; empty when there is none.
+	Service string `json:"service,omitempty"`
+}
+
+// ParticipantKind is what a use-case name resolves to.
+type ParticipantKind = lang.ParticipantKind
 
 const (
-	TriggerTypeExternal     TriggerType = "external"
-	TriggerTypeEvent        TriggerType = "event"
-	TriggerTypeDomainListen TriggerType = "domain_listen"
+	ParticipantBoundedContext = lang.ParticipantBoundedContext
+	ParticipantDomain         = lang.ParticipantDomain
+	ParticipantService        = lang.ParticipantService
+	ParticipantActor          = lang.ParticipantActor
+	ParticipantDataStore      = lang.ParticipantDataStore
+)
+
+// TriggerType classifies the origin of a scenario trigger.
+type TriggerType = lang.TriggerKind
+
+const (
+	TriggerTypeExternal     = lang.TriggerExternal
+	TriggerTypeEvent        = lang.TriggerEvent
+	TriggerTypeDomainListen = lang.TriggerDomainListen
 )
 
 // Operation is the trailing `[...]` operation annotation on an action line, for
@@ -201,16 +234,21 @@ type Action struct {
 	Phrase      string     `json:"phrase,omitempty"`
 	Description string     `json:"description"`
 	Line        int        `json:"line,omitempty"`
+	// From is what the subject (Context) resolves to; To is what the target
+	// (TargetContext) of a sync or return action resolves to. Both are nil
+	// when the name does not resolve, and To is nil for other action kinds.
+	From *Participant `json:"from,omitempty"`
+	To   *Participant `json:"to,omitempty"`
 }
 
 // ActionType classifies the interaction pattern of an action.
-type ActionType string
+type ActionType = lang.ActionKind
 
 const (
-	ActionTypeSync     ActionType = "sync_action"
-	ActionTypeAsync    ActionType = "async_action"
-	ActionTypeInternal ActionType = "internal_action"
-	ActionTypeReturn   ActionType = "return_action"
+	ActionTypeSync     = lang.ActionSync
+	ActionTypeAsync    = lang.ActionAsync
+	ActionTypeInternal = lang.ActionInternal
+	ActionTypeReturn   = lang.ActionReturn
 )
 
 // Interaction is a derived type computed from scenario actions; it represents a directed
