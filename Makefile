@@ -56,14 +56,7 @@ test-integration: ## Run integration tests that spin up real renderers via testc
 	$(TC_ENV) go test -tags=integration -count=1 ./internal/visualizer/...
 
 vet:
-	go vet \
-		github.com/tcarcao/craft/v2/internal/ast \
-		github.com/tcarcao/craft/v2/internal/lexer \
-		github.com/tcarcao/craft/v2/internal/syntax \
-		github.com/tcarcao/craft/v2/internal/sema \
-		github.com/tcarcao/craft/v2/internal/workspace \
-		github.com/tcarcao/craft/v2/internal/lsp \
-		github.com/tcarcao/craft/v2/pkg/craft
+	go vet ./...
 
 test-release: ## Download and smoke-test the latest GitHub release binary for the current platform
 	./scripts/test-release.sh
@@ -82,7 +75,7 @@ help:
 	@echo "  test                     - Run unit tests"
 	@echo "  test-integration         - Run integration tests (requires Docker/Podman; spins up real renderers)"
 	@echo "                             First-time: go get github.com/testcontainers/testcontainers-go"
-	@echo "  vet                      - Run go vet on hand-written packages"
+	@echo "  vet                      - Run go vet on all packages"
 	@echo "  test-release             - Download and smoke-test the latest GitHub release (current platform)"
 	@echo "                             Example: make test-release  (uses latest tag)"
 	@echo "                             Example: ./scripts/test-release.sh 0.1.0  (specific version)"

@@ -6,7 +6,7 @@
 
 Craft is a domain-specific language (DSL) for modeling business use cases and domain interactions. It generates visual diagrams (C4, domain-flow, sequence) from `.craft` source files.
 
-**Tech Stack:** Go 1.23, Docker / Podman, GitHub Actions.
+**Tech Stack:** Go 1.25, Docker / Podman, GitHub Actions.
 
 ---
 
@@ -17,15 +17,16 @@ cmd/
   server/       HTTP server (diagram generation API)
   craft/        CLI entry point
 internal/
-  ast/          v2 AST — pure data types
   lexer/        Hand-written scanner
-  syntax/       Hand-written recursive-descent parser → ast
+  green/        Lossless green tree (position-independent) + line index
+  syntax/       Hand-written recursive-descent parser → red tree + typed views; projection → CraftDoc
+  model/        CraftDoc data types (aliased by pkg/craft)
   sema/         Symbol tables, ResolutionMap, validation + lint rules
   workspace/    Multi-file store, per-file parse cache, URI index
   lsp/          LSP protocol handlers
-  visualizer/   PlantUML / C4 diagram generators
-  processor/    .craft file processing pipeline
-  parser_diff/  Differential harness (Harness A + Harness C)
+  fmtconfig/    Formatter configuration
+  visualizer/   PlantUML / Mermaid diagram generators (C4, domain, sequence)
+  parser_diff/  Corpus acceptance suite (Harness A: .craftjson goldens, Harness C: diagnostics goldens)
 pkg/
   craft/        Stable public Go API — CraftDoc canonical type
 build/
@@ -37,7 +38,7 @@ build/
     publish.yml   Build & push tiagocarcao/craft to Docker Hub on v* tags
 docs/
   page/         VitePress documentation site
-  decisions/    Architecture decision records
+  decisions/    Architecture decision records (see diagram-pipeline-deepening.md for the in-flight refactor)
 testdata/
   corpus/       Acceptance corpus (.craft + .craftjson pairs)
   broken/       Intentionally broken files + expected .diagnostics.json
@@ -164,3 +165,7 @@ The Craft VS Code extension is a separate repository:
 🔗 **[craft-vscode-extension](https://github.com/tcarcao/craft-vscode-extension)**
 
 See `docs/decisions/lsp-migration-plan.md` and `docs/AGENT.md` for operating rules.
+
+## Domain language
+
+`CONTEXT.md` is the glossary for the project's own vocabulary (Model, Participant, Interaction, View, Backend). Use those terms in code, comments and docs.

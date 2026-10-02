@@ -7,13 +7,15 @@ import (
 func (v *Visualizer) GenerateC4(arch *craft.CraftDoc, boundariesMode C4GenerationMode, showDatabases bool) ([]byte, error) {
 	diagram := GenerateC4ContainerDiagram(arch, boundariesMode, showDatabases)
 
-	return generatePlantUML(diagram)
+	data, _, err := generatePlantUMLWithFormat(diagram, FormatPNG)
+	return data, err
 }
 
 func (v *Visualizer) GenerateC4WithFocusAndContexts(arch *craft.CraftDoc, focusedServiceNames []string, focusedContextNames []string, boundariesMode C4GenerationMode, showDatabases bool) ([]byte, error) {
 	diagram := GenerateC4ContainerDiagramWithFocusAndContexts(arch, boundariesMode, focusedServiceNames, focusedContextNames, showDatabases)
 
-	return generatePlantUML(diagram)
+	data, _, err := generatePlantUMLWithFormat(diagram, FormatPNG)
+	return data, err
 }
 
 // New format-aware methods

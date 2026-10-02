@@ -69,7 +69,7 @@ Every commit on a migration branch MUST satisfy:
   3. Re-run Harness B and commit the regenerated goldens only after verifying the diff is exactly what the schema change intended.
   4. Link the PR in `docs/decisions/lsp-migration-plan.md` Q11 notes for post-hoc review.
 - After v0.1 (S11b), `CraftDoc` is stable: backward-compatible additions only.
-- Internal AST types under `internal/ast/` are **private** and change freely.
+- Internal tree and view types under `internal/syntax/` are **private** and change freely.
 
 ---
 
@@ -110,8 +110,8 @@ Each slice in `docs/decisions/lsp-migration-tracer-bullets.md` enumerates its ow
 
 These are hard rules. Violations block merge.
 
-1. **Never edit files under `pkg/parser/`** (ANTLR-generated).
-2. **Never edit `tools/antlr-grammar/Craft.g4`** during migration — grammar is frozen at v1 through v0.1 cut. Grammar-v2 is a separate post-v0.1 workstream.
+1. *(Retired — the ANTLR parser and `pkg/parser/` were removed.)*
+2. *(Retired — `tools/antlr-grammar/` was removed; the hand-written parser is the grammar.)*
 3. **Never introduce a new dependency on `antlr4-go/antlr/v4`**. Anything new belongs in the hand-written parser.
 4. **Never import `internal/lsp` from outside `cmd/`.** (Layer rule; see `ARCHITECTURE.md` §2.)
 5. **Never import `internal/workspace` from `internal/sema`.** (Layer rule.)
@@ -122,7 +122,7 @@ These are hard rules. Violations block merge.
 10. **Never touch `examples/*.craft`** during migration. They are frozen through v0.1 (tracer-bullets Q18). Modify `testdata/corpus/99_mixed/` copies instead.
 11. **Never publish to Marketplace or OpenVSX.** These actions belong to Tiago in S11a/S11b.
 12. **Never advertise an LSP capability whose handler is a no-op or panics.** See §3.
-13. **Never ignore `go vet` output on hand-written packages.** Use `make vet` (not `go vet ./...`) — `pkg/parser` is ANTLR-generated with pre-existing unreachable-code warnings that we must not edit. `make vet` covers all hand-written migration packages.
+13. **Never ignore `go vet` output.** `make vet` runs `go vet ./...`.
 14. **Never rename or restructure a public `pkg/craft/` type without following §5.**
 15. **Never skip hooks or bypass signing** on `git commit` or `git push`. If a hook fails, fix the underlying issue.
 16. **Never force-push to `main`.** Feature-branch force-pushes are fine; `main` is protected.
@@ -134,16 +134,13 @@ These are hard rules. Violations block merge.
 ## 8. Local commands you will run
 
 ```bash
-# regenerate ANTLR parser (needed only if you touch the generated layer — which you should not)
-make generate-grammar
-
 # full test run
 go test ./...
 
-# vet hand-written packages (excludes ANTLR-generated pkg/parser — see never-do rule #13)
+# vet all packages
 make vet
 
-# differential harness (A = v2 vs goldens, B = ANTLR vs goldens)
+# corpus acceptance suite (A = projection vs .craftjson goldens, C = diagnostics goldens)
 go test ./internal/parser_diff/...
 
 # benchmark (S10 gate)

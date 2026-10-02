@@ -365,8 +365,6 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 			return
 		}
 
-		fmt.Println(req.FocusInfo)
-
 		// Parse boundaries mode, default to "boundaries" if not provided or invalid
 		boundariesMode := visualizer.C4ModeBoundaries
 		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
