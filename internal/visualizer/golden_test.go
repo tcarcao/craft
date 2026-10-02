@@ -8,10 +8,6 @@ import (
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/analysis"
-	"github.com/tcarcao/craft/v2/internal/interaction"
-	"github.com/tcarcao/craft/v2/internal/visualizer/mermaid"
-	"github.com/tcarcao/craft/v2/internal/visualizer/plantuml"
-	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
@@ -33,44 +29,37 @@ func goldenModels(t *testing.T) map[string]string {
 	return out
 }
 
-// goldenRenders lists every view × backend; each renders a resolved model.
-var goldenRenders = map[string]func(doc *craft.CraftDoc) string{
-	"flow.puml": func(d *craft.CraftDoc) string { return plantuml.Flow(view.BuildFlow(d, interaction.Derive(d))) },
-	"flow.mmd":  func(d *craft.CraftDoc) string { return mermaid.Flow(view.BuildFlow(d, interaction.Derive(d))) },
-	"architecture.puml": func(d *craft.CraftDoc) string {
-		return plantuml.Architecture(view.BuildArchitecture(d, interaction.Derive(d)))
-	},
-	"architecture.mmd": func(d *craft.CraftDoc) string {
-		return mermaid.Architecture(view.BuildArchitecture(d, interaction.Derive(d)))
-	},
-	"sequence.puml": func(d *craft.CraftDoc) string { return plantuml.Sequence(view.BuildSequence(d, interaction.Derive(d))) },
-	"sequence.mmd":  func(d *craft.CraftDoc) string { return mermaid.Sequence(view.BuildSequence(d, interaction.Derive(d))) },
-	"c4-boundaries.puml": func(d *craft.CraftDoc) string {
-		return plantuml.C4(c4View(d, nil, nil, C4ModeBoundaries, false))
-	},
-	"c4-boundaries.mmd": func(d *craft.CraftDoc) string {
-		return mermaid.C4(c4View(d, nil, nil, C4ModeBoundaries, false))
-	},
-	"c4-transparent-db.puml": func(d *craft.CraftDoc) string {
-		return plantuml.C4(c4View(d, nil, nil, C4ModeTransparent, true))
-	},
-	"c4-transparent-db.mmd": func(d *craft.CraftDoc) string {
-		return mermaid.C4(c4View(d, nil, nil, C4ModeTransparent, true))
-	},
-	"c4-focus.puml": func(d *craft.CraftDoc) string {
-		return plantuml.C4(c4View(d, firstService(d), nil, C4ModeBoundaries, true))
-	},
-	"c4-focus.mmd": func(d *craft.CraftDoc) string {
-		return mermaid.C4(c4View(d, firstService(d), nil, C4ModeBoundaries, true))
-	},
+// goldenRenders lists every view × backend variant, as Render requests.
+var goldenRenders = map[string]Request{
+	"flow.puml":              {View: ViewFlow, Backend: PlantUML},
+	"flow.mmd":               {View: ViewFlow, Backend: Mermaid},
+	"architecture.puml":      {View: ViewArchitecture, Backend: PlantUML},
+	"architecture.mmd":       {View: ViewArchitecture, Backend: Mermaid},
+	"sequence.puml":          {View: ViewSequence, Backend: PlantUML},
+	"sequence.mmd":           {View: ViewSequence, Backend: Mermaid},
+	"c4-boundaries.puml":     {View: ViewC4, Backend: PlantUML, C4: &C4Options{Boundaries: true}},
+	"c4-boundaries.mmd":      {View: ViewC4, Backend: Mermaid, C4: &C4Options{Boundaries: true}},
+	"c4-transparent-db.puml": {View: ViewC4, Backend: PlantUML, C4: &C4Options{ShowDatabases: true}},
+	"c4-transparent-db.mmd":  {View: ViewC4, Backend: Mermaid, C4: &C4Options{ShowDatabases: true}},
+	"c4-focus.puml":          {View: ViewC4, Backend: PlantUML, C4: &C4Options{Boundaries: true, ShowDatabases: true}},
+	"c4-focus.mmd":           {View: ViewC4, Backend: Mermaid, C4: &C4Options{Boundaries: true, ShowDatabases: true}},
 }
 
-// firstService focuses a C4 golden on the model's first service, if any.
-func firstService(d *craft.CraftDoc) []string {
-	if len(d.Services) == 0 {
-		return nil
+// render draws one golden; the focus variants focus on the model's first
+// service.
+func render(t *testing.T, doc *craft.CraftDoc, kind string, req Request) string {
+	t.Helper()
+	req.Format = FormatSource
+	if strings.HasPrefix(kind, "c4-focus") && len(doc.Services) > 0 {
+		c4 := *req.C4
+		c4.FocusServices = []string{doc.Services[0].Name}
+		req.C4 = &c4
 	}
-	return []string{d.Services[0].Name}
+	out, err := New(nil).Render(doc, req)
+	if err != nil {
+		t.Fatalf("render %s: %v", kind, err)
+	}
+	return string(out.Data)
 }
 
 // TestGolden renders every model through every view and backend, and checks
@@ -83,14 +72,14 @@ func TestGolden(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for kind, render := range goldenRenders {
+		for kind, req := range goldenRenders {
 			t.Run(name+"."+kind, func(t *testing.T) {
 				analyze := func() *craft.CraftDoc {
 					return analysis.Workspace([]analysis.FileResult{analysis.File(filepath.Base(path), string(src))}).Doc
 				}
-				got := render(analyze())
+				got := render(t, analyze(), kind, req)
 				for i := 0; i < 20; i++ {
-					if again := render(analyze()); again != got {
+					if again := render(t, analyze(), kind, req); again != got {
 						t.Fatalf("output differs between runs (run %d)", i)
 					}
 				}

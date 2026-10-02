@@ -156,8 +156,7 @@ func minimalC4Model(language string) *craft.CraftDoc {
 
 func generateC4PUML(t *testing.T, doc *craft.CraftDoc) string {
 	t.Helper()
-	viz := visualizer.New()
-	puml, _, err := viz.GenerateC4WithFormat(doc, visualizer.C4ModeBoundaries, false, visualizer.FormatPUML)
+	puml, _, err := renderPUML(doc, visualizer.ViewC4)
 	if err != nil {
 		t.Fatalf("GenerateC4WithFormat: %v", err)
 	}
@@ -227,28 +226,26 @@ func TestVAS_AllDiagramsRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc := analysis.File("", string(src)).Doc
-
-	viz := visualizer.New()
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("vas.craft", string(src))}).Doc
 	type variant struct {
 		name string
 		gen  func() ([]byte, error)
 	}
 	variants := []variant{
 		{"c4", func() ([]byte, error) {
-			b, _, err := viz.GenerateC4WithFormat(doc, visualizer.C4ModeBoundaries, false, visualizer.FormatPUML)
+			b, _, err := renderPUML(doc, visualizer.ViewC4)
 			return b, err
 		}},
 		{"domain-detailed", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(doc, visualizer.DomainModeDetailed, visualizer.FormatPUML)
+			b, _, err := renderPUML(doc, visualizer.ViewFlow)
 			return b, err
 		}},
 		{"domain-architecture", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(doc, visualizer.DomainModeArchitecture, visualizer.FormatPUML)
+			b, _, err := renderPUML(doc, visualizer.ViewArchitecture)
 			return b, err
 		}},
 		{"sequence", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithTypeAndModeAndFormat(doc, visualizer.DiagramTypeSequence, visualizer.DomainModeDetailed, visualizer.FormatPUML)
+			b, _, err := renderPUML(doc, visualizer.ViewSequence)
 			return b, err
 		}},
 	}
@@ -265,7 +262,7 @@ func TestVAS_AllDiagramsRender(t *testing.T) {
 
 // TestVAS_SplitRenders proves that a single split-mode file produced by
 // filtering vas.craft to one em-dash-bearing use case still renders cleanly
-// through PlantUML. End-to-end check that Slugify, FilterUseCases, and
+// through PlantUML. End-to-end check that Slugify, use-case filtering, and
 // Unicode handling cooperate.
 func TestVAS_SplitRenders(t *testing.T) {
 	endpoint := plantUMLEndpoint(t)
@@ -273,20 +270,16 @@ func TestVAS_SplitRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc := analysis.File("", string(src)).Doc
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("vas.craft", string(src))}).Doc
 
-	filtered, missing := visualizer.FilterUseCases(doc, []string{"one-time-vas-fulfillment-through-provider-apply"})
-	if len(missing) != 0 {
-		t.Fatalf("expected to match the em-dash use case, missing: %v", missing)
-	}
-	if len(filtered.UseCases) != 1 {
-		t.Fatalf("expected exactly one matched use case, got %d", len(filtered.UseCases))
-	}
-
-	puml, _, err := visualizer.New().GenerateDomainDiagramWithModeAndFormat(filtered, visualizer.DomainModeDetailed, visualizer.FormatPUML)
+	out, err := visualizer.New(nil).Render(doc, visualizer.Request{
+		View: visualizer.ViewFlow, Backend: visualizer.PlantUML, Format: visualizer.FormatSource,
+		UseCases: []string{"one-time-vas-fulfillment-through-provider-apply"},
+	})
 	if err != nil {
-		t.Fatalf("generate: %v", err)
+		t.Fatalf("render: %v", err)
 	}
+	puml := out.Data
 	// Verify the use case content made it through.
 	if !strings.Contains(string(puml), "fulfillment") {
 		t.Fatalf("expected em-dash use case content in PUML, got: %s", puml)
@@ -309,9 +302,9 @@ func TestVAS_MermaidSequenceRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc := analysis.File("", string(src)).Doc
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("vas.craft", string(src))}).Doc
 
-	mermaidSrc, err := visualizer.New().GenerateSequenceDiagramMermaid(doc, visualizer.DomainModeDetailed)
+	mermaidSrc, err := renderMermaid(doc, visualizer.ViewSequence)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -378,9 +371,9 @@ func TestVAS_MermaidDomainDetailedRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc := analysis.File("", string(src)).Doc
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("vas.craft", string(src))}).Doc
 
-	mermaidSrc, err := visualizer.New().GenerateDomainDiagramMermaid(doc, visualizer.DomainModeDetailed)
+	mermaidSrc, err := renderMermaid(doc, visualizer.ViewFlow)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -445,9 +438,9 @@ func TestVAS_MermaidDomainArchitectureRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc := analysis.File("", string(src)).Doc
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("vas.craft", string(src))}).Doc
 
-	mermaidSrc, err := visualizer.New().GenerateDomainDiagramMermaid(doc, visualizer.DomainModeArchitecture)
+	mermaidSrc, err := renderMermaid(doc, visualizer.ViewArchitecture)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -512,9 +505,9 @@ func TestVAS_MermaidC4Renders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc := analysis.File("", string(src)).Doc
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("vas.craft", string(src))}).Doc
 
-	mermaidSrc, err := visualizer.New().GenerateC4Mermaid(doc, nil, nil, visualizer.C4ModeBoundaries, false)
+	mermaidSrc, err := renderMermaid(doc, visualizer.ViewC4)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -568,4 +561,24 @@ func TestVAS_MermaidC4Renders(t *testing.T) {
 	if len(out) == 0 {
 		t.Fatal("mmdc produced empty SVG")
 	}
+}
+
+// renderPUML and renderMermaid draw diagram source through Render. A C4
+// diagram uses boundaries mode without databases.
+func renderPUML(doc *craft.CraftDoc, v visualizer.View) ([]byte, string, error) {
+	return renderSource(doc, v, visualizer.PlantUML)
+}
+
+func renderMermaid(doc *craft.CraftDoc, v visualizer.View) (string, error) {
+	b, _, err := renderSource(doc, v, visualizer.Mermaid)
+	return string(b), err
+}
+
+func renderSource(doc *craft.CraftDoc, v visualizer.View, backend visualizer.Backend) ([]byte, string, error) {
+	req := visualizer.Request{View: v, Backend: backend, Format: visualizer.FormatSource}
+	if v == visualizer.ViewC4 {
+		req.C4 = &visualizer.C4Options{Boundaries: true}
+	}
+	out, err := visualizer.New(nil).Render(doc, req)
+	return out.Data, out.ContentType, err
 }

@@ -111,7 +111,7 @@ func generateCmd() *cobra.Command {
 				focusServices: focusServices,
 				focusContexts: focusContexts,
 			}
-			return generateDiagrams(visualizer.New(), doc, modelBaseName(files), outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, cmd.OutOrStdout(), force)
+			return generateDiagrams(visualizer.New(visualizer.ExecPlantUML{}), doc, modelBaseName(files), outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, cmd.OutOrStdout(), force)
 		},
 	}
 
@@ -131,265 +131,122 @@ func generateCmd() *cobra.Command {
 	return cmd
 }
 
-func generateDiagrams(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer, force bool) error {
-	// If the user supplied --use-case, validate that every requested value
-	// matches some use case in the model. Only used for domain/sequence
-	// types — c4 keeps full model for structural completeness.
-	if len(useCaseFilter) > 0 {
-		_, missing := visualizer.FilterUseCases(model, useCaseFilter)
-		if len(missing) > 0 {
-			available := make([]string, 0, len(model.UseCases))
-			for _, uc := range model.UseCases {
-				available = append(available, visualizer.Slugify(uc.Name))
-			}
-			return fmt.Errorf("no use case matches %v (available: %s)", missing, strings.Join(available, ", "))
-		}
+func generateDiagrams(r *visualizer.Renderer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer, force bool) error {
+	backend, outFormat := visualizer.PlantUML, visualizer.FormatSource
+	switch format {
+	case "mermaid":
+		backend = visualizer.Mermaid
+	case "mermaid-md":
+		backend, outFormat = visualizer.Mermaid, visualizer.FormatMarkdown
 	}
-
-	domainMode := visualizer.DomainModeDetailed
+	domainView := visualizer.ViewFlow
 	if strings.ToLower(mode) == "architecture" {
-		domainMode = visualizer.DomainModeArchitecture
+		domainView = visualizer.ViewArchitecture
 	}
 
-	types := expandType(diagType)
-
-	for _, t := range types {
-		var content []byte
-		var outFile string
-
+	for _, t := range expandType(diagType) {
+		req := visualizer.Request{Backend: backend, Format: outFormat}
 		switch t {
 		case "c4":
-			out, ext, err := renderC4(v, model, opts, format)
-			if err != nil {
-				return fmt.Errorf("c4: %w", err)
+			// C4 always shows the whole architecture: --use-case and --split
+			// do not apply to it.
+			req.View = visualizer.ViewC4
+			req.C4 = &visualizer.C4Options{
+				Boundaries:    opts.boundaries != "transparent",
+				ShowDatabases: opts.showDatabases,
+				FocusServices: opts.focusServices,
+				FocusContexts: opts.focusContexts,
 			}
-			content = out
-			outFile = filepath.Join(outDir, base+"-c4."+ext)
-
 		case "domain":
-			diagModel := model
-			if len(useCaseFilter) > 0 {
-				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
-			}
-			// Architecture mode silently ignores --split — it is structural.
-			if split && domainMode == visualizer.DomainModeDetailed {
-				if err := emitSplitDomainFiles(v, diagModel, base, outDir, domainMode, format, force); err != nil {
-					return fmt.Errorf("domain: %w", err)
-				}
-				continue
-			}
-			out, ext, err := renderDomain(v, diagModel, domainMode, format)
-			if err != nil {
-				return fmt.Errorf("domain: %w", err)
-			}
-			content = out
-			outFile = filepath.Join(outDir, base+"-domain."+ext)
-
+			req.View, req.UseCases = domainView, useCaseFilter
 		case "sequence":
-			diagModel := model
-			if len(useCaseFilter) > 0 {
-				diagModel, _ = visualizer.FilterUseCases(model, useCaseFilter)
-			}
-			if split {
-				if err := emitSplitSequenceFiles(v, diagModel, base, outDir, domainMode, format, force); err != nil {
-					return fmt.Errorf("sequence: %w", err)
-				}
-				continue
-			}
-			out, ext, err := renderSequence(v, diagModel, domainMode, format)
-			if err != nil {
-				return fmt.Errorf("sequence: %w", err)
-			}
-			content = out
-			outFile = filepath.Join(outDir, base+"-sequence."+ext)
+			req.View, req.UseCases = visualizer.ViewSequence, useCaseFilter
+		default:
+			return fmt.Errorf("unknown diagram type %q", t)
 		}
 
+		// Split applies to per-use-case views; the architecture view is
+		// structural, so it ignores --split.
+		if split && (req.View == visualizer.ViewFlow || req.View == visualizer.ViewSequence) {
+			if err := emitSplitFiles(r, model, req, base, outDir, t, useCaseFilter, force); err != nil {
+				return fmt.Errorf("%s: %w", t, err)
+			}
+			continue
+		}
+
+		out, err := r.Render(model, req)
+		if err != nil {
+			return fmt.Errorf("%s: %w", t, err)
+		}
 		if stdout {
-			if _, err := stdoutW.Write(content); err != nil {
+			if _, err := stdoutW.Write(out.Data); err != nil {
 				return err
 			}
 			continue
 		}
-		if !stdout && strings.HasSuffix(outFile, ".md") && !force {
-			if _, err := os.Stat(outFile); err == nil {
-				return fmt.Errorf("refusing to overwrite %q (use --force to overwrite)", outFile)
-			}
-		}
-		if err := os.WriteFile(outFile, content, 0644); err != nil {
+		if err := writeOutput(filepath.Join(outDir, base+"-"+t+"."+out.Ext), out.Data, force); err != nil {
 			return err
 		}
-		fmt.Println(outFile)
 	}
 	return nil
 }
 
-// emitSplitDomainFiles writes one detailed-domain file per use case. Each
-// output file contains a single use case from the filtered model and is
-// prefixed with a per-format title (PlantUML `title`, mermaid `%% comment`,
-// or markdown `# heading`). Use cases with zero scenarios are skipped with
-// a stderr note.
-func emitSplitDomainFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode, format string, force bool) error {
-	return emitSplitFiles(model, base, outDir, "domain", format, force, func(single *craft.CraftDoc) ([]byte, string, error) {
-		return renderDomain(v, single, mode, format)
-	})
-}
-
-// emitSplitSequenceFiles writes one sequence file per use case. Same
-// semantics as emitSplitDomainFiles.
-func emitSplitSequenceFiles(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir string, mode visualizer.DomainMode, format string, force bool) error {
-	return emitSplitFiles(model, base, outDir, "sequence", format, force, func(single *craft.CraftDoc) ([]byte, string, error) {
-		return renderSequence(v, single, mode, format)
-	})
-}
-
-// emitSplitFiles iterates use cases in the model and writes one file per use
-// case using the supplied generator. Empty use cases are skipped with a
-// stderr message. Each file gets a per-format title injected by injectTitle.
-// Detects slug collisions and errors before writing the conflicting file.
-func emitSplitFiles(model *craft.CraftDoc, base, outDir, diagSuffix, format string, force bool, generate func(*craft.CraftDoc) ([]byte, string, error)) error {
-	seenSlugs := make(map[string]string) // slug -> original name (for collision diagnostics)
+// emitSplitFiles writes one diagram per use case, titled with its name.
+// Use cases with no scenarios are skipped with a note on stderr, and two use
+// cases whose names slugify alike are an error rather than one overwriting the
+// other.
+func emitSplitFiles(r *visualizer.Renderer, model *craft.CraftDoc, req visualizer.Request, base, outDir, diagSuffix string, useCaseFilter []string, force bool) error {
+	wanted := map[string]bool{}
+	for _, v := range useCaseFilter {
+		wanted[visualizer.Slugify(v)] = true
+	}
+	if len(useCaseFilter) > 0 {
+		// Let Render report unknown names, with the available slugs.
+		if _, err := r.Render(model, req); err != nil {
+			return err
+		}
+	}
+	seenSlugs := make(map[string]string) // slug -> original name
 	for _, uc := range model.UseCases {
+		slug := visualizer.Slugify(uc.Name)
+		if len(wanted) > 0 && !wanted[slug] {
+			continue
+		}
 		if len(uc.Scenarios) == 0 {
 			fmt.Fprintf(os.Stderr, "craft generate: skipped %q (no scenarios)\n", uc.Name)
 			continue
 		}
-		slug := visualizer.Slugify(uc.Name)
 		if prev, ok := seenSlugs[slug]; ok {
 			return fmt.Errorf("duplicate slug %q from use cases %q and %q — rename one", slug, prev, uc.Name)
 		}
 		seenSlugs[slug] = uc.Name
 
-		single := *model
-		single.UseCases = []craft.UseCase{uc}
-		data, ext, err := generate(&single)
+		one := req
+		one.UseCases, one.Title = []string{uc.Name}, uc.Name
+		out, err := r.Render(model, one)
 		if err != nil {
 			return fmt.Errorf("%s: %w", uc.Name, err)
 		}
-		titled := injectTitle(data, uc.Name, format)
-		outFile := filepath.Join(outDir, fmt.Sprintf("%s-%s-%s.%s", base, diagSuffix, slug, ext))
-		if strings.HasSuffix(outFile, ".md") && !force {
-			if _, err := os.Stat(outFile); err == nil {
-				return fmt.Errorf("refusing to overwrite %q (use --force to overwrite)", outFile)
-			}
-		}
-		if err := os.WriteFile(outFile, titled, 0644); err != nil {
+		if err := writeOutput(filepath.Join(outDir, fmt.Sprintf("%s-%s-%s.%s", base, diagSuffix, slug, out.Ext)), out.Data, force); err != nil {
 			return err
 		}
-		fmt.Println(outFile)
 	}
 	return nil
 }
 
-// renderDomain dispatches the domain generator by format. Returns (content, ext, error).
-func renderDomain(v *visualizer.Visualizer, doc *craft.CraftDoc, mode visualizer.DomainMode, format string) ([]byte, string, error) {
-	switch format {
-	case "mermaid":
-		src, err := v.GenerateDomainDiagramMermaid(doc, mode)
-		return []byte(src), "mmd", err
-	case "mermaid-md":
-		src, err := v.GenerateDomainDiagramMermaid(doc, mode)
-		if err != nil {
-			return nil, "", err
+// writeOutput writes one diagram file and prints its path. An existing .md
+// file is only overwritten with --force: it may hold hand-written prose.
+func writeOutput(outFile string, data []byte, force bool) error {
+	if strings.HasSuffix(outFile, ".md") && !force {
+		if _, err := os.Stat(outFile); err == nil {
+			return fmt.Errorf("refusing to overwrite %q (use --force to overwrite)", outFile)
 		}
-		title := titleFor(doc, "Domain")
-		return []byte(wrapMarkdown(src, title)), "md", nil
-	default:
-		data, _, err := v.GenerateDomainDiagramWithModeAndFormat(doc, mode, visualizer.FormatPUML)
-		return data, "puml", err
 	}
-}
-
-func renderSequence(v *visualizer.Visualizer, doc *craft.CraftDoc, mode visualizer.DomainMode, format string) ([]byte, string, error) {
-	switch format {
-	case "mermaid":
-		src, err := v.GenerateSequenceDiagramMermaid(doc, mode)
-		return []byte(src), "mmd", err
-	case "mermaid-md":
-		src, err := v.GenerateSequenceDiagramMermaid(doc, mode)
-		if err != nil {
-			return nil, "", err
-		}
-		title := titleFor(doc, "Sequence")
-		return []byte(wrapMarkdown(src, title)), "md", nil
-	default:
-		data, _, err := v.GenerateDomainDiagramWithTypeAndModeAndFormat(doc, visualizer.DiagramTypeSequence, mode, visualizer.FormatPUML)
-		return data, "puml", err
+	if err := os.WriteFile(outFile, data, 0644); err != nil {
+		return err
 	}
-}
-
-func renderC4(v *visualizer.Visualizer, doc *craft.CraftDoc, opts c4Options, format string) ([]byte, string, error) {
-	boundariesMode := visualizer.C4ModeBoundaries
-	if strings.ToLower(opts.boundaries) == string(visualizer.C4ModeTransparent) {
-		boundariesMode = visualizer.C4ModeTransparent
-	}
-	switch format {
-	case "mermaid":
-		src, err := v.GenerateC4Mermaid(doc, opts.focusServices, opts.focusContexts, boundariesMode, opts.showDatabases)
-		return []byte(src), "mmd", err
-	case "mermaid-md":
-		src, err := v.GenerateC4Mermaid(doc, opts.focusServices, opts.focusContexts, boundariesMode, opts.showDatabases)
-		if err != nil {
-			return nil, "", err
-		}
-		title := titleFor(doc, "C4")
-		return []byte(wrapMarkdown(src, title)), "md", nil
-	default:
-		hasFocus := len(opts.focusServices) > 0 || len(opts.focusContexts) > 0
-		if hasFocus {
-			data, _, err := v.GenerateC4WithFocusContextsAndFormat(doc, opts.focusServices, opts.focusContexts, boundariesMode, opts.showDatabases, visualizer.FormatPUML)
-			return data, "puml", err
-		}
-		data, _, err := v.GenerateC4WithFormat(doc, boundariesMode, opts.showDatabases, visualizer.FormatPUML)
-		return data, "puml", err
-	}
-}
-
-// wrapMarkdown wraps Mermaid source in a fenced markdown block with a title heading.
-func wrapMarkdown(source, title string) string {
-	return "# " + title + "\n\n```mermaid\n" + source + "\n```\n"
-}
-
-// titleFor produces the markdown heading shown above the fenced block.
-// For single-use-case (split-mode) docs the use case name is preferred;
-// otherwise a generic "<base> — <type>" form is used.
-func titleFor(doc *craft.CraftDoc, diagramType string) string {
-	if len(doc.UseCases) == 1 {
-		return doc.UseCases[0].Name
-	}
-	return diagramType
-}
-
-// injectTitle prepends a per-format title for split-mode files.
-//   - mermaid-md: replace the wrapper's '# <generic title>' heading with the use case name.
-//   - mermaid: prepend a '%% <name>' comment line (Mermaid has no title directive).
-//   - puml: insert `title <name>` after the first @startuml.
-func injectTitle(content []byte, useCaseName, format string) []byte {
-	switch format {
-	case "mermaid-md":
-		s := string(content)
-		if strings.HasPrefix(s, "# ") {
-			newline := strings.IndexByte(s, '\n')
-			if newline > 0 {
-				return []byte("# " + useCaseName + s[newline:])
-			}
-		}
-		return content
-	case "mermaid":
-		return append([]byte("%% "+useCaseName+"\n"), content...)
-	default:
-		const marker = "@startuml\n"
-		idx := strings.Index(string(content), marker)
-		if idx < 0 {
-			return content
-		}
-		insertAt := idx + len(marker)
-		titleLine := []byte("title " + useCaseName + "\n")
-		out := make([]byte, 0, len(content)+len(titleLine))
-		out = append(out, content[:insertAt]...)
-		out = append(out, titleLine...)
-		out = append(out, content[insertAt:]...)
-		return out
-	}
+	fmt.Println(outFile)
+	return nil
 }
 
 // modelBaseName names the output files of a model: the input's own name
