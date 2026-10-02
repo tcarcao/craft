@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -222,7 +223,7 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 				checkSlugRef(uri, subject, triggerLine, col, &diags, &refs)
 			}
 
-			if trigger.Kind() == "domain_listen" {
+			if trigger.Kind() == lang.TriggerDomainListen {
 				col := 0
 				if hasLI {
 					col = trigger.EventCol(li)
@@ -249,7 +250,7 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 					checkSlugRef(uri, subj, line, col, &diags, &refs)
 				}
 				switch action.Kind() {
-				case "async_action":
+				case lang.ActionAsync:
 					col := 0
 					if hasLI {
 						col = action.EventCol(li)
@@ -259,7 +260,7 @@ func validateUseCaseRefs(uri string, file syntax.File, li green.LineIndex, hasLI
 					} else {
 						checkSlugRef(uri, action.EventValue(), line, col, &diags, &refs)
 					}
-				case "sync_action", "return_action":
+				case lang.ActionSync, lang.ActionReturn:
 					// return_action's `to <target>` became a ref slot in
 					// Task 6b, so it is validated alongside the asks target.
 					col := 0
@@ -397,57 +398,6 @@ func collectContextMapEdgeSites(uri string, file syntax.File, li green.LineIndex
 		}
 	}
 	return sites
-}
-
-// resolveBCRef resolves a context_map endpoint against the workspace symbol table.
-// scopeDomain is the owning block's domain scope ("" if unscoped).
-// Returns (canonical "domain/name" when a BC, kind, ambiguous).
-// kind ∈ {"bc","domain","service","actor",""}; "" means fully unresolved.
-func resolveBCRef(ws WorkspaceSymbols, scopeDomain, ref string) (resolved, kind string, ambiguous bool) {
-	// 1. Qualified `domain/name`: names a specific BC. If that domain doesn't
-	// declare it, it's fully unresolved (not endpoint-not-bc).
-	if idx := strings.IndexByte(ref, '/'); idx >= 0 {
-		domain, name := ref[:idx], ref[idx+1:]
-		if dom, ok := ws.Domains[domain]; ok && domainHasBC(dom, name) {
-			return domain + "/" + name, "bc", false
-		}
-		return "", "", false
-	}
-
-	// 2. Bare `name`, scope-first: a BC of the owning block's domain wins.
-	if scopeDomain != "" {
-		if dom, ok := ws.Domains[scopeDomain]; ok && domainHasBC(dom, ref) {
-			return scopeDomain + "/" + ref, "bc", false
-		}
-	}
-
-	// 3. Bare `name`, ambiguity count across all domains. (ws.BoundedContexts
-	// maps to a single owner and hides ambiguity, so it is not used here.)
-	owner, count := "", 0
-	for domName, dom := range ws.Domains {
-		if domainHasBC(dom, ref) {
-			owner = domName
-			count++
-		}
-	}
-	if count == 1 {
-		return owner + "/" + ref, "bc", false
-	}
-	if count >= 2 {
-		return "", "bc", true
-	}
-
-	// 4. Bare `name`, not a BC: fall through to domain / service / actor.
-	if _, ok := ws.Domains[ref]; ok {
-		return ref, "domain", false
-	}
-	if _, ok := ws.Services[ref]; ok {
-		return ref, "service", false
-	}
-	if _, ok := ws.Actors[ref]; ok {
-		return ref, "actor", false
-	}
-	return "", "", false
 }
 
 func domainHasBC(dom DomainSymbol, name string) bool {

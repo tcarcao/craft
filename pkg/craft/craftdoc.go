@@ -28,6 +28,8 @@ type (
 	Action             = model.Action
 	ActionType         = model.ActionType
 	Operation          = model.Operation
+	Participant        = model.Participant
+	ParticipantKind    = model.ParticipantKind
 	Interaction        = model.Interaction
 	Domain             = model.Domain
 	Actor              = model.Actor
@@ -47,6 +49,12 @@ const (
 	ActionTypeAsync    = model.ActionTypeAsync
 	ActionTypeInternal = model.ActionTypeInternal
 	ActionTypeReturn   = model.ActionTypeReturn
+
+	ParticipantBoundedContext = model.ParticipantBoundedContext
+	ParticipantDomain         = model.ParticipantDomain
+	ParticipantService        = model.ParticipantService
+	ParticipantActor          = model.ParticipantActor
+	ParticipantDataStore      = model.ParticipantDataStore
 
 	// OpVerb* are the recognised protocol verbs for an Operation annotation's
 	// Verb field. Untyped string constants, not a named type: the verb set is

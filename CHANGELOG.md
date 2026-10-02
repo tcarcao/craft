@@ -9,9 +9,15 @@
 - **`craft generate` stops on any error**, semantic as well as syntactic, and prints every diagnostic in `file:line: severity: message` form. An unresolved context, for example, used to pass silently and lose its edges in the diagram. `--allow-errors` draws anyway. Warnings and hints never stop generation.
 - **`craft.Parse` analyzes its file as a model of one file.** It returns the same cross-reference and lint diagnostics `ParseFiles` and `craft validate` report, where it used to return only syntax and single-file checks. A file that already validates cleanly gets no new errors.
 - **`craft.ParseFiles` keeps the first declaration of a service or domain declared in several files** (in sorted file order). It used to return every copy, while sema already resolved against the first. Same-name `services` blocks within one file still merge.
+- **One resolver for every participant slot.** Use cases, context maps, glossaries, lint and the language server now share one resolution order: qualified bounded context, bounded context, then domain, service, actor, data store. A name that is both an actor and a bounded context now means the bounded context inside use cases too (`craft/sema/cross-kind-name-reuse` already warns about such names).
+- **`craft/sema/ambiguous-bc` covers every participant slot**, including an internal action's subject, both sides of a `returns`, and an external trigger's actor. A bare name declared in two domains is never resolved to a guessed owner any more.
+- The corpus `.craftjson` goldens now record the resolved model (`from`, `to`, `subject`, `contextIds`), i.e. exactly what `craft.Parse` returns. `go test ./internal/corpustest -update` rewrites them.
 - The HTTP server analyzes preview input the same way and adds an optional `diagnostics` array to preview responses. Previews still draw partial models; existing response fields are unchanged.
 
 ### Added
+- **Every use-case participant carries its resolved identity.** `Action.From`, `Action.To` (sync and return actions) and `Trigger.Subject` are `*Participant{Kind, ID, Service}` (`from`, `to`, `subject` in `craft check` JSON): `Kind` is `bounded_context`, `domain`, `service`, `actor` or `data_store`; `ID` is `<domain>/<bc>` for a bounded context; `Service` is the service that deploys it or owns the data store. `Service.ContextIDs` gives the same canonical identity for each `contexts:` entry. Consumers no longer have to match names themselves, which is how a qualified participant such as `re/billing` used to vanish from diagrams while validating cleanly. All fields are additive and omitted when unresolved.
+- **Data stores are participants.** `Authentication asks user_db to check …` resolves to the data store `user_db` and its owning service.
+- **`craft/sema/bc-in-multiple-services`** (warning): a bounded context listed by two services. A bounded context belongs to one service; the first declaration keeps it.
 - **`craft/sema/duplicate-name` warns about a domain declared in more than one file.** The second declaration was dropped without a word before. A repeat within one file is still an error.
 
 ### Fixed

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -186,9 +187,9 @@ func projectTrigger(t syntax.TriggerDecl) model.Trigger {
 	kind := t.Kind()
 	var actor, context, event, verb, phrase, ref string
 	switch kind {
-	case "event":
+	case lang.TriggerEvent:
 		event = t.EventValue()
-	case "domain_listen":
+	case lang.TriggerDomainListen:
 		context = t.ContextName()
 		event = t.EventValue()
 		ref = t.EventRef()
@@ -199,16 +200,16 @@ func projectTrigger(t syntax.TriggerDecl) model.Trigger {
 	}
 	var description string
 	switch kind {
-	case "event":
+	case lang.TriggerEvent:
 		description = fmt.Sprintf("when %q", event)
-	case "domain_listen":
+	case lang.TriggerDomainListen:
 		description = fmt.Sprintf("when %s listens %q", context, event)
 	default:
 		// No trimming: an empty phrase leaves a trailing space, as it always has.
 		description = fmt.Sprintf("when %s %s %s", actor, verb, phrase)
 	}
 	return model.Trigger{
-		Type:        model.TriggerType(kind),
+		Type:        kind,
 		Actor:       actor,
 		Verb:        verb,
 		Phrase:      phrase,
@@ -229,15 +230,15 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 
 	var verb, description string
 	switch kind {
-	case "sync_action":
+	case lang.ActionSync:
 		// The connector is always included, so an empty one leaves a double space.
 		description = subject + " asks " + target + " " + connector
 		if phrase != "" {
 			description += " " + phrase
 		}
-	case "async_action":
+	case lang.ActionAsync:
 		description = fmt.Sprintf("%s notifies %q", subject, event)
-	case "return_action":
+	case lang.ActionReturn:
 		if target != "" {
 			description = fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
 		} else {
@@ -264,7 +265,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 	}
 	return model.Action{
 		ID:            id,
-		Type:          model.ActionType(kind),
+		Type:          kind,
 		Context:       subject,
 		Verb:          verb,
 		TargetContext: target,

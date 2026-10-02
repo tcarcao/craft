@@ -73,7 +73,11 @@
       ],
       "language": "golang",
       "deployment": {},
-      "line": 29
+      "line": 29,
+      "contextIds": [
+        "User/Authentication",
+        "User/Profile"
+      ]
     },
     {
       "name": "CommsService",
@@ -95,7 +99,11 @@
             "actor": "Business_User",
             "verb": "creates",
             "phrase": "Account",
-            "description": "when Business_User creates Account"
+            "description": "when Business_User creates Account",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -105,7 +113,12 @@
               "verb": "validates",
               "phrase": "email format",
               "description": "Authentication validates email format",
-              "line": 42
+              "line": 42,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_3",
@@ -116,7 +129,16 @@
               "connector": "to",
               "phrase": "check email uniqueness",
               "description": "Authentication asks Database to check email uniqueness",
-              "line": 43
+              "line": 43,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              },
+              "to": {
+                "kind": "actor",
+                "id": "Database"
+              }
             },
             {
               "id": "action_4",
@@ -125,7 +147,12 @@
               "verb": "creates",
               "phrase": "user profile",
               "description": "Profile creates user profile",
-              "line": 44
+              "line": 44,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Profile",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_5",
@@ -133,7 +160,12 @@
               "context": "Authentication",
               "event": "User Registered",
               "description": "Authentication notifies \"User Registered\"",
-              "line": 45
+              "line": 45,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             }
           ]
         },
@@ -143,7 +175,12 @@
             "type": "domain_listen",
             "context": "Profile",
             "event": "User Registered",
-            "description": "when Profile listens \"User Registered\""
+            "description": "when Profile listens \"User Registered\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "User/Profile",
+              "service": "UserService"
+            }
           },
           "actions": [
             {
@@ -155,7 +192,16 @@
               "connector": "to",
               "phrase": "store profile data",
               "description": "Profile asks Database to store profile data",
-              "line": 48
+              "line": 48,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Profile",
+                "service": "UserService"
+              },
+              "to": {
+                "kind": "actor",
+                "id": "Database"
+              }
             },
             {
               "id": "action_8",
@@ -166,7 +212,12 @@
               "connector": "to",
               "phrase": "send welcome email",
               "description": "Profile asks Notifier to send welcome email",
-              "line": 49
+              "line": 49,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Profile",
+                "service": "UserService"
+              }
             }
           ]
         }

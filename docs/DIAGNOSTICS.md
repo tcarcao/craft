@@ -29,7 +29,8 @@ Each entry lists:
 
 | Code | Severity | Meaning | Example message | Origin |
 |------|----------|---------|-----------------|--------|
-| `craft/sema/duplicate-name` | error | Two declarations in the same namespace share a name | `actor "Alice" already declared (first seen at line 1)` | S3 |
+| `craft/sema/duplicate-name` | error / warning | Two declarations in the same namespace share a name. An error within one file; a warning when a service or domain is declared again in another file, where the first declaration (sorted file order) wins | `actor "Alice" already declared (first seen at line 1)` | S3 |
+| `craft/sema/bc-in-multiple-services` | warning | A bounded context is listed in the `contexts:` of two services; a bounded context belongs to one service, and the first declaration keeps it | `bounded context "re/Billing" is already deployed by service "First"; a bounded context belongs to one service, so "Second" is ignored here` | 2.20 |
 | `craft/sema/cross-kind-name-reuse` | warning | The same identifier is declared in two different kind-namespaces (e.g. actor and domain) | `"Customer" is declared as both an actor (line 0) and a domain (line 3); consider renaming to avoid confusion` | S4 |
 | `craft/sema/sema-panic` | error | Unexpected panic recovered in the sema tier; analysis results may be incomplete | `internal sema error: <panic value>` | S4 |
 | `craft/sema/unresolved-reference` | error | A service's `contexts:` list names a bounded context or domain that doesn't exist in any workspace file | `service "UserService" references context "UnknownBC" which is not declared in any domain` | S5 |

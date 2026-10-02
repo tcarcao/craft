@@ -394,7 +394,7 @@ func TestTriggerDecl_Kind(t *testing.T) {
 			t.Fatalf("no scenarios: %q", tc.src)
 		}
 		got := scenarios[0].Trigger().Kind()
-		if got != tc.kind {
+		if string(got) != tc.kind {
 			t.Errorf("src=%q: want Kind=%q got %q", tc.src, tc.kind, got)
 		}
 	}
@@ -416,7 +416,7 @@ func TestActionDecl_Kind(t *testing.T) {
 	}
 	want := []string{"sync_action", "async_action", "return_action", "internal_action"}
 	for i, a := range actions {
-		if got := a.Kind(); got != want[i] {
+		if got := a.Kind(); string(got) != want[i] {
 			t.Errorf("action[%d]: want %q got %q", i, want[i], got)
 		}
 	}
@@ -801,7 +801,7 @@ func TestActionDecl_ConnectorValue(t *testing.T) {
 			t.Fatalf("no actions: %q", tc.src)
 		}
 		a := actions[0]
-		if got := a.Kind(); got != tc.wantKind {
+		if got := a.Kind(); string(got) != tc.wantKind {
 			t.Errorf("src=%q: Kind() = %q, want %q", tc.src, got, tc.wantKind)
 		}
 		if got := a.ConnectorValue(); got != tc.wantConn {

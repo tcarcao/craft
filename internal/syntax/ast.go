@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 )
 
 // nodeFirstTokenLine returns the 1-based line of the first token in node (via li),
@@ -1450,32 +1451,30 @@ func (t TriggerDecl) Tokens() []SyntaxToken { return t.node.Tokens() }
 // Event returns the string token for event-style triggers (when "<EventName>").
 func (t TriggerDecl) Event() *SyntaxToken { return t.node.ChildToken(SyntaxKindString) }
 
-// Kind returns "external", "event", or "domain_listen" based on token structure.
-// Mirrors lowerTrigger classification in lower.go.
-func (t TriggerDecl) Kind() string {
+// Kind classifies the trigger by its shape: a quoted event, a `listens`
+// clause, or an external actor.
+func (t TriggerDecl) Kind() lang.TriggerKind {
 	// Read slots as elements, not flat tokens: a qualified subject (Task 6b)
 	// is one Ref element but several tokens, which would push `listens` past
 	// a fixed token index 1.
 	elems := significantElements(t.node)
 	if len(elems) == 0 {
-		return "external"
+		return lang.TriggerExternal
 	}
-	// event trigger: first element is a string literal
 	if elems[0].Kind() == SyntaxKindString {
-		return "event"
+		return lang.TriggerEvent
 	}
-	// domain_listen: second element is `listens`
 	if len(elems) >= 2 && elems[1].Kind() == SyntaxKindKwListens {
-		return "domain_listen"
+		return lang.TriggerDomainListen
 	}
-	return "external"
+	return lang.TriggerExternal
 }
 
 // ActorName returns the trigger subject for external triggers (the actor/domain
 // name). The subject may be a parseRef-wrapped qualified ref (Task 6b), so
 // refAwareText reads the full "re/billing" rather than its first segment.
 func (t TriggerDecl) ActorName() string {
-	if t.Kind() != "external" {
+	if t.Kind() != lang.TriggerExternal {
 		return ""
 	}
 	el := t.subjectElement()
@@ -1499,7 +1498,7 @@ func (t TriggerDecl) ActorCol(li green.LineIndex) int {
 // ContextName returns the subject name for domain_listen triggers, reading a
 // qualified ref (Task 6b) in full via refAwareText.
 func (t TriggerDecl) ContextName() string {
-	if t.Kind() != "domain_listen" {
+	if t.Kind() != lang.TriggerDomainListen {
 		return ""
 	}
 	el := t.subjectElement()
@@ -1516,12 +1515,12 @@ func (t TriggerDecl) ContextName() string {
 // leaf token.
 func (t TriggerDecl) EventValue() string {
 	switch t.Kind() {
-	case "event":
+	case lang.TriggerEvent:
 		tokens := t.node.Tokens()
 		if len(tokens) > 0 {
 			return stringAwareText(tokens[0])
 		}
-	case "domain_listen":
+	case lang.TriggerDomainListen:
 		elems := significantElements(t.node)
 		if len(elems) >= 3 {
 			return refAwareText(elems[2])
@@ -1543,7 +1542,7 @@ func (t TriggerDecl) rawTextFrom(start int) string {
 // ActionDecl.PhraseText (Task 1 / Bug 8a) so prose with tight punctuation
 // keeps its original spacing instead of being space-joined.
 func (t TriggerDecl) PhraseText() string {
-	if t.Kind() != "external" {
+	if t.Kind() != lang.TriggerExternal {
 		return ""
 	}
 	tokens := t.node.Tokens()
@@ -1586,13 +1585,13 @@ func (t TriggerDecl) SourceText() string {
 // EventCol returns the 1-based column of the event token using li.
 func (t TriggerDecl) EventCol(li green.LineIndex) int {
 	switch t.Kind() {
-	case "event":
+	case lang.TriggerEvent:
 		tokens := t.node.Tokens()
 		if len(tokens) > 0 {
 			_, col := li.LineCol16(tokens[0].Offset())
 			return col
 		}
-	case "domain_listen":
+	case lang.TriggerDomainListen:
 		elems := significantElements(t.node)
 		if len(elems) >= 3 {
 			_, col := li.LineCol16(refAwareOffset(elems[2]))
@@ -1605,10 +1604,10 @@ func (t TriggerDecl) EventCol(li green.LineIndex) int {
 // EventIsString returns true when the event token is a quoted string literal.
 func (t TriggerDecl) EventIsString() bool {
 	switch t.Kind() {
-	case "event":
+	case lang.TriggerEvent:
 		tokens := t.node.Tokens()
 		return len(tokens) > 0 && tokens[0].Kind() == SyntaxKindString
-	case "domain_listen":
+	case lang.TriggerDomainListen:
 		elems := significantElements(t.node)
 		return len(elems) >= 3 && elems[2].Kind() == SyntaxKindString
 	}
@@ -1660,29 +1659,28 @@ func (a ActionDecl) Verb() *SyntaxToken {
 func (a ActionDecl) Connector() *SyntaxToken {
 	tokens := a.node.Tokens()
 	switch a.Kind() {
-	case "sync_action", "internal_action":
+	case lang.ActionSync, lang.ActionInternal:
 		return connectorAt(tokens, slotEndIndex(a))
 	default:
 		return a.node.ChildToken(SyntaxKindKwTo)
 	}
 }
 
-// Kind returns "sync_action", "async_action", "return_action", or "internal_action".
-// Mirrors lowerAction classification in lower.go.
-func (a ActionDecl) Kind() string {
+// Kind classifies the action by its verb.
+func (a ActionDecl) Kind() lang.ActionKind {
 	verb := a.Verb()
 	if verb == nil {
-		return "internal_action"
+		return lang.ActionInternal
 	}
 	switch verb.Kind() {
 	case SyntaxKindKwAsks:
-		return "sync_action"
+		return lang.ActionSync
 	case SyntaxKindKwNotifies:
-		return "async_action"
+		return lang.ActionAsync
 	case SyntaxKindKwReturns:
-		return "return_action"
+		return lang.ActionReturn
 	default:
-		return "internal_action"
+		return lang.ActionInternal
 	}
 }
 
@@ -1728,9 +1726,9 @@ func (a ActionDecl) targetElement() SyntaxElement {
 	elems := significantElements(a.node)
 	i := -1
 	switch a.Kind() {
-	case "sync_action":
+	case lang.ActionSync:
 		i = 2
-	case "return_action":
+	case lang.ActionReturn:
 		if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwTo {
 			i = 3
 		}
@@ -1769,7 +1767,7 @@ func (a ActionDecl) TargetCol(li green.LineIndex) int {
 // slot may be a quoted string or a parseRef-wrapped ref (Task 4); refAwareText
 // returns the full ref text for a kind-prefixed slug rather than truncating.
 func (a ActionDecl) EventValue() string {
-	if a.Kind() != "async_action" {
+	if a.Kind() != lang.ActionAsync {
 		return ""
 	}
 	elems := significantElements(a.node)
@@ -1781,7 +1779,7 @@ func (a ActionDecl) EventValue() string {
 
 // EventCol returns the 1-based column of the event token for async_action using li.
 func (a ActionDecl) EventCol(li green.LineIndex) int {
-	if a.Kind() != "async_action" {
+	if a.Kind() != lang.ActionAsync {
 		return 0
 	}
 	elems := significantElements(a.node)
@@ -1794,7 +1792,7 @@ func (a ActionDecl) EventCol(li green.LineIndex) int {
 
 // EventIsString returns true when the event was a quoted string literal.
 func (a ActionDecl) EventIsString() bool {
-	if a.Kind() != "async_action" {
+	if a.Kind() != lang.ActionAsync {
 		return false
 	}
 	elems := significantElements(a.node)
@@ -1852,9 +1850,9 @@ func (a ActionDecl) ConnectorValue() string {
 func slotEndIndex(a ActionDecl) int {
 	elems := significantElements(a.node)
 	switch a.Kind() {
-	case "sync_action":
+	case lang.ActionSync:
 		return tokenIndexAt(elems, 3) // subject, asks, target
-	case "return_action":
+	case lang.ActionReturn:
 		if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwTo {
 			return tokenIndexAt(elems, 4) // subject, returns, to, target
 		}
@@ -1869,7 +1867,7 @@ func slotEndIndex(a ActionDecl) int {
 // kind, skipping subject/verb/target/connector tokens. Returns len(tokens)
 // for action kinds that have no phrase (async_action).
 func phraseStartIndex(a ActionDecl, tokens []SyntaxToken) int {
-	if a.Kind() == "async_action" {
+	if a.Kind() == lang.ActionAsync {
 		return len(tokens) // no phrase for notifies
 	}
 	start := slotEndIndex(a)
@@ -1949,16 +1947,16 @@ func (a ActionDecl) SourceTextWithoutOp() string {
 	var sb strings.Builder
 	sb.WriteString(a.SubjectName())
 	switch a.Kind() {
-	case "async_action":
+	case lang.ActionAsync:
 		sb.WriteString(" notifies")
 		appendSpaced(&sb, a.eventSourceText())
-	case "sync_action":
+	case lang.ActionSync:
 		// appendSpaced rather than a literal trailing space, so a truncated
 		// `A asks` with no target does not render as "A asks ".
 		sb.WriteString(" asks")
 		appendSpaced(&sb, a.TargetName())
 		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
-	case "return_action":
+	case lang.ActionReturn:
 		sb.WriteString(" returns")
 		if target := a.TargetName(); target != "" {
 			sb.WriteString(" to ")

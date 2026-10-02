@@ -39,6 +39,7 @@ import (
 
 	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/internal/workspace"
@@ -1017,7 +1018,7 @@ func extractUseCaseContextsFromView(uc syntax.UseCaseDecl) (entryPoint string, i
 	}
 	for _, sc := range uc.Scenarios() {
 		trigger := sc.Trigger()
-		if trigger.Kind() == "domain_listen" {
+		if trigger.Kind() == lang.TriggerDomainListen {
 			add(trigger.ContextName())
 		}
 		for _, action := range sc.Actions() {
@@ -2540,7 +2541,7 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			// that TextMate would otherwise color incorrectly (uppercase idents →
 			// entity.name.type, connector words like "to" → keyword.operator).
 			phraseWordIdx := s.semanticTokenTypeIndex("craft-phrase-word")
-			if phraseWordIdx >= 0 && trigger.Kind() == "external" {
+			if phraseWordIdx >= 0 && trigger.Kind() == lang.TriggerExternal {
 				// The subject is already handled above, so skip its tokens.
 				// A qualified subject (re/billing) is more than one token, so
 				// take the span from the AST rather than skipping just one.
@@ -2696,7 +2697,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 	}
 
 	switch kind {
-	case "internal_action":
+	case lang.ActionInternal:
 		// toks: [subject..., verb, (connector?), phrase...]
 		// The subject may be a multi-token Ref (e.g. "re/billing"), so take the
 		// verb token and the connector position from the AST rather than
@@ -2719,7 +2720,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			emitPhraseWord(tok)
 		}
 
-	case "sync_action":
+	case lang.ActionSync:
 		// toks: [subject, asks, target, (connector?), phrase...]
 		// subject and target classified by resolution map; skip them. The
 		// target may be a multi-token Ref (e.g. "bc:re/billing", 5 flat
@@ -2743,7 +2744,7 @@ func (s *Server) classifyActionIdents(action syntax.ActionDecl, li green.LineInd
 			emitPhraseWord(tok)
 		}
 
-	case "return_action":
+	case lang.ActionReturn:
 		// toks: [subject, returns, (to, target)?, (connector?), phrase...]
 		// NOTE: action.Connector() must NOT be used here — for return_action
 		// it returns the KwTo target-introducer token (`to` in
@@ -2846,14 +2847,14 @@ func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.F
 		}
 		for _, sc := range uc.Scenarios() {
 			trigger := sc.Trigger()
-			if trigger.Kind() == "event" || trigger.Kind() == "domain_listen" {
+			if trigger.Kind() == lang.TriggerEvent || trigger.Kind() == lang.TriggerDomainListen {
 				if evTok := trigger.Event(); evTok != nil && trigger.EventIsString() {
 					pos := lspPosFromOffset(li, evTok.Offset())
 					overrides[posKey{pos.Line, pos.Character}] = evStringIdx
 				}
 			}
 			for _, action := range sc.Actions() {
-				if action.Kind() == "async_action" && action.EventIsString() {
+				if action.Kind() == lang.ActionAsync && action.EventIsString() {
 					actionLine := action.Line(li)
 					if actionLine <= 0 {
 						continue

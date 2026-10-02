@@ -134,3 +134,83 @@ func mustJSON(t *testing.T, r analysis.Result) string {
 	}
 	return string(b)
 }
+
+// The bug behind this work: `re/billing asks …` passed validation, but the
+// model only carried the text "re/billing", which no service's contexts list
+// matches, so diagrams dropped the edge. Every participant now carries its
+// resolved identity and owning service.
+func TestWorkspace_ResolvesParticipants(t *testing.T) {
+	res := workspaceOf(map[string]string{
+		"structure.craft": `actor user Customer
+
+domain re {
+    billing
+    subscriptions
+}
+
+domain ops {
+    billing
+}
+
+services {
+    BillingService {
+        contexts: subscriptions
+        data-stores: billing_db
+    }
+}
+`,
+		"flows.craft": `use_case "Renew" {
+    when Customer renews plan
+        subscriptions asks re/billing for a charge
+        re/billing asks billing_db to store the charge
+        re/billing returns to subscriptions the receipt
+        subscriptions notifies "Renewed"
+    when subscriptions listens "Renewed"
+        subscriptions updates the plan
+}
+`,
+	})
+	bc := func(id, svc string) *model.Participant {
+		return &model.Participant{Kind: model.ParticipantBoundedContext, ID: id, Service: svc}
+	}
+	sc := res.Doc.UseCases[0].Scenarios
+	checks := []struct {
+		what      string
+		got, want *model.Participant
+	}{
+		{"external trigger subject", sc[0].Trigger.Subject, &model.Participant{Kind: model.ParticipantActor, ID: "Customer"}},
+		{"sync subject", sc[0].Actions[0].From, bc("re/subscriptions", "BillingService")},
+		{"qualified sync target", sc[0].Actions[0].To, bc("re/billing", "")},
+		{"data store target", sc[0].Actions[1].To, &model.Participant{Kind: model.ParticipantDataStore, ID: "billing_db", Service: "BillingService"}},
+		{"return target", sc[0].Actions[2].To, bc("re/subscriptions", "BillingService")},
+		{"async has no target", sc[0].Actions[3].To, nil},
+		{"domain-listen subject", sc[1].Trigger.Subject, bc("re/subscriptions", "BillingService")},
+	}
+	for _, c := range checks {
+		if (c.got == nil) != (c.want == nil) || (c.got != nil && *c.got != *c.want) {
+			t.Errorf("%s = %+v, want %+v", c.what, c.got, c.want)
+		}
+	}
+	if ids := res.Doc.Services[0].ContextIDs; len(ids) != 1 || ids[0] != "re/subscriptions" {
+		t.Errorf("ContextIDs = %v, want [re/subscriptions]", ids)
+	}
+}
+
+// An ambiguous bare name never resolves to a guessed owner: the participant
+// stays nil and lint reports ambiguous-bc, an error that stops generate.
+func TestWorkspace_AmbiguousParticipantStaysUnresolved(t *testing.T) {
+	res := workspaceOf(map[string]string{
+		"a.craft": "domain re {\n    billing\n}\ndomain ops {\n    billing\n}\nuse_case \"U\" {\n    when billing starts\n        billing charges card\n}\n",
+	})
+	a := res.Doc.UseCases[0].Scenarios[0].Actions[0]
+	if a.From != nil {
+		t.Errorf("ambiguous subject resolved to %+v; want nil", a.From)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		found = found || (d.Code == "craft/sema/ambiguous-bc" && d.Severity == model.SeverityError)
+	}
+	if !found {
+		t.Error("want an ambiguous-bc error")
+	}
+}

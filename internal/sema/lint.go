@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -86,13 +87,13 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]gr
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
 				trigger := sc.Trigger()
-				if trigger.Kind() == "event" || trigger.Kind() == "domain_listen" {
+				if trigger.Kind() == lang.TriggerEvent || trigger.Kind() == lang.TriggerDomainListen {
 					if ev := trigger.EventValue(); ev != "" {
 						consumed[ev] = true
 					}
 				}
 				for _, action := range sc.Actions() {
-					if action.Kind() == "async_action" {
+					if action.Kind() == lang.ActionAsync {
 						ev := action.EventValue()
 						if ev != "" {
 							if _, seen := published[ev]; !seen {
@@ -146,11 +147,11 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 			for _, sc := range uc.Scenarios() {
 				trigger := sc.Trigger()
 				switch trigger.Kind() {
-				case "external":
+				case lang.TriggerExternal:
 					if actor := trigger.ActorName(); actor != "" {
 						used[actor] = true
 					}
-				case "domain_listen":
+				case lang.TriggerDomainListen:
 					// An actor can be the subject of a listens trigger; the parser
 					// stores the subject in Context regardless of whether it is an
 					// actor or a bounded context.
@@ -223,11 +224,11 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 				if whenTok != nil {
 					triggerLine, _ = li.LineCol(whenTok.Offset())
 				}
-				if k := trigger.Kind(); k == "event" || k == "domain_listen" {
+				if k := trigger.Kind(); k == lang.TriggerEvent || k == lang.TriggerDomainListen {
 					check(trigger.EventValue(), uri, triggerLine, trigger.EventCol(li), trigger.EventIsString())
 				}
 				for _, action := range sc.Actions() {
-					if action.Kind() == "async_action" {
+					if action.Kind() == lang.ActionAsync {
 						check(action.EventValue(), uri, action.Line(li), action.EventCol(li), action.EventIsString())
 					}
 				}
@@ -344,7 +345,7 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
 				trigger := sc.Trigger()
-				if trigger.Kind() == "domain_listen" {
+				if trigger.Kind() == lang.TriggerDomainListen {
 					if ev := trigger.EventValue(); ev != "" {
 						if ctx := trigger.ContextName(); ctx != "" {
 							resolved, kind, ambiguous := resolveBCRef(ws, "", ctx)
@@ -364,13 +365,13 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 
 				for _, action := range sc.Actions() {
 					switch action.Kind() {
-					case "sync_action":
+					case lang.ActionSync:
 						subject, subjectKind, subjectAmbig := resolveBCRef(ws, "", action.SubjectName())
 						target, targetKind, targetAmbig := resolveBCRef(ws, "", action.TargetName())
 						if subjectKind == "bc" && !subjectAmbig && targetKind == "bc" && !targetAmbig {
 							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li), lspLen(action.SubjectName()))
 						}
-					case "async_action":
+					case lang.ActionAsync:
 						if ev := action.EventValue(); ev != "" {
 							resolved, kind, ambiguous := resolveBCRef(ws, "", action.SubjectName())
 							if kind == "bc" && !ambiguous && resolved != "" {
@@ -398,79 +399,51 @@ func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 	return deps
 }
 
-// lintAmbiguousUseCaseRefs reports bare bounded-context names in use_case
-// actions and triggers that resolve to two or more domains. resolveBCRef
-// already detects this (validate.go:392), but buildDependencyEdges silently
-// drops the ambiguous case at every site it resolves, which would let an
-// unresolvable model look clean now that `bc:` prefixes are no longer
-// accepted in the target slot.
+// lintAmbiguousUseCaseRefs reports bare bounded-context names in use-case
+// participant slots that resolve to two or more domains. ResolveParticipant
+// never guesses an owner, so such a name resolves to nothing in the model —
+// it would silently drop out of every diagram without this diagnostic.
 //
-// Three sites are checked, mirroring exactly the sites buildDependencyEdges
-// resolves and would otherwise drop silently:
-//   - sync_action subject and target
-//   - async_action subject, only when it carries an event value: a notify
-//     with no event can never pair with a listener, so it never reaches the
-//     dependency graph regardless of ambiguity
-//   - domain_listen trigger context, only when the trigger carries an event
-//     value, for the same reason
-//
-// Internal and return actions do not participate in the dependency graph,
-// so an ambiguous name there is not yet actionable and is left unchecked.
-// Each site is visited exactly once per scenario, so a single ambiguous name
-// cannot produce two diagnostics at the same position.
+// Every participant slot is checked: each action's subject, the target of a
+// sync or return action, and the subject of an external or domain-listen
+// trigger. Each slot is visited once, so one ambiguous name cannot produce two
+// diagnostics at the same position.
 func lintAmbiguousUseCaseRefs(
 	perFileTrees map[string]syntax.SyntaxNode,
 	ws WorkspaceSymbols,
 	lis map[string]green.LineIndex,
 ) []model.Diagnostic {
 	var diags []model.Diagnostic
+	check := func(uri, name string, line, col int) {
+		if name == "" {
+			return
+		}
+		if _, ambiguous := ResolveParticipant(ws, "", name); ambiguous {
+			diags = append(diags, ambiguousUseCaseRefDiag(uri, name, line, col))
+		}
+	}
 	for _, uri := range sortedTreeURIs(perFileTrees) {
-		tree := perFileTrees[uri]
 		li := lis[uri]
-		file := syntax.AsFile(tree)
+		file := syntax.AsFile(perFileTrees[uri])
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
 				trigger := sc.Trigger()
-				if trigger.Kind() == "domain_listen" {
-					if ev := trigger.EventValue(); ev != "" {
-						if ctx := trigger.ContextName(); ctx != "" {
-							if _, _, ambiguous := resolveBCRef(ws, "", ctx); ambiguous {
-								whenTok := sc.When()
-								line := 0
-								if whenTok != nil {
-									line, _ = li.LineCol(whenTok.Offset())
-								}
-								diags = append(diags, ambiguousUseCaseRefDiag(
-									uri, ctx, line, trigger.ActorCol(li)))
-							}
-						}
-					}
+				line := 0
+				if whenTok := sc.When(); whenTok != nil {
+					line, _ = li.LineCol(whenTok.Offset())
+				}
+				switch trigger.Kind() {
+				case lang.TriggerExternal:
+					check(uri, trigger.ActorName(), line, trigger.ActorCol(li))
+				case lang.TriggerDomainListen:
+					check(uri, trigger.ContextName(), line, trigger.ActorCol(li))
 				}
 
 				for _, action := range sc.Actions() {
+					check(uri, action.SubjectName(), action.Line(li), action.SubjectCol(li))
 					switch action.Kind() {
-					case "sync_action":
-						if name := action.TargetName(); name != "" {
-							if _, _, ambiguous := resolveBCRef(ws, "", name); ambiguous {
-								diags = append(diags, ambiguousUseCaseRefDiag(
-									uri, name, action.Line(li), action.TargetCol(li)))
-							}
-						}
-						if name := action.SubjectName(); name != "" {
-							if _, _, ambiguous := resolveBCRef(ws, "", name); ambiguous {
-								diags = append(diags, ambiguousUseCaseRefDiag(
-									uri, name, action.Line(li), action.SubjectCol(li)))
-							}
-						}
-					case "async_action":
-						if ev := action.EventValue(); ev != "" {
-							if name := action.SubjectName(); name != "" {
-								if _, _, ambiguous := resolveBCRef(ws, "", name); ambiguous {
-									diags = append(diags, ambiguousUseCaseRefDiag(
-										uri, name, action.Line(li), action.SubjectCol(li)))
-								}
-							}
-						}
+					case lang.ActionSync, lang.ActionReturn:
+						check(uri, action.TargetName(), action.Line(li), action.TargetCol(li))
 					}
 				}
 			}

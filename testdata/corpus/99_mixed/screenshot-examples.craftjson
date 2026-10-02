@@ -83,7 +83,12 @@
       "deployment": {
         "type": "canary"
       },
-      "line": 70
+      "line": 70,
+      "contextIds": [
+        "User/Authentication",
+        "User/Profile",
+        "User/Preferences"
+      ]
     },
     {
       "name": "ProductService",
@@ -98,7 +103,12 @@
       ],
       "language": "java",
       "deployment": {},
-      "line": 76
+      "line": 76,
+      "contextIds": [
+        "Product/Catalog",
+        "Product/Inventory",
+        "Product/Pricing"
+      ]
     },
     {
       "name": "OrderService",
@@ -113,7 +123,12 @@
       ],
       "language": "typescript",
       "deployment": {},
-      "line": 81
+      "line": 81,
+      "contextIds": [
+        "Order/OrderManagement",
+        "Order/Payment",
+        "Order/Shipping"
+      ]
     },
     {
       "name": "NotificationService",
@@ -127,7 +142,12 @@
       ],
       "language": "python",
       "deployment": {},
-      "line": 86
+      "line": 86,
+      "contextIds": [
+        "Notification/EmailNotifier",
+        "Notification/SMSNotifier",
+        "Notification/PushNotifier"
+      ]
     }
   ],
   "useCases": [
@@ -141,7 +161,11 @@
             "actor": "Business_User",
             "verb": "creates",
             "phrase": "Account",
-            "description": "when Business_User creates Account"
+            "description": "when Business_User creates Account",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -151,7 +175,12 @@
               "verb": "validates",
               "phrase": "email format",
               "description": "Authentication validates email format",
-              "line": 100
+              "line": 100,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_3",
@@ -162,7 +191,12 @@
               "connector": "to",
               "phrase": "check email uniqueness",
               "description": "Authentication asks user_db to check email uniqueness",
-              "line": 101
+              "line": 101,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_4",
@@ -171,7 +205,12 @@
               "verb": "creates",
               "phrase": "user profile",
               "description": "Profile creates user profile",
-              "line": 102
+              "line": 102,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Profile",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_5",
@@ -182,7 +221,12 @@
               "connector": "to",
               "phrase": "store profile data",
               "description": "Profile asks user_db to store profile data",
-              "line": 103
+              "line": 103,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Profile",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_6",
@@ -190,7 +234,12 @@
               "context": "Authentication",
               "event": "UserRegistered",
               "description": "Authentication notifies \"UserRegistered\"",
-              "line": 104
+              "line": 104,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             }
           ]
         },
@@ -200,7 +249,12 @@
             "type": "domain_listen",
             "context": "Profile",
             "event": "UserRegistered",
-            "description": "when Profile listens \"UserRegistered\""
+            "description": "when Profile listens \"UserRegistered\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "User/Profile",
+              "service": "UserService"
+            }
           },
           "actions": [
             {
@@ -210,7 +264,12 @@
               "verb": "creates",
               "phrase": "default preferences",
               "description": "Preferences creates default preferences",
-              "line": 107
+              "line": 107,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Preferences",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_9",
@@ -221,7 +280,12 @@
               "connector": "to",
               "phrase": "save preferences",
               "description": "Preferences asks user_db to save preferences",
-              "line": 108
+              "line": 108,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Preferences",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_10",
@@ -230,7 +294,12 @@
               "verb": "sends",
               "phrase": "welcome email",
               "description": "EmailNotifier sends welcome email",
-              "line": 109
+              "line": 109,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/EmailNotifier",
+                "service": "NotificationService"
+              }
             }
           ]
         }
@@ -247,7 +316,11 @@
             "actor": "Business_User",
             "verb": "views",
             "phrase": "Product",
-            "description": "when Business_User views Product"
+            "description": "when Business_User views Product",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -256,7 +329,12 @@
               "context": "Catalog",
               "phrase": "product details",
               "description": "Catalog returns product details",
-              "line": 119
+              "line": 119,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Catalog",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_13",
@@ -265,7 +343,12 @@
               "verb": "calculates",
               "phrase": "current price",
               "description": "Pricing calculates current price",
-              "line": 120
+              "line": 120,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Pricing",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_14",
@@ -274,7 +357,12 @@
               "verb": "checks",
               "phrase": "availability",
               "description": "Inventory checks availability",
-              "line": 121
+              "line": 121,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Inventory",
+                "service": "ProductService"
+              }
             }
           ]
         },
@@ -285,7 +373,11 @@
             "actor": "Business_User",
             "verb": "adds",
             "phrase": "Product to Cart",
-            "description": "when Business_User adds Product to Cart"
+            "description": "when Business_User adds Product to Cart",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -295,7 +387,12 @@
               "verb": "creates",
               "phrase": "draft order",
               "description": "OrderManagement creates draft order",
-              "line": 124
+              "line": 124,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_17",
@@ -306,7 +403,12 @@
               "connector": "to",
               "phrase": "save draft",
               "description": "OrderManagement asks order_db to save draft",
-              "line": 125
+              "line": 125,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_18",
@@ -315,7 +417,12 @@
               "verb": "reserves",
               "phrase": "stock",
               "description": "Inventory reserves stock",
-              "line": 126
+              "line": 126,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Inventory",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_19",
@@ -324,7 +431,12 @@
               "verb": "applies",
               "phrase": "discounts",
               "description": "Pricing applies discounts",
-              "line": 127
+              "line": 127,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Pricing",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_20",
@@ -332,7 +444,12 @@
               "context": "OrderManagement",
               "phrase": "cart summary",
               "description": "OrderManagement returns cart summary",
-              "line": 128
+              "line": 128,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             }
           ]
         },
@@ -343,7 +460,11 @@
             "actor": "Business_User",
             "verb": "confirms",
             "phrase": "Purchase",
-            "description": "when Business_User confirms Purchase"
+            "description": "when Business_User confirms Purchase",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -353,7 +474,12 @@
               "verb": "validates",
               "phrase": "order",
               "description": "OrderManagement validates order",
-              "line": 131
+              "line": 131,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_23",
@@ -362,7 +488,12 @@
               "verb": "processes",
               "phrase": "payment",
               "description": "Payment processes payment",
-              "line": 132
+              "line": 132,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Payment",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_24",
@@ -373,7 +504,12 @@
               "connector": "to",
               "phrase": "charge card",
               "description": "Payment asks payment_gateway to charge card",
-              "line": 133
+              "line": 133,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Payment",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_25",
@@ -381,7 +517,12 @@
               "context": "Payment",
               "event": "PaymentCompleted",
               "description": "Payment notifies \"PaymentCompleted\"",
-              "line": 134
+              "line": 134,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Payment",
+                "service": "OrderService"
+              }
             }
           ]
         },
@@ -391,7 +532,12 @@
             "type": "domain_listen",
             "context": "OrderManagement",
             "event": "PaymentCompleted",
-            "description": "when OrderManagement listens \"PaymentCompleted\""
+            "description": "when OrderManagement listens \"PaymentCompleted\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "Order/OrderManagement",
+              "service": "OrderService"
+            }
           },
           "actions": [
             {
@@ -401,7 +547,12 @@
               "verb": "marks",
               "phrase": "order as paid",
               "description": "OrderManagement marks order as paid",
-              "line": 137
+              "line": 137,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_28",
@@ -410,7 +561,12 @@
               "verb": "confirms",
               "phrase": "stock allocation",
               "description": "Inventory confirms stock allocation",
-              "line": 138
+              "line": 138,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Inventory",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_29",
@@ -419,7 +575,12 @@
               "verb": "creates",
               "phrase": "shipment",
               "description": "Shipping creates shipment",
-              "line": 139
+              "line": 139,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Shipping",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_30",
@@ -430,7 +591,12 @@
               "connector": "to",
               "phrase": "schedule pickup",
               "description": "Shipping asks shipping_provider to schedule pickup",
-              "line": 140
+              "line": 140,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Shipping",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_31",
@@ -438,7 +604,12 @@
               "context": "OrderManagement",
               "event": "OrderConfirmed",
               "description": "OrderManagement notifies \"OrderConfirmed\"",
-              "line": 141
+              "line": 141,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             }
           ]
         },
@@ -448,7 +619,12 @@
             "type": "domain_listen",
             "context": "EmailNotifier",
             "event": "OrderConfirmed",
-            "description": "when EmailNotifier listens \"OrderConfirmed\""
+            "description": "when EmailNotifier listens \"OrderConfirmed\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "Notification/EmailNotifier",
+              "service": "NotificationService"
+            }
           },
           "actions": [
             {
@@ -458,7 +634,12 @@
               "verb": "sends",
               "phrase": "order confirmation",
               "description": "EmailNotifier sends order confirmation",
-              "line": 144
+              "line": 144,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/EmailNotifier",
+                "service": "NotificationService"
+              }
             },
             {
               "id": "action_34",
@@ -467,7 +648,12 @@
               "verb": "sends",
               "phrase": "tracking notification",
               "description": "SMSNotifier sends tracking notification",
-              "line": 145
+              "line": 145,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/SMSNotifier",
+                "service": "NotificationService"
+              }
             }
           ]
         }
@@ -484,7 +670,11 @@
             "actor": "CronScheduler",
             "verb": "triggers",
             "phrase": "\"DailyInventorySync\"",
-            "description": "when CronScheduler triggers \"DailyInventorySync\""
+            "description": "when CronScheduler triggers \"DailyInventorySync\"",
+            "subject": {
+              "kind": "actor",
+              "id": "CronScheduler"
+            }
           },
           "actions": [
             {
@@ -494,7 +684,12 @@
               "verb": "fetches",
               "phrase": "stock levels",
               "description": "Inventory fetches stock levels",
-              "line": 155
+              "line": 155,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Inventory",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_37",
@@ -505,7 +700,12 @@
               "connector": "to",
               "phrase": "get current stock",
               "description": "Inventory asks inventory_system to get current stock",
-              "line": 156
+              "line": 156,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Inventory",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_38",
@@ -513,7 +713,12 @@
               "context": "Inventory",
               "event": "StockLevelsUpdated",
               "description": "Inventory notifies \"StockLevelsUpdated\"",
-              "line": 157
+              "line": 157,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Inventory",
+                "service": "ProductService"
+              }
             }
           ]
         },
@@ -523,7 +728,12 @@
             "type": "domain_listen",
             "context": "Catalog",
             "event": "StockLevelsUpdated",
-            "description": "when Catalog listens \"StockLevelsUpdated\""
+            "description": "when Catalog listens \"StockLevelsUpdated\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "Product/Catalog",
+              "service": "ProductService"
+            }
           },
           "actions": [
             {
@@ -533,7 +743,12 @@
               "verb": "updates",
               "phrase": "product availability",
               "description": "Catalog updates product availability",
-              "line": 160
+              "line": 160,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Catalog",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_41",
@@ -544,7 +759,12 @@
               "connector": "to",
               "phrase": "update stock status",
               "description": "Catalog asks product_db to update stock status",
-              "line": 161
+              "line": 161,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Catalog",
+                "service": "ProductService"
+              }
             },
             {
               "id": "action_42",
@@ -552,7 +772,12 @@
               "context": "Catalog",
               "event": "CatalogUpdated",
               "description": "Catalog notifies \"CatalogUpdated\"",
-              "line": 162
+              "line": 162,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Product/Catalog",
+                "service": "ProductService"
+              }
             }
           ]
         },
@@ -562,7 +787,12 @@
             "type": "domain_listen",
             "context": "PushNotifier",
             "event": "CatalogUpdated",
-            "description": "when PushNotifier listens \"CatalogUpdated\""
+            "description": "when PushNotifier listens \"CatalogUpdated\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "Notification/PushNotifier",
+              "service": "NotificationService"
+            }
           },
           "actions": [
             {
@@ -572,7 +802,12 @@
               "verb": "sends",
               "phrase": "restock notifications",
               "description": "PushNotifier sends restock notifications",
-              "line": 165
+              "line": 165,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/PushNotifier",
+                "service": "NotificationService"
+              }
             },
             {
               "id": "action_45",
@@ -583,7 +818,12 @@
               "connector": "to",
               "phrase": "queue messages",
               "description": "PushNotifier asks notification_queue to queue messages",
-              "line": 166
+              "line": 166,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/PushNotifier",
+                "service": "NotificationService"
+              }
             }
           ]
         }
@@ -600,7 +840,11 @@
             "actor": "Customer_Support",
             "verb": "views",
             "phrase": "Order",
-            "description": "when Customer_Support views Order"
+            "description": "when Customer_Support views Order",
+            "subject": {
+              "kind": "actor",
+              "id": "Customer_Support"
+            }
           },
           "actions": [
             {
@@ -610,7 +854,12 @@
               "verb": "fetches",
               "phrase": "order details",
               "description": "OrderManagement fetches order details",
-              "line": 176
+              "line": 176,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_48",
@@ -621,7 +870,12 @@
               "connector": "to",
               "phrase": "retrieve order",
               "description": "OrderManagement asks order_db to retrieve order",
-              "line": 177
+              "line": 177,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_49",
@@ -630,7 +884,12 @@
               "verb": "retrieves",
               "phrase": "payment history",
               "description": "Payment retrieves payment history",
-              "line": 178
+              "line": 178,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Payment",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_50",
@@ -639,7 +898,12 @@
               "verb": "retrieves",
               "phrase": "shipment status",
               "description": "Shipping retrieves shipment status",
-              "line": 179
+              "line": 179,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/Shipping",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_51",
@@ -647,7 +911,12 @@
               "context": "OrderManagement",
               "phrase": "complete order view",
               "description": "OrderManagement returns complete order view",
-              "line": 180
+              "line": 180,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             }
           ]
         },
@@ -658,7 +927,11 @@
             "actor": "Customer_Support",
             "verb": "updates",
             "phrase": "Order",
-            "description": "when Customer_Support updates Order"
+            "description": "when Customer_Support updates Order",
+            "subject": {
+              "kind": "actor",
+              "id": "Customer_Support"
+            }
           },
           "actions": [
             {
@@ -668,7 +941,12 @@
               "verb": "validates",
               "phrase": "changes",
               "description": "OrderManagement validates changes",
-              "line": 183
+              "line": 183,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_54",
@@ -679,7 +957,12 @@
               "connector": "to",
               "phrase": "update order",
               "description": "OrderManagement asks order_db to update order",
-              "line": 184
+              "line": 184,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             },
             {
               "id": "action_55",
@@ -687,7 +970,12 @@
               "context": "OrderManagement",
               "event": "OrderUpdated",
               "description": "OrderManagement notifies \"OrderUpdated\"",
-              "line": 185
+              "line": 185,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Order/OrderManagement",
+                "service": "OrderService"
+              }
             }
           ]
         },
@@ -697,7 +985,12 @@
             "type": "domain_listen",
             "context": "EmailNotifier",
             "event": "OrderUpdated",
-            "description": "when EmailNotifier listens \"OrderUpdated\""
+            "description": "when EmailNotifier listens \"OrderUpdated\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "Notification/EmailNotifier",
+              "service": "NotificationService"
+            }
           },
           "actions": [
             {
@@ -707,7 +1000,12 @@
               "verb": "sends",
               "phrase": "update notification to customer",
               "description": "EmailNotifier sends update notification to customer",
-              "line": 188
+              "line": 188,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/EmailNotifier",
+                "service": "NotificationService"
+              }
             }
           ]
         }
@@ -724,7 +1022,11 @@
             "actor": "Business_User",
             "verb": "requests",
             "phrase": "password reset",
-            "description": "when Business_User requests password reset"
+            "description": "when Business_User requests password reset",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -734,7 +1036,12 @@
               "verb": "validates",
               "phrase": "email",
               "description": "Authentication validates email",
-              "line": 199
+              "line": 199,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_60",
@@ -743,7 +1050,12 @@
               "verb": "generates",
               "phrase": "reset token",
               "description": "Authentication generates reset token",
-              "line": 200
+              "line": 200,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_61",
@@ -754,7 +1066,12 @@
               "connector": "to",
               "phrase": "store token",
               "description": "Authentication asks user_db to store token",
-              "line": 201
+              "line": 201,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_62",
@@ -763,7 +1080,12 @@
               "verb": "sends",
               "phrase": "reset email",
               "description": "EmailNotifier sends reset email",
-              "line": 202
+              "line": 202,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/EmailNotifier",
+                "service": "NotificationService"
+              }
             }
           ]
         },
@@ -774,7 +1096,11 @@
             "actor": "Business_User",
             "verb": "submits",
             "phrase": "new password",
-            "description": "when Business_User submits new password"
+            "description": "when Business_User submits new password",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -784,7 +1110,12 @@
               "verb": "validates",
               "phrase": "reset token",
               "description": "Authentication validates reset token",
-              "line": 205
+              "line": 205,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_65",
@@ -795,7 +1126,12 @@
               "connector": "to",
               "phrase": "verify token",
               "description": "Authentication asks user_db to verify token",
-              "line": 206
+              "line": 206,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_66",
@@ -804,7 +1140,12 @@
               "verb": "updates",
               "phrase": "password",
               "description": "Authentication updates password",
-              "line": 207
+              "line": 207,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_67",
@@ -812,7 +1153,12 @@
               "context": "Authentication",
               "event": "PasswordChanged",
               "description": "Authentication notifies \"PasswordChanged\"",
-              "line": 208
+              "line": 208,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             }
           ]
         },
@@ -822,7 +1168,12 @@
             "type": "domain_listen",
             "context": "EmailNotifier",
             "event": "PasswordChanged",
-            "description": "when EmailNotifier listens \"PasswordChanged\""
+            "description": "when EmailNotifier listens \"PasswordChanged\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "Notification/EmailNotifier",
+              "service": "NotificationService"
+            }
           },
           "actions": [
             {
@@ -832,7 +1183,12 @@
               "verb": "sends",
               "phrase": "confirmation email",
               "description": "EmailNotifier sends confirmation email",
-              "line": 211
+              "line": 211,
+              "from": {
+                "kind": "bounded_context",
+                "id": "Notification/EmailNotifier",
+                "service": "NotificationService"
+              }
             }
           ]
         }
@@ -848,7 +1204,11 @@
             "type": "external",
             "actor": "Business_User",
             "verb": "authenticates",
-            "description": "when Business_User authenticates "
+            "description": "when Business_User authenticates ",
+            "subject": {
+              "kind": "actor",
+              "id": "Business_User"
+            }
           },
           "actions": [
             {
@@ -858,7 +1218,12 @@
               "verb": "validates",
               "phrase": "credentials",
               "description": "Authentication validates credentials",
-              "line": 221
+              "line": 221,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             },
             {
               "id": "action_72",
@@ -866,7 +1231,12 @@
               "context": "Authentication",
               "phrase": "access token",
               "description": "Authentication returns access token",
-              "line": 222
+              "line": 222,
+              "from": {
+                "kind": "bounded_context",
+                "id": "User/Authentication",
+                "service": "UserService"
+              }
             }
           ]
         }

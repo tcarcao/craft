@@ -19,7 +19,6 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"sort"
-	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/model"
@@ -186,6 +185,11 @@ type WorkspaceSymbols struct {
 	Services map[string]ServiceSymbol
 	// UseCases maps name → symbol across all workspace files.
 	UseCases map[string]UseCaseSymbol
+	// DataStores maps data-store name → the service that owns it.
+	DataStores map[string]string
+	// ContextOwners maps a bounded context's canonical "<domain>/<bc>" →
+	// the service that deploys it.
+	ContextOwners map[string]string
 }
 
 // RefSite records a single reference site used in ResolutionMap.
@@ -614,6 +618,8 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 		BCPositions:     make(map[string]BCPosition),
 		Services:        make(map[string]ServiceSymbol),
 		UseCases:        make(map[string]UseCaseSymbol),
+		DataStores:      make(map[string]string),
+		ContextOwners:   make(map[string]string),
 	}
 	uris := make([]string, 0, len(perFile))
 	for uri := range perFile {
@@ -690,6 +696,9 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 			}
 		}
 	}
+	// Service membership needs every domain merged first, to resolve each
+	// contexts entry to its canonical bounded context.
+	diags = append(diags, indexServiceMembers(&ws, perFile, uris)...)
 	return ws, diags
 }
 
@@ -746,8 +755,19 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 	for uri, syms := range perFile {
 		for _, ref := range syms.UseCaseRefs {
 			key := useCaseRefKey{URI: uri, Line: ref.Line, Name: ref.Name}
-			if target, ok := resolveUseCaseRef(ws, ref.Name); ok {
-				rm.UseCaseRefs[key] = target
+			p, ambiguous := ResolveParticipant(ws, "", ref.Name)
+			if ambiguous {
+				// LintWorkspace reports it (ambiguous-bc). Navigation still
+				// jumps to one deterministic declaration.
+				if d, ok := ws.BoundedContexts[ref.Name]; ok {
+					rm.UseCaseRefs[key] = ws.bcTarget(d, ref.Name)
+				}
+				continue
+			}
+			if p.Kind != "" {
+				if target, ok := ws.useCaseRefTarget(p); ok {
+					rm.UseCaseRefs[key] = target
+				}
 				continue
 			}
 			if !wsHasSymbols {
@@ -756,7 +776,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 			startChar := colToLSP(ref.Column)
 			diags = append(diags, model.Diagnostic{
 				Code:      "craft/sema/unresolved-reference",
-				Message:   fmt.Sprintf("use-case participant %q is not declared as an actor, domain, or service", ref.Name),
+				Message:   fmt.Sprintf("use-case participant %q is not declared as a bounded context, domain, service, actor or data store", ref.Name),
 				Severity:  model.SeverityWarning,
 				SourceURI: uri,
 				Range: model.Range{
@@ -923,51 +943,6 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 	}
 
 	return rm, diags
-}
-
-// resolveUseCaseRef attempts to resolve a name from a use-case body against
-// the workspace symbol tables. Returns the target and true if found.
-func resolveUseCaseRef(ws WorkspaceSymbols, name string) (UseCaseRefTarget, bool) {
-	// Qualified `<domain>/<name>` names a specific bounded context, exactly as it
-	// does for a context_map endpoint (see resolveBCRef). The grammar defines the
-	// use-case participant slot as the same <bc_ref> production — bare OR
-	// domain-qualified — so both forms must resolve here. Qualification is not
-	// stylistic: a bounded-context name declared in two domains can only be
-	// referenced unambiguously in this form.
-	if idx := strings.IndexByte(name, '/'); idx >= 0 {
-		domain, bcName := name[:idx], name[idx+1:]
-		if dom, ok := ws.Domains[domain]; ok && domainHasBC(dom, bcName) {
-			t := UseCaseRefTarget{Kind: "bounded_context", Domain: &dom}
-			// Positions are indexed by bare BC name.
-			if pos, ok := ws.BCPositions[bcName]; ok {
-				t.BCLine = pos.Line
-				t.BCColumn = pos.Column
-				t.BCURI = pos.URI
-			}
-			return t, true
-		}
-		return UseCaseRefTarget{}, false
-	}
-
-	if a, ok := ws.Actors[name]; ok {
-		return UseCaseRefTarget{Kind: "actor", Actor: &a}, true
-	}
-	if d, ok := ws.Domains[name]; ok {
-		return UseCaseRefTarget{Kind: "domain", Domain: &d}, true
-	}
-	if bc, ok := ws.BoundedContexts[name]; ok {
-		t := UseCaseRefTarget{Kind: "bounded_context", Domain: &bc}
-		if pos, ok := ws.BCPositions[name]; ok {
-			t.BCLine = pos.Line
-			t.BCColumn = pos.Column
-			t.BCURI = pos.URI
-		}
-		return t, true
-	}
-	if s, ok := ws.Services[name]; ok {
-		return UseCaseRefTarget{Kind: "service", Service: &s}, true
-	}
-	return UseCaseRefTarget{}, false
 }
 
 // ResolveServiceContext looks up where a service's context reference resolves.
