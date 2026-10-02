@@ -44,6 +44,10 @@ craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 
 Produce diagram files from `.craft` sources. Default output is PlantUML (`.puml`); `--format` switches to Mermaid (`.mmd`) or markdown-wrapped Mermaid (`.md` with a fenced ` ```mermaid ` block, ready to commit alongside docs).
 
+**All inputs form one model.** A use case in one file can run through services and domains declared in another, exactly as `craft validate` sees them. One diagram per kind is written: a single input keeps its own name (`payments.craft` → `payments-c4.puml`); several inputs are named after the folder they share (`docs/**/*.craft` → `docs-c4.puml`).
+
+**Errors stop generation.** Every diagnostic is printed to stderr as `file:line: severity: message`. If any is an error — syntax or semantic, such as a context declared in no domain — no diagram is written, because it would silently miss parts of the model. Pass `--allow-errors` to draw anyway. Warnings and hints never stop generation.
+
 ```bash
 craft generate [files...] [flags]
 ```
@@ -52,12 +56,13 @@ craft generate [files...] [flags]
 |------|---------|-------------|
 | `--type` | `all` | Diagram type: `c4`, `domain`, `sequence`, or `all` |
 | `--mode` | `detailed` | Domain diagram detail: `detailed` or `architecture` |
-| `-o, --output` | same dir as input | Directory to write output files |
+| `-o, --output` | dir of the first input | Directory to write output files |
 | `--format` | `puml` | Output format: `puml`, `mermaid`, or `mermaid-md` |
 | `--use-case` | — | Comma-separated use case slugs or names to render *(detailed-domain and sequence only)* |
 | `--split` | false | Emit one file per use case *(detailed-domain and sequence only)* |
 | `--stdout` | false | Write to stdout instead of files (single diagram only; mutually exclusive with `--output`, `--split`, `--type all`) |
 | `--force` | false | Allow overwriting existing `.md` files when `--format=mermaid-md` |
+| `--allow-errors` | false | Draw diagrams even when the model has error diagnostics |
 | `--boundaries` | `boundaries` | *(C4 only)* Boundaries rendering: `boundaries` or `transparent` |
 | `--no-databases` | false | *(C4 only)* Hide data-store containers from the diagram |
 | `--focus` | — | *(C4 only)* Comma-separated service names to focus on; unfocused services render as external |
@@ -75,7 +80,7 @@ craft generate [files...] [flags]
 # PlantUML (default)
 craft generate docs/payments.craft
 craft generate docs/payments.craft --type c4 --output diagrams/
-craft generate docs/**/*.craft --type sequence --mode architecture
+craft generate docs/**/*.craft --type domain --mode architecture   # one model → docs-domain.puml
 craft generate docs/payments.craft --type c4 --boundaries transparent
 craft generate docs/payments.craft --type c4 --no-databases
 craft generate docs/payments.craft --type c4 --focus PaymentService,OrderService

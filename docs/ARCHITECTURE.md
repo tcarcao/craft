@@ -17,14 +17,15 @@ cmd/
 internal/
   lexer/                  hand-written scanner
   green/                  lossless green tree + line index
-  syntax/                 recursive-descent parser → red tree + typed views; ProjectFromTree → CraftDoc
+  syntax/                 recursive-descent parser → red tree + typed views
   model/                  CraftDoc data types (pkg/craft aliases them)
   sema/                   symbol tables, ResolutionMap, validation + lint rules
   workspace/              multi-file store, per-file parse cache, URI index
   lsp/                    LSP protocol handlers; depends on sema + workspace
   fmtconfig/              formatter configuration
   visualizer/             diagram generator (consumes CraftDoc)
-  parser_diff/            corpus acceptance suite (Harness A + Harness C)
+  analysis/               per-file + workspace analysis → merged CraftDoc + diagnostics (all callers use it)
+  corpustest/             corpus acceptance suite (Harness A + Harness C)
 pkg/
   craft/                  STABLE PUBLIC API — CraftDoc canonical type
 testdata/

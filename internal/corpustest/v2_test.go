@@ -1,4 +1,4 @@
-package parser_diff_test
+package corpustest_test
 
 import (
 	"encoding/json"
@@ -8,21 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/analysis"
 )
-
-// skippedSubdirs lists corpus subdirectories that are not yet implemented by
-// the v2 parser. The `skipped` marker is the implementation-frontier ledger;
-// it advances as each grammar slice lands. Per Q11, it may only move forward —
-// never re-skip a directory that has been un-skipped on main.
-var skippedSubdirs = map[string]bool{
-	// 02_domains: un-skipped in S4
-	// 03_services: un-skipped in S5
-	// 04_use_cases: un-skipped in S6
-	// 05_arch: un-skipped in S7
-	// 06_exposures: un-skipped in S8
-	// 99_mixed: un-skipped in S8
-}
 
 func TestHarnessA_V2vsGoldens(t *testing.T) {
 	corpusRoot := "../../testdata/corpus"
@@ -32,14 +19,7 @@ func TestHarnessA_V2vsGoldens(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			rel, _ := filepath.Rel(corpusRoot, path)
-			if skippedSubdirs[rel] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".craft") {
+		if !info.IsDir() && strings.HasSuffix(path, ".craft") {
 			craftFiles = append(craftFiles, path)
 		}
 		return nil
@@ -66,17 +46,14 @@ func TestHarnessA_V2vsGoldens(t *testing.T) {
 				return
 			}
 
-			greenRoot, li, parserDiags := syntax.Parse(string(content))
-			if len(parserDiags) > 0 {
-				for _, d := range parserDiags {
-					if d.Severity == "error" {
-						t.Errorf("unexpected parse error for %s: [%s] %s", craftFile, d.Code, d.Message)
-					}
+			// No file name, so the goldens carry no sourceUri.
+			file := analysis.File("", string(content))
+			for _, d := range file.Diagnostics {
+				if d.Severity == "error" && !strings.HasPrefix(d.Code, "craft/sema/") {
+					t.Errorf("unexpected parse error for %s: [%s] %s", craftFile, d.Code, d.Message)
 				}
 			}
-
-			tree := syntax.Root(greenRoot)
-			doc := syntax.ProjectFromTree(tree, li)
+			doc := file.Doc
 
 			gotBytes, err := json.Marshal(doc)
 			if err != nil {
@@ -113,6 +90,6 @@ func TestHarnessA_V2vsGoldens(t *testing.T) {
 	}
 
 	if ran == 0 {
-		t.Fatalf("no corpus files exercised — check corpus root path or skippedSubdirs map")
+		t.Fatalf("no corpus files exercised — check the corpus root path")
 	}
 }

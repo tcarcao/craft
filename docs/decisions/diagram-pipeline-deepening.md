@@ -30,10 +30,14 @@ reviews do not re-open them.
    `--allow-errors` draws anyway. Warnings and hints are printed, never fatal.
 5. **The HTTP preview stays tolerant.** It always draws whatever partial model
    exists, and returns diagnostics in an optional `diagnostics` response field.
-6. **Same-name services and domains merge across files** with the same rule as
-   within a file: list fields are unioned in order, scalar fields take the first
-   non-empty value, files are visited in sorted URI order. Other named
-   declarations keep their duplicate-name diagnostics.
+6. **The model follows sema on repeated declarations.** Same-name service
+   blocks within one file merge (lists unioned, first non-empty scalar wins),
+   as before. Across files, the first declaration of a service or domain in
+   sorted file order wins, in the model as in sema, and the later one is a
+   `duplicate-name` warning — now also for domains, whose later declaration
+   used to vanish silently. A repeated domain within one file stays a
+   `duplicate-name` error (decision Q23). *Revised 2026-10-02: the first draft
+   merged across files; it was reversed once the existing rules surfaced.*
 7. **`craft.Parse` is a workspace of one file.** It returns the same resolution
    and workspace diagnostics `ParseFiles` does (minor version bump).
 

@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
@@ -71,11 +70,7 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 			WantSequence: generateSequence,
 		}
 
-		doc, err := parseDSL(input)
-		if err != nil {
-			s.respondWithError(w, err, input, generateC4, generateContext, generateSequence)
-			return
-		}
+		doc, _ := parseDSL(input)
 
 		if generateC4 {
 			diagram, err := s.viz.GenerateC4(doc, "boundaries", true)
@@ -181,6 +176,10 @@ type PreviewResponse struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
 	Data    string `json:"data,omitempty"` // base64 encoded diagram
+	// Diagnostics lists every problem found in the DSL. A preview is always
+	// drawn from whatever model exists, so errors here mean the diagram may be
+	// incomplete rather than that the request failed.
+	Diagnostics []craft.Diagnostic `json:"diagnostics,omitempty"`
 }
 
 // Domain-specific download request
@@ -211,11 +210,7 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		model, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		model, diags := parseDSL(req.DSL)
 
 		// Parse diagram type, default to "domain" if not provided or invalid
 		diagramType := visualizer.DiagramTypeDomain
@@ -249,8 +244,9 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 
 		// Encode and respond
 		response := PreviewResponse{
-			Success: true,
-			Data:    base64.StdEncoding.EncodeToString(diagram),
+			Success:     true,
+			Data:        base64.StdEncoding.EncodeToString(diagram),
+			Diagnostics: diags,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -269,11 +265,7 @@ func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 			respondWithError(w, http.StatusBadRequest, "Invalid request format")
 			return
 		}
-		arch, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		arch, diags := parseDSL(req.DSL)
 		mode := visualizer.DomainModeDetailed
 		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
 			mode = visualizer.DomainModeArchitecture
@@ -284,7 +276,7 @@ func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src})
+		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src, Diagnostics: diags})
 	}
 }
 
@@ -297,11 +289,7 @@ func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
 			respondWithError(w, http.StatusBadRequest, "Invalid request format")
 			return
 		}
-		arch, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		arch, diags := parseDSL(req.DSL)
 		mode := visualizer.DomainModeDetailed
 		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
 			mode = visualizer.DomainModeArchitecture
@@ -312,7 +300,7 @@ func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src})
+		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src, Diagnostics: diags})
 	}
 }
 
@@ -327,11 +315,7 @@ func (s *Server) handlePreviewMermaidC4() http.HandlerFunc {
 			respondWithError(w, http.StatusBadRequest, "Invalid request format")
 			return
 		}
-		arch, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		arch, diags := parseDSL(req.DSL)
 		boundariesMode := visualizer.C4ModeBoundaries
 		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
 			boundariesMode = visualizer.C4ModeTransparent
@@ -346,7 +330,7 @@ func (s *Server) handlePreviewMermaidC4() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src})
+		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src, Diagnostics: diags})
 	}
 }
 
@@ -359,11 +343,7 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 		}
 
 		// Parse DSL
-		arch, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		arch, diags := parseDSL(req.DSL)
 
 		// Parse boundaries mode, default to "boundaries" if not provided or invalid
 		boundariesMode := visualizer.C4ModeBoundaries
@@ -379,6 +359,7 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 
 		// Generate C4 diagram with focus information, boundaries mode, and database visibility
 		var diagram []byte
+		var err error
 		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedContexts) {
 			diagram, err = s.viz.GenerateC4WithFocusAndContexts(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames, boundariesMode, showDatabases)
 		} else {
@@ -392,8 +373,9 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 
 		// Encode and respond
 		response := PreviewResponse{
-			Success: true,
-			Data:    base64.StdEncoding.EncodeToString(diagram),
+			Success:     true,
+			Data:        base64.StdEncoding.EncodeToString(diagram),
+			Diagnostics: diags,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -412,14 +394,12 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// parseDSL parses a Craft DSL string using the hand-written v2 parser.
-// Diagnostics are intentionally discarded — the HTTP server uses island-parsing
-// semantics and renders whatever partial model the parser produces.
-// Callers that need strict error checking should use the CLI instead.
-func parseDSL(src string) (*craft.CraftDoc, error) {
-	greenRoot, li, _ := syntax.Parse(src)
-	tree := syntax.Root(greenRoot)
-	return syntax.ProjectFromTree(tree, li), nil
+// parseDSL analyzes a Craft DSL string as a model of one file. Previews are
+// tolerant: the caller always draws whatever (possibly partial) model comes
+// back, and returns the diagnostics alongside it.
+func parseDSL(src string) (*craft.CraftDoc, []craft.Diagnostic) {
+	doc, diags, _ := craft.Parse("preview.craft", []byte(src))
+	return doc, diags
 }
 
 func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
@@ -430,12 +410,8 @@ func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 			return
 		}
 
-		// Parse DSL
-		model, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		// Downloads carry the raw file only; diagnostics go with previews.
+		model, _ := parseDSL(req.DSL)
 
 		// Convert format string to SupportedFormat
 		var format visualizer.SupportedFormat
@@ -505,12 +481,8 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 			return
 		}
 
-		// Parse DSL
-		model, err := parseDSL(req.DSL)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Parse error: %v", err))
-			return
-		}
+		// Downloads carry the raw file only; diagnostics go with previews.
+		model, _ := parseDSL(req.DSL)
 
 		// Convert format string to SupportedFormat
 		var format visualizer.SupportedFormat
@@ -542,6 +514,7 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 		// Generate C4 diagram with focus and format
 		var diagram []byte
 		var contentType string
+		var err error
 		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedContexts) {
 			diagram, contentType, err = s.viz.GenerateC4WithFocusContextsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames, boundariesMode, showDatabases, format)
 		} else {

@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+**Why a minor version.** No exported `pkg/craft` identifier is removed or changes type. Behaviour does change: `Parse` now reports cross-reference and lint diagnostics, `ParseFiles` keeps one copy of a service or domain declared in several files, and `craft generate` draws all its inputs as one model and refuses a model with errors. Read the entries below before upgrading.
+
+### Changed
+- **`craft generate` draws its inputs as one model.** A folder is one model (grammar decision Q14), and `generate` now treats it that way: a use case in one file can run through services and domains declared in another. Given several files it writes one diagram per kind, named after the folder the files share (`craft generate shop/*.craft` writes `shop-c4.puml`, …), instead of one per file. A single input keeps its own name.
+- **`craft generate` stops on any error**, semantic as well as syntactic, and prints every diagnostic in `file:line: severity: message` form. An unresolved context, for example, used to pass silently and lose its edges in the diagram. `--allow-errors` draws anyway. Warnings and hints never stop generation.
+- **`craft.Parse` analyzes its file as a model of one file.** It returns the same cross-reference and lint diagnostics `ParseFiles` and `craft validate` report, where it used to return only syntax and single-file checks. A file that already validates cleanly gets no new errors.
+- **`craft.ParseFiles` keeps the first declaration of a service or domain declared in several files** (in sorted file order). It used to return every copy, while sema already resolved against the first. Same-name `services` blocks within one file still merge.
+- The HTTP server analyzes preview input the same way and adds an optional `diagnostics` array to preview responses. Previews still draw partial models; existing response fields are unchanged.
+
+### Added
+- **`craft/sema/duplicate-name` warns about a domain declared in more than one file.** The second declaration was dropped without a word before. A repeat within one file is still an error.
+
+### Fixed
+- **`--focus-context` alone no longer marks every service external** in C4 diagrams. A service that hosts a focused context counts as focused.
+- **Service languages match by whole word.** `javascript` no longer gets the Java icon, and `django` or `mongo` no longer resolve to Go.
+- Domain and sequence diagram generation no longer prints the whole diagram to stdout as a side effect.
+
+### Internal
+- New `internal/analysis` holds the whole pipeline (parse, project, collect symbols, merge, resolve, lint). `pkg/craft`, the LSP workspace, the CLI and the server all call it. The document projection moved out of `internal/syntax`.
+- `internal/parser_diff` is now `internal/corpustest`. `internal/processor`, the Graphviz renderer and the unreachable C4 context/component views were removed. See `docs/decisions/diagram-pipeline-deepening.md`.
+
 ## [2.19.0] — 2026-08-21
 
 **Why a minor version.** `pkg/craft`'s exported API is unchanged: the formatter lives in `internal/lsp`, nothing exported was removed or altered, and the module path stays `github.com/tcarcao/craft/v2`. Under Go module semantics that is a minor. Read the first entry before upgrading anyway, because **output changes for every existing file**: the default indent moves from 2 spaces to 4, so `craft fmt` will rewrite files it previously left alone and `craft fmt --check` will report previously-clean files as unformatted until each workspace either accepts the reflow or adds a `.craftfmt` containing `indent = 2`.

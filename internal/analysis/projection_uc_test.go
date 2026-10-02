@@ -1,4 +1,4 @@
-package syntax_test
+package analysis_test
 
 import (
 	"encoding/json"
@@ -17,11 +17,11 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
   when PaymentProcessing listens "Funds Reserved"
     PaymentProcessing asks AccountManagement to verify destination account
 }`
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	if len(doc.UseCases) != 1 {
 		t.Fatalf("expected 1 use case, got %d", len(doc.UseCases))
 	}
@@ -81,8 +81,8 @@ func TestProject_ActionOperation(t *testing.T) {
     Subscriptions asks Billing for a fresh charge attempt [POST /v1/charges]
     Billing asks Ledger to record the entry
 }`
-	g, li, _ := syntax.Parse(src)
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	g, _, _ := syntax.Parse(src)
+	doc := projectFile(syntax.Root(g), "")
 	actions := doc.UseCases[0].Scenarios[0].Actions
 
 	if actions[0].Operation == nil {
@@ -113,8 +113,8 @@ func TestProject_ActionOperation(t *testing.T) {
 // .craftjson goldens stay byte-identical.
 func TestProject_ActionOperation_OmittedWhenAbsent(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n}"
-	g, li, _ := syntax.Parse(src)
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	g, _, _ := syntax.Parse(src)
+	doc := projectFile(syntax.Root(g), "")
 	b, err := json.Marshal(doc.UseCases[0].Scenarios[0].Actions[0])
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -134,7 +134,7 @@ func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
   when U does x
     Billing asks Ledger to record the entry []
 }`
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	found := false
 	for _, d := range diags {
 		if d.Code == "craft/syntax/empty-op-annotation" {
@@ -145,7 +145,7 @@ func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
 		t.Fatalf("want a craft/syntax/empty-op-annotation diagnostic, got %v", diags)
 	}
 
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	action := doc.UseCases[0].Scenarios[0].Actions[0]
 	if action.Operation != nil {
 		t.Errorf("expected nil Operation for `[]`, got %+v", action.Operation)
@@ -164,11 +164,11 @@ func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
 // by TestActionDecl_SourceText.
 func TestProject_UseCase_DescriptionExcludesAnnotation(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x\n    A asks B for a fresh charge [POST /v1/charges]\n}"
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	action := doc.UseCases[0].Scenarios[0].Actions[0]
 	if got := action.Description; got != "A asks B for a fresh charge" {
 		t.Errorf("Description = %q, want %q (the annotation must not leak into the label)",

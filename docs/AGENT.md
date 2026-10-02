@@ -11,7 +11,7 @@
 
 Every PR-sized task during Track A / S3–S8 follows the same shape:
 
-1. **RED** — pick the next un-skipped file from the current slice's corpus subdirectory (or add a new one). Run Harness A (`go test ./internal/parser_diff/... -run TestV2VsGoldens`). It fails — that is the goal of this step.
+1. **RED** — pick the next un-skipped file from the current slice's corpus subdirectory (or add a new one). Run Harness A (`go test ./internal/corpustest/... -run TestHarnessA_V2vsGoldens`). It fails — that is the goal of this step.
 2. **GREEN** — write the **smallest** code change that makes Harness A pass for that file while keeping every previously-passing file green. No scope creep.
 3. **REFACTOR** — with Harness A green, clean up naming, duplication, and awkward shapes. Re-run the harness after each refactor.
 4. **HARNESS B** — verify Harness B (ANTLR-vs-goldens) still green everywhere. If you broke it, you touched something you should not have.
@@ -27,7 +27,7 @@ For slices outside Track A (S0, S2, S9–S13), the loop still holds but the orac
 
 Concretely:
 
-- Corpus files are the implementation frontier ledger. The `skipped` marker in `internal/parser_diff/v2_test.go` is **only** valid within the current slice's declared scope.
+- Corpus files are the implementation frontier ledger. Every corpus file is exercised by `internal/corpustest`; there is no skip list.
 - A PR that un-skips a new file in its target subdirectory MUST make that file pass, not mark it skipped-again.
 - A PR MUST NOT move the `skipped` marker backwards (re-skipping a file that passed on main). Fix the underlying regression instead.
 - Harness B MUST remain green on main at every commit; any PR that reddens Harness B is rejected regardless of Harness A status.
@@ -141,7 +141,7 @@ go test ./...
 make vet
 
 # corpus acceptance suite (A = projection vs .craftjson goldens, C = diagnostics goldens)
-go test ./internal/parser_diff/...
+go test ./internal/corpustest/...
 
 # benchmark (S10 gate)
 go test -bench . -run '^$' ./internal/syntax/

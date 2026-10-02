@@ -120,10 +120,6 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 	p.builder.StartNode(SyntaxKindFile)
 	var diags []model.Diagnostic
 
-	// Global counter for scenario_N / action_N IDs across all use_cases in the file,
-	// matching ANTLR's numbering scheme.
-	ucCounter := 0
-
 	// prevWasUseCase gates the stray-`}` hint to a `when` that directly follows
 	// a use_case. Further out the hint would point at a brace the reader has
 	// no reason to suspect.
@@ -148,7 +144,7 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 		case lexer.TokenKwServices:
 			diags = append(diags, p.parseServicesBlock()...)
 		case lexer.TokenKwUseCase:
-			diags = append(diags, p.parseUseCaseBlock(&ucCounter)...)
+			diags = append(diags, p.parseUseCaseBlock()...)
 		case lexer.TokenKwArch:
 			diags = append(diags, p.parseArchBlock()...)
 		case lexer.TokenKwExposure:
@@ -813,8 +809,7 @@ func isServiceNameKeyword(tt lexer.TokenType) bool {
 
 // parseUseCaseBlock parses: use_case "<name>" { <scenario>* }
 // A scenario is: when <trigger> <action>*
-// counter is the global ID counter shared across all use_cases in the file.
-func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
+func (p *Parser) parseUseCaseBlock() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindUseCaseDecl)
 	var diags []model.Diagnostic
 
@@ -852,7 +847,7 @@ func (p *Parser) parseUseCaseBlock(counter *int) []model.Diagnostic {
 
 		// `when` is a contextual keyword that lexes as TokenIdent.
 		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
-			d := p.parseScenario(counter)
+			d := p.parseScenario()
 			diags = append(diags, d...)
 		} else if tok.Type == lexer.TokenIdent && tok.Value == "tags" {
 			diags = append(diags, p.parseUseCaseTagsBlock()...)
@@ -1059,9 +1054,7 @@ func (p *Parser) startsTagKey() bool {
 }
 
 // parseScenario parses one `when <trigger>` clause plus its following action lines.
-// counter is a shared global ID counter (pointer) for scenario_N / action_N IDs,
-// matching ANTLR's numbering scheme where both scenarios and actions share one counter.
-func (p *Parser) parseScenario(counter *int) []model.Diagnostic {
+func (p *Parser) parseScenario() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindScenario)
 	var diags []model.Diagnostic
 
@@ -1072,8 +1065,6 @@ func (p *Parser) parseScenario(counter *int) []model.Diagnostic {
 	d := p.parseTrigger(whenTok.Line)
 	diags = append(diags, d...)
 
-	*counter++
-
 	// Parse actions until we see `when` (next scenario), `}` (end of use_case), or EOF.
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
@@ -1081,7 +1072,7 @@ func (p *Parser) parseScenario(counter *int) []model.Diagnostic {
 		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
 			break
 		}
-		d := p.parseAction(counter)
+		d := p.parseAction()
 		diags = append(diags, d...)
 	}
 
@@ -1195,8 +1186,7 @@ func isConnectorWord(v string) bool {
 	return false
 }
 
-// parseAction parses a single action line. counter is the shared global ID counter;
-// it is incremented for each action parsed.
+// parseAction parses a single action line.
 //
 // Action forms (subject is always an ident/keyword-as-ident):
 //
@@ -1204,7 +1194,7 @@ func isConnectorWord(v string) bool {
 //	<domain> notifies "<event>"              → async_action
 //	<domain> returns [to <target>] <phrase>  → return_action
 //	<domain> <verb> <phrase>                 → internal_action
-func (p *Parser) parseAction(counter *int) []model.Diagnostic {
+func (p *Parser) parseAction() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindAction)
 	var diags []model.Diagnostic
 
@@ -1227,14 +1217,10 @@ func (p *Parser) parseAction(counter *int) []model.Diagnostic {
 	verbTok := p.peek()
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
 		// No verb — treat as minimal internal action.
-		*counter++
-		*counter++
 		p.builder.FinishNode()
 		return diags
 	}
 	verb := verbTok.Value
-
-	*counter++
 
 	switch verb {
 	case "asks":

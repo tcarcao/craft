@@ -23,7 +23,7 @@ func TestEscapedString_ContentUnquotes_AndRoundTrips(t *testing.T) {
     PaymentService asks Bank to process
 }`
 
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
@@ -49,7 +49,7 @@ func TestEscapedString_ContentUnquotes_AndRoundTrips(t *testing.T) {
 
 	// Raw path: the projection layer must still see the exact original
 	// quoted+escaped text for round-trip purposes.
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	if len(doc.UseCases) != 1 || doc.UseCases[0].Name != want {
 		t.Fatalf("expected projected UseCase.Name %q, got %+v", want, doc.UseCases)
 	}

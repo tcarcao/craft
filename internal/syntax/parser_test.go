@@ -597,7 +597,7 @@ func TestContextMap_Edges(t *testing.T) {
   bc:re/subscriptions customer_supplier service:subscriptions-api
   term:subscriptions/dunning partnership term:billing/dunning
 }`
-	gn, li, diags := syntax.Parse(src)
+	gn, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -608,7 +608,7 @@ func TestContextMap_Edges(t *testing.T) {
 	}
 
 	root := syntax.Root(gn)
-	doc := syntax.ProjectFromTree(root, li)
+	doc := projectFile(root, "")
 	edges := doc.ContextMap
 	if len(edges) != 2 {
 		t.Fatalf("want 2 edges, got %d: %+v", len(edges), edges)
@@ -716,8 +716,8 @@ func TestParse_Glossary_ScopedAndShared(t *testing.T) {
 // GlossaryRelationDecl values.
 func TestProject_Glossary(t *testing.T) {
 	src := "glossary re {\n  billing/Invoice same_as subscriptions/Invoice\n}\n"
-	greenRoot, li, _ := syntax.Parse(src)
-	doc := syntax.ProjectFromTree(syntax.Root(greenRoot), li)
+	greenRoot, _, _ := syntax.Parse(src)
+	doc := projectFile(syntax.Root(greenRoot), "")
 	if len(doc.Glossary) != 1 {
 		t.Fatalf("want 1 term relation, got %d", len(doc.Glossary))
 	}
@@ -808,7 +808,7 @@ func TestServiceAnchors(t *testing.T) {
     repo: olxeu/realestate/subscriptions
   }
 }`
-	gn, li, diags := syntax.Parse(src)
+	gn, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -819,7 +819,7 @@ func TestServiceAnchors(t *testing.T) {
 	}
 
 	root := syntax.Root(gn)
-	doc := syntax.ProjectFromTree(root, li)
+	doc := projectFile(root, "")
 	if len(doc.Services) != 1 {
 		t.Fatalf("want 1 service, got %d: %+v", len(doc.Services), doc.Services)
 	}
@@ -872,7 +872,7 @@ func TestServiceAnchors_Optional(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			src := "services {\n  SubscriptionsApi {\n    contexts: Subscriptions\n" + tt.body + "  }\n}"
-			gn, li, diags := syntax.Parse(src)
+			gn, _, diags := syntax.Parse(src)
 			if len(diags) != 0 {
 				t.Fatalf("unexpected diagnostics: %v", diags)
 			}
@@ -880,7 +880,7 @@ func TestServiceAnchors_Optional(t *testing.T) {
 				t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 			}
 
-			doc := syntax.ProjectFromTree(syntax.Root(gn), li)
+			doc := projectFile(syntax.Root(gn), "")
 			if len(doc.Services) != 1 {
 				t.Fatalf("want 1 service, got %d: %+v", len(doc.Services), doc.Services)
 			}
@@ -905,7 +905,7 @@ func TestServiceAnchors_OpsLevelRemoved(t *testing.T) {
     opslevel: subscriptions-api
   }
 }`
-	gn, li, diags := syntax.Parse(src)
+	gn, _, diags := syntax.Parse(src)
 	if len(diags) == 0 {
 		t.Fatalf("want a diagnostic for the removed `opslevel:` spelling, got none")
 	}
@@ -920,7 +920,7 @@ func TestServiceAnchors_OpsLevelRemoved(t *testing.T) {
 	}
 
 	// The value must not leak into the model under any field.
-	doc := syntax.ProjectFromTree(syntax.Root(gn), li)
+	doc := projectFile(syntax.Root(gn), "")
 	if len(doc.Services) != 1 {
 		t.Fatalf("want 1 service, got %d", len(doc.Services))
 	}

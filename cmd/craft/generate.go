@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
 	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
@@ -33,10 +32,11 @@ func generateCmd() *cobra.Command {
 	var format string
 	var stdout bool
 	var force bool
+	var allowErrors bool
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
-		Short: "Generate PlantUML diagram files from .craft files",
+		Short: "Generate diagram files from .craft files (all inputs form one model)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if diagType == "all" || strings.ToLower(diagType) == "c4" {
@@ -66,61 +66,52 @@ func generateCmd() *cobra.Command {
 				if diagType == "all" || strings.Contains(diagType, ",") {
 					return fmt.Errorf("--stdout requires a single diagram (drop --type all or pick one type)")
 				}
-				if len(args) != 1 {
-					return fmt.Errorf("--stdout requires exactly one input file, got %d", len(args))
-				}
 			}
-
-			stdoutW := cmd.OutOrStdout()
 
 			files, err := resolveFiles(args)
 			if err != nil {
 				return err
 			}
-
-			v := visualizer.New()
-
+			contents := make(map[string][]byte, len(files))
 			for _, file := range files {
 				content, err := os.ReadFile(file)
 				if err != nil {
 					return fmt.Errorf("%s: %w", file, err)
 				}
+				contents[file] = content
+			}
 
-				greenRoot, li, diags := syntax.Parse(string(content))
-				hasError := false
-				for _, d := range diags {
-					fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", file, d.Range.Start.Line+1, d.Severity, d.Message)
-					if d.Severity == craft.SeverityError {
-						hasError = true
-					}
+			// All inputs are one model: a use case in one file may run through
+			// services and domains declared in another.
+			doc, diags, _ := craft.ParseFiles(contents)
+			errorCount := 0
+			for _, d := range diags {
+				fmt.Fprintf(os.Stderr, "%s:%d: %s: %s\n", d.SourceURI, d.Range.Start.Line+1, d.Severity, d.Message)
+				if d.Severity == craft.SeverityError {
+					errorCount++
 				}
-				if hasError {
-					return fmt.Errorf("%s: parse errors prevent diagram generation", file)
-				}
-				tree := syntax.Root(greenRoot)
-				doc := syntax.ProjectFromTree(tree, li)
+			}
+			if errorCount > 0 && !allowErrors {
+				return fmt.Errorf("%d error(s) prevent diagram generation (use --allow-errors to draw anyway)", errorCount)
+			}
 
-				outDir := outputDir
-				if outDir == "" {
-					outDir = filepath.Dir(file)
-				}
+			outDir := outputDir
+			if outDir == "" {
+				outDir = filepath.Dir(files[0])
+			}
+			if !stdout {
 				if err := os.MkdirAll(outDir, 0755); err != nil {
 					return err
 				}
-
-				base := baseName(file)
-
-				opts := c4Options{
-					boundaries:    boundaries,
-					showDatabases: !noDatabases,
-					focusServices: focusServices,
-					focusContexts: focusContexts,
-				}
-				if err := generateForFile(v, doc, base, outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, stdoutW, force); err != nil {
-					return fmt.Errorf("%s: %w", file, err)
-				}
 			}
-			return nil
+
+			opts := c4Options{
+				boundaries:    boundaries,
+				showDatabases: !noDatabases,
+				focusServices: focusServices,
+				focusContexts: focusContexts,
+			}
+			return generateDiagrams(visualizer.New(), doc, modelBaseName(files), outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, cmd.OutOrStdout(), force)
 		},
 	}
 
@@ -136,12 +127,13 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "puml", "output format: puml|mermaid|mermaid-md")
 	cmd.Flags().BoolVar(&stdout, "stdout", false, "write to stdout instead of files (single diagram only)")
 	cmd.Flags().BoolVar(&force, "force", false, "allow overwriting existing .md files when --format=mermaid-md")
+	cmd.Flags().BoolVar(&allowErrors, "allow-errors", false, "draw diagrams even when the model has error diagnostics")
 	return cmd
 }
 
-func generateForFile(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer, force bool) error {
+func generateDiagrams(v *visualizer.Visualizer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer, force bool) error {
 	// If the user supplied --use-case, validate that every requested value
-	// matches some use case in this file. Only used for domain/sequence
+	// matches some use case in the model. Only used for domain/sequence
 	// types — c4 keeps full model for structural completeness.
 	if len(useCaseFilter) > 0 {
 		_, missing := visualizer.FilterUseCases(model, useCaseFilter)
@@ -400,11 +392,31 @@ func injectTitle(content []byte, useCaseName, format string) []byte {
 	}
 }
 
-// baseName strips directory and extension from a file path.
-func baseName(file string) string {
-	name := filepath.Base(file)
-	ext := filepath.Ext(name)
-	return strings.TrimSuffix(name, ext)
+// modelBaseName names the output files of a model: the input's own name
+// without extension for a single file, else the name of the directory the
+// inputs share (e.g. "examples" for examples/*.craft).
+func modelBaseName(files []string) string {
+	if len(files) == 1 {
+		name := filepath.Base(files[0])
+		return strings.TrimSuffix(name, filepath.Ext(name))
+	}
+	common := filepath.Dir(files[0])
+	for _, f := range files[1:] {
+		for !isWithin(f, common) {
+			common = filepath.Dir(common)
+		}
+	}
+	abs, err := filepath.Abs(common)
+	if err != nil || filepath.Base(abs) == string(filepath.Separator) {
+		return "model"
+	}
+	return filepath.Base(abs)
+}
+
+// isWithin reports whether path lies inside dir.
+func isWithin(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func expandType(t string) []string {

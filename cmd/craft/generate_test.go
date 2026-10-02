@@ -11,7 +11,7 @@ import (
 func TestGenerateCmd_V2Default(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "test.craft")
-	if err := os.WriteFile(src, []byte("actor user Foo\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n"), 0644); err != nil {
+	if err := os.WriteFile(src, []byte("actor user Foo\n\ndomain D {\n  Ctx\n}\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -58,7 +58,7 @@ func TestGenerateCmd_V2ErrorsOnBrokenInput(t *testing.T) {
 func TestGenerateCmd_C4BoundariesFlag(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "test.craft")
-	craftSrc := []byte("actor user Foo\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n")
+	craftSrc := []byte("actor user Foo\n\ndomain D {\n  Ctx\n}\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n")
 	if err := os.WriteFile(src, craftSrc, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestGenerateCmd_C4NoDatabases(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "test.craft")
 	// Service with a data-store so the flag has something to hide
-	craftSrc := []byte("actor user Foo\n\nservices {\n  MyService {\n    contexts: Ctx\n    data-stores: my_db\n  }\n}\n")
+	craftSrc := []byte("actor user Foo\n\ndomain D {\n  Ctx\n}\n\nservices {\n  MyService {\n    contexts: Ctx\n    data-stores: my_db\n  }\n}\n")
 	if err := os.WriteFile(src, craftSrc, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +127,11 @@ func TestGenerateCmd_C4Focus(t *testing.T) {
 	src := filepath.Join(tmp, "test.craft")
 	// Two services so focus can include one and exclude the other
 	craftSrc := []byte(`actor user Foo
+
+domain D {
+  CtxA
+  CtxB
+}
 
 services {
   ServiceA {
@@ -180,7 +185,7 @@ services {
 func TestGenerateCmd_C4InvalidBoundaries(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "test.craft")
-	if err := os.WriteFile(src, []byte("actor user Foo\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n"), 0644); err != nil {
+	if err := os.WriteFile(src, []byte("actor user Foo\n\ndomain D {\n  Ctx\n}\n\nservices {\n  MyService {\n    contexts: Ctx\n  }\n}\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,6 +201,10 @@ func TestGenerateCmd_UseCaseFilter(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "test.craft")
 	craftSrc := []byte(`actor user Bob
+
+domain D {
+  BC1
+}
 
 services {
   Svc {
@@ -294,6 +303,10 @@ func TestGenerateCmd_Split(t *testing.T) {
 	tmp := t.TempDir()
 	src := filepath.Join(tmp, "test.craft")
 	craftSrc := []byte(`actor user Bob
+
+domain D {
+  BC1
+}
 
 services {
   Svc {
@@ -624,6 +637,10 @@ func TestGenerateCmd_MermaidMDNoClobber(t *testing.T) {
 func simpleCraft() []byte {
 	return []byte(`actor user Bob
 
+domain D {
+  BC1
+}
+
 services {
   Svc {
     contexts: BC1
@@ -636,4 +653,59 @@ use_case "Alpha" {
         BC1 notifies "AlphaEvent"
 }
 `)
+}
+
+// Inputs form one model: a use case in one file runs through a service and a
+// domain declared in another, and the diagrams are named after the folder.
+func TestGenerateCmd_MergesInputsIntoOneModel(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "shop")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	structure := filepath.Join(dir, "structure.craft")
+	flows := filepath.Join(dir, "flows.craft")
+	os.WriteFile(structure, []byte("actor user Bob\n\ndomain Sales {\n  Ordering\n}\n\nservices {\n  OrderService {\n    contexts: Ordering\n  }\n}\n"), 0644)
+	os.WriteFile(flows, []byte("use_case \"Place order\" {\n    when Bob places order\n        Ordering notifies \"OrderPlaced\"\n}\n"), 0644)
+
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", structure, flows, "--type", "c4"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "structure-c4.puml")); err == nil {
+		t.Error("inputs were drawn per file; want one model")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "shop-c4.puml"))
+	if err != nil {
+		t.Fatalf("expected one diagram named after the folder: %v", err)
+	}
+	if !strings.Contains(string(data), "OrderService") || !strings.Contains(string(data), "Bob") {
+		t.Errorf("merged diagram should draw the service from one file and the actor triggering a use case from the other:\n%s", data)
+	}
+}
+
+func TestGenerateCmd_SemanticErrorStopsGeneration(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "test.craft")
+	// Parses fine, but the context is declared in no domain.
+	os.WriteFile(src, []byte("services {\n  MyService {\n    contexts: Ctx\n  }\n}\n"), 0644)
+
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", src, "--type", "c4", "--output", tmp})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--allow-errors") {
+		t.Fatalf("want a semantic error to stop generation and mention --allow-errors, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmp, "test-c4.puml")); statErr == nil {
+		t.Error("no diagram should be written when generation stops")
+	}
+
+	root = newRootCmd()
+	root.SetArgs([]string{"generate", src, "--type", "c4", "--output", tmp, "--allow-errors"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("--allow-errors should draw anyway: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "test-c4.puml")); err != nil {
+		t.Errorf("expected diagram with --allow-errors: %v", err)
+	}
 }

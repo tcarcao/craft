@@ -25,6 +25,10 @@ domain User {
     Profile
 }
 
+domain Communication {
+    Notifier
+}
+
 services {
     UserService {
         contexts: Authentication, Profile

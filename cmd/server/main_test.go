@@ -9,22 +9,59 @@ import (
 )
 
 func TestParseDSL_V2Default(t *testing.T) {
-	doc, err := parseDSL("actor user Foo")
-	if err != nil {
-		t.Fatalf("v2 parse failed: %v", err)
-	}
+	doc, _ := parseDSL("actor user Foo")
 	if len(doc.Actors) == 0 {
 		t.Error("expected at least one actor in CraftDoc")
 	}
 }
 
 func TestParseDSL_EmptyInput(t *testing.T) {
-	doc, err := parseDSL("")
-	if err != nil {
-		t.Fatalf("empty input failed: %v", err)
-	}
+	doc, diags := parseDSL("")
 	if doc == nil {
 		t.Error("expected non-nil CraftDoc for empty input")
+	}
+	if len(diags) != 0 {
+		t.Errorf("expected no diagnostics for empty input, got %v", diags)
+	}
+}
+
+// A preview always draws, and reports problems in the optional diagnostics
+// field instead of failing; the existing fields keep their meaning.
+func TestHandlePreviewMermaidDomain_ReportsDiagnostics(t *testing.T) {
+	body := strings.NewReader(`{"dsl": "services {\n  Svc { contexts: Missing }\n}\n"}`)
+	req := httptest.NewRequest(http.MethodPost, "/preview/mermaid/domain", body)
+	rr := httptest.NewRecorder()
+	server, err := NewServer()
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	server.handlePreviewMermaidDomain()(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	var resp PreviewResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.Success || resp.Data == "" {
+		t.Fatalf("preview should still succeed with data: %+v", resp)
+	}
+	found := false
+	for _, d := range resp.Diagnostics {
+		if d.Severity == "error" && strings.Contains(d.Message, "Missing") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected an error diagnostic about the undeclared context, got %+v", resp.Diagnostics)
+	}
+}
+
+func TestPreviewResponse_OmitsEmptyDiagnostics(t *testing.T) {
+	b, _ := json.Marshal(PreviewResponse{Success: true, Data: "x"})
+	if strings.Contains(string(b), "diagnostics") {
+		t.Errorf("diagnostics must be omitted when empty, got %s", b)
 	}
 }
 
