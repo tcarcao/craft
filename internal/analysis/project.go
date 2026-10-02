@@ -165,7 +165,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 			counter++
 			outSc := model.Scenario{
 				ID:      fmt.Sprintf("scenario_%d", counter),
-				Trigger: projectTrigger(sc.Trigger()),
+				Trigger: projectTrigger(sc, li),
 				Actions: []model.Action{},
 			}
 			for _, action := range sc.Actions() {
@@ -183,7 +183,8 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 	return out
 }
 
-func projectTrigger(t syntax.TriggerDecl) model.Trigger {
+func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
+	t := sc.Trigger()
 	kind := t.Kind()
 	var actor, context, event, verb, phrase, ref string
 	switch kind {
@@ -208,7 +209,7 @@ func projectTrigger(t syntax.TriggerDecl) model.Trigger {
 		// No trimming: an empty phrase leaves a trailing space, as it always has.
 		description = fmt.Sprintf("when %s %s %s", actor, verb, phrase)
 	}
-	return model.Trigger{
+	out := model.Trigger{
 		Type:        kind,
 		Actor:       actor,
 		Verb:        verb,
@@ -217,7 +218,12 @@ func projectTrigger(t syntax.TriggerDecl) model.Trigger {
 		Event:       event,
 		Ref:         ref,
 		Description: description,
+		Column:      t.ActorCol(li),
 	}
+	if when := sc.When(); when != nil {
+		out.Line, _ = li.LineCol(when.Offset())
+	}
+	return out
 }
 
 func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Action {
@@ -276,6 +282,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		Phrase:        phrase,
 		Description:   description,
 		Line:          actionLine,
+		Column:        a.SubjectCol(li),
 	}
 }
 

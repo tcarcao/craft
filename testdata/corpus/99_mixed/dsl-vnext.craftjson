@@ -22,7 +22,9 @@
             "context": "Subscriptions",
             "event": "vas.VasApplied",
             "ref": "vas.VasApplied",
-            "description": "when Subscriptions listens \"vas.VasApplied\""
+            "description": "when Subscriptions listens \"vas.VasApplied\"",
+            "line": 15,
+            "column": 10
           },
           "actions": [
             {
@@ -39,7 +41,8 @@
               "connector": "for",
               "phrase": "a fresh charge attempt (1! \u0026 2!)",
               "description": "Subscriptions asks re/billing for a fresh charge attempt (1! \u0026 2!)",
-              "line": 16
+              "line": 16,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -48,7 +51,8 @@
               "event": "vas.VasFulfilled",
               "ref": "vas.VasFulfilled",
               "description": "Subscriptions notifies \"vas.VasFulfilled\"",
-              "line": 17
+              "line": 17,
+              "column": 9
             }
           ]
         }

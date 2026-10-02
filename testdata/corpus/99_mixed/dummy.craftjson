@@ -10,7 +10,9 @@
             "actor": "Business_User",
             "verb": "unschedules",
             "phrase": "VAS scheduling",
-            "description": "when Business_User unschedules VAS scheduling"
+            "description": "when Business_User unschedules VAS scheduling",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -22,7 +24,8 @@
               "connector": "to",
               "phrase": "cancel the VAS reservation",
               "description": "VASScheduling asks Wallet to cancel the VAS reservation",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -31,7 +34,8 @@
               "verb": "cancels",
               "phrase": "VAS reservation",
               "description": "Wallet cancels VAS reservation",
-              "line": 4
+              "line": 4,
+              "column": 9
             },
             {
               "id": "action_4",
@@ -39,7 +43,8 @@
               "context": "Wallet",
               "event": "VAS Reservation Canceled",
               "description": "Wallet notifies \"VAS Reservation Canceled\"",
-              "line": 5
+              "line": 5,
+              "column": 9
             },
             {
               "id": "action_5",
@@ -49,7 +54,8 @@
               "connector": "the",
               "phrase": "VAS schedule",
               "description": "VASScheduling cancels the VAS schedule",
-              "line": 6
+              "line": 6,
+              "column": 9
             }
           ]
         }
@@ -66,7 +72,9 @@
             "actor": "VASMgmt",
             "verb": "identifies",
             "phrase": "scheduled VAS to apply",
-            "description": "when VASMgmt identifies scheduled VAS to apply"
+            "description": "when VASMgmt identifies scheduled VAS to apply",
+            "line": 10,
+            "column": 10
           },
           "actions": [
             {
@@ -77,7 +85,8 @@
               "connector": "a",
               "phrase": "VAS and stores details until when its valid",
               "description": "VASMgmt applies a VAS and stores details until when its valid",
-              "line": 11
+              "line": 11,
+              "column": 9
             }
           ]
         }

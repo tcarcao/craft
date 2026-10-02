@@ -10,7 +10,9 @@
             "actor": "Customer",
             "verb": "submits",
             "phrase": "registration form",
-            "description": "when Customer submits registration form"
+            "description": "when Customer submits registration form",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -20,7 +22,8 @@
               "verb": "creates",
               "phrase": "account",
               "description": "UserService creates account",
-              "line": 3
+              "line": 3,
+              "column": 9
             }
           ]
         }

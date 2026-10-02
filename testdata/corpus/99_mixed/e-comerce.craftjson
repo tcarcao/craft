@@ -63,7 +63,9 @@
             "actor": "Business_User",
             "verb": "purchases",
             "phrase": "VAS to wallet",
-            "description": "when Business_User purchases VAS to wallet"
+            "description": "when Business_User purchases VAS to wallet",
+            "line": 27,
+            "column": 10
           },
           "actions": [
             {
@@ -76,6 +78,7 @@
               "phrase": "initiate a VAS addition",
               "description": "WalletItemPurchase asks Wallet to initiate a VAS addition",
               "line": 28,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/WalletItemPurchase",
@@ -94,6 +97,7 @@
               "event": "VAS Addition Request Approved",
               "description": "Wallet notifies \"VAS Addition Request Approved\"",
               "line": 29,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -113,7 +117,9 @@
               "kind": "bounded_context",
               "id": "Monetization/WalletItemPurchase",
               "service": "WalletService"
-            }
+            },
+            "line": 31,
+            "column": 10
           },
           "actions": [
             {
@@ -126,6 +132,7 @@
               "phrase": "create an Order",
               "description": "WalletItemPurchase asks OrderManagement to create an Order",
               "line": 32,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/WalletItemPurchase",
@@ -144,6 +151,7 @@
               "event": "Order Created",
               "description": "OrderManagement notifies \"Order Created\"",
               "line": 33,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -159,6 +167,7 @@
               "phrase": "Order as payment deferred",
               "description": "OrderManagement marks the Order as payment deferred",
               "line": 34,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -172,6 +181,7 @@
               "event": "Order payment deferred",
               "description": "OrderManagement notifies \"Order payment deferred\"",
               "line": 35,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -191,7 +201,9 @@
               "kind": "bounded_context",
               "id": "Monetization/OrderFulfilment",
               "service": "Order Service"
-            }
+            },
+            "line": 37,
+            "column": 10
           },
           "actions": [
             {
@@ -204,6 +216,7 @@
               "phrase": "fulfil the addition request",
               "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
               "line": 38,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderFulfilment",
@@ -225,6 +238,7 @@
               "phrase": "add VAS",
               "description": "WalletItemAddition asks Wallet to add VAS",
               "line": 39,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/WalletItemAddition",
@@ -243,6 +257,7 @@
               "event": "VAS added",
               "description": "Wallet notifies \"VAS added\"",
               "line": 40,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -262,7 +277,9 @@
               "kind": "bounded_context",
               "id": "Monetization/OrderFulfilment",
               "service": "Order Service"
-            }
+            },
+            "line": 42,
+            "column": 10
           },
           "actions": [
             {
@@ -275,6 +292,7 @@
               "phrase": "mark the Order as fulfiled",
               "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
               "line": 43,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderFulfilment",
@@ -293,6 +311,7 @@
               "event": "Order completed",
               "description": "OrderManagement notifies \"Order completed\"",
               "line": 44,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -314,7 +333,9 @@
             "actor": "Business_User",
             "verb": "schedules",
             "phrase": "VAS",
-            "description": "when Business_User schedules VAS"
+            "description": "when Business_User schedules VAS",
+            "line": 48,
+            "column": 10
           },
           "actions": [
             {
@@ -327,6 +348,7 @@
               "phrase": "reserve a VAS",
               "description": "VASScheduling asks Wallet to reserve a VAS",
               "line": 49,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -347,6 +369,7 @@
               "phrase": "unconfirmed VAS reservation",
               "description": "Wallet creates an unconfirmed VAS reservation",
               "line": 50,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -360,6 +383,7 @@
               "event": "VAS Addition Request Approved",
               "description": "Wallet notifies \"VAS Addition Request Approved\"",
               "line": 51,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -375,6 +399,7 @@
               "phrase": "VAS schedule",
               "description": "VASScheduling drafts a VAS schedule",
               "line": 52,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -394,7 +419,9 @@
               "kind": "bounded_context",
               "id": "Monetization/VASScheduling",
               "service": "service-re-go-vas"
-            }
+            },
+            "line": 54,
+            "column": 10
           },
           "actions": [
             {
@@ -407,6 +434,7 @@
               "phrase": "create an Order",
               "description": "VASScheduling asks OrderManagement to create an Order",
               "line": 55,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -425,6 +453,7 @@
               "event": "Order Created",
               "description": "OrderManagement notifies \"Order Created\"",
               "line": 56,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -440,6 +469,7 @@
               "phrase": "Order as payment deferred",
               "description": "OrderManagement marks the Order as payment deferred",
               "line": 57,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -453,6 +483,7 @@
               "event": "Order payment deferred",
               "description": "OrderManagement notifies \"Order payment deferred\"",
               "line": 58,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -472,7 +503,9 @@
               "kind": "bounded_context",
               "id": "Monetization/OrderFulfilment",
               "service": "Order Service"
-            }
+            },
+            "line": 60,
+            "column": 10
           },
           "actions": [
             {
@@ -485,6 +518,7 @@
               "phrase": "fulfil the addition request",
               "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
               "line": 61,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderFulfilment",
@@ -506,6 +540,7 @@
               "phrase": "add VAS",
               "description": "WalletItemAddition asks Wallet to add VAS",
               "line": 62,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/WalletItemAddition",
@@ -524,6 +559,7 @@
               "event": "VAS added",
               "description": "Wallet notifies \"VAS added\"",
               "line": 63,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -543,7 +579,9 @@
               "kind": "bounded_context",
               "id": "Monetization/OrderFulfilment",
               "service": "Order Service"
-            }
+            },
+            "line": 65,
+            "column": 10
           },
           "actions": [
             {
@@ -556,6 +594,7 @@
               "phrase": "mark the Order as fulfiled",
               "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
               "line": 66,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderFulfilment",
@@ -574,6 +613,7 @@
               "event": "Order completed",
               "description": "OrderManagement notifies \"Order completed\"",
               "line": 67,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/OrderManagement",
@@ -595,7 +635,9 @@
             "actor": "Business_User",
             "verb": "schedules",
             "phrase": "VAS",
-            "description": "when Business_User schedules VAS"
+            "description": "when Business_User schedules VAS",
+            "line": 71,
+            "column": 10
           },
           "actions": [
             {
@@ -608,6 +650,7 @@
               "phrase": "reserve a VAS",
               "description": "VASScheduling asks Wallet to reserve a VAS",
               "line": 72,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -628,6 +671,7 @@
               "phrase": "VAS",
               "description": "Wallet reserves a VAS",
               "line": 73,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -641,6 +685,7 @@
               "event": "VAS Reserved",
               "description": "Wallet notifies \"VAS Reserved\"",
               "line": 74,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -656,6 +701,7 @@
               "phrase": "VAS schedule",
               "description": "VASScheduling creates a VAS schedule",
               "line": 75,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -677,7 +723,9 @@
             "actor": "Business_User",
             "verb": "unschedules",
             "phrase": "VAS scheduling",
-            "description": "when Business_User unschedules VAS scheduling"
+            "description": "when Business_User unschedules VAS scheduling",
+            "line": 79,
+            "column": 10
           },
           "actions": [
             {
@@ -690,6 +738,7 @@
               "phrase": "cancel the VAS reservation",
               "description": "VASScheduling asks Wallet to cancel the VAS reservation",
               "line": 80,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -709,6 +758,7 @@
               "phrase": "VAS reservation",
               "description": "Wallet cancels VAS reservation",
               "line": 81,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -722,6 +772,7 @@
               "event": "VAS Reservation Canceled",
               "description": "Wallet notifies \"VAS Reservation Canceled\"",
               "line": 82,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -737,6 +788,7 @@
               "phrase": "VAS schedule",
               "description": "VASScheduling cancels the VAS schedule",
               "line": 83,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/VASScheduling",
@@ -758,7 +810,9 @@
             "actor": "CRON",
             "verb": "identifies",
             "phrase": "VAS expiring",
-            "description": "when CRON identifies VAS expiring"
+            "description": "when CRON identifies VAS expiring",
+            "line": 87,
+            "column": 10
           },
           "actions": [
             {
@@ -769,6 +823,7 @@
               "phrase": "VAS",
               "description": "Wallet removes VAS",
               "line": 88,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",
@@ -782,6 +837,7 @@
               "event": "VAS Expired",
               "description": "Wallet notifies \"VAS Expired\"",
               "line": 89,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Monetization/Wallet",

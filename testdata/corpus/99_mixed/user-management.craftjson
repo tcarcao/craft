@@ -103,7 +103,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 41,
+            "column": 10
           },
           "actions": [
             {
@@ -114,6 +116,7 @@
               "phrase": "email format",
               "description": "Authentication validates email format",
               "line": 42,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -130,6 +133,7 @@
               "phrase": "check email uniqueness",
               "description": "Authentication asks Database to check email uniqueness",
               "line": 43,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -148,6 +152,7 @@
               "phrase": "user profile",
               "description": "Profile creates user profile",
               "line": 44,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Profile",
@@ -161,6 +166,7 @@
               "event": "User Registered",
               "description": "Authentication notifies \"User Registered\"",
               "line": 45,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -180,7 +186,9 @@
               "kind": "bounded_context",
               "id": "User/Profile",
               "service": "UserService"
-            }
+            },
+            "line": 47,
+            "column": 10
           },
           "actions": [
             {
@@ -193,6 +201,7 @@
               "phrase": "store profile data",
               "description": "Profile asks Database to store profile data",
               "line": 48,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Profile",
@@ -213,6 +222,7 @@
               "phrase": "send welcome email",
               "description": "Profile asks Notifier to send welcome email",
               "line": 49,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Profile",

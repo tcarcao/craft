@@ -10,7 +10,9 @@
             "actor": "CRON",
             "verb": "triggers",
             "phrase": "data sync",
-            "description": "when CRON triggers data sync"
+            "description": "when CRON triggers data sync",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -20,7 +22,8 @@
               "verb": "fetches",
               "phrase": "remote data",
               "description": "SyncService fetches remote data",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -29,7 +32,8 @@
               "verb": "transforms",
               "phrase": "data format",
               "description": "SyncService transforms data format",
-              "line": 4
+              "line": 4,
+              "column": 9
             },
             {
               "id": "action_4",
@@ -38,7 +42,8 @@
               "verb": "persists",
               "phrase": "updated records",
               "description": "SyncService persists updated records",
-              "line": 5
+              "line": 5,
+              "column": 9
             },
             {
               "id": "action_5",
@@ -46,7 +51,8 @@
               "context": "SyncService",
               "event": "Sync Completed",
               "description": "SyncService notifies \"Sync Completed\"",
-              "line": 6
+              "line": 6,
+              "column": 9
             }
           ]
         }

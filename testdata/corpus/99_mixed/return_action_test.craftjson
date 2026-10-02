@@ -10,7 +10,9 @@
             "actor": "User",
             "verb": "submits",
             "phrase": "payment request",
-            "description": "when User submits payment request"
+            "description": "when User submits payment request",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -20,7 +22,8 @@
               "verb": "validates",
               "phrase": "payment data",
               "description": "PaymentService validates payment data",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -31,7 +34,8 @@
               "connector": "to",
               "phrase": "process payment",
               "description": "PaymentService asks BankGateway to process payment",
-              "line": 4
+              "line": 4,
+              "column": 9
             },
             {
               "id": "action_4",
@@ -40,7 +44,8 @@
               "targetContext": "PaymentService",
               "phrase": "payment result",
               "description": "BankGateway returns payment result to PaymentService",
-              "line": 5
+              "line": 5,
+              "column": 9
             },
             {
               "id": "action_5",
@@ -49,7 +54,8 @@
               "targetContext": "User",
               "phrase": "confirmation status",
               "description": "PaymentService returns confirmation status to User",
-              "line": 6
+              "line": 6,
+              "column": 9
             },
             {
               "id": "action_6",
@@ -57,7 +63,8 @@
               "context": "PaymentService",
               "event": "payment_processed",
               "description": "PaymentService notifies \"payment_processed\"",
-              "line": 7
+              "line": 7,
+              "column": 9
             }
           ]
         }
@@ -74,7 +81,9 @@
             "actor": "User",
             "verb": "submits",
             "phrase": "registration form",
-            "description": "when User submits registration form"
+            "description": "when User submits registration form",
+            "line": 11,
+            "column": 10
           },
           "actions": [
             {
@@ -84,7 +93,8 @@
               "verb": "validates",
               "phrase": "user data",
               "description": "UserService validates user data",
-              "line": 12
+              "line": 12,
+              "column": 9
             },
             {
               "id": "action_9",
@@ -95,7 +105,8 @@
               "connector": "to",
               "phrase": "send verification",
               "description": "UserService asks EmailService to send verification",
-              "line": 13
+              "line": 13,
+              "column": 9
             },
             {
               "id": "action_10",
@@ -103,7 +114,8 @@
               "context": "EmailService",
               "phrase": "email status",
               "description": "EmailService returns email status",
-              "line": 14
+              "line": 14,
+              "column": 9
             },
             {
               "id": "action_11",
@@ -112,7 +124,8 @@
               "targetContext": "User",
               "phrase": "registration result",
               "description": "UserService returns registration result to User",
-              "line": 15
+              "line": 15,
+              "column": 9
             }
           ]
         }

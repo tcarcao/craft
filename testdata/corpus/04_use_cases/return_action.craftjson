@@ -10,7 +10,9 @@
             "actor": "Customer",
             "verb": "checks",
             "phrase": "balance",
-            "description": "when Customer checks balance"
+            "description": "when Customer checks balance",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -22,7 +24,8 @@
               "connector": "to",
               "phrase": "get current balance",
               "description": "AccountService asks BalanceService to get current balance",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -30,7 +33,8 @@
               "context": "BalanceService",
               "phrase": "balance information",
               "description": "BalanceService returns balance information",
-              "line": 4
+              "line": 4,
+              "column": 9
             },
             {
               "id": "action_4",
@@ -39,7 +43,8 @@
               "targetContext": "Customer",
               "phrase": "balance details",
               "description": "AccountService returns balance details to Customer",
-              "line": 5
+              "line": 5,
+              "column": 9
             }
           ]
         }

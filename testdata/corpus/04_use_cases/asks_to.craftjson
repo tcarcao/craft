@@ -10,7 +10,9 @@
             "actor": "Customer",
             "verb": "initiates",
             "phrase": "transfer",
-            "description": "when Customer initiates transfer"
+            "description": "when Customer initiates transfer",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -22,7 +24,8 @@
               "connector": "to",
               "phrase": "verify source account",
               "description": "PaymentService asks AccountService to verify source account",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -33,7 +36,8 @@
               "connector": "to",
               "phrase": "verify destination account",
               "description": "PaymentService asks AccountService to verify destination account",
-              "line": 4
+              "line": 4,
+              "column": 9
             },
             {
               "id": "action_4",
@@ -41,7 +45,8 @@
               "context": "AccountService",
               "event": "Transfer Completed",
               "description": "AccountService notifies \"Transfer Completed\"",
-              "line": 5
+              "line": 5,
+              "column": 9
             }
           ]
         }

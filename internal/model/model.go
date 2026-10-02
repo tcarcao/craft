@@ -164,6 +164,10 @@ type Trigger struct {
 	// listen) resolves to across the whole model. Nil when it does not
 	// resolve, and for event triggers.
 	Subject *Participant `json:"subject,omitempty"`
+	// Line is the 1-based source line of the `when` keyword; Column is the
+	// 1-based UTF-16 column of the subject (0 for an event trigger).
+	Line   int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
 }
 
 // Participant is the resolved identity behind a name used in a use case. It is
@@ -234,6 +238,8 @@ type Action struct {
 	Phrase      string     `json:"phrase,omitempty"`
 	Description string     `json:"description"`
 	Line        int        `json:"line,omitempty"`
+	// Column is the 1-based UTF-16 column of the subject on Line.
+	Column int `json:"column,omitempty"`
 	// From is what the subject (Context) resolves to; To is what the target
 	// (TargetContext) of a sync or return action resolves to. Both are nil
 	// when the name does not resolve, and To is nil for other action kinds.
