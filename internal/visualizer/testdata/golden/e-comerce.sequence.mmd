@@ -1,0 +1,59 @@
+sequenceDiagram
+    actor Business_User as Business_User
+    participant WalletItemPurchase as WalletItemPurchase
+    participant Wallet as Wallet
+    participant OrderManagement as OrderManagement
+    participant OrderFulfilment as OrderFulfilment
+    participant WalletItemAddition as WalletItemAddition
+    participant VASScheduling as VASScheduling
+    actor CRON as CRON
+    Note over Business_User,CRON: Purchase VAS to Wallet
+    Business_User->>WalletItemPurchase: purchases VAS to wallet
+    WalletItemPurchase->>Wallet: to initiate a VAS addition
+    Wallet-)Wallet: notifies "VAS Addition Request Approved"
+    Wallet-)WalletItemPurchase: VAS Addition Request Approved
+    WalletItemPurchase->>OrderManagement: to create an Order
+    OrderManagement-)OrderManagement: notifies "Order Created"
+    OrderManagement->>OrderManagement: marks the Order as payment deferred
+    OrderManagement-)OrderManagement: notifies "Order payment deferred"
+    OrderManagement-)OrderFulfilment: Order payment deferred
+    OrderFulfilment->>WalletItemAddition: to fulfil the addition request
+    WalletItemAddition->>Wallet: to add VAS
+    Wallet-)Wallet: notifies "VAS added"
+    Wallet-)OrderFulfilment: VAS added
+    OrderFulfilment->>OrderManagement: to mark the Order as fulfiled
+    OrderManagement-)OrderManagement: notifies "Order completed"
+    Note over Business_User,CRON: VAS scheduled and no VAS in Wallet
+    Business_User->>VASScheduling: schedules VAS
+    VASScheduling->>Wallet: to reserve a VAS
+    Wallet->>Wallet: creates an unconfirmed VAS reservation
+    Wallet-)Wallet: notifies "VAS Addition Request Approved"
+    VASScheduling->>VASScheduling: drafts a VAS schedule
+    Wallet-)VASScheduling: VAS Addition Request Approved
+    VASScheduling->>OrderManagement: to create an Order
+    OrderManagement-)OrderManagement: notifies "Order Created"
+    OrderManagement->>OrderManagement: marks the Order as payment deferred
+    OrderManagement-)OrderManagement: notifies "Order payment deferred"
+    OrderManagement-)OrderFulfilment: Order payment deferred
+    OrderFulfilment->>WalletItemAddition: to fulfil the addition request
+    WalletItemAddition->>Wallet: to add VAS
+    Wallet-)Wallet: notifies "VAS added"
+    Wallet-)OrderFulfilment: VAS added
+    OrderFulfilment->>OrderManagement: to mark the Order as fulfiled
+    OrderManagement-)OrderManagement: notifies "Order completed"
+    Note over Business_User,CRON: VAS scheduled and VAS in Wallet
+    Business_User->>VASScheduling: schedules VAS
+    VASScheduling->>Wallet: to reserve a VAS
+    Wallet->>Wallet: reserves a VAS
+    Wallet-)Wallet: notifies "VAS Reserved"
+    VASScheduling->>VASScheduling: creates a VAS schedule
+    Note over Business_User,CRON: VAS unscheduled
+    Business_User->>VASScheduling: unschedules VAS scheduling
+    VASScheduling->>Wallet: to cancel the VAS reservation
+    Wallet->>Wallet: cancels VAS reservation
+    Wallet-)Wallet: notifies "VAS Reservation Canceled"
+    VASScheduling->>VASScheduling: cancels the VAS schedule
+    Note over Business_User,CRON: VAS expires
+    CRON->>Wallet: identifies VAS expiring
+    Wallet->>Wallet: removes VAS
+    Wallet-)Wallet: notifies "VAS Expired"

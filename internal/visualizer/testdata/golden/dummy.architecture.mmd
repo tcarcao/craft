@@ -1,0 +1,7 @@
+flowchart LR
+    VASMgmt["VASMgmt"]
+    VASScheduling["VASScheduling"]
+    Wallet["Wallet"]
+    Wallet_events[("Wallet events")]
+    VASScheduling --> Wallet
+    Wallet --> Wallet_events

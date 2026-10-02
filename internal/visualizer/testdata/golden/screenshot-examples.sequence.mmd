@@ -1,0 +1,101 @@
+sequenceDiagram
+    actor Business_User as Business_User
+    participant Authentication as Authentication
+    participant user_db as user_db
+    participant Profile as Profile
+    participant Preferences as Preferences
+    participant EmailNotifier as EmailNotifier
+    participant Catalog as Catalog
+    participant Pricing as Pricing
+    participant Inventory as Inventory
+    participant OrderManagement as OrderManagement
+    participant order_db as order_db
+    participant Payment as Payment
+    participant payment_gateway as payment_gateway
+    participant Shipping as Shipping
+    participant shipping_provider as shipping_provider
+    participant SMSNotifier as SMSNotifier
+    actor CronScheduler as CronScheduler
+    participant inventory_system as inventory_system
+    participant product_db as product_db
+    participant PushNotifier as PushNotifier
+    participant notification_queue as notification_queue
+    actor Customer_Support as Customer_Support
+    Note over Business_User,Customer_Support: User Registration
+    Business_User->>Authentication: creates Account
+    Authentication->>Authentication: validates email format
+    Authentication->>user_db: to check email uniqueness
+    Profile->>Profile: creates user profile
+    Profile->>user_db: to store profile data
+    Authentication-)Authentication: notifies "UserRegistered"
+    Authentication-)Profile: UserRegistered
+    Preferences->>Preferences: creates default preferences
+    Preferences->>user_db: to save preferences
+    EmailNotifier->>EmailNotifier: sends welcome email
+    Note over Business_User,Customer_Support: Product Purchase Flow
+    Business_User->>Catalog: views Product
+    Catalog-->>Business_User: returns product details
+    Pricing->>Pricing: calculates current price
+    Inventory->>Inventory: checks availability
+    Business_User->>OrderManagement: adds Product to Cart
+    OrderManagement->>OrderManagement: creates draft order
+    OrderManagement->>order_db: to save draft
+    Inventory->>Inventory: reserves stock
+    Pricing->>Pricing: applies discounts
+    OrderManagement-->>OrderManagement: returns cart summary
+    Business_User->>OrderManagement: confirms Purchase
+    OrderManagement->>OrderManagement: validates order
+    Payment->>Payment: processes payment
+    Payment->>payment_gateway: to charge card
+    Payment-)Payment: notifies "PaymentCompleted"
+    Payment-)OrderManagement: PaymentCompleted
+    OrderManagement->>OrderManagement: marks order as paid
+    Inventory->>Inventory: confirms stock allocation
+    Shipping->>Shipping: creates shipment
+    Shipping->>shipping_provider: to schedule pickup
+    OrderManagement-)OrderManagement: notifies "OrderConfirmed"
+    OrderManagement-)EmailNotifier: OrderConfirmed
+    EmailNotifier->>EmailNotifier: sends order confirmation
+    SMSNotifier->>SMSNotifier: sends tracking notification
+    Note over Business_User,Customer_Support: Inventory Sync
+    CronScheduler->>Inventory: triggers "DailyInventorySync"
+    Inventory->>Inventory: fetches stock levels
+    Inventory->>inventory_system: to get current stock
+    Inventory-)Inventory: notifies "StockLevelsUpdated"
+    Inventory-)Catalog: StockLevelsUpdated
+    Catalog->>Catalog: updates product availability
+    Catalog->>product_db: to update stock status
+    Catalog-)Catalog: notifies "CatalogUpdated"
+    Catalog-)PushNotifier: CatalogUpdated
+    PushNotifier->>PushNotifier: sends restock notifications
+    PushNotifier->>notification_queue: to queue messages
+    Note over Business_User,Customer_Support: Customer Support Inquiry
+    Customer_Support->>OrderManagement: views Order
+    OrderManagement->>OrderManagement: fetches order details
+    OrderManagement->>order_db: to retrieve order
+    Payment->>Payment: retrieves payment history
+    Shipping->>Shipping: retrieves shipment status
+    OrderManagement-->>OrderManagement: returns complete order view
+    Customer_Support->>OrderManagement: updates Order
+    OrderManagement->>OrderManagement: validates changes
+    OrderManagement->>order_db: to update order
+    OrderManagement-)OrderManagement: notifies "OrderUpdated"
+    OrderManagement-)EmailNotifier: OrderUpdated
+    EmailNotifier->>EmailNotifier: sends update notification to customer
+    Note over Business_User,Customer_Support: Password Reset
+    Business_User->>Authentication: requests password reset
+    Authentication->>Authentication: validates email
+    Authentication->>Authentication: generates reset token
+    Authentication->>user_db: to store token
+    EmailNotifier->>EmailNotifier: sends reset email
+    Business_User->>Authentication: submits new password
+    Authentication->>Authentication: validates reset token
+    Authentication->>user_db: to verify token
+    Authentication->>Authentication: updates password
+    Authentication-)Authentication: notifies "PasswordChanged"
+    Authentication-)EmailNotifier: PasswordChanged
+    EmailNotifier->>EmailNotifier: sends confirmation email
+    Note over Business_User,Customer_Support: User Login
+    Business_User->>Authentication: authenticates
+    Authentication->>Authentication: validates credentials
+    Authentication-->>Business_User: returns access token

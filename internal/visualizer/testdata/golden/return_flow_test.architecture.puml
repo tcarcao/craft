@@ -1,0 +1,53 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Ungrouped subdomains
+frame "Admin" as Admin
+frame "BankGateway" as BankGateway
+frame "CacheService" as CacheService
+frame "DatabaseService" as DatabaseService
+frame "NotificationService" as NotificationService
+frame "PaymentService" as PaymentService
+frame "ReportService" as ReportService
+frame "User" as User
+
+' Subdomain connections
+BankGateway --> PaymentService
+CacheService --> DatabaseService
+DatabaseService --> CacheService
+DatabaseService --> ReportService
+NotificationService --> PaymentService
+PaymentService --> BankGateway
+PaymentService --> NotificationService
+PaymentService --> User
+ReportService --> Admin
+ReportService --> DatabaseService
+
+@enduml

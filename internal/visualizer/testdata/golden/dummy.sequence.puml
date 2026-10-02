@@ -1,0 +1,24 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+actor "Business_User" as Business_User
+participant "VASScheduling" as VASScheduling
+participant "Wallet" as Wallet
+actor "VASMgmt" as VASMgmt
+
+== VAS unscheduled ==
+
+Business_User -> VASScheduling : unschedules VAS scheduling
+VASScheduling -> Wallet : to cancel the VAS reservation
+Wallet -> Wallet : cancels VAS reservation
+Wallet ->> Wallet : notifies "VAS Reservation Canceled"
+VASScheduling -> VASScheduling : cancels the VAS schedule
+
+== Scheduled VAS Applied ==
+
+VASMgmt -> VASMgmt : identifies scheduled VAS to apply
+VASMgmt -> VASMgmt : applies a VAS and stores details until when its valid
+
+@enduml

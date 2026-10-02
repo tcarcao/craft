@@ -1,0 +1,63 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+boundary "CRON" as CRON
+participant "VASScheduler" as VASScheduler
+participant "VASFulfillment" as VASFulfillment
+participant "VasApplication" as VasApplication
+participant "VasLifecycle" as VasLifecycle
+boundary "FulfillmentTimer" as FulfillmentTimer
+boundary "VasLifecycleTimer" as VasLifecycleTimer
+
+== Release due VAS work to fulfillment ==
+
+CRON -> VASScheduler : advances schedule
+VASScheduler -> VASScheduler : selects VAS deliveries that are due from snapshot
+VASScheduler ->> VASScheduler : notifies "VASReadyForFulfillment"
+
+== One-time VAS — fulfillment through provider apply ==
+
+VASFulfillment -> VASFulfillment : validates snapshot parameters are present
+VASFulfillment ->> VASFulfillment : notifies "RequestVasApplication"
+VASFulfillment ->> VasApplication : RequestVasApplication
+VasApplication -> VasApplication : delegates apply through provider translator
+VasApplication ->> VasApplication : notifies "VasApplicationAcknowledged"
+VasApplication ->> VASFulfillment : VasApplicationAcknowledged
+VASFulfillment -> VASFulfillment : records correlation for vasFulfillmentId
+VasApplication ->> VasApplication : notifies "VasApplied"
+VasApplication ->> VASFulfillment : VasApplied
+VASFulfillment -> VASFulfillment : advances internal VAS lifecycle for succeeded delivery
+VASFulfillment -> VasLifecycle : to record fulfillment outcome on VAS aggregate
+VASFulfillment ->> VASFulfillment : notifies "VasFulfilled"
+
+== VAS application rejected by provider ==
+
+[-> VasApplication : RequestVasApplication
+VasApplication -> VasApplication : delegates apply through provider translator
+VasApplication ->> VasApplication : notifies "VasApplicationFailed"
+VasApplication ->> VASFulfillment : VasApplicationFailed
+VASFulfillment -> VASFulfillment : classifies failure and exhausts retry policy when applicable
+VASFulfillment -> VasLifecycle : to record terminal failure for the VAS attempt
+VASFulfillment ->> VASFulfillment : notifies "VasFulfillmentFailed"
+
+== Provider silent — fulfillment timeout ==
+
+FulfillmentTimer -> VASFulfillment : fires fulfillment deadline sweep
+VASFulfillment -> VASFulfillment : finds pending correlations past deadline
+VASFulfillment -> VasLifecycle : to record timeout outcome for the VAS attempt
+VASFulfillment ->> VASFulfillment : notifies "VasFulfillmentTimedOut"
+VASFulfillment ->> VASFulfillment : notifies "RequestEndOfVasApplication"
+
+== Time-based VAS — scheduled finish ==
+
+VasLifecycleTimer -> VASFulfillment : fires configured end_time for active time_based VAS
+VASFulfillment ->> VASFulfillment : notifies "RequestEndOfVasApplication"
+VASFulfillment ->> VasApplication : RequestEndOfVasApplication
+VasApplication -> VasApplication : delegates finish through provider translator
+VasApplication ->> VasApplication : notifies "VasApplicationEnded"
+VasApplication ->> VasLifecycle : VasApplicationEnded
+VasLifecycle -> VasLifecycle : records time-based VAS as ended
+
+@enduml

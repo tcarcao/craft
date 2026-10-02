@@ -1,0 +1,56 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "BankGateway" as BankGateway
+frame "CacheService" as CacheService
+frame "DatabaseService" as DatabaseService
+frame "NotificationService" as NotificationService
+frame "PaymentService" as PaymentService
+frame "ReportService" as ReportService
+
+' Actors
+actor "Admin" as Admin
+actor "User" as User
+
+' Workflow flows
+User --> PaymentService : 1. submits payment request
+PaymentService -> PaymentService : 2. validates payment data
+PaymentService ->> BankGateway : 3. to process payment
+BankGateway --> PaymentService : 4. returns payment result
+PaymentService ->> NotificationService : 5. to send confirmation
+NotificationService --> PaymentService : 6. returns delivery status
+PaymentService --> User : 7. returns final confirmation
+Admin --> ReportService : 8. requests report
+ReportService ->> DatabaseService : 9. for data
+DatabaseService ->> CacheService : 10. to check cache
+CacheService --> DatabaseService : 11. returns cache miss
+DatabaseService -> DatabaseService : 12. queries main database
+DatabaseService --> ReportService : 13. returns report data
+ReportService -> ReportService : 14. formats the data
+ReportService --> Admin : 15. returns formatted report
+
+@enduml

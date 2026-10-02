@@ -1,0 +1,42 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Ungrouped subdomains
+frame "Subscriptions" as Subscriptions
+frame "re/billing" as re_billing
+
+' Domain queues
+queue "Subscriptions events" as Subscriptions_events
+
+' Subdomain connections
+Subscriptions --> Subscriptions_events
+Subscriptions --> re_billing
+
+@enduml

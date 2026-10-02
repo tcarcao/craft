@@ -1,20 +1,25 @@
 package visualizer
 
 import (
+	"github.com/tcarcao/craft/v2/internal/interaction"
 	"github.com/tcarcao/craft/v2/internal/visualizer/mermaid"
+	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // GenerateDomainDiagramMermaid renders a Craft domain diagram as Mermaid source.
 // Both DomainModeDetailed and DomainModeArchitecture are supported.
 func (v *Visualizer) GenerateDomainDiagramMermaid(doc *craft.CraftDoc, mode DomainMode) (string, error) {
-	architecture := mode == DomainModeArchitecture
-	return mermaid.Domain(doc, architecture)
+	its := interaction.Derive(doc)
+	if mode == DomainModeArchitecture {
+		return mermaid.Architecture(view.BuildArchitecture(doc, its)), nil
+	}
+	return mermaid.Flow(view.BuildFlow(doc, its)), nil
 }
 
 // GenerateSequenceDiagramMermaid renders a Craft sequence diagram as Mermaid source.
 func (v *Visualizer) GenerateSequenceDiagramMermaid(doc *craft.CraftDoc, mode DomainMode) (string, error) {
-	return mermaid.Sequence(doc)
+	return mermaid.Sequence(view.BuildSequence(doc, interaction.Derive(doc))), nil
 }
 
 // GenerateC4Mermaid renders a Craft C4 diagram as Mermaid source using the

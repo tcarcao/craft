@@ -1,0 +1,56 @@
+flowchart LR
+    Business_User(["Business_User"])
+    CRON(["CRON"])
+    OrderFulfilment["OrderFulfilment"]
+    OrderManagement["OrderManagement"]
+    VASScheduling["VASScheduling"]
+    Wallet["Wallet"]
+    WalletItemAddition["WalletItemAddition"]
+    WalletItemPurchase["WalletItemPurchase"]
+    OrderManagement_events[("OrderManagement events")]
+    Wallet_events[("Wallet events")]
+    Business_User -- "1. purchases VAS to wallet" --> WalletItemPurchase
+    WalletItemPurchase -- "2. to initiate a VAS addition" --> Wallet
+    Wallet -- "3. VAS Addition Request Approved" --> Wallet_events
+    Wallet_events -- "4. VAS Addition Request Approved" --> WalletItemPurchase
+    WalletItemPurchase -- "5. to create an Order" --> OrderManagement
+    OrderManagement -- "6. Order Created" --> OrderManagement_events
+    OrderManagement -- "7. marks the Order as payment deferred" --> OrderManagement
+    OrderManagement -- "8. Order payment deferred" --> OrderManagement_events
+    OrderManagement_events -- "9. Order payment deferred" --> OrderFulfilment
+    OrderFulfilment -- "10. to fulfil the addition request" --> WalletItemAddition
+    WalletItemAddition -- "11. to add VAS" --> Wallet
+    Wallet -- "12. VAS added" --> Wallet_events
+    Wallet_events -- "13. VAS added" --> OrderFulfilment
+    OrderFulfilment -- "14. to mark the Order as fulfiled" --> OrderManagement
+    OrderManagement -- "15. Order completed" --> OrderManagement_events
+    Business_User -- "16. schedules VAS" --> VASScheduling
+    VASScheduling -- "17. to reserve a VAS" --> Wallet
+    Wallet -- "18. creates an unconfirmed VAS reservation" --> Wallet
+    Wallet -- "19. VAS Addition Request Approved" --> Wallet_events
+    VASScheduling -- "20. drafts a VAS schedule" --> VASScheduling
+    Wallet_events -- "21. VAS Addition Request Approved" --> VASScheduling
+    VASScheduling -- "22. to create an Order" --> OrderManagement
+    OrderManagement -- "23. Order Created" --> OrderManagement_events
+    OrderManagement -- "24. marks the Order as payment deferred" --> OrderManagement
+    OrderManagement -- "25. Order payment deferred" --> OrderManagement_events
+    OrderManagement_events -- "26. Order payment deferred" --> OrderFulfilment
+    OrderFulfilment -- "27. to fulfil the addition request" --> WalletItemAddition
+    WalletItemAddition -- "28. to add VAS" --> Wallet
+    Wallet -- "29. VAS added" --> Wallet_events
+    Wallet_events -- "30. VAS added" --> OrderFulfilment
+    OrderFulfilment -- "31. to mark the Order as fulfiled" --> OrderManagement
+    OrderManagement -- "32. Order completed" --> OrderManagement_events
+    Business_User -- "33. schedules VAS" --> VASScheduling
+    VASScheduling -- "34. to reserve a VAS" --> Wallet
+    Wallet -- "35. reserves a VAS" --> Wallet
+    Wallet -- "36. VAS Reserved" --> Wallet_events
+    VASScheduling -- "37. creates a VAS schedule" --> VASScheduling
+    Business_User -- "38. unschedules VAS scheduling" --> VASScheduling
+    VASScheduling -- "39. to cancel the VAS reservation" --> Wallet
+    Wallet -- "40. cancels VAS reservation" --> Wallet
+    Wallet -- "41. VAS Reservation Canceled" --> Wallet_events
+    VASScheduling -- "42. cancels the VAS schedule" --> VASScheduling
+    CRON -- "43. identifies VAS expiring" --> Wallet
+    Wallet -- "44. removes VAS" --> Wallet
+    Wallet -- "45. VAS Expired" --> Wallet_events

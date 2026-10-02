@@ -1,0 +1,95 @@
+flowchart LR
+    Business_User(["Business_User"])
+    CRON(["CRON"])
+    Customer(["Customer"])
+    VASMgmt(["VASMgmt"])
+    Offering["Offering"]
+    Order["Order"]
+    OrderFulfilment["OrderFulfilment"]
+    OrderManagement["OrderManagement"]
+    OrderMgmt["OrderMgmt"]
+    PaymentProvider["PaymentProvider"]
+    Subscription["Subscription"]
+    Susbscription["Susbscription"]
+    VASScheduling["VASScheduling"]
+    Wallet["Wallet"]
+    WalletItemAddition["WalletItemAddition"]
+    OrderManagement_events[("OrderManagement events")]
+    OrderMgmt_events[("OrderMgmt events")]
+    PaymentProvider_events[("PaymentProvider events")]
+    Susbscription_events[("Susbscription events")]
+    VASMgmt_events[("VASMgmt events")]
+    Wallet_events[("Wallet events")]
+    Customer -- "1. decides purchase a VAS" --> Offering
+    Offering -. "2. returns available offering" .-> Customer
+    Customer -- "3. asks Order to create an order" --> Order
+    Order -- "4. creates a draft Order" --> Order
+    Order -. "5. returns the url of the payment providers" .-> Customer
+    Customer -- "6. pays the order" --> PaymentProvider
+    PaymentProvider -- "7. confirms payment" --> PaymentProvider
+    PaymentProvider -- "8. PaymentCompleted" --> PaymentProvider_events
+    PaymentProvider_events -- "9. PaymentCompleted" --> Order
+    Order -- "10. marks the Order as Paid" --> Order
+    Business_User -- "11. schedules VAS" --> VASScheduling
+    VASScheduling -- "12. to reserve a VAS" --> Wallet
+    Wallet -- "13. creates an unconfirmed VAS reservation" --> Wallet
+    Wallet -- "14. VAS Addition Request Approved" --> Wallet_events
+    VASScheduling -- "15. drafts a VAS schedule" --> VASScheduling
+    Wallet_events -- "16. VAS Addition Request Approved" --> VASScheduling
+    VASScheduling -- "17. to create an Order" --> OrderManagement
+    OrderManagement -- "18. Order Created" --> OrderManagement_events
+    OrderManagement -- "19. marks the Order as payment deferred" --> OrderManagement
+    OrderManagement -- "20. Order payment deferred" --> OrderManagement_events
+    OrderManagement_events -- "21. Order payment deferred" --> OrderFulfilment
+    OrderMgmt_events -- "22. Order payment deferred" --> OrderFulfilment
+    OrderFulfilment -- "23. to fulfil the addition request" --> WalletItemAddition
+    WalletItemAddition -- "24. to add VAS" --> Wallet
+    Wallet -- "25. VAS added" --> Wallet_events
+    Wallet_events -- "26. VAS added" --> OrderFulfilment
+    OrderFulfilment -- "27. to mark the Order as fulfiled" --> OrderManagement
+    OrderManagement -- "28. Order completed" --> OrderManagement_events
+    Business_User -- "29. schedules VAS" --> VASScheduling
+    VASScheduling -- "30. to reserve a VAS" --> Wallet
+    Wallet -- "31. reserves a VAS" --> Wallet
+    Wallet -- "32. VAS Reserved" --> Wallet_events
+    VASScheduling -- "33. creates a VAS schedule" --> VASScheduling
+    Business_User -- "34. unschedules VAS scheduling" --> VASScheduling
+    VASScheduling -- "35. to cancel the VAS reservation" --> Wallet
+    Wallet -- "36. cancels VAS reservation" --> Wallet
+    Wallet -- "37. VAS Reservation Canceled" --> Wallet_events
+    VASScheduling -- "38. cancels the VAS schedule" --> VASScheduling
+    CRON -- "39. identifies VAS expiring" --> Wallet
+    Wallet -- "40. removes VAS" --> Wallet
+    Wallet -- "41. VAS Expired" --> Wallet_events
+    Business_User -- "42. schedules VAS" --> OrderMgmt
+    OrderMgmt -- "43. creates an #quot;Order with two items to fulfil: VAS and VAS Subscription#quot;" --> OrderMgmt
+    OrderMgmt -- "44. Order Created" --> OrderMgmt_events
+    OrderMgmt -- "45. marks the Order as payment deferred" --> OrderMgmt
+    OrderMgmt -- "46. Order payment deferred" --> OrderMgmt_events
+    OrderManagement_events -- "47. Order payment deferred" --> OrderFulfilment
+    OrderMgmt_events -- "48. Order payment deferred" --> OrderFulfilment
+    OrderFulfilment -- "49. to schedule the VAS" --> VASMgmt
+    VASMgmt -- "50. schedules the VAS for future application" --> VASMgmt
+    VASMgmt -- "51. VAS scheduled" --> VASMgmt_events
+    VASMgmt_events -- "52. VAS scheduled" --> OrderFulfilment
+    OrderFulfilment -- "53. to create a VAS Subscription" --> Subscription
+    Subscription -- "54. creates a VAS Subscription with the details" --> Subscription
+    OrderFulfilment -- "55. marks the vas subscription item as Fulfiled" --> OrderFulfilment
+    Business_User -- "56. schedules VAS" --> VASMgmt
+    VASMgmt -- "57. schedules a VAS for future application" --> VASMgmt
+    VASMgmt -- "58. VAS scheduled with subscription included" --> VASMgmt_events
+    VASMgmt_events -- "59. VAS scheduled with subscription included" --> Subscription
+    Subscription -- "60. creates a VAS Subscription with the details" --> Subscription
+    VASMgmt -- "61. identifies scheduled VAS to apply" --> VASMgmt
+    VASMgmt -- "62. applies a VAS and stores details until when its valid" --> VASMgmt
+    VASMgmt -- "63. VAS Applied" --> VASMgmt_events
+    VASMgmt -- "64. identifies VAS expired" --> VASMgmt
+    VASMgmt -- "65. marks the VAS as expired" --> VASMgmt
+    VASMgmt -- "66. VAS expired" --> VASMgmt_events
+    VASMgmt_events -- "67. VAS expired" --> Subscription
+    Subscription -- "68. checks if VAS has active associated subscription" --> Subscription
+    Subscription -- "69. to #quot;schedule/apply a new VAS#quot;" --> VASMgmt
+    Subscription -- "70. renews the VAS Subscription with the VAS" --> Subscription
+    Susbscription -- "71. VAS Subscription Renewed" --> Susbscription_events
+    Business_User -- "72. stops VAS Auto-Renewal" --> Subscription
+    Subscription -- "73. cancels the subscription" --> Subscription

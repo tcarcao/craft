@@ -1,0 +1,129 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "Offering" as Offering
+frame "Order" as Order
+frame "OrderFulfilment" as OrderFulfilment
+frame "OrderManagement" as OrderManagement
+frame "OrderMgmt" as OrderMgmt
+frame "PaymentProvider" as PaymentProvider
+frame "Subscription" as Subscription
+frame "Susbscription" as Susbscription
+frame "VASScheduling" as VASScheduling
+frame "Wallet" as Wallet
+frame "WalletItemAddition" as WalletItemAddition
+
+' Actors
+actor "Business_User" as Business_User
+actor "CRON" as CRON
+actor "Customer" as Customer
+actor "VASMgmt" as VASMgmt
+
+' Domain queues
+queue "OrderManagement events" as OrderManagement_events
+queue "OrderMgmt events" as OrderMgmt_events
+queue "PaymentProvider events" as PaymentProvider_events
+queue "Susbscription events" as Susbscription_events
+queue "VASMgmt events" as VASMgmt_events
+queue "Wallet events" as Wallet_events
+
+' Workflow flows
+Customer --> Offering : 1. decides purchase a VAS
+Offering --> Customer : 2. returns available offering
+Customer --> Order : 3. asks Order to create an order
+Order -> Order : 4. creates a draft Order
+Order --> Customer : 5. returns the url of the payment providers
+Customer --> PaymentProvider : 6. pays the order
+PaymentProvider -> PaymentProvider : 7. confirms payment
+PaymentProvider ->> PaymentProvider_events : 8. PaymentCompleted
+PaymentProvider_events --> Order : 9. PaymentCompleted
+Order -> Order : 10. marks the Order as Paid
+Business_User --> VASScheduling : 11. schedules VAS
+VASScheduling ->> Wallet : 12. to reserve a VAS
+Wallet -> Wallet : 13. creates an unconfirmed VAS reservation
+Wallet ->> Wallet_events : 14. VAS Addition Request Approved
+VASScheduling -> VASScheduling : 15. drafts a VAS schedule
+Wallet_events --> VASScheduling : 16. VAS Addition Request Approved
+VASScheduling ->> OrderManagement : 17. to create an Order
+OrderManagement ->> OrderManagement_events : 18. Order Created
+OrderManagement -> OrderManagement : 19. marks the Order as payment deferred
+OrderManagement ->> OrderManagement_events : 20. Order payment deferred
+OrderManagement_events --> OrderFulfilment : 21. Order payment deferred
+OrderMgmt_events --> OrderFulfilment : 22. Order payment deferred
+OrderFulfilment ->> WalletItemAddition : 23. to fulfil the addition request
+WalletItemAddition ->> Wallet : 24. to add VAS
+Wallet ->> Wallet_events : 25. VAS added
+Wallet_events --> OrderFulfilment : 26. VAS added
+OrderFulfilment ->> OrderManagement : 27. to mark the Order as fulfiled
+OrderManagement ->> OrderManagement_events : 28. Order completed
+Business_User --> VASScheduling : 29. schedules VAS
+VASScheduling ->> Wallet : 30. to reserve a VAS
+Wallet -> Wallet : 31. reserves a VAS
+Wallet ->> Wallet_events : 32. VAS Reserved
+VASScheduling -> VASScheduling : 33. creates a VAS schedule
+Business_User --> VASScheduling : 34. unschedules VAS scheduling
+VASScheduling ->> Wallet : 35. to cancel the VAS reservation
+Wallet -> Wallet : 36. cancels VAS reservation
+Wallet ->> Wallet_events : 37. VAS Reservation Canceled
+VASScheduling -> VASScheduling : 38. cancels the VAS schedule
+CRON --> Wallet : 39. identifies VAS expiring
+Wallet -> Wallet : 40. removes VAS
+Wallet ->> Wallet_events : 41. VAS Expired
+Business_User --> OrderMgmt : 42. schedules VAS
+OrderMgmt -> OrderMgmt : 43. creates an "Order with two items to fulfil: VAS and VAS Subscription"
+OrderMgmt ->> OrderMgmt_events : 44. Order Created
+OrderMgmt -> OrderMgmt : 45. marks the Order as payment deferred
+OrderMgmt ->> OrderMgmt_events : 46. Order payment deferred
+OrderManagement_events --> OrderFulfilment : 47. Order payment deferred
+OrderMgmt_events --> OrderFulfilment : 48. Order payment deferred
+OrderFulfilment ->> VASMgmt : 49. to schedule the VAS
+VASMgmt -> VASMgmt : 50. schedules the VAS for future application
+VASMgmt ->> VASMgmt_events : 51. VAS scheduled
+VASMgmt_events --> OrderFulfilment : 52. VAS scheduled
+OrderFulfilment ->> Subscription : 53. to create a VAS Subscription
+Subscription -> Subscription : 54. creates a VAS Subscription with the details
+OrderFulfilment -> OrderFulfilment : 55. marks the vas subscription item as Fulfiled
+Business_User --> VASMgmt : 56. schedules VAS
+VASMgmt -> VASMgmt : 57. schedules a VAS for future application
+VASMgmt ->> VASMgmt_events : 58. VAS scheduled with subscription included
+VASMgmt_events --> Subscription : 59. VAS scheduled with subscription included
+Subscription -> Subscription : 60. creates a VAS Subscription with the details
+VASMgmt --> VASMgmt : 61. identifies scheduled VAS to apply
+VASMgmt -> VASMgmt : 62. applies a VAS and stores details until when its valid
+VASMgmt ->> VASMgmt_events : 63. VAS Applied
+VASMgmt --> VASMgmt : 64. identifies VAS expired
+VASMgmt -> VASMgmt : 65. marks the VAS as expired
+VASMgmt ->> VASMgmt_events : 66. VAS expired
+VASMgmt_events --> Subscription : 67. VAS expired
+Subscription -> Subscription : 68. checks if VAS has active associated subscription
+Subscription ->> VASMgmt : 69. to "schedule/apply a new VAS"
+Subscription -> Subscription : 70. renews the VAS Subscription with the VAS
+Susbscription ->> Susbscription_events : 71. VAS Subscription Renewed
+Business_User --> Subscription : 72. stops VAS Auto-Renewal
+Subscription -> Subscription : 73. cancels the subscription
+
+@enduml

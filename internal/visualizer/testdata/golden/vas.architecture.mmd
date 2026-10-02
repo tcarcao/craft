@@ -1,0 +1,19 @@
+flowchart LR
+    subgraph VasApplicationServiceA["VasApplicationServiceA"]
+        VasApplication["VasApplication"]
+    end
+    subgraph VasManagementService["VasManagementService"]
+        VASFulfillment["VASFulfillment"]
+        VASScheduler["VASScheduler"]
+        VasLifecycle["VasLifecycle"]
+    end
+    VASFulfillment_events[("VASFulfillment events")]
+    VASScheduler_events[("VASScheduler events")]
+    VasApplication_events[("VasApplication events")]
+    VASFulfillment --> VasLifecycle
+    VASFulfillment --> VASFulfillment_events
+    VASScheduler --> VASScheduler_events
+    VasApplication --> VasApplication_events
+    VASFulfillment_events --> VasApplication
+    VasApplication_events --> VASFulfillment
+    VasApplication_events --> VasLifecycle

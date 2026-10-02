@@ -1,0 +1,36 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+actor "User" as User
+participant "PaymentService" as PaymentService
+participant "BankGateway" as BankGateway
+participant "NotificationService" as NotificationService
+actor "Admin" as Admin
+participant "ReportService" as ReportService
+participant "DatabaseService" as DatabaseService
+participant "CacheService" as CacheService
+
+== Payment Processing with Proper Return Flow ==
+
+User -> PaymentService : submits payment request
+PaymentService -> PaymentService : validates payment data
+PaymentService -> BankGateway : to process payment
+BankGateway --> PaymentService : returns payment result
+PaymentService -> NotificationService : to send confirmation
+NotificationService --> PaymentService : returns delivery status
+PaymentService --> User : returns final confirmation
+
+== Nested Call Chain ==
+
+Admin -> ReportService : requests report
+ReportService -> DatabaseService : for data
+DatabaseService -> CacheService : to check cache
+CacheService --> DatabaseService : returns cache miss
+DatabaseService -> DatabaseService : queries main database
+DatabaseService --> ReportService : returns report data
+ReportService -> ReportService : formats the data
+ReportService --> Admin : returns formatted report
+
+@enduml

@@ -1,0 +1,91 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Service boundaries
+rectangle "NotificationService" as NotificationService {
+  frame "EmailNotifier" as EmailNotifier
+  frame "PushNotifier" as PushNotifier
+  frame "SMSNotifier" as SMSNotifier
+}
+rectangle "OrderService" as OrderService {
+  frame "OrderManagement" as OrderManagement
+  frame "Payment" as Payment
+  frame "Shipping" as Shipping
+}
+rectangle "ProductService" as ProductService {
+  frame "Catalog" as Catalog
+  frame "Inventory" as Inventory
+  frame "Pricing" as Pricing
+}
+rectangle "UserService" as UserService {
+  frame "Authentication" as Authentication
+  frame "Preferences" as Preferences
+  frame "Profile" as Profile
+}
+
+' Ungrouped subdomains
+frame "inventory_system" as inventory_system
+frame "notification_queue" as notification_queue
+frame "order_db" as order_db
+frame "payment_gateway" as payment_gateway
+frame "product_db" as product_db
+frame "shipping_provider" as shipping_provider
+frame "user_db" as user_db
+
+' Domain queues
+queue "Authentication events" as Authentication_events
+queue "Catalog events" as Catalog_events
+queue "Inventory events" as Inventory_events
+queue "OrderManagement events" as OrderManagement_events
+queue "Payment events" as Payment_events
+
+' Subdomain connections
+PushNotifier --> notification_queue
+OrderManagement --> order_db
+OrderManagement --> OrderManagement_events
+Payment --> payment_gateway
+Payment --> Payment_events
+Shipping --> shipping_provider
+Catalog --> product_db
+Catalog --> Catalog_events
+Inventory --> inventory_system
+Inventory --> Inventory_events
+Authentication --> Authentication_events
+Authentication --> user_db
+Preferences --> user_db
+Profile --> user_db
+OrderManagement_events --> EmailNotifier
+Payment_events --> OrderManagement
+Catalog_events --> PushNotifier
+Inventory_events --> Catalog
+Authentication_events --> EmailNotifier
+Authentication_events --> Profile
+
+@enduml

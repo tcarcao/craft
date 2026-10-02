@@ -1,0 +1,49 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "Authentication" as Authentication
+frame "Notifier" as Notifier
+frame "Profile" as Profile
+
+' Actors
+actor "Business_User" as Business_User
+control "Database" as Database
+
+' Domain queues
+queue "Authentication events" as Authentication_events
+
+' Workflow flows
+Business_User --> Authentication : 1. creates Account
+Authentication -> Authentication : 2. validates email format
+Authentication ->> Database : 3. to check email uniqueness
+Profile -> Profile : 4. creates user profile
+Authentication ->> Authentication_events : 5. User Registered
+Authentication_events --> Profile : 6. User Registered
+Profile ->> Database : 7. to store profile data
+Profile ->> Notifier : 8. to send welcome email
+
+@enduml

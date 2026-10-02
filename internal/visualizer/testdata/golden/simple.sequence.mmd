@@ -1,0 +1,100 @@
+sequenceDiagram
+    actor Customer as Customer
+    participant Offering as Offering
+    participant Order as Order
+    participant PaymentProvider as PaymentProvider
+    actor Business_User as Business_User
+    participant VASScheduling as VASScheduling
+    participant Wallet as Wallet
+    participant OrderManagement as OrderManagement
+    participant OrderFulfilment as OrderFulfilment
+    participant WalletItemAddition as WalletItemAddition
+    actor CRON as CRON
+    participant OrderMgmt as OrderMgmt
+    actor VASMgmt as VASMgmt
+    participant Subscription as Subscription
+    participant Susbscription as Susbscription
+    participant External as External
+    Note over Customer,Susbscription: C2C user purchases
+    Customer->>Offering: decides purchase a VAS
+    Offering-->>Customer: returns available offering
+    Customer->>Order: asks Order to create an order
+    Order->>Order: creates a draft Order
+    Order-->>Customer: returns the url of the payment providers
+    Customer->>PaymentProvider: pays the order
+    PaymentProvider->>PaymentProvider: confirms payment
+    PaymentProvider-)PaymentProvider: notifies "PaymentCompleted"
+    PaymentProvider-)Order: PaymentCompleted
+    Order->>Order: marks the Order as Paid
+    Note over Customer,Susbscription: VAS scheduled and no VAS in Wallet
+    Business_User->>VASScheduling: schedules VAS
+    VASScheduling->>Wallet: to reserve a VAS
+    Wallet->>Wallet: creates an unconfirmed VAS reservation
+    Wallet-)Wallet: notifies "VAS Addition Request Approved"
+    VASScheduling->>VASScheduling: drafts a VAS schedule
+    Wallet-)VASScheduling: VAS Addition Request Approved
+    VASScheduling->>OrderManagement: to create an Order
+    OrderManagement-)OrderManagement: notifies "Order Created"
+    OrderManagement->>OrderManagement: marks the Order as payment deferred
+    OrderManagement-)OrderManagement: notifies "Order payment deferred"
+    OrderManagement-)OrderFulfilment: Order payment deferred
+    External->>OrderFulfilment: Order payment deferred
+    OrderFulfilment->>WalletItemAddition: to fulfil the addition request
+    WalletItemAddition->>Wallet: to add VAS
+    Wallet-)Wallet: notifies "VAS added"
+    Wallet-)OrderFulfilment: VAS added
+    OrderFulfilment->>OrderManagement: to mark the Order as fulfiled
+    OrderManagement-)OrderManagement: notifies "Order completed"
+    Note over Customer,Susbscription: VAS scheduled and VAS in Wallet
+    Business_User->>VASScheduling: schedules VAS
+    VASScheduling->>Wallet: to reserve a VAS
+    Wallet->>Wallet: reserves a VAS
+    Wallet-)Wallet: notifies "VAS Reserved"
+    VASScheduling->>VASScheduling: creates a VAS schedule
+    Note over Customer,Susbscription: VAS unscheduled
+    Business_User->>VASScheduling: unschedules VAS scheduling
+    VASScheduling->>Wallet: to cancel the VAS reservation
+    Wallet->>Wallet: cancels VAS reservation
+    Wallet-)Wallet: notifies "VAS Reservation Canceled"
+    VASScheduling->>VASScheduling: cancels the VAS schedule
+    Note over Customer,Susbscription: VAS expires
+    CRON->>Wallet: identifies VAS expiring
+    Wallet->>Wallet: removes VAS
+    Wallet-)Wallet: notifies "VAS Expired"
+    Note over Customer,Susbscription: Purchase VAS schedule and its renewal (ideal scenario)
+    Business_User->>OrderMgmt: schedules VAS
+    OrderMgmt->>OrderMgmt: creates an "Order with two items to fulfil: VAS and VAS Subscription"
+    OrderMgmt-)OrderMgmt: notifies "Order Created"
+    OrderMgmt->>OrderMgmt: marks the Order as payment deferred
+    OrderMgmt-)OrderMgmt: notifies "Order payment deferred"
+    External->>OrderFulfilment: Order payment deferred
+    OrderMgmt-)OrderFulfilment: Order payment deferred
+    OrderFulfilment->>VASMgmt: to schedule the VAS
+    VASMgmt->>VASMgmt: schedules the VAS for future application
+    VASMgmt-)VASMgmt: notifies "VAS scheduled"
+    VASMgmt-)OrderFulfilment: VAS scheduled
+    OrderFulfilment->>Subscription: to create a VAS Subscription
+    Subscription->>Subscription: creates a VAS Subscription with the details
+    OrderFulfilment->>OrderFulfilment: marks the vas subscription item as Fulfiled
+    Note over Customer,Susbscription: Purchase VAS schedule and its renewal (current possible scenario)
+    Business_User->>VASMgmt: schedules VAS
+    VASMgmt->>VASMgmt: schedules a VAS for future application
+    VASMgmt-)VASMgmt: notifies "VAS scheduled with subscription included"
+    VASMgmt-)Subscription: VAS scheduled with subscription included
+    Subscription->>Subscription: creates a VAS Subscription with the details
+    Note over Customer,Susbscription: Scheduled VAS Applied
+    VASMgmt->>VASMgmt: identifies scheduled VAS to apply
+    VASMgmt->>VASMgmt: applies a VAS and stores details until when its valid
+    VASMgmt-)VASMgmt: notifies "VAS Applied"
+    Note over Customer,Susbscription: VAS Renewal Flow
+    VASMgmt->>VASMgmt: identifies VAS expired
+    VASMgmt->>VASMgmt: marks the VAS as expired
+    VASMgmt-)VASMgmt: notifies "VAS expired"
+    VASMgmt-)Subscription: VAS expired
+    Subscription->>Subscription: checks if VAS has active associated subscription
+    Subscription->>VASMgmt: to "schedule/apply a new VAS"
+    Subscription->>Subscription: renews the VAS Subscription with the VAS
+    Susbscription-)Susbscription: notifies "VAS Subscription Renewed"
+    Note over Customer,Susbscription: Stop Auto-Renewal
+    Business_User->>Subscription: stops VAS Auto-Renewal
+    Subscription->>Subscription: cancels the subscription

@@ -1,0 +1,79 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Ungrouped subdomains
+frame "Customer" as Customer
+frame "Offering" as Offering
+frame "Order" as Order
+frame "OrderFulfilment" as OrderFulfilment
+frame "OrderManagement" as OrderManagement
+frame "OrderMgmt" as OrderMgmt
+frame "PaymentProvider" as PaymentProvider
+frame "Subscription" as Subscription
+frame "Susbscription" as Susbscription
+frame "VASMgmt" as VASMgmt
+frame "VASScheduling" as VASScheduling
+frame "Wallet" as Wallet
+frame "WalletItemAddition" as WalletItemAddition
+
+' Domain queues
+queue "OrderManagement events" as OrderManagement_events
+queue "OrderMgmt events" as OrderMgmt_events
+queue "PaymentProvider events" as PaymentProvider_events
+queue "Susbscription events" as Susbscription_events
+queue "VASMgmt events" as VASMgmt_events
+queue "Wallet events" as Wallet_events
+
+' Subdomain connections
+Offering --> Customer
+Order --> Customer
+OrderFulfilment --> OrderManagement
+OrderFulfilment --> Subscription
+OrderFulfilment --> VASMgmt
+OrderFulfilment --> WalletItemAddition
+OrderManagement --> OrderManagement_events
+OrderMgmt --> OrderMgmt_events
+PaymentProvider --> PaymentProvider_events
+Subscription --> VASMgmt
+Susbscription --> Susbscription_events
+VASMgmt --> VASMgmt_events
+VASScheduling --> OrderManagement
+VASScheduling --> Wallet
+Wallet --> Wallet_events
+WalletItemAddition --> Wallet
+OrderManagement_events --> OrderFulfilment
+OrderMgmt_events --> OrderFulfilment
+PaymentProvider_events --> Order
+VASMgmt_events --> OrderFulfilment
+VASMgmt_events --> Subscription
+Wallet_events --> OrderFulfilment
+Wallet_events --> VASScheduling
+
+@enduml

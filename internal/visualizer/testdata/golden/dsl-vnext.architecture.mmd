@@ -1,0 +1,6 @@
+flowchart LR
+    Subscriptions["Subscriptions"]
+    re_billing["re/billing"]
+    Subscriptions_events[("Subscriptions events")]
+    Subscriptions --> Subscriptions_events
+    Subscriptions --> re_billing

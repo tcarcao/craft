@@ -1,0 +1,48 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Service boundaries
+rectangle "UserService" as UserService {
+  frame "Authentication" as Authentication
+  frame "Profile" as Profile
+}
+
+' Ungrouped subdomains
+frame "Notifier" as Notifier
+
+' Domain queues
+queue "Authentication events" as Authentication_events
+
+' Subdomain connections
+Authentication --> Authentication_events
+Profile --> Notifier
+Authentication_events --> Profile
+
+@enduml
