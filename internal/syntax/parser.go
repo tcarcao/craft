@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/lexer"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
@@ -447,8 +448,8 @@ func (p *Parser) parseDomainsBlock() []model.Diagnostic {
 
 // parseBoundedContextList parses a list of identifiers until `}` or EOF.
 // These are the bounded context names inside a domain block.
-// Duplicates are silently deduplicated (keeping first occurrence), matching
-// ANTLR behavior and the v1 spec.
+// Duplicates are silently deduplicated (keeping first occurrence), as the v1
+// spec requires.
 // Emits BoundedContext nodes into the current builder scope.
 func (p *Parser) parseBoundedContextList() []model.Diagnostic {
 	seen := make(map[string]bool)
@@ -469,7 +470,7 @@ func (p *Parser) parseBoundedContextList() []model.Diagnostic {
 				p.consumeAs(SyntaxKindIdent)
 				p.builder.FinishNode()
 			} else {
-				// Duplicate: consume but do not wrap (matches ANTLR dedup behavior).
+				// Duplicate: consume but do not wrap (first occurrence wins).
 				p.consume()
 			}
 		} else if tok.Type == lexer.TokenError {
@@ -1162,7 +1163,7 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 	// external: when <actor> <verb> [connector_word] <phrase>
 	p.consumeAs(SyntaxKindIdent)
 
-	// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
+	// connector_word: a|an|the|as|to|from|in|on|at|for|with|by
 	connTok := p.peek()
 	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == verbTok.Line {
 		p.consumeAs(SyntaxKindIdent)
@@ -1176,7 +1177,7 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 	return diags
 }
 
-// isConnectorWord returns true for ANTLR grammar connector_word tokens.
+// isConnectorWord reports whether v is a grammar connector_word.
 // Grammar rule: 'a' | 'an' | 'the' | 'as' | 'to' | 'from' | 'in' | 'on' | 'at' | 'for' | 'with' | 'by'
 func isConnectorWord(v string) bool {
 	switch v {
@@ -1244,7 +1245,7 @@ func (p *Parser) parseAction() []model.Diagnostic {
 	default:
 		// internal_action: <domain> <verb> [connector_word] <phrase>
 		p.consumeAs(SyntaxKindIdent)
-		// connector_word matches ANTLR grammar: a|an|the|as|to|from|in|on|at|for|with|by
+		// connector_word: a|an|the|as|to|from|in|on|at|for|with|by
 		connTok := p.peek()
 		if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == actionLine {
 			p.consumeAs(SyntaxKindIdent)
@@ -1350,7 +1351,7 @@ func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 		}
 	}
 
-	// Optional connector_word before phrase (ANTLR grammar: return_action connector_word? phrase)
+	// Optional connector_word before phrase (return_action: connector_word? phrase)
 	connTok := p.peek()
 	if connTok.Type == lexer.TokenIdent && isConnectorWord(connTok.Value) && connTok.Line == line {
 		p.consumeAs(SyntaxKindIdent)
@@ -1432,7 +1433,7 @@ func (p *Parser) parseOpAnnotation() []model.Diagnostic {
 		diags = append(diags, p.diagEmptyOpAnnotation(lbTok, rbTok))
 	}
 
-	if t := p.peek(); (t.Type == lexer.TokenIdent || isAnyKeywordAsIdent(t.Type)) && isProtocolVerb(t.Value) {
+	if t := p.peek(); (t.Type == lexer.TokenIdent || isAnyKeywordAsIdent(t.Type)) && lang.IsProtocolVerb(t.Value) {
 		p.consumeAs(SyntaxKindOpVerb)
 	}
 
@@ -2405,7 +2406,7 @@ func (p *Parser) parseEdgeStmt() []model.Diagnostic {
 	diags = append(diags, p.parseEdgeEndpoint()...) // left endpoint
 
 	verb := p.peek()
-	if verb.Type == lexer.TokenIdent && isEdgeKeyword(verb.Value) {
+	if verb.Type == lexer.TokenIdent && lang.IsEdgeVerb(verb.Value) {
 		p.consumeAs(SyntaxKindEdgeKw)
 	} else {
 		diags = append(diags, p.diagUnexpected(verb, "a relationship pattern: directional (customer_supplier/conformist/anticorruption_layer/open_host_service/published_language) or symmetric (partnership/shared_kernel/separate_ways)"))
@@ -2484,33 +2485,6 @@ func (p *Parser) parseEdgeEndpoint() []model.Diagnostic {
 	}
 	p.consumeAs(SyntaxKindIdent) // guarantee forward progress either way
 	return diags
-}
-
-// edgeKeywords is the single source of truth for context_map relationship verbs
-// (DDD strategic context-mapping patterns). LEFT = upstream for directional verbs.
-var edgeKeywords = []string{
-	// directional
-	"customer_supplier", "conformist", "anticorruption_layer",
-	"open_host_service", "published_language",
-	// symmetric
-	"partnership", "shared_kernel", "separate_ways",
-}
-
-// isEdgeKeyword reports whether s is a recognised context_map edge verb.
-func isEdgeKeyword(s string) bool {
-	for _, k := range edgeKeywords {
-		if k == s {
-			return true
-		}
-	}
-	return false
-}
-
-// EdgeKeywords returns the context_map edge verbs the parser accepts. Exported so
-// sema (and future docs/tooling) can verify its own verb classification stays in
-// sync instead of hand-copying the list.
-func EdgeKeywords() []string {
-	return append([]string(nil), edgeKeywords...)
 }
 
 // parseGlossaryBlock parses: glossary [domain] { relation_stmt* }
@@ -2597,7 +2571,7 @@ func (p *Parser) parseGlossaryRelation() []model.Diagnostic {
 	diags = append(diags, p.parseEdgeEndpoint()...) // left endpoint
 
 	verb := p.peek()
-	if verb.Type == lexer.TokenIdent && isGlossaryVerb(verb.Value) {
+	if verb.Type == lexer.TokenIdent && lang.IsGlossaryVerb(verb.Value) {
 		p.consumeAs(SyntaxKindEdgeKw)
 	} else {
 		diags = append(diags, p.diagUnexpected(verb, "a glossary relation verb: same_as, contrasts, or distinct_from"))

@@ -551,7 +551,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 		return protocol.Location{}, false
 	}
 	switch target.Kind {
-	case "actor":
+	case lang.ParticipantActor:
 		sym := target.Actor
 		if sym.Line == 0 {
 			return protocol.Location{}, false
@@ -567,7 +567,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
-	case "domain":
+	case lang.ParticipantDomain:
 		sym := target.Domain
 		if sym.Line == 0 {
 			return protocol.Location{}, false
@@ -583,7 +583,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: startChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
-	case "bounded_context":
+	case lang.ParticipantBoundedContext:
 		if target.BCLine > 0 {
 			col := uint32(0)
 			if target.BCColumn > 0 {
@@ -613,7 +613,7 @@ func resolveUseCaseRefToLocation(rm sema.ResolutionMap, uri, name string, line i
 				End:   protocol.Position{Line: uint32(sym.Line - 1), Character: domFbStartChar + green.UTF16Len(sym.Name)},
 			},
 		}, true
-	case "service":
+	case lang.ParticipantService:
 		sym := target.Service
 		if sym.Line == 0 {
 			return protocol.Location{}, false
@@ -1744,13 +1744,13 @@ func hoverForUseCaseRef(rm sema.ResolutionMap, uri, name string, line int) strin
 		return ""
 	}
 	switch target.Kind {
-	case "actor":
+	case lang.ParticipantActor:
 		return "actor: " + target.Actor.Name + " (" + string(target.Actor.Type) + ")"
-	case "domain":
+	case lang.ParticipantDomain:
 		return "domain: " + target.Domain.Name
-	case "bounded_context":
+	case lang.ParticipantBoundedContext:
 		return "bounded context: " + name + " (domain: " + target.Domain.Name + ")"
-	case "service":
+	case lang.ParticipantService:
 		detail := "service: " + target.Service.Name
 		if target.Service.Language != "" {
 			detail += " (" + target.Service.Language + ")"
@@ -1877,15 +1877,15 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 			// Only rename refs that point to the symbol declared in the cursor's file.
 			var targetURI string
 			switch target.Kind {
-			case "actor":
+			case lang.ParticipantActor:
 				if target.Actor != nil {
 					targetURI = target.Actor.URI
 				}
-			case "domain":
+			case lang.ParticipantDomain:
 				if target.Domain != nil {
 					targetURI = target.Domain.URI
 				}
-			case "service":
+			case lang.ParticipantService:
 				if target.Service != nil {
 					targetURI = target.Service.URI
 				}
@@ -2792,13 +2792,13 @@ func useCaseRefTokenType(rm sema.ResolutionMap, uri, name string, line int) (uin
 		return 0, false
 	}
 	switch target.Kind {
-	case "actor":
+	case lang.ParticipantActor:
 		return semanticTokenTypeIndexConst(semanticTokenTypeActorRef), true
-	case "domain":
+	case lang.ParticipantDomain:
 		return semanticTokenTypeIndexConst(semanticTokenTypeDomainName), true
-	case "bounded_context":
+	case lang.ParticipantBoundedContext:
 		return semanticTokenTypeIndexConst(semanticTokenTypeContextName), true
-	case "service":
+	case lang.ParticipantService:
 		return semanticTokenTypeIndexConst(semanticTokenTypeServiceName), true
 	}
 	return 0, false

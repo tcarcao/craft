@@ -19,19 +19,6 @@ import (
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
-// edgeRelationshipVerbs is sema's recognition set for context_map edge verbs:
-// the 8 DDD strategic context-mapping patterns. It MUST stay in sync with the
-// parser's edgeKeywords (asserted by TestEdgeVerbVocabulariesInSync). Recognition
-// only — endpoint resolution, endpoint-not-bc, self-relationship, and redundant
-// symmetric lint are LATER tasks and are deliberately not implemented here.
-var edgeRelationshipVerbs = map[string]bool{
-	// directional
-	"customer_supplier": true, "conformist": true, "anticorruption_layer": true,
-	"open_host_service": true, "published_language": true,
-	// symmetric
-	"partnership": true, "shared_kernel": true, "separate_ways": true,
-}
-
 // SlugRefSite records a single kind-prefixed node-slug reference (domain:,
 // bc:, or service: — term: is skipped, since craft tracks no term
 // declarations at all; that resolution is hub-only) for cross-file
@@ -325,20 +312,18 @@ func validateContextMapEdges(uri string, file syntax.File, li green.LineIndex, h
 }
 
 // classifyEdgeVerb recognises one context_map edge verb. A verb in
-// edgeRelationshipVerbs (the 8 DDD patterns) is accepted with NO diagnostic —
-// endpoint resolution / endpoint-not-bc / self-relationship / redundant lint are
-// LATER tasks. The default branch is unreachable via .craft source (the parser's
-// isEdgeKeyword gates the same vocabulary, kept in sync by
-// TestEdgeVerbVocabulariesInSync); it exists only to make parser/sema drift a
-// loud internal error and is unit-tested directly.
+// lang's edge verbs (the 8 DDD patterns) are accepted with no diagnostic. The
+// parser accepts exactly the same table, so the error branch is unreachable
+// from .craft source; it stays as a loud internal error and is unit-tested
+// directly.
 func classifyEdgeVerb(uri, verb, left string, leftLine, leftCol int) []model.Diagnostic {
-	if edgeRelationshipVerbs[verb] {
+	if lang.IsEdgeVerb(verb) {
 		return nil
 	}
 	startChar := colToLSP(leftCol)
 	return []model.Diagnostic{{
 		Code:      "craft/sema/unrecognised-edge-verb",
-		Message:   fmt.Sprintf("edge verb %q is not a recognised relationship pattern (internal: parser accepted it via isEdgeKeyword but sema doesn't classify it — parser/sema drift, not a user error)", verb),
+		Message:   fmt.Sprintf("edge verb %q is not a recognised relationship pattern (internal error, not a user error)", verb),
 		Severity:  model.SeverityError,
 		SourceURI: uri,
 		Range: model.Range{
@@ -678,7 +663,7 @@ func glossaryLintDiags(
 // across the whole workspace resolution loop so duplicates split across
 // files still dedupe.
 func redundantRelationshipDiag(ws WorkspaceSymbols, site ContextMapEdgeSite, seen map[string]bool) []model.Diagnostic {
-	if !syntax.EdgeVerbSymmetric(site.Verb) {
+	if v, _ := lang.LookupEdgeVerb(site.Verb); !v.Symmetric() {
 		return nil
 	}
 

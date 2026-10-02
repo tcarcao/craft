@@ -1,8 +1,7 @@
-// Package sema — lint rules for Craft DSL (v2 typed views, B5).
-// These rules mirror the heuristics in internal/linter/ but operate on
-// the syntax tree typed views (internal/syntax/ast.go) and the workspace
-// symbol table rather than the ANTLR parser.DSLModel. The old linter
-// package remains intact until ANTLR is deleted in S12.
+// Package sema — lint rules for Craft DSL. They read the syntax tree's typed
+// views (internal/syntax/ast.go) and the workspace symbol table;
+// LintCommunication additionally reads the interactions derived from the
+// resolved model.
 package sema
 
 import (
@@ -472,7 +471,7 @@ func LintCommunication(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSy
 				// R2a/R2b: direction-inverted / bidirectional, directional
 				// verbs only (symmetric verbs like separate_ways/partnership/
 				// shared_kernel have no upstream/downstream distinction).
-				if _, ok := syntax.LookupEdgeVerbMeta(verb); !ok || syntax.EdgeVerbSymmetric(verb) {
+				if v, ok := lang.LookupEdgeVerb(verb); !ok || v.Symmetric() {
 					continue
 				}
 

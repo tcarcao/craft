@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
 
@@ -100,13 +101,13 @@ func (ws WorkspaceSymbols) useCaseRefTarget(p model.Participant) (UseCaseRefTarg
 	switch p.Kind {
 	case model.ParticipantActor:
 		a := ws.Actors[p.ID]
-		return UseCaseRefTarget{Kind: "actor", Actor: &a}, true
+		return UseCaseRefTarget{Kind: lang.ParticipantActor, Actor: &a}, true
 	case model.ParticipantDomain:
 		d := ws.Domains[p.ID]
-		return UseCaseRefTarget{Kind: "domain", Domain: &d}, true
+		return UseCaseRefTarget{Kind: lang.ParticipantDomain, Domain: &d}, true
 	case model.ParticipantService:
 		s := ws.Services[p.ID]
-		return UseCaseRefTarget{Kind: "service", Service: &s}, true
+		return UseCaseRefTarget{Kind: lang.ParticipantService, Service: &s}, true
 	case model.ParticipantBoundedContext:
 		domain, name, _ := strings.Cut(p.ID, "/")
 		d := ws.Domains[domain]
@@ -116,7 +117,7 @@ func (ws WorkspaceSymbols) useCaseRefTarget(p model.Participant) (UseCaseRefTarg
 }
 
 func (ws WorkspaceSymbols) bcTarget(d DomainSymbol, name string) UseCaseRefTarget {
-	t := UseCaseRefTarget{Kind: "bounded_context", Domain: &d}
+	t := UseCaseRefTarget{Kind: lang.ParticipantBoundedContext, Domain: &d}
 	// Positions are indexed by bare BC name.
 	if pos, ok := ws.BCPositions[name]; ok {
 		t.BCLine = pos.Line

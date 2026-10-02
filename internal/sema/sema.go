@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -230,13 +231,13 @@ type useCaseRefKey struct {
 
 // UseCaseRefTarget is the resolved symbol for a use-case reference.
 type UseCaseRefTarget struct {
-	Kind string // "actor" | "domain" | "bounded_context" | "service"
+	Kind lang.ParticipantKind // actor, domain, bounded context or service
 	// One of the following is populated depending on Kind:
 	Actor   *ActorSymbol
 	Domain  *DomainSymbol
 	Service *ServiceSymbol
 	// BCLine, BCColumn, BCURI carry the position of the bounded context's own
-	// declaration token (inside its parent domain body). Set when Kind == "bounded_context".
+	// declaration token (inside its parent domain body). Set when Kind is lang.ParticipantBoundedContext.
 	BCLine   int
 	BCColumn int
 	BCURI    string

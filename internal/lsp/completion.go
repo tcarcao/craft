@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"strings"
 
 	"go.lsp.dev/protocol"
@@ -424,7 +425,7 @@ func domainAndServiceSymbolCompletions(ws *workspace.Workspace) *protocol.Comple
 // verbs (GET, POST, GRPC, TOPIC, ...) as keyword completion items. Offered only
 // at an operation annotation's head position; see isOpAnnotationHead.
 func protocolVerbCompletions() *protocol.CompletionList {
-	verbs := syntax.ProtocolVerbs()
+	verbs := lang.ProtocolVerbs()
 	items := make([]protocol.CompletionItem, len(verbs))
 	for i, v := range verbs {
 		items[i] = protocol.CompletionItem{
