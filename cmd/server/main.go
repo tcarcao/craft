@@ -138,17 +138,6 @@ func (s *Server) handleDownloadDiagram() http.HandlerFunc {
 	}
 }
 
-func (s *Server) respondWithError(w http.ResponseWriter, err error, input string, c4, context, sequence bool) {
-	s.tmpl.Execute(w, Response{
-		Success:      false,
-		Error:        err.Error(),
-		Input:        input,
-		WantC4:       c4,
-		WantContext:  context,
-		WantSequence: sequence,
-	})
-}
-
 // Domain-specific preview request
 type DomainPreviewRequest struct {
 	DSL         string `json:"dsl"`

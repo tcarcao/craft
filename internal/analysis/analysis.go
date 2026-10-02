@@ -1,6 +1,6 @@
 // Package analysis turns Craft source files into a model: the merged document
 // plus every diagnostic. It is the one place the pipeline is assembled — parse,
-// project, collect symbols, merge, resolve, lint — and every caller (pkg/craft,
+// project, collect symbols, merge, resolve, derive interactions, lint — and every caller (pkg/craft,
 // the LSP workspace, the CLI, the HTTP server) goes through it.
 //
 // It has two stages. File is per file and pure, so callers may cache its result
@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/interaction"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -108,8 +109,9 @@ func Workspace(files []FileResult) Result {
 		lintDiags := sema.LintWorkspace(perFileTrees, ws, perFileLIs)
 		res.Symbols, res.Resolution = ws, rm
 		resolveParticipants(res.Doc, ws)
+		commDiags := sema.LintCommunication(perFileTrees, ws, perFileLIs, interaction.Derive(res.Doc))
 
-		wsDiags := append(append(mergeDiags, resolveDiags...), lintDiags...)
+		wsDiags := append(append(append(mergeDiags, resolveDiags...), lintDiags...), commDiags...)
 		res.WorkspaceDiagnostics = sortDiagnostics(wsDiags)
 		all = append(all, wsDiags...)
 	}

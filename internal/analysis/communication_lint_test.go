@@ -1,28 +1,18 @@
-package sema
+package analysis_test
 
 import (
 	"testing"
 
-	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/model"
-	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
-// buildLintWorkspace runs the real single-file pipeline (AnalyzeFile ->
-// MergeWorkspaceSymbols) over src and returns the pieces LintWorkspace needs:
-// the per-file syntax tree map, the merged workspace symbol table, and the
-// per-file line-index map. Mirrors analyzeRelationshipSrc in
-// validate_relationship_test.go, but stops short of AnalyzeWorkspace since
-// these tests exercise the lint pass directly.
-func buildLintWorkspace(t *testing.T, src string) (map[string]syntax.SyntaxNode, WorkspaceSymbols, map[string]green.LineIndex) {
-	t.Helper()
-	g, li, _ := syntax.Parse(src)
-	tree := syntax.Root(g)
-	uri := "file:///lint.craft"
-	syms, _ := AnalyzeFile(uri, tree, li)
-	perFile := map[string]Symbols{uri: syms}
-	ws, _ := MergeWorkspaceSymbols(perFile)
-	return map[string]syntax.SyntaxNode{uri: tree}, ws, map[string]green.LineIndex{uri: li}
+// The context-map consistency lints compare declared context_map edges with
+// the communication derived from use cases (internal/interaction), so they run
+// on the analyzed model rather than on sema's symbols alone.
+
+// lintModel analyzes src as a model of one file and returns every diagnostic.
+func lintModel(src string) []model.Diagnostic {
+	return workspaceOf(map[string]string{"lint.craft": src}).Diagnostics
 }
 
 func countCode(diags []model.Diagnostic, code string) int {
@@ -46,8 +36,7 @@ use_case "Test" {
     billing asks vas to check eligibility
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/separate-ways-violation"); n != 1 {
 		t.Fatalf("expected 1 craft/lint/separate-ways-violation, got %d: %+v", n, diags)
 	}
@@ -70,8 +59,7 @@ use_case "Test" {
     billing validates something
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/separate-ways-violation"); n != 0 {
 		t.Fatalf("expected 0 craft/lint/separate-ways-violation, got %d: %+v", n, diags)
 	}
@@ -80,8 +68,8 @@ use_case "Test" {
 // TestContextMapConsistency_SeparateWaysViolation_Async: a separate_ways edge
 // whose endpoints communicate via the ASYNC notifies/listens event-pairing
 // path (not `asks`) must also fire exactly one separate-ways-violation
-// warning. This is the crux of buildDependencyEdges' async publisher/listener
-// pairing (lint.go's publishersByEvent/listenersByEvent matching), which had
+// warning. This is the crux of the async publisher/listener
+// pairing (interaction.Derive pairs every publisher with every listener), which had
 // no direct test coverage prior to this one.
 func TestContextMapConsistency_SeparateWaysViolation_Async(t *testing.T) {
 	src := `domain re { billing vas }
@@ -95,8 +83,7 @@ use_case "Consume" {
     vas validates payload
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/separate-ways-violation"); n != 1 {
 		t.Fatalf("expected 1 craft/lint/separate-ways-violation, got %d: %+v", n, diags)
 	}
@@ -123,8 +110,7 @@ use_case "Consume" {
     vas validates payload
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/separate-ways-violation"); n != 0 {
 		t.Fatalf("expected 0 craft/lint/separate-ways-violation, got %d: %+v", n, diags)
 	}
@@ -148,8 +134,7 @@ use_case "Test" {
     billing asks vas to check eligibility
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 1 {
 		t.Fatalf("expected 1 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
 	}
@@ -175,8 +160,7 @@ use_case "Test" {
     vas asks billing to check eligibility
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 0 {
 		t.Fatalf("expected 0 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
 	}
@@ -200,8 +184,7 @@ use_case "Backward" {
     billing asks vas to refund
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/relationship-bidirectional"); n != 1 {
 		t.Fatalf("expected 1 craft/lint/relationship-bidirectional, got %d: %+v", n, diags)
 	}
@@ -232,8 +215,7 @@ use_case "Consume" {
     vas validates payload
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/relationship-direction-inverted"); n != 0 {
 		t.Fatalf("expected 0 craft/lint/relationship-direction-inverted, got %d: %+v", n, diags)
 	}
@@ -255,8 +237,7 @@ use_case "Test" {
     billing asks ledger to record entry
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/unclassified-communication"); n != 1 {
 		t.Fatalf("expected 1 craft/lint/unclassified-communication, got %d: %+v", n, diags)
 	}
@@ -278,8 +259,7 @@ use_case "Test" {
     billing asks ledger to record entry
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/unclassified-communication"); n != 0 {
 		t.Fatalf("expected 0 craft/lint/unclassified-communication, got %d: %+v", n, diags)
 	}
@@ -297,8 +277,7 @@ use_case "Test" {
     billing validates something
 }
 `
-	perFileTrees, ws, lis := buildLintWorkspace(t, src)
-	diags := LintWorkspace(perFileTrees, ws, lis)
+	diags := lintModel(src)
 	if n := countCode(diags, "craft/lint/unclassified-communication"); n != 0 {
 		t.Fatalf("expected 0 craft/lint/unclassified-communication, got %d: %+v", n, diags)
 	}
