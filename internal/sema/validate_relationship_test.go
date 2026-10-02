@@ -10,7 +10,7 @@ import (
 // analyzeRelationshipSrc runs the real cross-file pipeline
 // (AnalyzeFile -> MergeWorkspaceSymbols -> AnalyzeWorkspace) over a single
 // source string and returns the workspace-pass diagnostics — mirroring the
-// broken-fixture harness in internal/parser_diff/diagnostics_test.go. Whitebox
+// broken-fixture harness in internal/corpustest/diagnostics_test.go. Whitebox
 // so it can also exercise resolveBCRef directly.
 func analyzeRelationshipSrc(t *testing.T, src string) []model.Diagnostic {
 	t.Helper()

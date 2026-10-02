@@ -1,4 +1,4 @@
-package syntax_test
+package analysis_test
 
 import (
 	"strings"
@@ -19,11 +19,11 @@ func TestProject_ActionPhrase_TightPunctuation_NoInsertedSpaces(t *testing.T) {
   when Customer initiates flow
     A asks B for (1! & 2!)
 }`
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	if len(doc.UseCases) != 1 || len(doc.UseCases[0].Scenarios) != 1 {
 		t.Fatalf("unexpected projection shape: %+v", doc.UseCases)
 	}

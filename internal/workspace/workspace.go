@@ -14,7 +14,6 @@ package workspace
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -23,22 +22,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/analysis"
 	"github.com/tcarcao/craft/v2/internal/sema"
-	"github.com/tcarcao/craft/v2/internal/syntax"
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
-// File holds the cached parse result for a single .craft document.
+// File holds the cached analysis of a single .craft document: the per-file
+// stage of internal/analysis (tree, line index, symbols, per-file diagnostics,
+// unresolved document) plus the source it came from.
 type File struct {
+	analysis.FileResult
 	URI         string
 	Content     string // kept: hash check and UTF16Col source
 	ContentHash [32]byte
-	Green       *green.GreenNode // replaces SyntaxTree
-	LineIndex   green.LineIndex  // built once per open/change
-	Diagnostics []craft.Diagnostic
-	// Symbols is the per-file symbol table, computed after parsing.
-	Symbols sema.Symbols
 }
 
 // Workspace is the multi-file index. It is safe for concurrent access.
@@ -176,61 +172,30 @@ func (w *Workspace) parseAndStore(uri, content string) {
 		return // nothing changed
 	}
 
-	file := &File{
+	w.files[uri] = &File{
+		FileResult:  analysis.File(uri, content),
 		URI:         uri,
 		Content:     content,
 		ContentHash: hash,
 	}
-
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				w.log.Error("workspace: parser panic recovered",
-					"uri", uri,
-					"panic", fmt.Sprintf("%v", r),
-				)
-				file.Diagnostics = append(file.Diagnostics, craft.Diagnostic{
-					Code:     "craft/internal/parser-panic",
-					Message:  fmt.Sprintf("internal parser error: %v", r),
-					Severity: craft.SeverityError,
-				})
-			}
-		}()
-		file.Green, file.LineIndex, file.Diagnostics = syntax.Parse(content)
-	}()
-
-	// Collect per-file symbols (no cross-file resolution yet).
-	syms, semaDiags := sema.AnalyzeFile(uri, syntax.Root(file.Green), file.LineIndex)
-	file.Symbols = syms
-	file.Diagnostics = append(file.Diagnostics, semaDiags...)
-
-	w.files[uri] = file
 }
 
 // recomputeResolution rebuilds the workspace-level symbol table, resolution
 // map, and cross-file diagnostics from the current per-file symbol tables.
 // Must be called with w.mu held.
 func (w *Workspace) recomputeResolution() {
-	perFile := make(map[string]sema.Symbols, len(w.files))
-	perFileTrees := make(map[string]syntax.SyntaxNode, len(w.files))
-	perFileLIs := make(map[string]green.LineIndex, len(w.files))
-	for uri, f := range w.files {
-		perFile[uri] = f.Symbols
-		perFileTrees[uri] = syntax.Root(f.Green)
-		perFileLIs[uri] = f.LineIndex
+	results := make([]analysis.FileResult, 0, len(w.files))
+	for _, f := range w.files {
+		results = append(results, f.FileResult)
 	}
-	ws, mergeDiags := sema.MergeWorkspaceSymbols(perFile)
-	rm, resolveDiags := sema.AnalyzeWorkspace(perFile, ws)
-	lintDiags := sema.LintWorkspace(perFileTrees, ws, perFileLIs)
-	w.resolution.ws = ws
-	w.resolution.rm = rm
+	res := analysis.Workspace(results)
+	w.resolution.ws = res.Symbols
+	w.resolution.rm = res.Resolution
 
-	// Index all workspace-level diagnostics by source file URI so
+	// Index the workspace-level diagnostics by source file URI so
 	// publishDiagnostics can merge them into the per-file payload.
-	allWSDiags := append(mergeDiags, resolveDiags...)
-	allWSDiags = append(allWSDiags, lintDiags...)
-	byURI := make(map[string][]craft.Diagnostic, len(allWSDiags))
-	for _, d := range allWSDiags {
+	byURI := make(map[string][]craft.Diagnostic, len(res.WorkspaceDiagnostics))
+	for _, d := range res.WorkspaceDiagnostics {
 		byURI[d.SourceURI] = append(byURI[d.SourceURI], d)
 	}
 	w.resolution.diags = byURI

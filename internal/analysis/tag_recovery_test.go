@@ -1,4 +1,4 @@
-package syntax_test
+package analysis_test
 
 import (
 	"testing"
@@ -22,8 +22,8 @@ import (
 // use case, which is what `craft check` serialises.
 func projectTags(t *testing.T, src string) map[string]string {
 	t.Helper()
-	g, li, _ := syntax.Parse(src)
-	doc := syntax.ProjectFromTree(syntax.Root(g), li, "test.craft")
+	g, _, _ := syntax.Parse(src)
+	doc := projectFile(syntax.Root(g), "test.craft")
 	if len(doc.UseCases) == 0 {
 		t.Fatalf("no use cases projected from %q", src)
 	}
@@ -111,7 +111,7 @@ func TestTagRecovery_TreeStillReproducesSource(t *testing.T) {
 		"use_case \"A\" {\n    tags {\n        journey: { }\n    }\n}\n",
 	} {
 		g, _, _ := syntax.Parse(src)
-		if got := reassembleGreen(g); got != src {
+		if got := sourceOf(syntax.Root(g)); got != src {
 			t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 		}
 	}

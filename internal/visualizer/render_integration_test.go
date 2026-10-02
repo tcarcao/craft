@@ -31,7 +31,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/internal/analysis"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
 	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
@@ -244,9 +244,7 @@ func TestVAS_AllDiagramsRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	greenRoot, li, _ := syntax.Parse(string(src))
-	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := analysis.File("", string(src)).Doc
 
 	viz := visualizer.New()
 	type variant struct {
@@ -292,9 +290,7 @@ func TestVAS_SplitRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	greenRoot, li, _ := syntax.Parse(string(src))
-	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := analysis.File("", string(src)).Doc
 
 	filtered, missing := visualizer.FilterUseCases(doc, []string{"one-time-vas-fulfillment-through-provider-apply"})
 	if len(missing) != 0 {
@@ -330,9 +326,7 @@ func TestVAS_MermaidSequenceRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	greenRoot, li, _ := syntax.Parse(string(src))
-	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := analysis.File("", string(src)).Doc
 
 	mermaidSrc, err := visualizer.New().GenerateSequenceDiagramMermaid(doc, visualizer.DomainModeDetailed)
 	if err != nil {
@@ -401,9 +395,7 @@ func TestVAS_MermaidDomainDetailedRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	greenRoot, li, _ := syntax.Parse(string(src))
-	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := analysis.File("", string(src)).Doc
 
 	mermaidSrc, err := visualizer.New().GenerateDomainDiagramMermaid(doc, visualizer.DomainModeDetailed)
 	if err != nil {
@@ -470,9 +462,7 @@ func TestVAS_MermaidDomainArchitectureRenders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	greenRoot, li, _ := syntax.Parse(string(src))
-	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := analysis.File("", string(src)).Doc
 
 	mermaidSrc, err := visualizer.New().GenerateDomainDiagramMermaid(doc, visualizer.DomainModeArchitecture)
 	if err != nil {
@@ -539,9 +529,7 @@ func TestVAS_MermaidC4Renders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	greenRoot, li, _ := syntax.Parse(string(src))
-	tree := syntax.Root(greenRoot)
-	doc := syntax.ProjectFromTree(tree, li)
+	doc := analysis.File("", string(src)).Doc
 
 	mermaidSrc, err := visualizer.New().GenerateC4Mermaid(doc, visualizer.C4ModeBoundaries, false)
 	if err != nil {

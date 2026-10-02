@@ -1,0 +1,339 @@
+package analysis
+
+import (
+	"fmt"
+
+	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/model"
+	"github.com/tcarcao/craft/v2/internal/syntax"
+)
+
+// project builds one file's document model from its syntax tree. Names are
+// copied as written; nothing is resolved here. sourceURI is stamped on every
+// use case.
+func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *model.CraftDoc {
+	doc := &model.CraftDoc{UseCases: []model.UseCase{}}
+	if root == (syntax.SyntaxNode{}) {
+		return doc
+	}
+	file := syntax.AsFile(root)
+
+	doc.Services = mergeServices(projectServices(file, li))
+
+	for _, a := range file.Actors() {
+		nameTok := a.Name()
+		if nameTok == nil {
+			continue
+		}
+		typeVal := a.ActorTypeValue()
+		if typeVal == "" {
+			continue // malformed — skip
+		}
+		actorLine, _ := li.LineCol(nameTok.Offset())
+		doc.Actors = append(doc.Actors, model.Actor{
+			Name: nameTok.Text(),
+			Type: model.ActorType(typeVal),
+			Line: actorLine,
+		})
+	}
+
+	for _, d := range file.Domains() {
+		nameTok := d.Name()
+		if nameTok == nil {
+			continue
+		}
+		var bcNames []string
+		for _, bc := range d.BoundedContexts() {
+			if bcTok := bc.Name(); bcTok != nil {
+				bcNames = append(bcNames, bcTok.Text())
+			}
+		}
+		doc.Domains = append(doc.Domains, model.Domain{
+			Name:            syntax.StringAwareText(*nameTok),
+			BoundedContexts: bcNames,
+		})
+	}
+	doc.Domains = firstByName(doc.Domains, func(d model.Domain) string { return d.Name })
+
+	doc.UseCases = projectUseCases(file, li, sourceURI)
+
+	for _, a := range file.Archs() {
+		name := ""
+		if nameTok := a.Name(); nameTok != nil {
+			name = nameTok.Text()
+		}
+		ab := model.ArchBlock{
+			Name:         name,
+			Presentation: []model.Component{},
+			Gateway:      []model.Component{},
+		}
+		for _, section := range a.Sections() {
+			kwTok := section.Keyword()
+			if kwTok == nil {
+				continue
+			}
+			var components []model.Component
+			for _, c := range section.Components() {
+				components = append(components, projectArchComponent(c))
+			}
+			switch kwTok.Kind() {
+			case syntax.SyntaxKindKwPresentation:
+				ab.Presentation = append(ab.Presentation, components...)
+			case syntax.SyntaxKindKwGateway:
+				ab.Gateway = append(ab.Gateway, components...)
+			}
+		}
+		doc.Architectures = append(doc.Architectures, ab)
+	}
+
+	for _, e := range file.Exposures() {
+		nameTok := e.Name()
+		if nameTok == nil {
+			continue
+		}
+		doc.Exposures = append(doc.Exposures, model.Exposure{
+			Name:     nameTok.Text(),
+			To:       e.To(),
+			Contexts: e.Contexts(),
+			Through:  e.Through(),
+		})
+	}
+
+	for _, cm := range file.ContextMaps() {
+		for _, e := range cm.Edges() {
+			left, verb, right := e.Left(), e.Verb(), e.Right()
+			if left == "" || verb == "" || right == "" {
+				continue // malformed — skip
+			}
+			doc.ContextMap = append(doc.ContextMap, model.Edge{Left: left, Verb: verb, Right: right})
+		}
+	}
+
+	for _, g := range file.Glossaries() {
+		for _, r := range g.Relations() {
+			left, verb, right := r.Left(), r.Verb(), r.Right()
+			if left == "" || verb == "" || right == "" {
+				continue // malformed — skip
+			}
+			doc.Glossary = append(doc.Glossary, model.TermRelation{Left: left, Verb: verb, Right: right})
+		}
+	}
+
+	return doc
+}
+
+// projectUseCases numbers scenarios and actions from one counter shared across
+// the file (scenario_N / action_N). An incomplete action line still consumes
+// two numbers, so the IDs of the actions after it do not depend on whether
+// it parsed.
+func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []model.UseCase {
+	out := []model.UseCase{}
+	counter := 0
+	for _, uc := range file.UseCases() {
+		if uc.Title() == nil {
+			continue
+		}
+		ucLine, _ := li.LineCol(uc.Title().Offset())
+		outUC := model.UseCase{
+			Name:      uc.Name(),
+			Scenarios: []model.Scenario{},
+			Line:      ucLine,
+			SourceURI: sourceURI,
+		}
+		if tb := uc.TagsBlock(); tb != nil {
+			// Last write wins on a duplicate key; sema warns about it.
+			tags := map[string]string{}
+			tagValues := map[string][]string{}
+			for _, ts := range tb.Tags() {
+				keyTok := ts.Key()
+				if keyTok == nil {
+					continue
+				}
+				// Both forms: the joined string existing consumers read, and the
+				// split list, the only one that tells `web, mobile` from
+				// `"web, mobile"`.
+				tags[keyTok.Text()] = ts.ValueText()
+				tagValues[keyTok.Text()] = ts.Values()
+			}
+			if len(tags) > 0 {
+				outUC.Tags = tags
+				outUC.TagValues = tagValues
+			}
+		}
+		for _, sc := range uc.Scenarios() {
+			counter++
+			outSc := model.Scenario{
+				ID:      fmt.Sprintf("scenario_%d", counter),
+				Trigger: projectTrigger(sc.Trigger()),
+				Actions: []model.Action{},
+			}
+			for _, action := range sc.Actions() {
+				if action.IsIncomplete() {
+					counter += 2
+					continue
+				}
+				counter++
+				outSc.Actions = append(outSc.Actions, projectAction(action, fmt.Sprintf("action_%d", counter), li))
+			}
+			outUC.Scenarios = append(outUC.Scenarios, outSc)
+		}
+		out = append(out, outUC)
+	}
+	return out
+}
+
+func projectTrigger(t syntax.TriggerDecl) model.Trigger {
+	kind := t.Kind()
+	var actor, context, event, verb, phrase, ref string
+	switch kind {
+	case "event":
+		event = t.EventValue()
+	case "domain_listen":
+		context = t.ContextName()
+		event = t.EventValue()
+		ref = t.EventRef()
+	default: // external
+		actor = t.ExternalSubjectText()
+		verb = t.ExternalVerbText()
+		phrase = t.PhraseText()
+	}
+	var description string
+	switch kind {
+	case "event":
+		description = fmt.Sprintf("when %q", event)
+	case "domain_listen":
+		description = fmt.Sprintf("when %s listens %q", context, event)
+	default:
+		// No trimming: an empty phrase leaves a trailing space, as it always has.
+		description = fmt.Sprintf("when %s %s %s", actor, verb, phrase)
+	}
+	return model.Trigger{
+		Type:        model.TriggerType(kind),
+		Actor:       actor,
+		Verb:        verb,
+		Phrase:      phrase,
+		Context:     context,
+		Event:       event,
+		Ref:         ref,
+		Description: description,
+	}
+}
+
+func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Action {
+	kind := a.Kind()
+	subject := a.SubjectName()
+	target := a.TargetName()
+	event := a.EventValue()
+	connector := a.DescriptionConnector()
+	phrase := a.PhraseText()
+
+	var verb, description string
+	switch kind {
+	case "sync_action":
+		// The connector is always included, so an empty one leaves a double space.
+		description = subject + " asks " + target + " " + connector
+		if phrase != "" {
+			description += " " + phrase
+		}
+	case "async_action":
+		description = fmt.Sprintf("%s notifies %q", subject, event)
+	case "return_action":
+		if target != "" {
+			description = fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
+		} else {
+			description = fmt.Sprintf("%s returns %s", subject, phrase)
+		}
+	default: // internal_action
+		verb = a.VerbValue()
+		description = subject + " " + verb
+		if connector != "" {
+			description += " " + connector
+		}
+		if phrase != "" {
+			description += " " + phrase
+		}
+	}
+
+	actionLine := 0
+	if toks := a.Tokens(); len(toks) > 0 {
+		actionLine, _ = li.LineCol(toks[0].Offset())
+	}
+	var operation *model.Operation
+	if text := a.OpText(); text != "" {
+		operation = &model.Operation{Verb: a.OpVerb(), Payload: a.OpPayload(), Text: text}
+	}
+	return model.Action{
+		ID:            id,
+		Type:          model.ActionType(kind),
+		Context:       subject,
+		Verb:          verb,
+		TargetContext: target,
+		Event:         event,
+		Ref:           a.ObjectRef(),
+		Operation:     operation,
+		Connector:     connector,
+		Phrase:        phrase,
+		Description:   description,
+		Line:          actionLine,
+	}
+}
+
+// projectServices returns one Service per service block, in source order.
+// Same-name blocks are combined afterwards by mergeServices.
+func projectServices(file syntax.File, li green.LineIndex) []model.Service {
+	var out []model.Service
+	for _, svc := range file.Services() {
+		nameTok := svc.Name()
+		if nameTok == nil {
+			continue
+		}
+		line, _ := li.LineCol(nameTok.Offset())
+		s := model.Service{
+			Name:       syntax.StringAwareText(*nameTok),
+			Contexts:   svc.Contexts(),
+			DataStores: svc.DataStores(),
+			Language:   svc.Language(),
+			CatalogRef: svc.CatalogRef(),
+			Repo:       svc.Repo(),
+			Deployment: model.DeploymentStrategy{Type: svc.DeploymentType()},
+			Line:       line,
+		}
+		for _, r := range svc.DeploymentRules() {
+			s.Deployment.Rules = append(s.Deployment.Rules, model.DeploymentRule{
+				Percentage: r.Percentage,
+				Target:     r.Target,
+			})
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func projectArchComponent(c syntax.ArchComponent) model.Component {
+	if !c.IsFlow() {
+		comp := model.Component{Type: model.ComponentTypeSimple}
+		if nameTok := c.Name(); nameTok != nil {
+			comp.Name = nameTok.Text()
+		}
+		for _, m := range c.Modifiers() {
+			var mod model.ComponentModifier
+			if k := m.Key(); k != nil {
+				mod.Key = k.Text()
+			}
+			if v := m.Value(); v != nil {
+				mod.Value = syntax.StringAwareText(*v)
+			}
+			comp.Modifiers = append(comp.Modifiers, mod)
+		}
+		return comp
+	}
+	var chain []model.Component
+	for _, step := range c.FlowSteps() {
+		link := model.Component{Name: step.Name, Type: model.ComponentTypeSimple}
+		for _, m := range step.Modifiers {
+			link.Modifiers = append(link.Modifiers, model.ComponentModifier{Key: m.Key, Value: m.Value})
+		}
+		chain = append(chain, link)
+	}
+	return model.Component{Type: model.ComponentTypeFlow, Chain: chain}
+}

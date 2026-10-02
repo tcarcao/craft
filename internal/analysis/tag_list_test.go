@@ -1,4 +1,4 @@
-package syntax_test
+package analysis_test
 
 import (
 	"strings"
@@ -20,11 +20,11 @@ import (
 func projectUseCase(t *testing.T, stmts string) model.UseCase {
 	t.Helper()
 	src := "use_case \"A\" {\n    tags {\n" + stmts + "\n    }\n}\n"
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	for _, d := range diags {
 		t.Fatalf("unexpected diagnostic for %q: %+v", stmts, d)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li, "test.craft")
+	doc := projectFile(syntax.Root(g), "test.craft")
 	if len(doc.UseCases) == 0 {
 		t.Fatalf("no use cases projected from %q", stmts)
 	}
@@ -107,7 +107,7 @@ func TestTagList_WrapsAcrossLines(t *testing.T) {
 func TestTagList_DanglingCommaDoesNotEatTheNextStatement(t *testing.T) {
 	src := "use_case \"A\" {\n    tags {\n        channels: web,\n        journey: renewal\n    }\n}\n"
 
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 
 	if len(diags) != 1 {
 		t.Fatalf("want exactly 1 diagnostic for the dangling comma, got %d: %+v", len(diags), diags)
@@ -116,7 +116,7 @@ func TestTagList_DanglingCommaDoesNotEatTheNextStatement(t *testing.T) {
 		t.Errorf("severity = %q, want %q", diags[0].Severity, model.SeverityError)
 	}
 
-	doc := syntax.ProjectFromTree(syntax.Root(g), li, "test.craft")
+	doc := projectFile(syntax.Root(g), "test.craft")
 	uc := doc.UseCases[0]
 	if _, fabricated := uc.TagValues["channels"]; fabricated {
 		t.Errorf("the channels statement did not parse, so it must not reach the model; got %q", uc.TagValues)
@@ -130,7 +130,7 @@ func TestTagList_DanglingCommaDoesNotEatTheNextStatement(t *testing.T) {
 func TestTagList_TrailingCommaIsAnError(t *testing.T) {
 	src := "use_case \"A\" {\n    tags {\n        channels: web,\n    }\n}\n"
 
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 
 	if len(diags) != 1 {
 		t.Fatalf("want exactly 1 diagnostic, got %d: %+v", len(diags), diags)
@@ -138,7 +138,7 @@ func TestTagList_TrailingCommaIsAnError(t *testing.T) {
 	if !strings.Contains(diags[0].Message, "comma") {
 		t.Errorf("message should name the dangling comma, got %q", diags[0].Message)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li, "test.craft")
+	doc := projectFile(syntax.Root(g), "test.craft")
 	if tags := doc.UseCases[0].TagValues; len(tags) != 0 {
 		t.Errorf("got %q, want nothing: the statement did not parse", tags)
 	}
@@ -159,8 +159,8 @@ func TestTagList_SingleValuesAlsoAppearInTagValues(t *testing.T) {
 // A use case with no tags block must not gain an empty TagValues map in the
 // JSON, matching how Tags is already omitted.
 func TestTagList_NoTagsBlockLeavesBothFieldsNil(t *testing.T) {
-	g, li, _ := syntax.Parse("use_case \"A\" {\n    when S enters the page\n        f asks g for it\n}\n")
-	doc := syntax.ProjectFromTree(syntax.Root(g), li, "test.craft")
+	g, _, _ := syntax.Parse("use_case \"A\" {\n    when S enters the page\n        f asks g for it\n}\n")
+	doc := projectFile(syntax.Root(g), "test.craft")
 
 	if uc := doc.UseCases[0]; uc.Tags != nil || uc.TagValues != nil {
 		t.Errorf("Tags = %v, TagValues = %v, want both nil", uc.Tags, uc.TagValues)
@@ -177,7 +177,7 @@ func TestTagList_TreeReproducesSource(t *testing.T) {
 		"use_case \"A\" {\n    tags { channels: web, mobile }\n}\n",
 	} {
 		g, _, _ := syntax.Parse(src)
-		if got := reassembleGreen(g); got != src {
+		if got := sourceOf(syntax.Root(g)); got != src {
 			t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 		}
 	}

@@ -19,14 +19,15 @@ cmd/
 internal/
   lexer/        Hand-written scanner
   green/        Lossless green tree (position-independent) + line index
-  syntax/       Hand-written recursive-descent parser → red tree + typed views; projection → CraftDoc
+  syntax/       Hand-written recursive-descent parser → red tree + typed views
   model/        CraftDoc data types (aliased by pkg/craft)
   sema/         Symbol tables, ResolutionMap, validation + lint rules
   workspace/    Multi-file store, per-file parse cache, URI index
   lsp/          LSP protocol handlers
   fmtconfig/    Formatter configuration
   visualizer/   PlantUML / Mermaid diagram generators (C4, domain, sequence)
-  parser_diff/  Corpus acceptance suite (Harness A: .craftjson goldens, Harness C: diagnostics goldens)
+  analysis/     Per-file + workspace analysis: parse → project → resolve → lint → CraftDoc + diagnostics
+  corpustest/   Corpus acceptance suite (Harness A: .craftjson goldens, Harness C: diagnostics goldens)
 pkg/
   craft/        Stable public Go API — CraftDoc canonical type
 build/

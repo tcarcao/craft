@@ -1,4 +1,4 @@
-package parser_diff_test
+package corpustest_test
 
 import (
 	"encoding/json"

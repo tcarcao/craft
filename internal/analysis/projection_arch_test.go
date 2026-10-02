@@ -1,4 +1,4 @@
-package syntax_test
+package analysis_test
 
 import (
 	"testing"
@@ -17,11 +17,11 @@ func TestProject_ArchModifier_QuotedValueUnquoted(t *testing.T) {
     presentation:
         WebApp[label:"some value", plain:bareword]
 }`
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	if len(doc.Architectures) != 1 {
 		t.Fatalf("expected 1 arch, got %d", len(doc.Architectures))
 	}
@@ -50,11 +50,11 @@ func TestProject_ArchModifier_FlowComponent_QuotedValueUnquoted(t *testing.T) {
     gateway:
         APIGateway[label:"rate limited"] > Backend
 }`
-	g, li, diags := syntax.Parse(src)
+	g, _, diags := syntax.Parse(src)
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	doc := syntax.ProjectFromTree(syntax.Root(g), li)
+	doc := projectFile(syntax.Root(g), "")
 	if len(doc.Architectures) != 1 {
 		t.Fatalf("expected 1 arch, got %d", len(doc.Architectures))
 	}
@@ -85,7 +85,7 @@ func TestParse_ArchModifier_QuotedValue_RoundTrips(t *testing.T) {
 	if len(diags) != 0 {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
-	got := reassembleGreen(g)
+	got := sourceOf(syntax.Root(g))
 	if got != src {
 		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 	}

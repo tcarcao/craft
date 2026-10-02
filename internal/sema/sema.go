@@ -630,8 +630,27 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 			}
 		}
 		for _, d := range syms.Domains {
-			if _, dup := ws.Domains[d.Name]; !dup {
+			if prev, dup := ws.Domains[d.Name]; !dup {
 				ws.Domains[d.Name] = d
+			} else if prev.URI != d.URI {
+				// Same rule as a service declared in two files: the domain
+				// symbol keeps the first declaration, so report the later one
+				// instead of silently dropping it. (A repeat within one file is
+				// already a duplicate-name error.)
+				startChar := colToLSP(d.Column)
+				diags = append(diags, model.Diagnostic{
+					Code: "craft/sema/duplicate-name",
+					Message: fmt.Sprintf(
+						"domain %q already declared in %s (line %d)",
+						d.Name, prev.URI, prev.Line,
+					),
+					Severity:  model.SeverityWarning,
+					SourceURI: d.URI,
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(d.Line), Character: startChar},
+						End:   model.Position{Line: lineToLSP(d.Line), Character: startChar + lspLen(d.Name)},
+					},
+				})
 			}
 			for _, bc := range d.BoundedContexts {
 				if _, dup := ws.BoundedContexts[bc]; !dup {

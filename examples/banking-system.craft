@@ -1,3 +1,14 @@
+domain Banking {
+    AccountManagement
+    BalanceTracking
+    PaymentProcessing
+    TransactionValidation
+}
+
+domain Communication {
+    CustomerNotification
+}
+
 services {
     AccountService {
         contexts: AccountManagement, BalanceTracking

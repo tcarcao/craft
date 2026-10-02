@@ -21,7 +21,7 @@ func repoFile(t *testing.T, rel string) []byte {
 }
 
 // mustMarshalIndent matches how the corpus goldens are encoded (see
-// internal/syntax/projection_uc_test.go:73, internal/parser_diff/diagnostics_test.go:151).
+// internal/analysis/projection_uc_test.go, internal/corpustest/diagnostics_test.go).
 func mustMarshalIndent(t *testing.T, v interface{}) string {
 	t.Helper()
 	b, err := json.MarshalIndent(v, "", "  ")
@@ -32,8 +32,9 @@ func mustMarshalIndent(t *testing.T, v interface{}) string {
 }
 
 func TestParse_ValidMultiDomain(t *testing.T) {
-	src := repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craft")
-	doc, diags, err := craft.Parse("dsl-vnext.craft", src)
+	// Parse runs full analysis, so the input must pass `craft validate` clean.
+	src := repoFile(t, "testdata/corpus/99_mixed/e-comerce.craft")
+	doc, diags, err := craft.Parse("e-comerce.craft", src)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,11 +77,9 @@ func TestParse_DiagnosticsAreDataNotError(t *testing.T) {
 }
 
 func TestParse_MatchesCorpusGolden(t *testing.T) {
-	// Parse's doc must equal the existing projection golden byte-for-byte,
-	// proving Parse is a faithful wrapper of ProjectFromTree.
+	// Parse's doc must equal the existing projection golden byte-for-byte.
 	src := repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craft")
-	// DD2: no sourceURI here, matching TestHarnessA_V2vsGoldens' no-URI
-	// ProjectFromTree call, so the 99_mixed golden carries no sourceUri.
+	// An empty filename, matching Harness A, so the golden carries no sourceUri.
 	doc, _, _ := craft.Parse("", src)
 	got := mustMarshalIndent(t, doc)
 	want := strings.TrimRight(string(repoFile(t, "testdata/corpus/99_mixed/dsl-vnext.craftjson")), "\n")
