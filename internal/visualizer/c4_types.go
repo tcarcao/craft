@@ -31,7 +31,5 @@ type C4Relation struct {
 type C4DiagramType string
 
 const (
-	C4Context    C4DiagramType = "context"   // System Context level
 	C4Containers C4DiagramType = "container" // Container level
-	C4Components C4DiagramType = "component" // Component level (domains as components)
 )

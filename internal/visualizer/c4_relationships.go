@@ -545,51 +545,6 @@ func (g *C4DiagramGenerator) inferGatewayTechnology(component craft.Component) s
 	return "Gateway"
 }
 
-func (g *C4DiagramGenerator) getServiceTechnology(language string) string {
-	if language == "" {
-		return "Application"
-	}
-
-	lowerLang := strings.ToLower(language)
-
-	if strings.Contains(lowerLang, "go") || strings.Contains(lowerLang, "golang") {
-		return "Go Application"
-	}
-	if strings.Contains(lowerLang, "java") {
-		return "Java Application"
-	}
-	if strings.Contains(lowerLang, "python") {
-		return "Python Application"
-	}
-	if strings.Contains(lowerLang, "javascript") || strings.Contains(lowerLang, "js") || strings.Contains(lowerLang, "node") {
-		return "Node.js Application"
-	}
-	if strings.Contains(lowerLang, "typescript") || strings.Contains(lowerLang, "ts") {
-		return "TypeScript Application"
-	}
-	if strings.Contains(lowerLang, "rust") {
-		return "Rust Application"
-	}
-	if strings.Contains(lowerLang, "csharp") || strings.Contains(lowerLang, "c#") || strings.Contains(lowerLang, "dotnet") {
-		return ".NET Application"
-	}
-	if strings.Contains(lowerLang, "php") {
-		return "PHP Application"
-	}
-	if strings.Contains(lowerLang, "ruby") {
-		return "Ruby Application"
-	}
-	if strings.Contains(lowerLang, "kotlin") {
-		return "Kotlin Application"
-	}
-	if strings.Contains(lowerLang, "swift") {
-		return "Swift Application"
-	}
-
-	// Default fallback
-	return fmt.Sprintf("%s Application", strings.Title(language))
-}
-
 // inferDatabaseType determines database technology from datastore name
 func (g *C4DiagramGenerator) inferDatabaseType(dataStore string) string {
 	lowerStore := strings.ToLower(dataStore)
@@ -619,23 +574,12 @@ func (g *C4DiagramGenerator) buildC4PlantUML(diagramType C4DiagramType) string {
 	sb.WriteString("@startuml\n")
 
 	switch diagramType {
-	case C4Context:
-		sb.WriteString("!include <C4/C4_Context.puml>\n")
-		g.addIconIncludes(&sb)
-		sb.WriteString("\n\nLAYOUT_WITH_LEGEND()\n\n")
-		sb.WriteString("title System Context Diagram - Architecture\n\n")
-		g.buildContextDiagram(&sb)
 	case C4Containers:
 		sb.WriteString("!include <C4/C4_Container.puml>\n")
 		g.addIconIncludes(&sb)
 		sb.WriteString("\n\nLAYOUT_WITH_LEGEND()\n\n")
 		sb.WriteString(fmt.Sprintf("title Container Diagram - Architecture (%s mode)\n\n", g.mode))
 		g.buildContainerDiagram(&sb)
-	case C4Components:
-		sb.WriteString("!include <C4/C4_Component.puml>\n\n")
-		sb.WriteString("LAYOUT_WITH_LEGEND()\n\n")
-		sb.WriteString("title Component Diagram - Architecture\n\n")
-		g.buildComponentDiagram(&sb)
 	}
 
 	sb.WriteString("\n@enduml")
@@ -718,50 +662,6 @@ func spriteNameFromAttr(attr string) string {
 		return ""
 	}
 	return name
-}
-
-// buildContextDiagram builds system context diagram
-func (g *C4DiagramGenerator) buildContextDiagram(sb *strings.Builder) {
-	// Add actors based on their type
-	actors := g.getSortedActors()
-	for _, actorName := range actors {
-		actorInfo := g.getActorInfo(actorName)
-		elementType, description := g.getActorC4Element(actorInfo)
-		sb.WriteString(fmt.Sprintf("%s(%s, \"%s\", \"%s\")\n",
-			elementType, g.sanitizeIdentifier(actorName), actorName, description))
-	}
-	if len(actors) > 0 {
-		sb.WriteString("\n")
-	}
-
-	// Add external systems
-	externalSystems := g.getExternalSystems()
-	for _, systemName := range externalSystems {
-		system := g.systems[systemName]
-		sb.WriteString(fmt.Sprintf("System_Ext(%s, \"%s\", \"%s\")\n",
-			g.sanitizeIdentifier(systemName), systemName, system.Description))
-	}
-	if len(externalSystems) > 0 {
-		sb.WriteString("\n")
-	}
-
-	// Add internal systems (presentation, gateway, services)
-	internalSystems := g.getInternalSystems()
-	for _, systemName := range internalSystems {
-		system := g.systems[systemName]
-		icon := g.getSystemIcon(systemName)
-		sb.WriteString(fmt.Sprintf("System(%s, \"%s\", \"%s\"%s)\n",
-			g.sanitizeIdentifier(systemName), systemName, system.Description, icon))
-	}
-	sb.WriteString("\n")
-
-	// Add system-level relationships
-	for _, relation := range g.systemRelations {
-		sb.WriteString(fmt.Sprintf("Rel(%s, %s, \"%s\")\n",
-			g.sanitizeIdentifier(relation.From),
-			g.sanitizeIdentifier(relation.To),
-			relation.Description))
-	}
 }
 
 // buildContainerDiagram builds container diagram with proper system separation
@@ -934,33 +834,6 @@ func (g *C4DiagramGenerator) buildStandardContainers(sb *strings.Builder, system
 	}
 }
 
-// buildComponentDiagram builds component diagram focusing on main service
-func (g *C4DiagramGenerator) buildComponentDiagram(sb *strings.Builder) {
-	mainService := g.getMainService()
-	if mainService == "" {
-		sb.WriteString("' No main service found\n")
-		return
-	}
-
-	service := g.findService(mainService)
-	if service == nil {
-		return
-	}
-
-	sb.WriteString(fmt.Sprintf("Container_Boundary(%s_boundary, \"%s Service\") {\n",
-		g.sanitizeIdentifier(mainService), mainService))
-
-	for _, domain := range service.Contexts {
-		sb.WriteString(fmt.Sprintf("    Component(%s, \"%s\", \"[Context]\", \"Handles %s business logic\")\n",
-			g.sanitizeIdentifier(domain), domain, domain))
-	}
-
-	sb.WriteString("}\n\n")
-
-	// Add component relationships (domain to domain within service)
-	g.addComponentRelationships(sb, service.Contexts)
-}
-
 // addAllRelationships adds all container relationships
 func (g *C4DiagramGenerator) addAllRelationships(sb *strings.Builder) {
 	// System-level relationships
@@ -979,25 +852,6 @@ func (g *C4DiagramGenerator) addAllRelationships(sb *strings.Builder) {
 				g.sanitizeIdentifier(relation.To),
 				relation.Description,
 				relation.Technology))
-		}
-	}
-}
-
-// addComponentRelationships adds relationships between components
-func (g *C4DiagramGenerator) addComponentRelationships(sb *strings.Builder, domains []string) {
-	// Create relationships from use case actions
-	for _, useCase := range g.model.UseCases {
-		for _, scenario := range useCase.Scenarios {
-			for _, action := range scenario.Actions {
-				if action.Type == craft.ActionTypeSync &&
-					g.containsString(domains, action.Context) &&
-					g.containsString(domains, action.TargetContext) {
-					sb.WriteString(fmt.Sprintf("Rel(%s, %s, \"%s\")\n",
-						g.sanitizeIdentifier(action.Context),
-						g.sanitizeIdentifier(action.TargetContext),
-						action.Phrase))
-				}
-			}
 		}
 	}
 }
@@ -1053,94 +907,7 @@ func (g *C4DiagramGenerator) findService(serviceName string) *craft.Service {
 	return nil
 }
 
-// getMainService returns the service with most user interactions
-func (g *C4DiagramGenerator) getMainService() string {
-	serviceCount := make(map[string]int)
-
-	for _, services := range g.userInteractionMap {
-		for _, service := range services {
-			serviceCount[service]++
-		}
-	}
-
-	maxCount := 0
-	mainService := ""
-	for service, count := range serviceCount {
-		if count > maxCount {
-			maxCount = count
-			mainService = service
-		}
-	}
-
-	return mainService
-}
-
 // Icon methods
-
-// getSystemIcon returns icon for system based on type
-func (g *C4DiagramGenerator) getSystemIcon(systemName string) string {
-	if systemName == "Presentation" {
-		return ", $sprite=\"globe\""
-	}
-	if systemName == "Gateway" {
-		return ", $sprite=\"shield_alt\""
-	}
-
-	// For service systems, use language icon
-	service := g.findService(systemName)
-	if service != nil {
-		return g.getServiceIcon(service.Language)
-	}
-
-	return ""
-}
-
-// getServiceIcon returns the appropriate icon for service languages
-func (g *C4DiagramGenerator) getServiceIcon(language string) string {
-	if language == "" {
-		return ""
-	}
-
-	lowerLang := strings.ToLower(language)
-
-	// Return icon parameter for C4 PlantUML - using correct sprite names
-	if strings.Contains(lowerLang, "go") || strings.Contains(lowerLang, "golang") {
-		return ", $sprite=\"go\""
-	}
-	if strings.Contains(lowerLang, "java") {
-		return ", $sprite=\"java\""
-	}
-	if strings.Contains(lowerLang, "python") {
-		return ", $sprite=\"python\""
-	}
-	if strings.Contains(lowerLang, "javascript") || strings.Contains(lowerLang, "js") || strings.Contains(lowerLang, "node") {
-		return ", $sprite=\"nodejs\""
-	}
-	if strings.Contains(lowerLang, "typescript") || strings.Contains(lowerLang, "ts") {
-		return ", $sprite=\"javascript\"" // Using javascript icon for TypeScript
-	}
-	if strings.Contains(lowerLang, "rust") {
-		return ", $sprite=\"rust\""
-	}
-	if strings.Contains(lowerLang, "csharp") || strings.Contains(lowerLang, "c#") || strings.Contains(lowerLang, "dotnet") {
-		return ", $sprite=\"dot_net\""
-	}
-	if strings.Contains(lowerLang, "php") {
-		return ", $sprite=\"php\""
-	}
-	if strings.Contains(lowerLang, "ruby") {
-		return ", $sprite=\"ruby\""
-	}
-	if strings.Contains(lowerLang, "kotlin") {
-		return ", $sprite=\"kotlin\""
-	}
-	if strings.Contains(lowerLang, "swift") {
-		return ", $sprite=\"swift\""
-	}
-
-	// Default to a generic application icon
-	return ", $sprite=\"code\""
-}
 
 // getContainerIcon returns icon for container
 func (g *C4DiagramGenerator) getContainerIcon(containerName, systemName string) string {

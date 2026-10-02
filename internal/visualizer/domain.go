@@ -24,15 +24,6 @@ const (
 	DiagramTypeSequence DiagramType = "sequence"
 )
 
-func (v *Visualizer) GenerateDomainDiagram(model *craft.CraftDoc) ([]byte, error) {
-	return v.GenerateDomainDiagramWithMode(model, DomainModeDetailed)
-}
-
-func (v *Visualizer) GenerateDomainDiagramWithMode(model *craft.CraftDoc, mode DomainMode) ([]byte, error) {
-	data, _, err := v.GenerateDomainDiagramWithModeAndFormat(model, mode, FormatPNG)
-	return data, err
-}
-
 func (v *Visualizer) GenerateDomainDiagramWithModeAndFormat(model *craft.CraftDoc, mode DomainMode, format SupportedFormat) ([]byte, string, error) {
 	return v.GenerateDomainDiagramWithTypeAndModeAndFormat(model, DiagramTypeDomain, mode, format)
 }
@@ -72,7 +63,6 @@ func (v *Visualizer) GenerateDomainDiagramWithTypeAndModeAndFormat(model *craft.
 		}
 	}
 
-	fmt.Println(diagramTxt)
 	return generatePlantUMLWithFormat(diagramTxt, format)
 }
 
@@ -109,12 +99,6 @@ type PlantUMLArchitectureGenerator struct {
 	domainToService map[string]string // subdomain -> service mapping
 	domainAliases   map[string]string
 	serviceAliases  map[string]string
-}
-
-// ArchitectureConnection represents a connection between subdomains
-type ArchitectureConnection struct {
-	From string
-	To   string
 }
 
 // NewPlantUMLGenerator creates a new generator instance
@@ -731,12 +715,6 @@ func (g *PlantUMLGenerator) getElementAlias(element string) string {
 	return element
 }
 
-// Main function to generate PlantUML from DSL model
-func GenerateDomainFlowDiagram(model *craft.CraftDoc) string {
-	generator := NewPlantUMLGenerator()
-	return generator.GeneratePlantUML(model)
-}
-
 // Architecture generator methods
 // collectServicesForArchitecture collects services and maps domains to services
 func (g *PlantUMLArchitectureGenerator) collectServicesForArchitecture(model *craft.CraftDoc) {
@@ -1065,16 +1043,6 @@ func (g *PlantUMLArchitectureGenerator) defineServiceBoundaries(sb *strings.Buil
 	}
 
 	sb.WriteString("\n")
-}
-
-// Helper methods for architecture generator
-func (g *PlantUMLArchitectureGenerator) getSortedSubDomains() []string {
-	subDomains := make([]string, 0, len(g.subDomains))
-	for subDomain := range g.subDomains {
-		subDomains = append(subDomains, subDomain)
-	}
-	sort.Strings(subDomains)
-	return subDomains
 }
 
 func (g *PlantUMLArchitectureGenerator) formatSubDomainName(subDomain string) string {

@@ -31,11 +31,6 @@ Thumbs.db
 # Environment files
 .env
 
-# ANTLR generated files
-/pkg/parser/
-tools/antlr-*.jar
-tools/vscode-extension/server/src/parser/generated
-
 # LLMs
 CLAUDE.md.worktrees/
 

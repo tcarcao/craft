@@ -1,5 +1,7 @@
 # Craft — Architecture (v0.1 migration target)
 
+> **Note (2026-10):** §1 reflects the current package layout. The ANTLR parser, `internal/ast` and `internal/processor` are gone. The staged refactor in `docs/decisions/diagram-pipeline-deepening.md` adds `internal/analysis`, `internal/interaction` and `internal/lang`; this doc will be updated as each lands.
+
 > **Status:** Draft — P0.7 deliverable of the LSP migration (`docs/decisions/lsp-migration-plan.md`).
 > **Scope:** the Go package layout, layer rules, and runtime invariants that the hand-written parser + LSP must satisfy. Derived from source-plan decisions Q1–Q15 and tracer-bullets decisions Q1–Q23.
 > **Enforcement:** `docs/AGENT.md` encodes the checks; CI mirrors them. A PR that violates these rules is not merge-ready.
@@ -10,31 +12,25 @@
 
 ```
 cmd/
-  craft/                  CLI entry (subcommands: lsp, check, visualize, diff-parsers)
+  craft/                  CLI entry (subcommands: lsp, check, validate, inspect, generate, fmt, …)
   server/                 HTTP diagram server
 internal/
-  ast/                    v2 AST — pure data, JSON-round-trippable, private
   lexer/                  hand-written scanner
-  syntax/                 hand-written recursive-descent parser → ast
-  sema/                   symbol tables, ResolutionMap, validation rules
+  green/                  lossless green tree + line index
+  syntax/                 recursive-descent parser → red tree + typed views; ProjectFromTree → CraftDoc
+  model/                  CraftDoc data types (pkg/craft aliases them)
+  sema/                   symbol tables, ResolutionMap, validation + lint rules
   workspace/              multi-file store, per-file parse cache, URI index
-  lint/                   (absorbs existing internal/linter in S9)
   lsp/                    LSP protocol handlers; depends on sema + workspace
+  fmtconfig/              formatter configuration
   visualizer/             diagram generator (consumes CraftDoc)
-  processor/              .craft file processing pipeline (consumes CraftDoc)
-  parser/                 EXISTING ANTLR visitor layer — deleted in S12
-  parser_antlr_adapter/   S1 bridge: ANTLR visitor output → pkg/craft.CraftDoc — deleted in S12
-  parser_diff/            S1/S3 differential harness — deleted in S12
+  parser_diff/            corpus acceptance suite (Harness A + Harness C)
 pkg/
   craft/                  STABLE PUBLIC API — CraftDoc canonical type
-                          (experimental until v0.1; stable thereafter)
 testdata/
   corpus/                 acceptance corpus (valid inputs + .craftjson goldens)
-    01_actors/            ... 06_exposures/, 99_mixed/
   broken/                 hand-authored broken inputs + .diagnostics.json
-  visualize-baseline/     pre-S1 PlantUML/SVG snapshots for regression check
-tools/
-  antlr-grammar/          Craft.g4 (v1) — deleted in S12
+  visualize-baseline/     PlantUML snapshots for regression check
 ```
 
 ---
@@ -54,7 +50,7 @@ ast  ←  lexer  ←  syntax  ←  sema  ←  workspace  ←  lsp
 - `workspace` is the only module that holds state per URI and orchestrates re-parse. It imports `syntax` and `sema`; not vice-versa.
 - `lsp` may import `workspace`, `sema`, and `pkg/craft`. It is imported only by `cmd/`.
 - `lint` is peer to `sema` — it may consume the AST and the `ResolutionMap` but not `workspace` or `lsp`.
-- `visualizer` and `processor` depend only on `pkg/craft.CraftDoc` (and stdlib).
+- `visualizer` depends only on `pkg/craft.CraftDoc` (and stdlib).
 
 **Enforcement:** a CI check using `go list` + `go-cleanarch` (or a simple grep-driven script in `AGENT.md`'s toolbelt) rejects any import that crosses these arrows.
 

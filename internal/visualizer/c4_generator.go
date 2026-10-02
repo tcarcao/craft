@@ -51,28 +51,6 @@ func NewC4DiagramGenerator(mode C4GenerationMode, showDatabases bool) *C4Diagram
 	}
 }
 
-// NewC4DiagramGeneratorWithFocus creates a generator with service focus
-func NewC4DiagramGeneratorWithFocus(mode C4GenerationMode, focusedServiceNames []string, showDatabases bool) *C4DiagramGenerator {
-	focusedServices := make(map[string]bool)
-	for _, serviceName := range focusedServiceNames {
-		focusedServices[serviceName] = true
-	}
-
-	return &C4DiagramGenerator{
-		mode:               mode,
-		systems:            make(map[string]*C4System),
-		containers:         make(map[string]*C4Container),
-		relations:          make([]C4Relation, 0),
-		actors:             make(map[string]bool),
-		systemRelations:    make([]C4Relation, 0),
-		userInteractionMap: make(map[string][]string),
-		focusedServices:    focusedServices,
-		focusedContexts:    make(map[string]bool),
-		hasFocus:           len(focusedServiceNames) > 0,
-		showDatabases:      showDatabases,
-	}
-}
-
 // NewC4DiagramGeneratorWithFocusAndContexts creates a generator with service and context focus
 func NewC4DiagramGeneratorWithFocusAndContexts(mode C4GenerationMode, focusedServiceNames []string, focusedContextNames []string, showDatabases bool) *C4DiagramGenerator {
 	focusedServices := make(map[string]bool)
@@ -104,6 +82,7 @@ func NewC4DiagramGeneratorWithFocusAndContexts(mode C4GenerationMode, focusedSer
 func (g *C4DiagramGenerator) GenerateC4Diagram(model *craft.CraftDoc, diagramType C4DiagramType) string {
 	g.model = model
 	g.reset()
+	g.focusServicesHostingFocusedContexts()
 
 	// Analyze and build systems
 	g.analyzeModel()
@@ -122,6 +101,20 @@ func (g *C4DiagramGenerator) reset() {
 	g.userInteractionMap = make(map[string][]string)
 	g.presentationSystem = nil
 	g.gatewaySystem = nil
+}
+
+// focusServicesHostingFocusedContexts adds every service that hosts a focused
+// context to focusedServices. Every focus check reads focusedServices, so
+// without this a context-only focus marked every service external.
+func (g *C4DiagramGenerator) focusServicesHostingFocusedContexts() {
+	for _, service := range g.model.Services {
+		for _, ctx := range service.Contexts {
+			if g.focusedContexts[ctx] {
+				g.focusedServices[service.Name] = true
+				break
+			}
+		}
+	}
 }
 
 // analyzeModel processes the model with proper system separation
@@ -561,12 +554,6 @@ func (g *C4DiagramGenerator) analyzeDirectlyAccessibleDomains(scenario craft.Sce
 	}
 }
 
-// Main generation functions
-func GenerateC4ContextDiagram(model *craft.CraftDoc, mode C4GenerationMode, showDatabases bool) string {
-	generator := NewC4DiagramGenerator(mode, showDatabases)
-	return generator.GenerateC4Diagram(model, C4Context)
-}
-
 func GenerateC4ContainerDiagram(model *craft.CraftDoc, mode C4GenerationMode, showDatabases bool) string {
 	generator := NewC4DiagramGenerator(mode, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
@@ -575,9 +562,4 @@ func GenerateC4ContainerDiagram(model *craft.CraftDoc, mode C4GenerationMode, sh
 func GenerateC4ContainerDiagramWithFocusAndContexts(model *craft.CraftDoc, mode C4GenerationMode, focusedServiceNames []string, focusedContextNames []string, showDatabases bool) string {
 	generator := NewC4DiagramGeneratorWithFocusAndContexts(mode, focusedServiceNames, focusedContextNames, showDatabases)
 	return generator.GenerateC4Diagram(model, C4Containers)
-}
-
-func GenerateC4ComponentDiagram(model *craft.CraftDoc, mode C4GenerationMode, showDatabases bool) string {
-	generator := NewC4DiagramGenerator(mode, showDatabases)
-	return generator.GenerateC4Diagram(model, C4Components)
 }

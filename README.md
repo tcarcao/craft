@@ -132,11 +132,7 @@ make test
 
 ### Grammar changes
 
-The ANTLR grammar lives in `tools/antlr-grammar/Craft.g4`. Generated parser code in `pkg/parser/` is gitignored — regenerate with:
-
-```bash
-make generate-grammar
-```
+The parser is hand-written: the scanner is in `internal/lexer` and the recursive-descent parser in `internal/syntax`. Language rules are recorded in `docs/decisions/`.
 
 ---
 
