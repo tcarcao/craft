@@ -1,0 +1,59 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+Person(Business_User, "Business_User", "External user")
+
+System_Boundary(CommsService_boundary, "CommsService") {
+    Container_Boundary(CommsService_Notifier_Domain_boundary, "Notifier Domain") {
+        Container(Notifier, "Notifier", "Application", "Notifier [Context]")
+    }
+}
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(Gateway_boundary, "Gateway") {
+    Container(APIGateway, "APIGateway", "Gateway", "Gateway composed by: LoadBalancer → APIGateway | Modifiers: LoadBalancer[ssl:true], APIGateway[type:nginx]", $sprite="shield_alt")
+}
+
+System_Boundary(Presentation_boundary, "Presentation") {
+    Container(WebApp, "WebApp", "React Frontend", " [framework:react, ssl]", $sprite="code")
+    Container(MobileApp, "MobileApp", "Mobile App", "", $sprite="code")
+}
+
+System_Boundary(UserService_boundary, "UserService") {
+    Container_Boundary(UserService_Authentication_Domain_boundary, "Authentication Domain") {
+        Container(Authentication, "Authentication", "Go Application", "Authentication [Context]", $sprite="go")
+    }
+    Container_Boundary(UserService_Profile_Domain_boundary, "Profile Domain") {
+        Container(Profile, "Profile", "Go Application", "Profile [Context]", $sprite="go")
+    }
+}
+
+Rel(Business_User, WebApp, "Uses")
+Rel(Business_User, MobileApp, "Uses")
+Rel(WebApp, APIGateway, "API Requests", "HTTPS/REST")
+Rel(MobileApp, APIGateway, "API Requests", "HTTPS/REST")
+Rel(APIGateway, Authentication, "Routes Authentication requests", "HTTP/gRPC")
+Rel(Profile, Notifier, "to send welcome email", "Service API")
+Rel(Authentication, Event_Queue, "User Registered", "Event Publishing")
+Rel(Event_Queue, Profile, "User Registered", "Event Delivery")
+
+@enduml

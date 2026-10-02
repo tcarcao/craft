@@ -10,7 +10,9 @@
             "actor": "Business_User",
             "verb": "creates",
             "phrase": "Account",
-            "description": "when Business_User creates Account"
+            "description": "when Business_User creates Account",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -20,7 +22,8 @@
               "verb": "validates",
               "phrase": "email format",
               "description": "Authentication validates email format",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -28,7 +31,8 @@
               "context": "Authentication",
               "event": "User Registered",
               "description": "Authentication notifies \"User Registered\"",
-              "line": 4
+              "line": 4,
+              "column": 9
             }
           ]
         }

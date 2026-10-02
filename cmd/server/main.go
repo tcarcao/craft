@@ -138,17 +138,6 @@ func (s *Server) handleDownloadDiagram() http.HandlerFunc {
 	}
 }
 
-func (s *Server) respondWithError(w http.ResponseWriter, err error, input string, c4, context, sequence bool) {
-	s.tmpl.Execute(w, Response{
-		Success:      false,
-		Error:        err.Error(),
-		Input:        input,
-		WantC4:       c4,
-		WantContext:  context,
-		WantSequence: sequence,
-	})
-}
-
 // Domain-specific preview request
 type DomainPreviewRequest struct {
 	DSL         string `json:"dsl"`
@@ -304,10 +293,9 @@ func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
 	}
 }
 
-// handlePreviewMermaidC4 returns Mermaid c4Diagram source for the given
-// Craft DSL. Response.Data is plain text, NOT base64. boundariesMode is
-// accepted for parity with the PlantUML side but Mermaid's experimental
-// c4Diagram has no equivalent — currently no-op.
+// handlePreviewMermaidC4 returns Mermaid C4Container source for the given
+// Craft DSL. Response.Data is plain text, NOT base64. Focus, boundaries mode
+// and database visibility apply exactly as on the PlantUML side.
 func (s *Server) handlePreviewMermaidC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4PreviewRequest
@@ -324,7 +312,11 @@ func (s *Server) handlePreviewMermaidC4() http.HandlerFunc {
 		if req.ShowDatabases != nil {
 			showDatabases = *req.ShowDatabases
 		}
-		src, err := s.viz.GenerateC4Mermaid(arch, boundariesMode, showDatabases)
+		var focusServices, focusContexts []string
+		if req.FocusInfo != nil {
+			focusServices, focusContexts = req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames
+		}
+		src, err := s.viz.GenerateC4Mermaid(arch, focusServices, focusContexts, boundariesMode, showDatabases)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
 			return

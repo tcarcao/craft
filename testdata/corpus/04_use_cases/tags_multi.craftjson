@@ -10,7 +10,9 @@
             "actor": "Customer",
             "verb": "creates",
             "phrase": "Account",
-            "description": "when Customer creates Account"
+            "description": "when Customer creates Account",
+            "line": 8,
+            "column": 10
           },
           "actions": [
             {
@@ -19,7 +21,8 @@
               "context": "Billing",
               "event": "Account Created",
               "description": "Billing notifies \"Account Created\"",
-              "line": 9
+              "line": 9,
+              "column": 9
             }
           ]
         }

@@ -1,0 +1,75 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "AccountManagement" as AccountManagement
+frame "BalanceTracking" as BalanceTracking
+frame "CustomerNotification" as CustomerNotification
+frame "PaymentProcessing" as PaymentProcessing
+
+' Actors
+actor "CRON" as CRON
+actor "Customer" as Customer
+actor "TransactionValidation" as TransactionValidation
+
+' Domain queues
+queue "BalanceTracking events" as BalanceTracking_events
+queue "CustomerNotification events" as CustomerNotification_events
+queue "PaymentProcessing events" as PaymentProcessing_events
+queue "TransactionValidation events" as TransactionValidation_events
+
+' Workflow flows
+Customer --> PaymentProcessing : 1. initiates transfer
+PaymentProcessing ->> AccountManagement : 2. to verify source account
+PaymentProcessing ->> TransactionValidation : 3. to check transfer limits
+TransactionValidation -> TransactionValidation : 4. validates transaction rules
+PaymentProcessing ->> BalanceTracking : 5. to reserve funds
+BalanceTracking ->> BalanceTracking_events : 6. Funds Reserved
+BalanceTracking_events --> PaymentProcessing : 7. Funds Reserved
+PaymentProcessing ->> AccountManagement : 8. to verify destination account
+PaymentProcessing -> PaymentProcessing : 9. executes fund transfer
+BalanceTracking -> BalanceTracking : 10. updates account balances
+PaymentProcessing ->> PaymentProcessing_events : 11. Transfer Completed
+PaymentProcessing_events --> CustomerNotification : 12. Transfer Completed
+CustomerNotification -> CustomerNotification : 13. sends confirmation to both accounts
+Customer --> AccountManagement : 14. checks balance
+AccountManagement ->> BalanceTracking : 15. to get current balance
+BalanceTracking -> BalanceTracking : 16. calculates available balance
+AccountManagement --> AccountManagement : 17. returns balance information
+TransactionValidation --> TransactionValidation : 18. detects suspicious pattern
+TransactionValidation ->> AccountManagement : 19. to freeze account
+AccountManagement -> AccountManagement : 20. applies security hold
+TransactionValidation ->> TransactionValidation_events : 21. Account Frozen
+TransactionValidation_events --> CustomerNotification : 22. Account Frozen
+CustomerNotification -> CustomerNotification : 23. sends security alert to customer
+CustomerNotification ->> CustomerNotification_events : 24. bank security team
+CRON --> PaymentProcessing : 25. triggers scheduled payments
+PaymentProcessing ->> AccountManagement : 26. to get scheduled payments
+PaymentProcessing -> PaymentProcessing : 27. processes each scheduled payment
+BalanceTracking -> BalanceTracking : 28. updates balances for processed payments
+PaymentProcessing ->> PaymentProcessing_events : 29. Scheduled Payments Processed
+
+@enduml

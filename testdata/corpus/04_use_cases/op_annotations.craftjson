@@ -10,7 +10,9 @@
             "actor": "CRON",
             "verb": "detects",
             "phrase": "failed charge",
-            "description": "when CRON detects failed charge"
+            "description": "when CRON detects failed charge",
+            "line": 8,
+            "column": 10
           },
           "actions": [
             {
@@ -28,6 +30,7 @@
               "phrase": "a fresh charge attempt",
               "description": "Subscriptions asks Billing for a fresh charge attempt",
               "line": 9,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "re/Subscriptions"
@@ -52,6 +55,7 @@
               "phrase": "authorize the card",
               "description": "Billing asks Gateway to authorize the card",
               "line": 10,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "re/Billing"
@@ -72,6 +76,7 @@
               "phrase": "record the entry",
               "description": "Billing asks Ledger to record the entry",
               "line": 11,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "re/Billing"
@@ -94,6 +99,7 @@
               "phrase": "authorization result",
               "description": "Gateway returns authorization result to Billing",
               "line": 12,
+              "column": 9,
               "to": {
                 "kind": "bounded_context",
                 "id": "re/Billing"
@@ -112,6 +118,7 @@
               },
               "description": "Billing notifies \"billing.ChargeSucceeded\"",
               "line": 13,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "re/Billing"
@@ -125,7 +132,8 @@
               "connector": "the",
               "phrase": "subscription active",
               "description": "re/subscriptions marks the subscription active",
-              "line": 14
+              "line": 14,
+              "column": 9
             },
             {
               "id": "action_8",
@@ -141,6 +149,7 @@
               "phrase": "log the outcome",
               "description": "Subscriptions asks Audit to log the outcome",
               "line": 15,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "re/Subscriptions"
@@ -160,6 +169,7 @@
               "phrase": "a reconciliation",
               "description": "Subscriptions asks Legacy for a reconciliation",
               "line": 16,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "re/Subscriptions"
@@ -174,7 +184,9 @@
             "context": "re/billing",
             "event": "vas.VasApplied",
             "ref": "vas.VasApplied",
-            "description": "when re/billing listens \"vas.VasApplied\""
+            "description": "when re/billing listens \"vas.VasApplied\"",
+            "line": 18,
+            "column": 10
           },
           "actions": [
             {
@@ -192,6 +204,7 @@
               "phrase": "record a duplicate-charge audit entry",
               "description": "re/billing asks Ledger to record a duplicate-charge audit entry",
               "line": 19,
+              "column": 9,
               "to": {
                 "kind": "bounded_context",
                 "id": "re/Ledger"

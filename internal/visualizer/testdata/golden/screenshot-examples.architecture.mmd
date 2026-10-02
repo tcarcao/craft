@@ -1,0 +1,53 @@
+flowchart LR
+    subgraph NotificationService["NotificationService"]
+        EmailNotifier["EmailNotifier"]
+        PushNotifier["PushNotifier"]
+        SMSNotifier["SMSNotifier"]
+    end
+    subgraph OrderService["OrderService"]
+        OrderManagement["OrderManagement"]
+        Payment["Payment"]
+        Shipping["Shipping"]
+    end
+    subgraph ProductService["ProductService"]
+        Catalog["Catalog"]
+        Inventory["Inventory"]
+        Pricing["Pricing"]
+    end
+    subgraph UserService["UserService"]
+        Authentication["Authentication"]
+        Preferences["Preferences"]
+        Profile["Profile"]
+    end
+    inventory_system["inventory_system"]
+    notification_queue["notification_queue"]
+    order_db["order_db"]
+    payment_gateway["payment_gateway"]
+    product_db["product_db"]
+    shipping_provider["shipping_provider"]
+    user_db["user_db"]
+    Authentication_events[("Authentication events")]
+    Catalog_events[("Catalog events")]
+    Inventory_events[("Inventory events")]
+    OrderManagement_events[("OrderManagement events")]
+    Payment_events[("Payment events")]
+    PushNotifier --> notification_queue
+    OrderManagement --> order_db
+    OrderManagement --> OrderManagement_events
+    Payment --> payment_gateway
+    Payment --> Payment_events
+    Shipping --> shipping_provider
+    Catalog --> product_db
+    Catalog --> Catalog_events
+    Inventory --> inventory_system
+    Inventory --> Inventory_events
+    Authentication --> Authentication_events
+    Authentication --> user_db
+    Preferences --> user_db
+    Profile --> user_db
+    OrderManagement_events --> EmailNotifier
+    Payment_events --> OrderManagement
+    Catalog_events --> PushNotifier
+    Inventory_events --> Catalog
+    Authentication_events --> EmailNotifier
+    Authentication_events --> Profile

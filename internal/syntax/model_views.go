@@ -6,10 +6,6 @@ import "github.com/tcarcao/craft/v2/internal/lang"
 // answer positional, token-level questions so that model building never has to
 // index into a node's flat token slice itself.
 
-// IsConnectorWord reports whether v is one of the grammar's connector words
-// (a, an, the, as, to, from, in, on, at, for, with, by).
-func IsConnectorWord(v string) bool { return isConnectorWord(v) }
-
 // ExternalSubjectText returns the subject of an external trigger, read by
 // position: significant element 0, which may be a keyword such as `user` or
 // `cron` rather than an identifier, or a multi-token qualified ref.

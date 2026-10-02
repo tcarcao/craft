@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/interaction"
 	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -53,7 +54,6 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintDeadEvents(perFileTrees, lis)...)
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
 	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
-	diags = append(diags, lintContextMapConsistency(perFileTrees, ws, lis)...)
 	diags = append(diags, lintAmbiguousUseCaseRefs(perFileTrees, ws, lis)...)
 	return diags
 }
@@ -320,82 +320,26 @@ func siteLess(uri1 string, line1, col1 int, uri2 string, line2, col2 int) bool {
 	return col1 < col2
 }
 
-// asyncSite records one resolved async publisher or listener site, keyed
-// externally by event value, for cross-file publisher/listener pairing.
-type asyncSite struct {
-	bc, uri   string
-	line, col int
-	nameLen   int
-}
-
-// buildDependencyEdges walks every use-case scenario in perFileTrees and
-// builds the dependency adjacency described above: sync `asks` edges direct,
-// async `notifies`/`listens` edges paired by equal event value across the
-// whole workspace (mirroring how lintDeadEvents matches publish/consume
-// workspace-wide).
-func buildDependencyEdges(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) map[pairKey]depInfo {
+// dependenciesFrom builds the dependency adjacency from derived interactions:
+// a request makes its subject depend on its target, and a delivered event
+// makes the listener depend on the publisher. Only interactions between two
+// resolved bounded contexts count.
+func dependenciesFrom(its []interaction.Interaction) map[pairKey]depInfo {
 	deps := map[pairKey]depInfo{}
-	publishersByEvent := map[string][]asyncSite{}
-	listenersByEvent := map[string][]asyncSite{}
-
-	for _, uri := range sortedTreeURIs(perFileTrees) {
-		tree := perFileTrees[uri]
-		li := lis[uri]
-		file := syntax.AsFile(tree)
-		for _, uc := range file.UseCases() {
-			for _, sc := range uc.Scenarios() {
-				trigger := sc.Trigger()
-				if trigger.Kind() == lang.TriggerDomainListen {
-					if ev := trigger.EventValue(); ev != "" {
-						if ctx := trigger.ContextName(); ctx != "" {
-							resolved, kind, ambiguous := resolveBCRef(ws, "", ctx)
-							if kind == "bc" && !ambiguous && resolved != "" {
-								whenTok := sc.When()
-								line := 0
-								if whenTok != nil {
-									line, _ = li.LineCol(whenTok.Offset())
-								}
-								listenersByEvent[ev] = append(listenersByEvent[ev], asyncSite{
-									bc: resolved, uri: uri, line: line, col: trigger.ActorCol(li), nameLen: lspLen(ctx),
-								})
-							}
-						}
-					}
-				}
-
-				for _, action := range sc.Actions() {
-					switch action.Kind() {
-					case lang.ActionSync:
-						subject, subjectKind, subjectAmbig := resolveBCRef(ws, "", action.SubjectName())
-						target, targetKind, targetAmbig := resolveBCRef(ws, "", action.TargetName())
-						if subjectKind == "bc" && !subjectAmbig && targetKind == "bc" && !targetAmbig {
-							recordDependency(deps, subject, target, uri, action.Line(li), action.SubjectCol(li), lspLen(action.SubjectName()))
-						}
-					case lang.ActionAsync:
-						if ev := action.EventValue(); ev != "" {
-							resolved, kind, ambiguous := resolveBCRef(ws, "", action.SubjectName())
-							if kind == "bc" && !ambiguous && resolved != "" {
-								publishersByEvent[ev] = append(publishersByEvent[ev], asyncSite{
-									bc: resolved, uri: uri, line: action.Line(li), col: action.SubjectCol(li), nameLen: lspLen(action.SubjectName()),
-								})
-							}
-						}
-					}
-				}
+	bc := func(e interaction.Endpoint) bool { return e.Kind == model.ParticipantBoundedContext }
+	for _, it := range its {
+		site := it.Site
+		switch it.Kind {
+		case interaction.Request:
+			if bc(it.From) && bc(it.To) {
+				recordDependency(deps, it.From.Key, it.To.Key, site.URI, site.Line, site.Column, site.Length)
+			}
+		case interaction.Listen:
+			if bc(it.From) && bc(it.To) {
+				recordDependency(deps, it.To.Key, it.From.Key, site.URI, site.Line, site.Column, site.Length)
 			}
 		}
 	}
-
-	// Pair publishers and listeners of the same event across the whole
-	// workspace: a listener depends on every bc that publishes that event.
-	for event, listeners := range listenersByEvent {
-		for _, publisher := range publishersByEvent[event] {
-			for _, listener := range listeners {
-				recordDependency(deps, listener.bc, publisher.bc, listener.uri, listener.line, listener.col, listener.nameLen)
-			}
-		}
-	}
-
 	return deps
 }
 
@@ -470,14 +414,16 @@ func ambiguousUseCaseRefDiag(uri, ref string, line, col int) model.Diagnostic {
 	}
 }
 
-// lintContextMapConsistency cross-checks context_map edges against the
-// dependency adjacency built by buildDependencyEdges. R1 (this task):
-// separate-ways-violation — a `separate_ways` edge whose endpoints have ANY
-// observed dependency (either direction) between them is contradictory,
-// since separate_ways declares that no relationship should exist. Later
-// tasks (B2, B3) add further rules over the same adjacency.
-func lintContextMapConsistency(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
-	deps := buildDependencyEdges(perFileTrees, ws, lis)
+// LintCommunication cross-checks the declared context_map edges against the
+// communication derived from use cases (its). It runs after the model is
+// resolved, which is why it is separate from LintWorkspace:
+//   - separate-ways-violation: a `separate_ways` pair that communicates;
+//   - relationship-direction-inverted / relationship-bidirectional: traffic
+//     against, or in both directions of, an asymmetric pattern;
+//   - unclassified-communication: a communicating pair with no context_map
+//     edge at all.
+func LintCommunication(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex, its []interaction.Interaction) []model.Diagnostic {
+	deps := dependenciesFrom(its)
 
 	var diags []model.Diagnostic
 	for _, uri := range sortedTreeURIs(perFileTrees) {

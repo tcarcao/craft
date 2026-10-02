@@ -1,0 +1,52 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "BankGateway" as BankGateway
+frame "EmailService" as EmailService
+frame "PaymentService" as PaymentService
+frame "UserService" as UserService
+
+' Actors
+actor "User" as User
+
+' Domain queues
+queue "PaymentService events" as PaymentService_events
+
+' Workflow flows
+User --> PaymentService : 1. submits payment request
+PaymentService -> PaymentService : 2. validates payment data
+PaymentService ->> BankGateway : 3. to process payment
+BankGateway --> PaymentService : 4. returns payment result
+PaymentService --> User : 5. returns confirmation status
+PaymentService ->> PaymentService_events : 6. payment_processed
+User --> UserService : 7. submits registration form
+UserService -> UserService : 8. validates user data
+UserService ->> EmailService : 9. to send verification
+EmailService --> UserService : 10. returns email status
+UserService --> User : 11. returns registration result
+
+@enduml

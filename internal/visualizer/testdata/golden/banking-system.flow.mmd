@@ -1,0 +1,41 @@
+flowchart LR
+    CRON(["CRON"])
+    Customer(["Customer"])
+    TransactionValidation(["TransactionValidation"])
+    AccountManagement["AccountManagement"]
+    BalanceTracking["BalanceTracking"]
+    CustomerNotification["CustomerNotification"]
+    PaymentProcessing["PaymentProcessing"]
+    BalanceTracking_events[("BalanceTracking events")]
+    CustomerNotification_events[("CustomerNotification events")]
+    PaymentProcessing_events[("PaymentProcessing events")]
+    TransactionValidation_events[("TransactionValidation events")]
+    Customer -- "1. initiates transfer" --> PaymentProcessing
+    PaymentProcessing -- "2. to verify source account" --> AccountManagement
+    PaymentProcessing -- "3. to check transfer limits" --> TransactionValidation
+    TransactionValidation -- "4. validates transaction rules" --> TransactionValidation
+    PaymentProcessing -- "5. to reserve funds" --> BalanceTracking
+    BalanceTracking -- "6. Funds Reserved" --> BalanceTracking_events
+    BalanceTracking_events -- "7. Funds Reserved" --> PaymentProcessing
+    PaymentProcessing -- "8. to verify destination account" --> AccountManagement
+    PaymentProcessing -- "9. executes fund transfer" --> PaymentProcessing
+    BalanceTracking -- "10. updates account balances" --> BalanceTracking
+    PaymentProcessing -- "11. Transfer Completed" --> PaymentProcessing_events
+    PaymentProcessing_events -- "12. Transfer Completed" --> CustomerNotification
+    CustomerNotification -- "13. sends confirmation to both accounts" --> CustomerNotification
+    Customer -- "14. checks balance" --> AccountManagement
+    AccountManagement -- "15. to get current balance" --> BalanceTracking
+    BalanceTracking -- "16. calculates available balance" --> BalanceTracking
+    AccountManagement -. "17. returns balance information" .-> AccountManagement
+    TransactionValidation -- "18. detects suspicious pattern" --> TransactionValidation
+    TransactionValidation -- "19. to freeze account" --> AccountManagement
+    AccountManagement -- "20. applies security hold" --> AccountManagement
+    TransactionValidation -- "21. Account Frozen" --> TransactionValidation_events
+    TransactionValidation_events -- "22. Account Frozen" --> CustomerNotification
+    CustomerNotification -- "23. sends security alert to customer" --> CustomerNotification
+    CustomerNotification -- "24. bank security team" --> CustomerNotification_events
+    CRON -- "25. triggers scheduled payments" --> PaymentProcessing
+    PaymentProcessing -- "26. to get scheduled payments" --> AccountManagement
+    PaymentProcessing -- "27. processes each scheduled payment" --> PaymentProcessing
+    BalanceTracking -- "28. updates balances for processed payments" --> BalanceTracking
+    PaymentProcessing -- "29. Scheduled Payments Processed" --> PaymentProcessing_events

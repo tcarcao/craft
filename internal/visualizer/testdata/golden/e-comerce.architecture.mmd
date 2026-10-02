@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph Order_Service["Order Service"]
+        OrderFulfilment["OrderFulfilment"]
+        OrderManagement["OrderManagement"]
+    end
+    subgraph WalletService["WalletService"]
+        Wallet["Wallet"]
+        WalletItemAddition["WalletItemAddition"]
+        WalletItemPurchase["WalletItemPurchase"]
+    end
+    subgraph service_re_go_vas["service-re-go-vas"]
+        VASScheduling["VASScheduling"]
+    end
+    OrderManagement_events[("OrderManagement events")]
+    Wallet_events[("Wallet events")]
+    OrderFulfilment --> OrderManagement
+    OrderFulfilment --> WalletItemAddition
+    OrderManagement --> OrderManagement_events
+    VASScheduling --> OrderManagement
+    VASScheduling --> Wallet
+    Wallet --> Wallet_events
+    WalletItemAddition --> Wallet
+    WalletItemPurchase --> OrderManagement
+    WalletItemPurchase --> Wallet
+    OrderManagement_events --> OrderFulfilment
+    Wallet_events --> OrderFulfilment
+    Wallet_events --> VASScheduling
+    Wallet_events --> WalletItemPurchase

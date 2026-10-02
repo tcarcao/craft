@@ -1,0 +1,56 @@
+C4Container
+    title Container Diagram - Architecture (boundaries mode)
+    Person(Business_User, "Business_User", "External user")
+    Person(CRON, "CRON", "External user")
+    Enterprise_Boundary(Order_Service_boundary, "Order Service") {
+        Container_Boundary(Order_Service_OrderManagement_Domain_boundary, "OrderManagement Domain") {
+            Container_Ext(OrderManagement, "OrderManagement", "Application", "OrderManagement [Context]")
+        }
+        Container_Boundary(Order_Service_OrderFulfilment_Domain_boundary, "OrderFulfilment Domain") {
+            Container_Ext(OrderFulfilment, "OrderFulfilment", "Application", "OrderFulfilment [Context]")
+        }
+        ContainerDb_Ext(Order_Service_posgres, "Order Service_posgres", "Database", "Stores posgres data")
+    }
+    Enterprise_Boundary(service_re_go_vas_boundary, "service-re-go-vas") {
+        Container_Boundary(service_re_go_vas_VASScheduling_Domain_boundary, "VASScheduling Domain") {
+            Container_Ext(VASScheduling, "VASScheduling", "Application", "VASScheduling [Context]")
+        }
+        ContainerDb_Ext(service_re_go_vas_posgres, "service-re-go-vas_posgres", "Database", "Stores posgres data")
+        ContainerDb_Ext(service_re_go_vas_dynamodb, "service-re-go-vas_dynamodb", "Database", "Stores dynamodb data")
+    }
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(WalletService_boundary, "WalletService") {
+        Container_Boundary(WalletService_Wallet_Domain_boundary, "Wallet Domain") {
+            Container(Wallet, "Wallet", "Go Application", "Wallet [Context]")
+        }
+        Container_Boundary(WalletService_WalletItemPurchase_Domain_boundary, "WalletItemPurchase Domain") {
+            Container(WalletItemPurchase, "WalletItemPurchase", "Go Application", "WalletItemPurchase [Context]")
+        }
+        Container_Boundary(WalletService_WalletItemAddition_Domain_boundary, "WalletItemAddition Domain") {
+            Container(WalletItemAddition, "WalletItemAddition", "Go Application", "WalletItemAddition [Context]")
+        }
+        ContainerDb(WalletService_posgres, "WalletService_posgres", "Database", "Stores posgres data")
+        ContainerDb(WalletService_redis, "WalletService_redis", "Redis Cache", "Stores redis data")
+    }
+    Rel(Business_User, WalletItemPurchase, "Triggers")
+    Rel(Business_User, VASScheduling, "Triggers")
+    Rel(CRON, Wallet, "Triggers")
+    Rel(WalletItemPurchase, OrderManagement, "to create an Order", "Service API")
+    Rel(OrderFulfilment, WalletItemAddition, "to fulfil the addition request", "Service API")
+    Rel(VASScheduling, Wallet, "to reserve a VAS", "Service API")
+    Rel(VASScheduling, OrderManagement, "to create an Order", "Service API")
+    Rel(VASScheduling, Wallet, "to cancel the VAS reservation", "Service API")
+    Rel(Wallet, Event_Queue, "VAS Addition Request Approved", "Event Publishing")
+    Rel(OrderManagement, Event_Queue, "Order Created", "Event Publishing")
+    Rel(OrderManagement, Event_Queue, "Order payment deferred", "Event Publishing")
+    Rel(Wallet, Event_Queue, "VAS added", "Event Publishing")
+    Rel(OrderManagement, Event_Queue, "Order completed", "Event Publishing")
+    Rel(Wallet, Event_Queue, "VAS Reserved", "Event Publishing")
+    Rel(Wallet, Event_Queue, "VAS Reservation Canceled", "Event Publishing")
+    Rel(Wallet, Event_Queue, "VAS Expired", "Event Publishing")
+    Rel(Event_Queue, WalletItemPurchase, "VAS Addition Request Approved", "Event Delivery")
+    Rel(Event_Queue, OrderFulfilment, "Order payment deferred", "Event Delivery")
+    Rel(Event_Queue, OrderFulfilment, "VAS added", "Event Delivery")
+    Rel(Event_Queue, VASScheduling, "VAS Addition Request Approved", "Event Delivery")

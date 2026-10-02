@@ -1,0 +1,15 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+participant "Subscriptions" as Subscriptions
+participant "re/billing" as re_billing
+
+== Renewal with typed refs and flexible prose ==
+
+[-> Subscriptions : vas.VasApplied
+Subscriptions -> re_billing : for a fresh charge attempt (1! & 2!)
+Subscriptions ->> Subscriptions : notifies "vas.VasFulfilled"
+
+@enduml

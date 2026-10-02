@@ -10,7 +10,9 @@
             "actor": "Customer",
             "verb": "places",
             "phrase": "order",
-            "description": "when Customer places order"
+            "description": "when Customer places order",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -20,7 +22,8 @@
               "verb": "validates",
               "phrase": "order details",
               "description": "OrderService validates order details",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -28,7 +31,8 @@
               "context": "OrderService",
               "event": "Order Placed",
               "description": "OrderService notifies \"Order Placed\"",
-              "line": 4
+              "line": 4,
+              "column": 9
             }
           ]
         },
@@ -38,7 +42,9 @@
             "type": "domain_listen",
             "context": "Inventory",
             "event": "Order Placed",
-            "description": "when Inventory listens \"Order Placed\""
+            "description": "when Inventory listens \"Order Placed\"",
+            "line": 6,
+            "column": 10
           },
           "actions": [
             {
@@ -48,7 +54,8 @@
               "verb": "checks",
               "phrase": "stock availability",
               "description": "Inventory checks stock availability",
-              "line": 7
+              "line": 7,
+              "column": 9
             },
             {
               "id": "action_6",
@@ -56,7 +63,8 @@
               "context": "Inventory",
               "event": "Stock Reserved",
               "description": "Inventory notifies \"Stock Reserved\"",
-              "line": 8
+              "line": 8,
+              "column": 9
             }
           ]
         }

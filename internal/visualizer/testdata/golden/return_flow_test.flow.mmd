@@ -1,0 +1,24 @@
+flowchart LR
+    Admin(["Admin"])
+    User(["User"])
+    BankGateway["BankGateway"]
+    CacheService["CacheService"]
+    DatabaseService["DatabaseService"]
+    NotificationService["NotificationService"]
+    PaymentService["PaymentService"]
+    ReportService["ReportService"]
+    User -- "1. submits payment request" --> PaymentService
+    PaymentService -- "2. validates payment data" --> PaymentService
+    PaymentService -- "3. to process payment" --> BankGateway
+    BankGateway -. "4. returns payment result" .-> PaymentService
+    PaymentService -- "5. to send confirmation" --> NotificationService
+    NotificationService -. "6. returns delivery status" .-> PaymentService
+    PaymentService -. "7. returns final confirmation" .-> User
+    Admin -- "8. requests report" --> ReportService
+    ReportService -- "9. for data" --> DatabaseService
+    DatabaseService -- "10. to check cache" --> CacheService
+    CacheService -. "11. returns cache miss" .-> DatabaseService
+    DatabaseService -- "12. queries main database" --> DatabaseService
+    DatabaseService -. "13. returns report data" .-> ReportService
+    ReportService -- "14. formats the data" --> ReportService
+    ReportService -. "15. returns formatted report" .-> Admin

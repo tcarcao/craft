@@ -1,0 +1,15 @@
+sequenceDiagram
+    actor Business_User as Business_User
+    participant Authentication as Authentication
+    actor Database as Database
+    participant Profile as Profile
+    participant Notifier as Notifier
+    Note over Business_User,Notifier: User Registration
+    Business_User->>Authentication: creates Account
+    Authentication->>Authentication: validates email format
+    Authentication->>Database: to check email uniqueness
+    Profile->>Profile: creates user profile
+    Authentication-)Authentication: notifies "User Registered"
+    Authentication-)Profile: User Registered
+    Profile->>Database: to store profile data
+    Profile->>Notifier: to send welcome email

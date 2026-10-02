@@ -1,0 +1,22 @@
+flowchart LR
+    AccountManagement["AccountManagement"]
+    BalanceTracking["BalanceTracking"]
+    CustomerNotification["CustomerNotification"]
+    PaymentProcessing["PaymentProcessing"]
+    TransactionValidation["TransactionValidation"]
+    BalanceTracking_events[("BalanceTracking events")]
+    CustomerNotification_events[("CustomerNotification events")]
+    PaymentProcessing_events[("PaymentProcessing events")]
+    TransactionValidation_events[("TransactionValidation events")]
+    AccountManagement --> BalanceTracking
+    BalanceTracking --> BalanceTracking_events
+    CustomerNotification --> CustomerNotification_events
+    PaymentProcessing --> AccountManagement
+    PaymentProcessing --> BalanceTracking
+    PaymentProcessing --> TransactionValidation
+    PaymentProcessing --> PaymentProcessing_events
+    TransactionValidation --> AccountManagement
+    TransactionValidation --> TransactionValidation_events
+    BalanceTracking_events --> PaymentProcessing
+    PaymentProcessing_events --> CustomerNotification
+    TransactionValidation_events --> CustomerNotification

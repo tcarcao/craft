@@ -1,0 +1,64 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Service boundaries
+rectangle "Order Service" as Order_Service {
+  frame "OrderFulfilment" as OrderFulfilment
+  frame "OrderManagement" as OrderManagement
+}
+rectangle "WalletService" as WalletService {
+  frame "Wallet" as Wallet
+  frame "WalletItemAddition" as WalletItemAddition
+  frame "WalletItemPurchase" as WalletItemPurchase
+}
+rectangle "service-re-go-vas" as service_re_go_vas {
+  frame "VASScheduling" as VASScheduling
+}
+
+' Domain queues
+queue "OrderManagement events" as OrderManagement_events
+queue "Wallet events" as Wallet_events
+
+' Subdomain connections
+OrderFulfilment --> OrderManagement
+OrderFulfilment --> WalletItemAddition
+OrderManagement --> OrderManagement_events
+VASScheduling --> OrderManagement
+VASScheduling --> Wallet
+Wallet --> Wallet_events
+WalletItemAddition --> Wallet
+WalletItemPurchase --> OrderManagement
+WalletItemPurchase --> Wallet
+OrderManagement_events --> OrderFulfilment
+Wallet_events --> OrderFulfilment
+Wallet_events --> VASScheduling
+Wallet_events --> WalletItemPurchase
+
+@enduml

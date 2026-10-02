@@ -33,6 +33,7 @@ import (
 
 	"github.com/tcarcao/craft/v2/internal/analysis"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
+	"github.com/tcarcao/craft/v2/internal/visualizer/plantuml"
 	craft "github.com/tcarcao/craft/v2/pkg/craft"
 )
 
@@ -163,7 +164,7 @@ func generateC4PUML(t *testing.T, doc *craft.CraftDoc) string {
 	return string(puml)
 }
 
-// TestC4Render_PerLanguage exercises every language getServiceIcon recognises.
+// TestC4Render_PerLanguage exercises every language the C4 view recognises.
 // Failure means either the generated PUML emits an include path the strict
 // renderer can't resolve, or the sprite referenced via $sprite="..." has no
 // matching include.
@@ -197,7 +198,7 @@ func TestC4Render_PerLanguage(t *testing.T) {
 func TestC4Render_NoLanguage(t *testing.T) {
 	endpoint := plantUMLEndpoint(t)
 	puml := generateC4PUML(t, minimalC4Model(""))
-	for path := range languageIncludePathsForTest() {
+	for _, path := range plantuml.LanguageIncludes() {
 		if strings.Contains(puml, "<"+path+">") {
 			t.Fatalf("unexpected language include %q emitted when no service declares a language\n--- puml ---\n%s", path, puml)
 		}
@@ -215,24 +216,6 @@ func TestC4Render_Regression_RustInclude(t *testing.T) {
 		t.Fatalf("regression: generator emitted tupadr3/devicons2/rust (missing from PlantUML stdlib)")
 	}
 	assertRendersClean(t, endpoint, puml)
-}
-
-// languageIncludePathsForTest mirrors the in-package map. Duplicated here to
-// keep the test in the `_test` package without exporting internals.
-func languageIncludePathsForTest() map[string]string {
-	return map[string]string{
-		"tupadr3/devicons2/go":         "go",
-		"tupadr3/devicons2/java":       "java",
-		"tupadr3/devicons2/python":     "python",
-		"tupadr3/devicons2/nodejs":     "nodejs",
-		"tupadr3/devicons2/javascript": "javascript",
-		"tupadr3/devicons/rust":        "rust",
-		"tupadr3/devicons2/dot_net":    "dot_net",
-		"tupadr3/devicons2/php":        "php",
-		"tupadr3/devicons2/ruby":       "ruby",
-		"tupadr3/devicons2/kotlin":     "kotlin",
-		"tupadr3/devicons2/swift":      "swift",
-	}
 }
 
 // TestVAS_AllDiagramsRender renders the full vas.craft fixture through every
@@ -531,7 +514,7 @@ func TestVAS_MermaidC4Renders(t *testing.T) {
 	}
 	doc := analysis.File("", string(src)).Doc
 
-	mermaidSrc, err := visualizer.New().GenerateC4Mermaid(doc, visualizer.C4ModeBoundaries, false)
+	mermaidSrc, err := visualizer.New().GenerateC4Mermaid(doc, nil, nil, visualizer.C4ModeBoundaries, false)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}

@@ -4,102 +4,56 @@ import (
 	"fmt"
 	"strings"
 
-	craft "github.com/tcarcao/craft/v2/pkg/craft"
+	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 )
 
-// C4 emits a Mermaid C4Container (experimental syntax) diagram from doc.
-// showDatabases is reserved for parity with the PlantUML side; Mermaid C4
-// has no element type richer than Container, so data-stores would render
-// as plain Containers if represented.
-func C4(doc *craft.CraftDoc, showDatabases bool) (string, error) {
+// C4 writes a C4 container diagram with Mermaid's C4Container syntax. It draws
+// the same view as the PlantUML writer; Mermaid has no sprites, so icons are
+// left out.
+func C4(c view.C4) string {
 	var b strings.Builder
+	al := newAliases()
 	b.WriteString("C4Container\n")
-
-	for _, a := range doc.Actors {
-		switch a.Type {
-		case craft.ActorTypeUser:
-			fmt.Fprintf(&b, "    Person(%s, %q, \"\")\n", safeID(a.Name), a.Name)
-		case craft.ActorTypeSystem, craft.ActorTypeService:
-			fmt.Fprintf(&b, "    System_Ext(%s, %q, \"\")\n", safeID(a.Name), a.Name)
+	fmt.Fprintf(&b, "    title %s\n", c.Title)
+	for _, a := range c.Actors {
+		element := "Person"
+		if a.Element == view.C4ExternalSystem {
+			element = "System_Ext"
 		}
+		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), text(a.Label), text(a.Description))
 	}
-
-	for _, svc := range doc.Services {
-		fmt.Fprintf(&b, "    System_Boundary(%s, %q) {\n", safeID(svc.Name), svc.Name)
-		for _, ctx := range svc.Contexts {
-			fmt.Fprintf(&b, "        Container(%s, %q, \"\", \"\")\n", safeID(ctx), ctx)
+	for _, sys := range c.Systems {
+		boundary := "System_Boundary"
+		if sys.External {
+			boundary = "Enterprise_Boundary"
+		}
+		fmt.Fprintf(&b, "    %s(%s, \"%s\") {\n", boundary, al.declare("system:"+sys.ID, sys.Label+" boundary"), text(sys.Label))
+		for _, g := range sys.Groups {
+			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), text(g.Label))
+			for _, ct := range g.Containers {
+				c4Container(&b, "            ", al, ct, sys.External)
+			}
+			b.WriteString("        }\n")
+		}
+		for _, ct := range sys.Containers {
+			c4Container(&b, "        ", al, ct, sys.External)
 		}
 		b.WriteString("    }\n")
 	}
-
-	if hasAsyncActions(doc) {
-		b.WriteString("    ContainerQueue(Event_Queue, \"Event_Queue\", \"Message Queue\", \"\")\n")
-		writeC4EventRels(&b, doc)
+	for _, r := range c.Relations {
+		if r.Technology == "" {
+			fmt.Fprintf(&b, "    Rel(%s, %s, \"%s\")\n", al.of(r.From), al.of(r.To), text(r.Label))
+			continue
+		}
+		fmt.Fprintf(&b, "    Rel(%s, %s, \"%s\", \"%s\")\n", al.of(r.From), al.of(r.To), text(r.Label), text(r.Technology))
 	}
-
-	writeC4TriggerRels(&b, doc)
-
-	return b.String(), nil
+	return b.String()
 }
 
-func hasAsyncActions(doc *craft.CraftDoc) bool {
-	for _, uc := range doc.UseCases {
-		for _, sc := range uc.Scenarios {
-			for _, act := range sc.Actions {
-				if act.Type == craft.ActionTypeAsync {
-					return true
-				}
-			}
-		}
+func c4Container(b *strings.Builder, indent string, al *aliases, c view.C4Container, external bool) {
+	element := map[view.C4ContainerKind]string{view.C4App: "Container", view.C4Database: "ContainerDb", view.C4Queue: "ContainerQueue"}[c.Kind]
+	if external {
+		element += "_Ext"
 	}
-	return false
-}
-
-func writeC4EventRels(b *strings.Builder, doc *craft.CraftDoc) {
-	seen := map[string]bool{}
-	for _, uc := range doc.UseCases {
-		for _, sc := range uc.Scenarios {
-			if sc.Trigger.Type == craft.TriggerTypeDomainListen {
-				key := fmt.Sprintf("EQ->%s|%s", sc.Trigger.Context, sc.Trigger.Event)
-				if !seen[key] && sc.Trigger.Context != "" {
-					seen[key] = true
-					fmt.Fprintf(b, "    Rel(Event_Queue, %s, %q)\n", safeID(sc.Trigger.Context), sc.Trigger.Event)
-				}
-			}
-			for _, act := range sc.Actions {
-				if act.Type == craft.ActionTypeAsync && act.Context != "" {
-					key := fmt.Sprintf("%s->EQ|%s", act.Context, act.Event)
-					if !seen[key] {
-						seen[key] = true
-						fmt.Fprintf(b, "    Rel(%s, Event_Queue, %q)\n", safeID(act.Context), act.Event)
-					}
-				}
-			}
-		}
-	}
-}
-
-func writeC4TriggerRels(b *strings.Builder, doc *craft.CraftDoc) {
-	seen := map[string]bool{}
-	for _, uc := range doc.UseCases {
-		for _, sc := range uc.Scenarios {
-			if sc.Trigger.Type != craft.TriggerTypeExternal {
-				continue
-			}
-			actor := sc.Trigger.Actor
-			if actor == "" || len(sc.Actions) == 0 {
-				continue
-			}
-			target := sc.Actions[0].Context
-			if target == "" {
-				continue
-			}
-			key := actor + "->" + target
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			fmt.Fprintf(b, "    Rel(%s, %s, \"Triggers\")\n", safeID(actor), safeID(target))
-		}
-	}
+	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), text(c.Label), text(c.Technology), text(c.Description))
 }

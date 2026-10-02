@@ -1,0 +1,10 @@
+flowchart LR
+    subgraph UserService["UserService"]
+        Authentication["Authentication"]
+        Profile["Profile"]
+    end
+    Notifier["Notifier"]
+    Authentication_events[("Authentication events")]
+    Authentication --> Authentication_events
+    Profile --> Notifier
+    Authentication_events --> Profile

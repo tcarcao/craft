@@ -1,0 +1,41 @@
+sequenceDiagram
+    actor Customer as Customer
+    participant PaymentProcessing as PaymentProcessing
+    participant AccountManagement as AccountManagement
+    actor TransactionValidation as TransactionValidation
+    participant BalanceTracking as BalanceTracking
+    participant CustomerNotification as CustomerNotification
+    actor CRON as CRON
+    Note over Customer,CRON: Money Transfer
+    Customer->>PaymentProcessing: initiates transfer
+    PaymentProcessing->>AccountManagement: to verify source account
+    PaymentProcessing->>TransactionValidation: to check transfer limits
+    TransactionValidation->>TransactionValidation: validates transaction rules
+    PaymentProcessing->>BalanceTracking: to reserve funds
+    BalanceTracking-)BalanceTracking: notifies "Funds Reserved"
+    BalanceTracking-)PaymentProcessing: Funds Reserved
+    PaymentProcessing->>AccountManagement: to verify destination account
+    PaymentProcessing->>PaymentProcessing: executes fund transfer
+    BalanceTracking->>BalanceTracking: updates account balances
+    PaymentProcessing-)PaymentProcessing: notifies "Transfer Completed"
+    PaymentProcessing-)CustomerNotification: Transfer Completed
+    CustomerNotification->>CustomerNotification: sends confirmation to both accounts
+    Note over Customer,CRON: Account Balance Check
+    Customer->>AccountManagement: checks balance
+    AccountManagement->>BalanceTracking: to get current balance
+    BalanceTracking->>BalanceTracking: calculates available balance
+    AccountManagement-->>AccountManagement: returns balance information
+    Note over Customer,CRON: Suspicious Activity Detection
+    TransactionValidation->>TransactionValidation: detects suspicious pattern
+    TransactionValidation->>AccountManagement: to freeze account
+    AccountManagement->>AccountManagement: applies security hold
+    TransactionValidation-)TransactionValidation: notifies "Account Frozen"
+    TransactionValidation-)CustomerNotification: Account Frozen
+    CustomerNotification->>CustomerNotification: sends security alert to customer
+    CustomerNotification-)CustomerNotification: notifies "bank security team"
+    Note over Customer,CRON: Scheduled Payment Processing
+    CRON->>PaymentProcessing: triggers scheduled payments
+    PaymentProcessing->>AccountManagement: to get scheduled payments
+    PaymentProcessing->>PaymentProcessing: processes each scheduled payment
+    BalanceTracking->>BalanceTracking: updates balances for processed payments
+    PaymentProcessing-)PaymentProcessing: notifies "Scheduled Payments Processed"

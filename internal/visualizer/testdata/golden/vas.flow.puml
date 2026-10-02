@@ -1,0 +1,79 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "VASFulfillment" as VASFulfillment
+frame "VASScheduler" as VASScheduler
+frame "VasApplication" as VasApplication
+frame "VasLifecycle" as VasLifecycle
+
+' Actors
+boundary "CRON" as CRON
+boundary "FulfillmentTimer" as FulfillmentTimer
+boundary "VasLifecycleTimer" as VasLifecycleTimer
+
+' Domain queues
+queue "VASFulfillment events" as VASFulfillment_events
+queue "VASScheduler events" as VASScheduler_events
+queue "VasApplication events" as VasApplication_events
+
+' Workflow flows
+CRON --> VASScheduler : 1. advances schedule
+VASScheduler -> VASScheduler : 2. selects VAS deliveries that are due from snapshot
+VASScheduler ->> VASScheduler_events : 3. VASReadyForFulfillment
+VASFulfillment -> VASFulfillment : 4. validates snapshot parameters are present
+VASFulfillment ->> VASFulfillment_events : 5. RequestVasApplication
+VASFulfillment_events --> VasApplication : 6. RequestVasApplication
+VasApplication -> VasApplication : 7. delegates apply through provider translator
+VasApplication ->> VasApplication_events : 8. VasApplicationAcknowledged
+VasApplication_events --> VASFulfillment : 9. VasApplicationAcknowledged
+VASFulfillment -> VASFulfillment : 10. records correlation for vasFulfillmentId
+VasApplication ->> VasApplication_events : 11. VasApplied
+VasApplication_events --> VASFulfillment : 12. VasApplied
+VASFulfillment -> VASFulfillment : 13. advances internal VAS lifecycle for succeeded delivery
+VASFulfillment ->> VasLifecycle : 14. to record fulfillment outcome on VAS aggregate
+VASFulfillment ->> VASFulfillment_events : 15. VasFulfilled
+VASFulfillment_events --> VasApplication : 16. RequestVasApplication
+VasApplication -> VasApplication : 17. delegates apply through provider translator
+VasApplication ->> VasApplication_events : 18. VasApplicationFailed
+VasApplication_events --> VASFulfillment : 19. VasApplicationFailed
+VASFulfillment -> VASFulfillment : 20. classifies failure and exhausts retry policy when applicable
+VASFulfillment ->> VasLifecycle : 21. to record terminal failure for the VAS attempt
+VASFulfillment ->> VASFulfillment_events : 22. VasFulfillmentFailed
+FulfillmentTimer --> VASFulfillment : 23. fires fulfillment deadline sweep
+VASFulfillment -> VASFulfillment : 24. finds pending correlations past deadline
+VASFulfillment ->> VasLifecycle : 25. to record timeout outcome for the VAS attempt
+VASFulfillment ->> VASFulfillment_events : 26. VasFulfillmentTimedOut
+VASFulfillment ->> VASFulfillment_events : 27. RequestEndOfVasApplication
+VasLifecycleTimer --> VASFulfillment : 28. fires configured end_time for active time_based VAS
+VASFulfillment ->> VASFulfillment_events : 29. RequestEndOfVasApplication
+VASFulfillment_events --> VasApplication : 30. RequestEndOfVasApplication
+VasApplication -> VasApplication : 31. delegates finish through provider translator
+VasApplication ->> VasApplication_events : 32. VasApplicationEnded
+VasApplication_events --> VasLifecycle : 33. VasApplicationEnded
+VasLifecycle -> VasLifecycle : 34. records time-based VAS as ended
+
+@enduml

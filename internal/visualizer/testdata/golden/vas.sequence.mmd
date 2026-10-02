@@ -1,0 +1,48 @@
+sequenceDiagram
+    actor CRON as CRON
+    participant VASScheduler as VASScheduler
+    participant VASFulfillment as VASFulfillment
+    participant VasApplication as VasApplication
+    participant VasLifecycle as VasLifecycle
+    actor FulfillmentTimer as FulfillmentTimer
+    actor VasLifecycleTimer as VasLifecycleTimer
+    participant External as External
+    Note over CRON,VasLifecycleTimer: Release due VAS work to fulfillment
+    CRON->>VASScheduler: advances schedule
+    VASScheduler->>VASScheduler: selects VAS deliveries that are due from snapshot
+    VASScheduler-)VASScheduler: notifies "VASReadyForFulfillment"
+    Note over CRON,VasLifecycleTimer: One-time VAS — fulfillment through provider apply
+    VASFulfillment->>VASFulfillment: validates snapshot parameters are present
+    VASFulfillment-)VASFulfillment: notifies "RequestVasApplication"
+    VASFulfillment-)VasApplication: RequestVasApplication
+    VasApplication->>VasApplication: delegates apply through provider translator
+    VasApplication-)VasApplication: notifies "VasApplicationAcknowledged"
+    VasApplication-)VASFulfillment: VasApplicationAcknowledged
+    VASFulfillment->>VASFulfillment: records correlation for vasFulfillmentId
+    VasApplication-)VasApplication: notifies "VasApplied"
+    VasApplication-)VASFulfillment: VasApplied
+    VASFulfillment->>VASFulfillment: advances internal VAS lifecycle for succeeded delivery
+    VASFulfillment->>VasLifecycle: to record fulfillment outcome on VAS aggregate
+    VASFulfillment-)VASFulfillment: notifies "VasFulfilled"
+    Note over CRON,VasLifecycleTimer: VAS application rejected by provider
+    External->>VasApplication: RequestVasApplication
+    VasApplication->>VasApplication: delegates apply through provider translator
+    VasApplication-)VasApplication: notifies "VasApplicationFailed"
+    VasApplication-)VASFulfillment: VasApplicationFailed
+    VASFulfillment->>VASFulfillment: classifies failure and exhausts retry policy when applicable
+    VASFulfillment->>VasLifecycle: to record terminal failure for the VAS attempt
+    VASFulfillment-)VASFulfillment: notifies "VasFulfillmentFailed"
+    Note over CRON,VasLifecycleTimer: Provider silent — fulfillment timeout
+    FulfillmentTimer->>VASFulfillment: fires fulfillment deadline sweep
+    VASFulfillment->>VASFulfillment: finds pending correlations past deadline
+    VASFulfillment->>VasLifecycle: to record timeout outcome for the VAS attempt
+    VASFulfillment-)VASFulfillment: notifies "VasFulfillmentTimedOut"
+    VASFulfillment-)VASFulfillment: notifies "RequestEndOfVasApplication"
+    Note over CRON,VasLifecycleTimer: Time-based VAS — scheduled finish
+    VasLifecycleTimer->>VASFulfillment: fires configured end_time for active time_based VAS
+    VASFulfillment-)VASFulfillment: notifies "RequestEndOfVasApplication"
+    VASFulfillment-)VasApplication: RequestEndOfVasApplication
+    VasApplication->>VasApplication: delegates finish through provider translator
+    VasApplication-)VasApplication: notifies "VasApplicationEnded"
+    VasApplication-)VasLifecycle: VasApplicationEnded
+    VasLifecycle->>VasLifecycle: records time-based VAS as ended

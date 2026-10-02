@@ -1,0 +1,90 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "OrderFulfilment" as OrderFulfilment
+frame "OrderManagement" as OrderManagement
+frame "VASScheduling" as VASScheduling
+frame "Wallet" as Wallet
+frame "WalletItemAddition" as WalletItemAddition
+frame "WalletItemPurchase" as WalletItemPurchase
+
+' Actors
+actor "Business_User" as Business_User
+actor "CRON" as CRON
+
+' Domain queues
+queue "OrderManagement events" as OrderManagement_events
+queue "Wallet events" as Wallet_events
+
+' Workflow flows
+Business_User --> WalletItemPurchase : 1. purchases VAS to wallet
+WalletItemPurchase ->> Wallet : 2. to initiate a VAS addition
+Wallet ->> Wallet_events : 3. VAS Addition Request Approved
+Wallet_events --> WalletItemPurchase : 4. VAS Addition Request Approved
+WalletItemPurchase ->> OrderManagement : 5. to create an Order
+OrderManagement ->> OrderManagement_events : 6. Order Created
+OrderManagement -> OrderManagement : 7. marks the Order as payment deferred
+OrderManagement ->> OrderManagement_events : 8. Order payment deferred
+OrderManagement_events --> OrderFulfilment : 9. Order payment deferred
+OrderFulfilment ->> WalletItemAddition : 10. to fulfil the addition request
+WalletItemAddition ->> Wallet : 11. to add VAS
+Wallet ->> Wallet_events : 12. VAS added
+Wallet_events --> OrderFulfilment : 13. VAS added
+OrderFulfilment ->> OrderManagement : 14. to mark the Order as fulfiled
+OrderManagement ->> OrderManagement_events : 15. Order completed
+Business_User --> VASScheduling : 16. schedules VAS
+VASScheduling ->> Wallet : 17. to reserve a VAS
+Wallet -> Wallet : 18. creates an unconfirmed VAS reservation
+Wallet ->> Wallet_events : 19. VAS Addition Request Approved
+VASScheduling -> VASScheduling : 20. drafts a VAS schedule
+Wallet_events --> VASScheduling : 21. VAS Addition Request Approved
+VASScheduling ->> OrderManagement : 22. to create an Order
+OrderManagement ->> OrderManagement_events : 23. Order Created
+OrderManagement -> OrderManagement : 24. marks the Order as payment deferred
+OrderManagement ->> OrderManagement_events : 25. Order payment deferred
+OrderManagement_events --> OrderFulfilment : 26. Order payment deferred
+OrderFulfilment ->> WalletItemAddition : 27. to fulfil the addition request
+WalletItemAddition ->> Wallet : 28. to add VAS
+Wallet ->> Wallet_events : 29. VAS added
+Wallet_events --> OrderFulfilment : 30. VAS added
+OrderFulfilment ->> OrderManagement : 31. to mark the Order as fulfiled
+OrderManagement ->> OrderManagement_events : 32. Order completed
+Business_User --> VASScheduling : 33. schedules VAS
+VASScheduling ->> Wallet : 34. to reserve a VAS
+Wallet -> Wallet : 35. reserves a VAS
+Wallet ->> Wallet_events : 36. VAS Reserved
+VASScheduling -> VASScheduling : 37. creates a VAS schedule
+Business_User --> VASScheduling : 38. unschedules VAS scheduling
+VASScheduling ->> Wallet : 39. to cancel the VAS reservation
+Wallet -> Wallet : 40. cancels VAS reservation
+Wallet ->> Wallet_events : 41. VAS Reservation Canceled
+VASScheduling -> VASScheduling : 42. cancels the VAS schedule
+CRON --> Wallet : 43. identifies VAS expiring
+Wallet -> Wallet : 44. removes VAS
+Wallet ->> Wallet_events : 45. VAS Expired
+
+@enduml

@@ -10,7 +10,9 @@
             "actor": "Customer",
             "verb": "decides",
             "phrase": "purchase a VAS",
-            "description": "when Customer decides purchase a VAS"
+            "description": "when Customer decides purchase a VAS",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -19,7 +21,8 @@
               "context": "Offering",
               "phrase": "available offering",
               "description": "Offering returns available offering",
-              "line": 3
+              "line": 3,
+              "column": 9
             }
           ]
         },
@@ -30,7 +33,9 @@
             "actor": "Customer",
             "verb": "asks",
             "phrase": "Order to create an order",
-            "description": "when Customer asks Order to create an order"
+            "description": "when Customer asks Order to create an order",
+            "line": 5,
+            "column": 10
           },
           "actions": [
             {
@@ -41,7 +46,8 @@
               "connector": "a",
               "phrase": "draft Order",
               "description": "Order creates a draft Order",
-              "line": 6
+              "line": 6,
+              "column": 9
             },
             {
               "id": "action_5",
@@ -50,7 +56,8 @@
               "connector": "the",
               "phrase": "url of the payment providers",
               "description": "Order returns url of the payment providers",
-              "line": 7
+              "line": 7,
+              "column": 9
             }
           ]
         },
@@ -61,7 +68,9 @@
             "actor": "Customer",
             "verb": "pays",
             "phrase": "the order",
-            "description": "when Customer pays the order"
+            "description": "when Customer pays the order",
+            "line": 9,
+            "column": 10
           },
           "actions": [
             {
@@ -71,7 +80,8 @@
               "verb": "confirms",
               "phrase": "payment",
               "description": "PaymentProvider confirms payment",
-              "line": 10
+              "line": 10,
+              "column": 9
             },
             {
               "id": "action_8",
@@ -79,7 +89,8 @@
               "context": "PaymentProvider",
               "event": "PaymentCompleted",
               "description": "PaymentProvider notifies \"PaymentCompleted\"",
-              "line": 11
+              "line": 11,
+              "column": 9
             }
           ]
         },
@@ -89,7 +100,9 @@
             "type": "domain_listen",
             "context": "Order",
             "event": "PaymentCompleted",
-            "description": "when Order listens \"PaymentCompleted\""
+            "description": "when Order listens \"PaymentCompleted\"",
+            "line": 14,
+            "column": 10
           },
           "actions": [
             {
@@ -100,7 +113,8 @@
               "connector": "the",
               "phrase": "Order as Paid",
               "description": "Order marks the Order as Paid",
-              "line": 15
+              "line": 15,
+              "column": 9
             }
           ]
         }
@@ -117,7 +131,9 @@
             "actor": "Business_User",
             "verb": "schedules",
             "phrase": "VAS",
-            "description": "when Business_User schedules VAS"
+            "description": "when Business_User schedules VAS",
+            "line": 19,
+            "column": 10
           },
           "actions": [
             {
@@ -129,7 +145,8 @@
               "connector": "to",
               "phrase": "reserve a VAS",
               "description": "VASScheduling asks Wallet to reserve a VAS",
-              "line": 20
+              "line": 20,
+              "column": 9
             },
             {
               "id": "action_13",
@@ -139,7 +156,8 @@
               "connector": "an",
               "phrase": "unconfirmed VAS reservation",
               "description": "Wallet creates an unconfirmed VAS reservation",
-              "line": 21
+              "line": 21,
+              "column": 9
             },
             {
               "id": "action_14",
@@ -147,7 +165,8 @@
               "context": "Wallet",
               "event": "VAS Addition Request Approved",
               "description": "Wallet notifies \"VAS Addition Request Approved\"",
-              "line": 22
+              "line": 22,
+              "column": 9
             },
             {
               "id": "action_15",
@@ -157,7 +176,8 @@
               "connector": "a",
               "phrase": "VAS schedule",
               "description": "VASScheduling drafts a VAS schedule",
-              "line": 23
+              "line": 23,
+              "column": 9
             }
           ]
         },
@@ -167,7 +187,9 @@
             "type": "domain_listen",
             "context": "VASScheduling",
             "event": "VAS Addition Request Approved",
-            "description": "when VASScheduling listens \"VAS Addition Request Approved\""
+            "description": "when VASScheduling listens \"VAS Addition Request Approved\"",
+            "line": 25,
+            "column": 10
           },
           "actions": [
             {
@@ -179,7 +201,8 @@
               "connector": "to",
               "phrase": "create an Order",
               "description": "VASScheduling asks OrderManagement to create an Order",
-              "line": 26
+              "line": 26,
+              "column": 9
             },
             {
               "id": "action_18",
@@ -187,7 +210,8 @@
               "context": "OrderManagement",
               "event": "Order Created",
               "description": "OrderManagement notifies \"Order Created\"",
-              "line": 27
+              "line": 27,
+              "column": 9
             },
             {
               "id": "action_19",
@@ -197,7 +221,8 @@
               "connector": "the",
               "phrase": "Order as payment deferred",
               "description": "OrderManagement marks the Order as payment deferred",
-              "line": 28
+              "line": 28,
+              "column": 9
             },
             {
               "id": "action_20",
@@ -205,7 +230,8 @@
               "context": "OrderManagement",
               "event": "Order payment deferred",
               "description": "OrderManagement notifies \"Order payment deferred\"",
-              "line": 29
+              "line": 29,
+              "column": 9
             }
           ]
         },
@@ -215,7 +241,9 @@
             "type": "domain_listen",
             "context": "OrderFulfilment",
             "event": "Order payment deferred",
-            "description": "when OrderFulfilment listens \"Order payment deferred\""
+            "description": "when OrderFulfilment listens \"Order payment deferred\"",
+            "line": 31,
+            "column": 10
           },
           "actions": [
             {
@@ -227,7 +255,8 @@
               "connector": "to",
               "phrase": "fulfil the addition request",
               "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
-              "line": 32
+              "line": 32,
+              "column": 9
             },
             {
               "id": "action_23",
@@ -238,7 +267,8 @@
               "connector": "to",
               "phrase": "add VAS",
               "description": "WalletItemAddition asks Wallet to add VAS",
-              "line": 33
+              "line": 33,
+              "column": 9
             },
             {
               "id": "action_24",
@@ -246,7 +276,8 @@
               "context": "Wallet",
               "event": "VAS added",
               "description": "Wallet notifies \"VAS added\"",
-              "line": 34
+              "line": 34,
+              "column": 9
             }
           ]
         },
@@ -256,7 +287,9 @@
             "type": "domain_listen",
             "context": "OrderFulfilment",
             "event": "VAS added",
-            "description": "when OrderFulfilment listens \"VAS added\""
+            "description": "when OrderFulfilment listens \"VAS added\"",
+            "line": 36,
+            "column": 10
           },
           "actions": [
             {
@@ -268,7 +301,8 @@
               "connector": "to",
               "phrase": "mark the Order as fulfiled",
               "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
-              "line": 37
+              "line": 37,
+              "column": 9
             },
             {
               "id": "action_27",
@@ -276,7 +310,8 @@
               "context": "OrderManagement",
               "event": "Order completed",
               "description": "OrderManagement notifies \"Order completed\"",
-              "line": 38
+              "line": 38,
+              "column": 9
             }
           ]
         }
@@ -293,7 +328,9 @@
             "actor": "Business_User",
             "verb": "schedules",
             "phrase": "VAS",
-            "description": "when Business_User schedules VAS"
+            "description": "when Business_User schedules VAS",
+            "line": 42,
+            "column": 10
           },
           "actions": [
             {
@@ -305,7 +342,8 @@
               "connector": "to",
               "phrase": "reserve a VAS",
               "description": "VASScheduling asks Wallet to reserve a VAS",
-              "line": 43
+              "line": 43,
+              "column": 9
             },
             {
               "id": "action_30",
@@ -315,7 +353,8 @@
               "connector": "a",
               "phrase": "VAS",
               "description": "Wallet reserves a VAS",
-              "line": 44
+              "line": 44,
+              "column": 9
             },
             {
               "id": "action_31",
@@ -323,7 +362,8 @@
               "context": "Wallet",
               "event": "VAS Reserved",
               "description": "Wallet notifies \"VAS Reserved\"",
-              "line": 45
+              "line": 45,
+              "column": 9
             },
             {
               "id": "action_32",
@@ -333,7 +373,8 @@
               "connector": "a",
               "phrase": "VAS schedule",
               "description": "VASScheduling creates a VAS schedule",
-              "line": 46
+              "line": 46,
+              "column": 9
             }
           ]
         }
@@ -350,7 +391,9 @@
             "actor": "Business_User",
             "verb": "unschedules",
             "phrase": "VAS scheduling",
-            "description": "when Business_User unschedules VAS scheduling"
+            "description": "when Business_User unschedules VAS scheduling",
+            "line": 50,
+            "column": 10
           },
           "actions": [
             {
@@ -362,7 +405,8 @@
               "connector": "to",
               "phrase": "cancel the VAS reservation",
               "description": "VASScheduling asks Wallet to cancel the VAS reservation",
-              "line": 51
+              "line": 51,
+              "column": 9
             },
             {
               "id": "action_35",
@@ -371,7 +415,8 @@
               "verb": "cancels",
               "phrase": "VAS reservation",
               "description": "Wallet cancels VAS reservation",
-              "line": 52
+              "line": 52,
+              "column": 9
             },
             {
               "id": "action_36",
@@ -379,7 +424,8 @@
               "context": "Wallet",
               "event": "VAS Reservation Canceled",
               "description": "Wallet notifies \"VAS Reservation Canceled\"",
-              "line": 53
+              "line": 53,
+              "column": 9
             },
             {
               "id": "action_37",
@@ -389,7 +435,8 @@
               "connector": "the",
               "phrase": "VAS schedule",
               "description": "VASScheduling cancels the VAS schedule",
-              "line": 54
+              "line": 54,
+              "column": 9
             }
           ]
         }
@@ -406,7 +453,9 @@
             "actor": "CRON",
             "verb": "identifies",
             "phrase": "VAS expiring",
-            "description": "when CRON identifies VAS expiring"
+            "description": "when CRON identifies VAS expiring",
+            "line": 58,
+            "column": 10
           },
           "actions": [
             {
@@ -416,7 +465,8 @@
               "verb": "removes",
               "phrase": "VAS",
               "description": "Wallet removes VAS",
-              "line": 59
+              "line": 59,
+              "column": 9
             },
             {
               "id": "action_40",
@@ -424,7 +474,8 @@
               "context": "Wallet",
               "event": "VAS Expired",
               "description": "Wallet notifies \"VAS Expired\"",
-              "line": 60
+              "line": 60,
+              "column": 9
             }
           ]
         }
@@ -441,7 +492,9 @@
             "actor": "Business_User",
             "verb": "schedules",
             "phrase": "VAS",
-            "description": "when Business_User schedules VAS"
+            "description": "when Business_User schedules VAS",
+            "line": 66,
+            "column": 10
           },
           "actions": [
             {
@@ -452,7 +505,8 @@
               "connector": "an",
               "phrase": "\"Order with two items to fulfil: VAS and VAS Subscription\"",
               "description": "OrderMgmt creates an \"Order with two items to fulfil: VAS and VAS Subscription\"",
-              "line": 67
+              "line": 67,
+              "column": 9
             },
             {
               "id": "action_43",
@@ -460,7 +514,8 @@
               "context": "OrderMgmt",
               "event": "Order Created",
               "description": "OrderMgmt notifies \"Order Created\"",
-              "line": 68
+              "line": 68,
+              "column": 9
             },
             {
               "id": "action_44",
@@ -470,7 +525,8 @@
               "connector": "the",
               "phrase": "Order as payment deferred",
               "description": "OrderMgmt marks the Order as payment deferred",
-              "line": 69
+              "line": 69,
+              "column": 9
             },
             {
               "id": "action_45",
@@ -478,7 +534,8 @@
               "context": "OrderMgmt",
               "event": "Order payment deferred",
               "description": "OrderMgmt notifies \"Order payment deferred\"",
-              "line": 70
+              "line": 70,
+              "column": 9
             }
           ]
         },
@@ -488,7 +545,9 @@
             "type": "domain_listen",
             "context": "OrderFulfilment",
             "event": "Order payment deferred",
-            "description": "when OrderFulfilment listens \"Order payment deferred\""
+            "description": "when OrderFulfilment listens \"Order payment deferred\"",
+            "line": 72,
+            "column": 10
           },
           "actions": [
             {
@@ -500,7 +559,8 @@
               "connector": "to",
               "phrase": "schedule the VAS",
               "description": "OrderFulfilment asks VASMgmt to schedule the VAS",
-              "line": 73
+              "line": 73,
+              "column": 9
             },
             {
               "id": "action_48",
@@ -510,7 +570,8 @@
               "connector": "the",
               "phrase": "VAS for future application",
               "description": "VASMgmt schedules the VAS for future application",
-              "line": 74
+              "line": 74,
+              "column": 9
             },
             {
               "id": "action_49",
@@ -518,7 +579,8 @@
               "context": "VASMgmt",
               "event": "VAS scheduled",
               "description": "VASMgmt notifies \"VAS scheduled\"",
-              "line": 75
+              "line": 75,
+              "column": 9
             }
           ]
         },
@@ -528,7 +590,9 @@
             "type": "domain_listen",
             "context": "OrderFulfilment",
             "event": "VAS scheduled",
-            "description": "when OrderFulfilment listens \"VAS scheduled\""
+            "description": "when OrderFulfilment listens \"VAS scheduled\"",
+            "line": 77,
+            "column": 10
           },
           "actions": [
             {
@@ -540,7 +604,8 @@
               "connector": "to",
               "phrase": "create a VAS Subscription",
               "description": "OrderFulfilment asks Subscription to create a VAS Subscription",
-              "line": 78
+              "line": 78,
+              "column": 9
             },
             {
               "id": "action_52",
@@ -550,7 +615,8 @@
               "connector": "a",
               "phrase": "VAS Subscription with the details",
               "description": "Subscription creates a VAS Subscription with the details",
-              "line": 79
+              "line": 79,
+              "column": 9
             },
             {
               "id": "action_53",
@@ -560,7 +626,8 @@
               "connector": "the",
               "phrase": "vas subscription item as Fulfiled",
               "description": "OrderFulfilment marks the vas subscription item as Fulfiled",
-              "line": 80
+              "line": 80,
+              "column": 9
             }
           ]
         }
@@ -577,7 +644,9 @@
             "actor": "Business_User",
             "verb": "schedules",
             "phrase": "VAS",
-            "description": "when Business_User schedules VAS"
+            "description": "when Business_User schedules VAS",
+            "line": 84,
+            "column": 10
           },
           "actions": [
             {
@@ -588,7 +657,8 @@
               "connector": "a",
               "phrase": "VAS for future application",
               "description": "VASMgmt schedules a VAS for future application",
-              "line": 85
+              "line": 85,
+              "column": 9
             },
             {
               "id": "action_56",
@@ -596,7 +666,8 @@
               "context": "VASMgmt",
               "event": "VAS scheduled with subscription included",
               "description": "VASMgmt notifies \"VAS scheduled with subscription included\"",
-              "line": 86
+              "line": 86,
+              "column": 9
             }
           ]
         },
@@ -606,7 +677,9 @@
             "type": "domain_listen",
             "context": "Subscription",
             "event": "VAS scheduled with subscription included",
-            "description": "when Subscription listens \"VAS scheduled with subscription included\""
+            "description": "when Subscription listens \"VAS scheduled with subscription included\"",
+            "line": 88,
+            "column": 10
           },
           "actions": [
             {
@@ -617,7 +690,8 @@
               "connector": "a",
               "phrase": "VAS Subscription with the details",
               "description": "Subscription creates a VAS Subscription with the details",
-              "line": 89
+              "line": 89,
+              "column": 9
             }
           ]
         }
@@ -634,7 +708,9 @@
             "actor": "VASMgmt",
             "verb": "identifies",
             "phrase": "scheduled VAS to apply",
-            "description": "when VASMgmt identifies scheduled VAS to apply"
+            "description": "when VASMgmt identifies scheduled VAS to apply",
+            "line": 93,
+            "column": 10
           },
           "actions": [
             {
@@ -645,7 +721,8 @@
               "connector": "a",
               "phrase": "VAS and stores details until when its valid",
               "description": "VASMgmt applies a VAS and stores details until when its valid",
-              "line": 94
+              "line": 94,
+              "column": 9
             },
             {
               "id": "action_61",
@@ -653,7 +730,8 @@
               "context": "VASMgmt",
               "event": "VAS Applied",
               "description": "VASMgmt notifies \"VAS Applied\"",
-              "line": 95
+              "line": 95,
+              "column": 9
             }
           ]
         }
@@ -670,7 +748,9 @@
             "actor": "VASMgmt",
             "verb": "identifies",
             "phrase": "VAS expired",
-            "description": "when VASMgmt identifies VAS expired"
+            "description": "when VASMgmt identifies VAS expired",
+            "line": 99,
+            "column": 10
           },
           "actions": [
             {
@@ -681,7 +761,8 @@
               "connector": "the",
               "phrase": "VAS as expired",
               "description": "VASMgmt marks the VAS as expired",
-              "line": 100
+              "line": 100,
+              "column": 9
             },
             {
               "id": "action_64",
@@ -689,7 +770,8 @@
               "context": "VASMgmt",
               "event": "VAS expired",
               "description": "VASMgmt notifies \"VAS expired\"",
-              "line": 101
+              "line": 101,
+              "column": 9
             }
           ]
         },
@@ -699,7 +781,9 @@
             "type": "domain_listen",
             "context": "Subscription",
             "event": "VAS expired",
-            "description": "when Subscription listens \"VAS expired\""
+            "description": "when Subscription listens \"VAS expired\"",
+            "line": 103,
+            "column": 10
           },
           "actions": [
             {
@@ -709,7 +793,8 @@
               "verb": "checks",
               "phrase": "if VAS has active associated subscription",
               "description": "Subscription checks if VAS has active associated subscription",
-              "line": 104
+              "line": 104,
+              "column": 9
             },
             {
               "id": "action_67",
@@ -720,7 +805,8 @@
               "connector": "to",
               "phrase": "\"schedule/apply a new VAS\"",
               "description": "Subscription asks VASMgmt to \"schedule/apply a new VAS\"",
-              "line": 105
+              "line": 105,
+              "column": 9
             },
             {
               "id": "action_68",
@@ -730,7 +816,8 @@
               "connector": "the",
               "phrase": "VAS Subscription with the VAS",
               "description": "Subscription renews the VAS Subscription with the VAS",
-              "line": 106
+              "line": 106,
+              "column": 9
             },
             {
               "id": "action_69",
@@ -738,7 +825,8 @@
               "context": "Susbscription",
               "event": "VAS Subscription Renewed",
               "description": "Susbscription notifies \"VAS Subscription Renewed\"",
-              "line": 107
+              "line": 107,
+              "column": 9
             }
           ]
         }
@@ -755,7 +843,9 @@
             "actor": "Business_User",
             "verb": "stops",
             "phrase": "VAS Auto-Renewal",
-            "description": "when Business_User stops VAS Auto-Renewal"
+            "description": "when Business_User stops VAS Auto-Renewal",
+            "line": 111,
+            "column": 10
           },
           "actions": [
             {
@@ -766,7 +856,8 @@
               "connector": "the",
               "phrase": "subscription",
               "description": "Subscription cancels the subscription",
-              "line": 112
+              "line": 112,
+              "column": 9
             }
           ]
         }

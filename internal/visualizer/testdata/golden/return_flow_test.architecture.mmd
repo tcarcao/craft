@@ -1,0 +1,19 @@
+flowchart LR
+    Admin["Admin"]
+    BankGateway["BankGateway"]
+    CacheService["CacheService"]
+    DatabaseService["DatabaseService"]
+    NotificationService["NotificationService"]
+    PaymentService["PaymentService"]
+    ReportService["ReportService"]
+    User["User"]
+    BankGateway --> PaymentService
+    CacheService --> DatabaseService
+    DatabaseService --> CacheService
+    DatabaseService --> ReportService
+    NotificationService --> PaymentService
+    PaymentService --> BankGateway
+    PaymentService --> NotificationService
+    PaymentService --> User
+    ReportService --> Admin
+    ReportService --> DatabaseService

@@ -10,7 +10,9 @@
             "actor": "User",
             "verb": "submits",
             "phrase": "credentials",
-            "description": "when User submits credentials"
+            "description": "when User submits credentials",
+            "line": 2,
+            "column": 10
           },
           "actions": [
             {
@@ -20,7 +22,8 @@
               "verb": "validates",
               "phrase": "credentials",
               "description": "AuthService validates credentials",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -28,7 +31,8 @@
               "context": "AuthService",
               "event": "User Logged In",
               "description": "AuthService notifies \"User Logged In\"",
-              "line": 4
+              "line": 4,
+              "column": 9
             }
           ]
         }
@@ -45,7 +49,9 @@
             "actor": "User",
             "verb": "requests",
             "phrase": "logout",
-            "description": "when User requests logout"
+            "description": "when User requests logout",
+            "line": 8,
+            "column": 10
           },
           "actions": [
             {
@@ -55,7 +61,8 @@
               "verb": "invalidates",
               "phrase": "session",
               "description": "AuthService invalidates session",
-              "line": 9
+              "line": 9,
+              "column": 9
             },
             {
               "id": "action_6",
@@ -63,7 +70,8 @@
               "context": "AuthService",
               "event": "User Logged Out",
               "description": "AuthService notifies \"User Logged Out\"",
-              "line": 10
+              "line": 10,
+              "column": 9
             }
           ]
         }

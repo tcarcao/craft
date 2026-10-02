@@ -8,7 +8,8 @@
           "trigger": {
             "type": "event",
             "event": "Order Placed",
-            "description": "when \"Order Placed\""
+            "description": "when \"Order Placed\"",
+            "line": 2
           },
           "actions": [
             {
@@ -18,7 +19,8 @@
               "verb": "sends",
               "phrase": "confirmation email",
               "description": "notification sends confirmation email",
-              "line": 3
+              "line": 3,
+              "column": 9
             },
             {
               "id": "action_3",
@@ -27,7 +29,8 @@
               "verb": "tracks",
               "phrase": "order event",
               "description": "analytics tracks order event",
-              "line": 4
+              "line": 4,
+              "column": 9
             }
           ]
         }

@@ -1,0 +1,30 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (transparent mode)
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(SubscriptionsApi_boundary, "SubscriptionsApi") {
+    Container(SubscriptionsApi_Application, "SubscriptionsApi Application", "Application", "Core business logic for SubscriptionsApi domains: Subscriptions")
+}
+
+Rel(SubscriptionsApi_Application, Event_Queue, "vas.VasFulfilled", "Event Publishing")
+Rel(Event_Queue, SubscriptionsApi_Application, "vas.VasApplied", "Event Delivery")
+
+@enduml

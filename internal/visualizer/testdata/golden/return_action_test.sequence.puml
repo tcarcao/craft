@@ -1,0 +1,29 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+actor "User" as User
+participant "PaymentService" as PaymentService
+participant "BankGateway" as BankGateway
+participant "UserService" as UserService
+participant "EmailService" as EmailService
+
+== Process Payment with Return Values ==
+
+User -> PaymentService : submits payment request
+PaymentService -> PaymentService : validates payment data
+PaymentService -> BankGateway : to process payment
+BankGateway --> PaymentService : returns payment result
+PaymentService --> User : returns confirmation status
+PaymentService ->> PaymentService : notifies "payment_processed"
+
+== User Registration with Validation ==
+
+User -> UserService : submits registration form
+UserService -> UserService : validates user data
+UserService -> EmailService : to send verification
+EmailService --> UserService : returns email status
+UserService --> User : returns registration result
+
+@enduml

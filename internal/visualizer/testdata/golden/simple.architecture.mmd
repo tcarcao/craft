@@ -1,0 +1,43 @@
+flowchart LR
+    Customer["Customer"]
+    Offering["Offering"]
+    Order["Order"]
+    OrderFulfilment["OrderFulfilment"]
+    OrderManagement["OrderManagement"]
+    OrderMgmt["OrderMgmt"]
+    PaymentProvider["PaymentProvider"]
+    Subscription["Subscription"]
+    Susbscription["Susbscription"]
+    VASMgmt["VASMgmt"]
+    VASScheduling["VASScheduling"]
+    Wallet["Wallet"]
+    WalletItemAddition["WalletItemAddition"]
+    OrderManagement_events[("OrderManagement events")]
+    OrderMgmt_events[("OrderMgmt events")]
+    PaymentProvider_events[("PaymentProvider events")]
+    Susbscription_events[("Susbscription events")]
+    VASMgmt_events[("VASMgmt events")]
+    Wallet_events[("Wallet events")]
+    Offering --> Customer
+    Order --> Customer
+    OrderFulfilment --> OrderManagement
+    OrderFulfilment --> Subscription
+    OrderFulfilment --> VASMgmt
+    OrderFulfilment --> WalletItemAddition
+    OrderManagement --> OrderManagement_events
+    OrderMgmt --> OrderMgmt_events
+    PaymentProvider --> PaymentProvider_events
+    Subscription --> VASMgmt
+    Susbscription --> Susbscription_events
+    VASMgmt --> VASMgmt_events
+    VASScheduling --> OrderManagement
+    VASScheduling --> Wallet
+    Wallet --> Wallet_events
+    WalletItemAddition --> Wallet
+    OrderManagement_events --> OrderFulfilment
+    OrderMgmt_events --> OrderFulfilment
+    PaymentProvider_events --> Order
+    VASMgmt_events --> OrderFulfilment
+    VASMgmt_events --> Subscription
+    Wallet_events --> OrderFulfilment
+    Wallet_events --> VASScheduling

@@ -165,7 +165,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 99,
+            "column": 10
           },
           "actions": [
             {
@@ -176,6 +178,7 @@
               "phrase": "email format",
               "description": "Authentication validates email format",
               "line": 100,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -192,6 +195,7 @@
               "phrase": "check email uniqueness",
               "description": "Authentication asks user_db to check email uniqueness",
               "line": 101,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -206,6 +210,7 @@
               "phrase": "user profile",
               "description": "Profile creates user profile",
               "line": 102,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Profile",
@@ -222,6 +227,7 @@
               "phrase": "store profile data",
               "description": "Profile asks user_db to store profile data",
               "line": 103,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Profile",
@@ -235,6 +241,7 @@
               "event": "UserRegistered",
               "description": "Authentication notifies \"UserRegistered\"",
               "line": 104,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -254,7 +261,9 @@
               "kind": "bounded_context",
               "id": "User/Profile",
               "service": "UserService"
-            }
+            },
+            "line": 106,
+            "column": 10
           },
           "actions": [
             {
@@ -265,6 +274,7 @@
               "phrase": "default preferences",
               "description": "Preferences creates default preferences",
               "line": 107,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Preferences",
@@ -281,6 +291,7 @@
               "phrase": "save preferences",
               "description": "Preferences asks user_db to save preferences",
               "line": 108,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Preferences",
@@ -295,6 +306,7 @@
               "phrase": "welcome email",
               "description": "EmailNotifier sends welcome email",
               "line": 109,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/EmailNotifier",
@@ -320,7 +332,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 118,
+            "column": 10
           },
           "actions": [
             {
@@ -330,6 +344,7 @@
               "phrase": "product details",
               "description": "Catalog returns product details",
               "line": 119,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Catalog",
@@ -344,6 +359,7 @@
               "phrase": "current price",
               "description": "Pricing calculates current price",
               "line": 120,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Pricing",
@@ -358,6 +374,7 @@
               "phrase": "availability",
               "description": "Inventory checks availability",
               "line": 121,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Inventory",
@@ -377,7 +394,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 123,
+            "column": 10
           },
           "actions": [
             {
@@ -388,6 +407,7 @@
               "phrase": "draft order",
               "description": "OrderManagement creates draft order",
               "line": 124,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -404,6 +424,7 @@
               "phrase": "save draft",
               "description": "OrderManagement asks order_db to save draft",
               "line": 125,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -418,6 +439,7 @@
               "phrase": "stock",
               "description": "Inventory reserves stock",
               "line": 126,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Inventory",
@@ -432,6 +454,7 @@
               "phrase": "discounts",
               "description": "Pricing applies discounts",
               "line": 127,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Pricing",
@@ -445,6 +468,7 @@
               "phrase": "cart summary",
               "description": "OrderManagement returns cart summary",
               "line": 128,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -464,7 +488,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 130,
+            "column": 10
           },
           "actions": [
             {
@@ -475,6 +501,7 @@
               "phrase": "order",
               "description": "OrderManagement validates order",
               "line": 131,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -489,6 +516,7 @@
               "phrase": "payment",
               "description": "Payment processes payment",
               "line": 132,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Payment",
@@ -505,6 +533,7 @@
               "phrase": "charge card",
               "description": "Payment asks payment_gateway to charge card",
               "line": 133,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Payment",
@@ -518,6 +547,7 @@
               "event": "PaymentCompleted",
               "description": "Payment notifies \"PaymentCompleted\"",
               "line": 134,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Payment",
@@ -537,7 +567,9 @@
               "kind": "bounded_context",
               "id": "Order/OrderManagement",
               "service": "OrderService"
-            }
+            },
+            "line": 136,
+            "column": 10
           },
           "actions": [
             {
@@ -548,6 +580,7 @@
               "phrase": "order as paid",
               "description": "OrderManagement marks order as paid",
               "line": 137,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -562,6 +595,7 @@
               "phrase": "stock allocation",
               "description": "Inventory confirms stock allocation",
               "line": 138,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Inventory",
@@ -576,6 +610,7 @@
               "phrase": "shipment",
               "description": "Shipping creates shipment",
               "line": 139,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Shipping",
@@ -592,6 +627,7 @@
               "phrase": "schedule pickup",
               "description": "Shipping asks shipping_provider to schedule pickup",
               "line": 140,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Shipping",
@@ -605,6 +641,7 @@
               "event": "OrderConfirmed",
               "description": "OrderManagement notifies \"OrderConfirmed\"",
               "line": 141,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -624,7 +661,9 @@
               "kind": "bounded_context",
               "id": "Notification/EmailNotifier",
               "service": "NotificationService"
-            }
+            },
+            "line": 143,
+            "column": 10
           },
           "actions": [
             {
@@ -635,6 +674,7 @@
               "phrase": "order confirmation",
               "description": "EmailNotifier sends order confirmation",
               "line": 144,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/EmailNotifier",
@@ -649,6 +689,7 @@
               "phrase": "tracking notification",
               "description": "SMSNotifier sends tracking notification",
               "line": 145,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/SMSNotifier",
@@ -674,7 +715,9 @@
             "subject": {
               "kind": "actor",
               "id": "CronScheduler"
-            }
+            },
+            "line": 154,
+            "column": 10
           },
           "actions": [
             {
@@ -685,6 +728,7 @@
               "phrase": "stock levels",
               "description": "Inventory fetches stock levels",
               "line": 155,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Inventory",
@@ -701,6 +745,7 @@
               "phrase": "get current stock",
               "description": "Inventory asks inventory_system to get current stock",
               "line": 156,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Inventory",
@@ -714,6 +759,7 @@
               "event": "StockLevelsUpdated",
               "description": "Inventory notifies \"StockLevelsUpdated\"",
               "line": 157,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Inventory",
@@ -733,7 +779,9 @@
               "kind": "bounded_context",
               "id": "Product/Catalog",
               "service": "ProductService"
-            }
+            },
+            "line": 159,
+            "column": 10
           },
           "actions": [
             {
@@ -744,6 +792,7 @@
               "phrase": "product availability",
               "description": "Catalog updates product availability",
               "line": 160,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Catalog",
@@ -760,6 +809,7 @@
               "phrase": "update stock status",
               "description": "Catalog asks product_db to update stock status",
               "line": 161,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Catalog",
@@ -773,6 +823,7 @@
               "event": "CatalogUpdated",
               "description": "Catalog notifies \"CatalogUpdated\"",
               "line": 162,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Product/Catalog",
@@ -792,7 +843,9 @@
               "kind": "bounded_context",
               "id": "Notification/PushNotifier",
               "service": "NotificationService"
-            }
+            },
+            "line": 164,
+            "column": 10
           },
           "actions": [
             {
@@ -803,6 +856,7 @@
               "phrase": "restock notifications",
               "description": "PushNotifier sends restock notifications",
               "line": 165,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/PushNotifier",
@@ -819,6 +873,7 @@
               "phrase": "queue messages",
               "description": "PushNotifier asks notification_queue to queue messages",
               "line": 166,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/PushNotifier",
@@ -844,7 +899,9 @@
             "subject": {
               "kind": "actor",
               "id": "Customer_Support"
-            }
+            },
+            "line": 175,
+            "column": 10
           },
           "actions": [
             {
@@ -855,6 +912,7 @@
               "phrase": "order details",
               "description": "OrderManagement fetches order details",
               "line": 176,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -871,6 +929,7 @@
               "phrase": "retrieve order",
               "description": "OrderManagement asks order_db to retrieve order",
               "line": 177,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -885,6 +944,7 @@
               "phrase": "payment history",
               "description": "Payment retrieves payment history",
               "line": 178,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Payment",
@@ -899,6 +959,7 @@
               "phrase": "shipment status",
               "description": "Shipping retrieves shipment status",
               "line": 179,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/Shipping",
@@ -912,6 +973,7 @@
               "phrase": "complete order view",
               "description": "OrderManagement returns complete order view",
               "line": 180,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -931,7 +993,9 @@
             "subject": {
               "kind": "actor",
               "id": "Customer_Support"
-            }
+            },
+            "line": 182,
+            "column": 10
           },
           "actions": [
             {
@@ -942,6 +1006,7 @@
               "phrase": "changes",
               "description": "OrderManagement validates changes",
               "line": 183,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -958,6 +1023,7 @@
               "phrase": "update order",
               "description": "OrderManagement asks order_db to update order",
               "line": 184,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -971,6 +1037,7 @@
               "event": "OrderUpdated",
               "description": "OrderManagement notifies \"OrderUpdated\"",
               "line": 185,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Order/OrderManagement",
@@ -990,7 +1057,9 @@
               "kind": "bounded_context",
               "id": "Notification/EmailNotifier",
               "service": "NotificationService"
-            }
+            },
+            "line": 187,
+            "column": 10
           },
           "actions": [
             {
@@ -1001,6 +1070,7 @@
               "phrase": "update notification to customer",
               "description": "EmailNotifier sends update notification to customer",
               "line": 188,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/EmailNotifier",
@@ -1026,7 +1096,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 198,
+            "column": 10
           },
           "actions": [
             {
@@ -1037,6 +1109,7 @@
               "phrase": "email",
               "description": "Authentication validates email",
               "line": 199,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1051,6 +1124,7 @@
               "phrase": "reset token",
               "description": "Authentication generates reset token",
               "line": 200,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1067,6 +1141,7 @@
               "phrase": "store token",
               "description": "Authentication asks user_db to store token",
               "line": 201,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1081,6 +1156,7 @@
               "phrase": "reset email",
               "description": "EmailNotifier sends reset email",
               "line": 202,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/EmailNotifier",
@@ -1100,7 +1176,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 204,
+            "column": 10
           },
           "actions": [
             {
@@ -1111,6 +1189,7 @@
               "phrase": "reset token",
               "description": "Authentication validates reset token",
               "line": 205,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1127,6 +1206,7 @@
               "phrase": "verify token",
               "description": "Authentication asks user_db to verify token",
               "line": 206,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1141,6 +1221,7 @@
               "phrase": "password",
               "description": "Authentication updates password",
               "line": 207,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1154,6 +1235,7 @@
               "event": "PasswordChanged",
               "description": "Authentication notifies \"PasswordChanged\"",
               "line": 208,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1173,7 +1255,9 @@
               "kind": "bounded_context",
               "id": "Notification/EmailNotifier",
               "service": "NotificationService"
-            }
+            },
+            "line": 210,
+            "column": 10
           },
           "actions": [
             {
@@ -1184,6 +1268,7 @@
               "phrase": "confirmation email",
               "description": "EmailNotifier sends confirmation email",
               "line": 211,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "Notification/EmailNotifier",
@@ -1208,7 +1293,9 @@
             "subject": {
               "kind": "actor",
               "id": "Business_User"
-            }
+            },
+            "line": 220,
+            "column": 10
           },
           "actions": [
             {
@@ -1219,6 +1306,7 @@
               "phrase": "credentials",
               "description": "Authentication validates credentials",
               "line": 221,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",
@@ -1232,6 +1320,7 @@
               "phrase": "access token",
               "description": "Authentication returns access token",
               "line": 222,
+              "column": 9,
               "from": {
                 "kind": "bounded_context",
                 "id": "User/Authentication",

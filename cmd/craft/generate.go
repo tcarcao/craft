@@ -324,10 +324,10 @@ func renderC4(v *visualizer.Visualizer, doc *craft.CraftDoc, opts c4Options, for
 	}
 	switch format {
 	case "mermaid":
-		src, err := v.GenerateC4Mermaid(doc, boundariesMode, opts.showDatabases)
+		src, err := v.GenerateC4Mermaid(doc, opts.focusServices, opts.focusContexts, boundariesMode, opts.showDatabases)
 		return []byte(src), "mmd", err
 	case "mermaid-md":
-		src, err := v.GenerateC4Mermaid(doc, boundariesMode, opts.showDatabases)
+		src, err := v.GenerateC4Mermaid(doc, opts.focusServices, opts.focusContexts, boundariesMode, opts.showDatabases)
 		if err != nil {
 			return nil, "", err
 		}

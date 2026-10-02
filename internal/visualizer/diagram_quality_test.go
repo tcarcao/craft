@@ -1,6 +1,7 @@
 package visualizer
 
 import (
+	"github.com/tcarcao/craft/v2/internal/analysis"
 	"strings"
 	"testing"
 
@@ -112,30 +113,21 @@ func TestGeneratedPUML_DeclaresUnicodeCapableFont(t *testing.T) {
 }
 
 func TestDomainDiagram_DomainsNotClassifiedAsActors(t *testing.T) {
-	// Model where a bounded context ("BC1") is also a trigger actor —
-	// reproduces the "VASFulfillment as stickman" bug from vas.craft.
-	doc := &craft.CraftDoc{
-		Services: []craft.Service{{
-			Name:     "Svc",
-			Contexts: []string{"BC1"},
-		}},
-		UseCases: []craft.UseCase{{
-			Name: "starts",
-			Scenarios: []craft.Scenario{{
-				ID: "s1",
-				Trigger: craft.Trigger{
-					Type:  craft.TriggerTypeExternal,
-					Actor: "BC1",
-					Verb:  "begins",
-				},
-				Actions: []craft.Action{{
-					Type:    craft.ActionTypeInternal,
-					Context: "BC1",
-					Phrase:  "work",
-				}},
-			}},
-		}},
-	}
+	// A bounded context ("BC1") in the trigger's actor slot — reproduces the
+	// "VASFulfillment as stickman" bug from vas.craft.
+	doc := resolvedDoc(t, `domain D {
+    BC1
+}
+services {
+    Svc {
+        contexts: BC1
+    }
+}
+use_case "starts" {
+    when BC1 begins
+        BC1 does work
+}
+`)
 	puml, _, err := New().GenerateDomainDiagramWithModeAndFormat(doc, DomainModeDetailed, FormatPUML)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
@@ -486,4 +478,11 @@ func TestMermaidFormatConstants(t *testing.T) {
 	if FormatMermaidMD != "mermaid-md" {
 		t.Errorf("FormatMermaidMD = %q, want %q", FormatMermaidMD, "mermaid-md")
 	}
+}
+
+// resolvedDoc analyzes src as a model of one file, exactly as callers of the
+// visualizer do.
+func resolvedDoc(t *testing.T, src string) *craft.CraftDoc {
+	t.Helper()
+	return analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc
 }
