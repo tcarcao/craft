@@ -38,7 +38,7 @@ func Slugify(name string) string {
 	return strings.TrimRight(b.String(), "-")
 }
 
-// FilterUseCases returns a shallow copy of doc keeping only UseCases that
+// filterUseCases returns a shallow copy of doc keeping only UseCases that
 // match one of `values`. Each value matches by either exact name or by
 // Slugify(name) == Slugify(value). Order of use cases in the result follows
 // the source document, not the order of values in the filter.
@@ -49,7 +49,7 @@ func Slugify(name string) string {
 //
 // Passing an empty or nil `values` slice returns the source doc unchanged
 // (same pointer) and a nil missing slice.
-func FilterUseCases(doc *craft.CraftDoc, values []string) (*craft.CraftDoc, []string) {
+func filterUseCases(doc *craft.CraftDoc, values []string) (*craft.CraftDoc, []string) {
 	if len(values) == 0 {
 		return doc, nil
 	}

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -31,9 +32,9 @@ type Response struct {
 }
 
 type Server struct {
-	tmpl   *template.Template
-	viz    *visualizer.Visualizer
-	lastC4 []byte
+	tmpl     *template.Template
+	renderer *visualizer.Renderer
+	lastC4   []byte
 }
 
 func NewServer() (*Server, error) {
@@ -43,8 +44,8 @@ func NewServer() (*Server, error) {
 	}
 
 	return &Server{
-		tmpl: tmpl,
-		viz:  visualizer.New(),
+		tmpl:     tmpl,
+		renderer: visualizer.New(visualizer.ExecPlantUML{}),
 	}, nil
 }
 
@@ -73,12 +74,15 @@ func (s *Server) handleGenerate() http.HandlerFunc {
 		doc, _ := parseDSL(input)
 
 		if generateC4 {
-			diagram, err := s.viz.GenerateC4(doc, "boundaries", true)
+			out, err := s.renderer.Render(doc, visualizer.Request{
+				View: visualizer.ViewC4, Backend: visualizer.PlantUML, Format: visualizer.FormatPNG,
+				C4: &visualizer.C4Options{Boundaries: true, ShowDatabases: true},
+			})
 			if err != nil {
 				log.Printf("Error generating C4 diagram: %v", err)
 			} else {
-				s.lastC4 = diagram
-				resp.C4 = base64.StdEncoding.EncodeToString(diagram)
+				s.lastC4 = out.Data
+				resp.C4 = base64.StdEncoding.EncodeToString(out.Data)
 			}
 		}
 
@@ -190,56 +194,97 @@ type C4DownloadRequest struct {
 	Filename       string     `json:"filename,omitempty"`
 }
 
+// Request mapping: the HTTP API keeps its field names; these helpers turn
+// them into one visualizer.Request each.
+
+// domainView maps diagramType (domain|sequence) and domainMode
+// (detailed|architecture) to a view.
+func domainView(diagramType, domainMode string) visualizer.View {
+	switch {
+	case diagramType == "sequence":
+		return visualizer.ViewSequence
+	case domainMode == "architecture":
+		return visualizer.ViewArchitecture
+	}
+	return visualizer.ViewFlow
+}
+
+// plantUMLFormat maps the API's format field; PNG is the default.
+func plantUMLFormat(format string) visualizer.Format {
+	switch format {
+	case "puml":
+		return visualizer.FormatSource
+	case "svg":
+		return visualizer.FormatSVG
+	case "pdf":
+		return visualizer.FormatPDF
+	}
+	return visualizer.FormatPNG
+}
+
+// c4Options maps the C4 request fields. Boundaries mode is the default, and
+// databases are shown unless showDatabases is explicitly false.
+func c4Options(boundariesMode string, showDatabases *bool, focus *FocusInfo) *visualizer.C4Options {
+	opts := &visualizer.C4Options{Boundaries: boundariesMode != "transparent", ShowDatabases: true}
+	if showDatabases != nil {
+		opts.ShowDatabases = *showDatabases
+	}
+	if focus != nil {
+		if focus.HasFocusedServices {
+			opts.FocusServices = focus.FocusedServiceNames
+		}
+		if focus.HasFocusedContexts {
+			opts.FocusContexts = focus.FocusedContextNames
+		}
+	}
+	return opts
+}
+
+// render draws one diagram and writes an error response when it cannot: 400
+// for a request the visualizer does not support, 500 otherwise. It reports
+// whether the caller should carry on.
+func (s *Server) render(w http.ResponseWriter, doc *craft.CraftDoc, req visualizer.Request) (visualizer.Output, bool) {
+	out, err := s.renderer.Render(doc, req)
+	switch {
+	case errors.Is(err, visualizer.ErrUnsupported):
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return out, false
+	case err != nil:
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+		return out, false
+	}
+	return out, true
+}
+
+func respondJSON(w http.ResponseWriter, resp PreviewResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func decode(w http.ResponseWriter, r *http.Request, into any) bool {
+	if err := json.NewDecoder(r.Body).Decode(into); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		return false
+	}
+	return true
+}
+
+// handlePreviewDomain renders a domain or sequence diagram with PlantUML.
+// Response.Data is base64.
 func (s *Server) handlePreviewDomain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DomainPreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-
-		// Parse DSL
-		model, diags := parseDSL(req.DSL)
-
-		// Parse diagram type, default to "domain" if not provided or invalid
-		diagramType := visualizer.DiagramTypeDomain
-		if req.DiagramType == string(visualizer.DiagramTypeSequence) {
-			diagramType = visualizer.DiagramTypeSequence
-		}
-
-		// Parse domain mode, default to "detailed" if not provided or invalid
-		domainMode := visualizer.DomainModeDetailed
-		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
-			domainMode = visualizer.DomainModeArchitecture
-		}
-
-		// Parse format, default to PNG
-		format := visualizer.FormatPNG
-		switch req.Format {
-		case "puml":
-			format = visualizer.FormatPUML
-		case "svg":
-			format = visualizer.FormatSVG
-		case "pdf":
-			format = visualizer.FormatPDF
-		}
-
-		// Generate diagram with type and mode
-		diagram, _, err := s.viz.GenerateDomainDiagramWithTypeAndModeAndFormat(model, diagramType, domainMode, format)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+		doc, diags := parseDSL(req.DSL)
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: domainView(req.DiagramType, req.DomainMode), Backend: visualizer.PlantUML, Format: plantUMLFormat(req.Format),
+		})
+		if !ok {
 			return
 		}
-
-		// Encode and respond
-		response := PreviewResponse{
-			Success:     true,
-			Data:        base64.StdEncoding.EncodeToString(diagram),
-			Diagnostics: diags,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		respondJSON(w, PreviewResponse{Success: true, Data: base64.StdEncoding.EncodeToString(out.Data), Diagnostics: diags})
 	}
 }
 
@@ -250,22 +295,17 @@ func (s *Server) handlePreviewDomain() http.HandlerFunc {
 func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DomainPreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-		arch, diags := parseDSL(req.DSL)
-		mode := visualizer.DomainModeDetailed
-		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
-			mode = visualizer.DomainModeArchitecture
-		}
-		src, err := s.viz.GenerateDomainDiagramMermaid(arch, mode)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
+		doc, diags := parseDSL(req.DSL)
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: domainView("domain", req.DomainMode), Backend: visualizer.Mermaid, Format: visualizer.FormatSource,
+		})
+		if !ok {
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src, Diagnostics: diags})
+		respondJSON(w, PreviewResponse{Success: true, Data: string(out.Data), Diagnostics: diags})
 	}
 }
 
@@ -274,22 +314,17 @@ func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DomainPreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-		arch, diags := parseDSL(req.DSL)
-		mode := visualizer.DomainModeDetailed
-		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
-			mode = visualizer.DomainModeArchitecture
-		}
-		src, err := s.viz.GenerateSequenceDiagramMermaid(arch, mode)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
+		doc, diags := parseDSL(req.DSL)
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: visualizer.ViewSequence, Backend: visualizer.Mermaid, Format: visualizer.FormatSource,
+		})
+		if !ok {
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src, Diagnostics: diags})
+		respondJSON(w, PreviewResponse{Success: true, Data: string(out.Data), Diagnostics: diags})
 	}
 }
 
@@ -299,79 +334,37 @@ func (s *Server) handlePreviewMermaidSequence() http.HandlerFunc {
 func (s *Server) handlePreviewMermaidC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4PreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-		arch, diags := parseDSL(req.DSL)
-		boundariesMode := visualizer.C4ModeBoundaries
-		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
-			boundariesMode = visualizer.C4ModeTransparent
-		}
-		showDatabases := true
-		if req.ShowDatabases != nil {
-			showDatabases = *req.ShowDatabases
-		}
-		var focusServices, focusContexts []string
-		if req.FocusInfo != nil {
-			focusServices, focusContexts = req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames
-		}
-		src, err := s.viz.GenerateC4Mermaid(arch, focusServices, focusContexts, boundariesMode, showDatabases)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Mermaid generation failed: %v", err))
+		doc, diags := parseDSL(req.DSL)
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: visualizer.ViewC4, Backend: visualizer.Mermaid, Format: visualizer.FormatSource,
+			C4: c4Options(req.BoundariesMode, req.ShowDatabases, req.FocusInfo),
+		})
+		if !ok {
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(PreviewResponse{Success: true, Data: src, Diagnostics: diags})
+		respondJSON(w, PreviewResponse{Success: true, Data: string(out.Data), Diagnostics: diags})
 	}
 }
 
+// handlePreviewC4 renders a C4 diagram to PNG. Response.Data is base64.
 func (s *Server) handlePreviewC4() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4PreviewRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-
-		// Parse DSL
-		arch, diags := parseDSL(req.DSL)
-
-		// Parse boundaries mode, default to "boundaries" if not provided or invalid
-		boundariesMode := visualizer.C4ModeBoundaries
-		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
-			boundariesMode = visualizer.C4ModeTransparent
-		}
-
-		// Parse database visibility, default to true if not provided
-		showDatabases := true
-		if req.ShowDatabases != nil {
-			showDatabases = *req.ShowDatabases
-		}
-
-		// Generate C4 diagram with focus information, boundaries mode, and database visibility
-		var diagram []byte
-		var err error
-		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedContexts) {
-			diagram, err = s.viz.GenerateC4WithFocusAndContexts(arch, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames, boundariesMode, showDatabases)
-		} else {
-			diagram, err = s.viz.GenerateC4(arch, boundariesMode, showDatabases)
-		}
-
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+		doc, diags := parseDSL(req.DSL)
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: visualizer.ViewC4, Backend: visualizer.PlantUML, Format: visualizer.FormatPNG,
+			C4: c4Options(req.BoundariesMode, req.ShowDatabases, req.FocusInfo),
+		})
+		if !ok {
 			return
 		}
-
-		// Encode and respond
-		response := PreviewResponse{
-			Success:     true,
-			Data:        base64.StdEncoding.EncodeToString(diagram),
-			Diagnostics: diags,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		respondJSON(w, PreviewResponse{Success: true, Data: base64.StdEncoding.EncodeToString(out.Data), Diagnostics: diags})
 	}
 }
 
@@ -394,144 +387,56 @@ func parseDSL(src string) (*craft.CraftDoc, []craft.Diagnostic) {
 	return doc, diags
 }
 
+// download writes a rendered diagram as an attachment, named filename or
+// defaultName plus the format's extension.
+func download(w http.ResponseWriter, out visualizer.Output, filename, defaultName string) {
+	if filename == "" {
+		filename = defaultName + "." + out.Ext
+	}
+	w.Header().Set("Content-Type", out.ContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Write(out.Data)
+}
+
 func (s *Server) handleDownloadDomainDiagram() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req DomainDownloadRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-
 		// Downloads carry the raw file only; diagnostics go with previews.
-		model, _ := parseDSL(req.DSL)
-
-		// Convert format string to SupportedFormat
-		var format visualizer.SupportedFormat
-		switch req.Format {
-		case "png":
-			format = visualizer.FormatPNG
-		case "svg":
-			format = visualizer.FormatSVG
-		case "pdf":
-			format = visualizer.FormatPDF
-		case "puml":
-			format = visualizer.FormatPUML
-		default:
-			format = visualizer.FormatPNG
-		}
-
-		// Parse diagram type, default to "domain" if not provided or invalid
-		diagramType := visualizer.DiagramTypeDomain
-		if req.DiagramType == string(visualizer.DiagramTypeSequence) {
-			diagramType = visualizer.DiagramTypeSequence
-		}
-
-		// Parse domain mode, default to "detailed" if not provided or invalid
-		domainMode := visualizer.DomainModeDetailed
-		if req.DomainMode == string(visualizer.DomainModeArchitecture) {
-			domainMode = visualizer.DomainModeArchitecture
-		}
-
-		diagram, contentType, err := s.viz.GenerateDomainDiagramWithTypeAndModeAndFormat(model, diagramType, domainMode, format)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+		doc, _ := parseDSL(req.DSL)
+		v := domainView(req.DiagramType, req.DomainMode)
+		out, ok := s.render(w, doc, visualizer.Request{View: v, Backend: visualizer.PlantUML, Format: plantUMLFormat(req.Format)})
+		if !ok {
 			return
 		}
-
-		// Set filename based on diagram type and mode
-		var defaultFilename string
-		if diagramType == visualizer.DiagramTypeSequence {
-			defaultFilename = "sequence-diagram"
-		} else if domainMode == visualizer.DomainModeArchitecture {
-			defaultFilename = "architecture-diagram"
-		} else {
-			defaultFilename = "domain-diagram"
+		name := map[visualizer.View]string{
+			visualizer.ViewSequence:     "sequence-diagram",
+			visualizer.ViewArchitecture: "architecture-diagram",
+		}[v]
+		if name == "" {
+			name = "domain-diagram"
 		}
-
-		// Determine filename
-		filename := req.Filename
-		if filename == "" {
-			extension := string(format)
-			if format == visualizer.FormatPUML {
-				extension = "puml"
-			}
-			filename = fmt.Sprintf("%s.%s", defaultFilename, extension)
-		}
-
-		// Set response headers
-		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-		w.Write(diagram)
+		download(w, out, req.Filename, name)
 	}
 }
 
 func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req C4DownloadRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		if !decode(w, r, &req) {
 			return
 		}
-
-		// Downloads carry the raw file only; diagnostics go with previews.
-		model, _ := parseDSL(req.DSL)
-
-		// Convert format string to SupportedFormat
-		var format visualizer.SupportedFormat
-		switch req.Format {
-		case "png":
-			format = visualizer.FormatPNG
-		case "svg":
-			format = visualizer.FormatSVG
-		case "pdf":
-			format = visualizer.FormatPDF
-		case "puml":
-			format = visualizer.FormatPUML
-		default:
-			format = visualizer.FormatPNG
-		}
-
-		// Parse boundaries mode
-		boundariesMode := visualizer.C4ModeBoundaries
-		if req.BoundariesMode == string(visualizer.C4ModeTransparent) {
-			boundariesMode = visualizer.C4ModeTransparent
-		}
-
-		// Parse database visibility, default to true if not provided
-		showDatabases := true
-		if req.ShowDatabases != nil {
-			showDatabases = *req.ShowDatabases
-		}
-
-		// Generate C4 diagram with focus and format
-		var diagram []byte
-		var contentType string
-		var err error
-		if req.FocusInfo != nil && (req.FocusInfo.HasFocusedServices || req.FocusInfo.HasFocusedContexts) {
-			diagram, contentType, err = s.viz.GenerateC4WithFocusContextsAndFormat(model, req.FocusInfo.FocusedServiceNames, req.FocusInfo.FocusedContextNames, boundariesMode, showDatabases, format)
-		} else {
-			diagram, contentType, err = s.viz.GenerateC4WithFormat(model, boundariesMode, showDatabases, format)
-		}
-
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Diagram generation failed: %v", err))
+		doc, _ := parseDSL(req.DSL)
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: visualizer.ViewC4, Backend: visualizer.PlantUML, Format: plantUMLFormat(req.Format),
+			C4: c4Options(req.BoundariesMode, req.ShowDatabases, req.FocusInfo),
+		})
+		if !ok {
 			return
 		}
-
-		// Determine filename
-		filename := req.Filename
-		if filename == "" {
-			extension := string(format)
-			if format == visualizer.FormatPUML {
-				extension = "puml"
-			}
-			filename = fmt.Sprintf("c4-diagram.%s", extension)
-		}
-
-		// Set response headers
-		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-		w.Write(diagram)
+		download(w, out, req.Filename, "c4-diagram")
 	}
 }
 

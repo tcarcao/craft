@@ -27,7 +27,12 @@ func TestC4_FocusContextKeepsHostingServiceInternal(t *testing.T) {
 		}},
 	}
 
-	out := GenerateC4ContainerDiagramWithFocusAndContexts(doc, C4ModeTransparent, nil, []string{"Ordering"}, false)
+	res, err := New(nil).Render(doc, Request{View: ViewC4, Backend: PlantUML, Format: FormatSource,
+		C4: &C4Options{FocusContexts: []string{"Ordering"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(res.Data)
 
 	if !strings.Contains(out, `System_Boundary(Orders`) {
 		t.Errorf("focused context's service Orders should be internal:\n%s", out)

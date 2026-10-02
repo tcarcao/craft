@@ -38,7 +38,6 @@ func minimalDoc() *craft.CraftDoc {
 }
 
 func TestGeneratedPUML_HasNoHandwrittenSkinparam(t *testing.T) {
-	viz := New()
 	// Use FormatPUML for all flavours so the test does not require the
 	// `plantuml` binary on $PATH — we only need to inspect the generated
 	// PUML source text.
@@ -47,18 +46,15 @@ func TestGeneratedPUML_HasNoHandwrittenSkinparam(t *testing.T) {
 		gen  func() ([]byte, error)
 	}{
 		{"domain-detailed", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(
-				minimalDoc(), DomainModeDetailed, FormatPUML)
+			b, _, err := renderPUML(minimalDoc(), ViewFlow)
 			return b, err
 		}},
 		{"domain-architecture", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(
-				minimalDoc(), DomainModeArchitecture, FormatPUML)
+			b, _, err := renderPUML(minimalDoc(), ViewArchitecture)
 			return b, err
 		}},
 		{"sequence", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithTypeAndModeAndFormat(
-				minimalDoc(), DiagramTypeSequence, DomainModeDetailed, FormatPUML)
+			b, _, err := renderPUML(minimalDoc(), ViewSequence)
 			return b, err
 		}},
 	}
@@ -77,7 +73,6 @@ func TestGeneratedPUML_HasNoHandwrittenSkinparam(t *testing.T) {
 }
 
 func TestGeneratedPUML_DeclaresUnicodeCapableFont(t *testing.T) {
-	viz := New()
 	doc := minimalDoc()
 	// Inject an em-dash into a use case name so the test fixture exercises the path.
 	doc.UseCases[0].Name = "Time-based — scheduled"
@@ -86,16 +81,15 @@ func TestGeneratedPUML_DeclaresUnicodeCapableFont(t *testing.T) {
 		gen  func() ([]byte, error)
 	}{
 		{"domain-detailed", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(doc, DomainModeDetailed, FormatPUML)
+			b, _, err := renderPUML(doc, ViewFlow)
 			return b, err
 		}},
 		{"domain-architecture", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithModeAndFormat(doc, DomainModeArchitecture, FormatPUML)
+			b, _, err := renderPUML(doc, ViewArchitecture)
 			return b, err
 		}},
 		{"sequence", func() ([]byte, error) {
-			b, _, err := viz.GenerateDomainDiagramWithTypeAndModeAndFormat(
-				doc, DiagramTypeSequence, DomainModeDetailed, FormatPUML)
+			b, _, err := renderPUML(doc, ViewSequence)
 			return b, err
 		}},
 	}
@@ -128,7 +122,7 @@ use_case "starts" {
         BC1 does work
 }
 `)
-	puml, _, err := New().GenerateDomainDiagramWithModeAndFormat(doc, DomainModeDetailed, FormatPUML)
+	puml, _, err := renderPUML(doc, ViewFlow)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -164,7 +158,7 @@ func TestDomainArchitectureDiagram_NoSelfLoops(t *testing.T) {
 		}},
 		Actors: []craft.Actor{{Name: "User", Type: craft.ActorTypeUser}},
 	}
-	puml, _, err := New().GenerateDomainDiagramWithModeAndFormat(doc, DomainModeArchitecture, FormatPUML)
+	puml, _, err := renderPUML(doc, ViewArchitecture)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -215,7 +209,7 @@ func TestC4Diagram_IncludesCRONActor(t *testing.T) {
 		}},
 		Actors: []craft.Actor{{Name: "CRON", Type: craft.ActorTypeSystem}},
 	}
-	puml, _, err := New().GenerateC4WithFormat(doc, C4ModeBoundaries, false, FormatPUML)
+	puml, _, err := renderPUML(doc, ViewC4)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -260,7 +254,7 @@ func TestC4Diagram_ActorOnlyConnectsToTriggeredDomains(t *testing.T) {
 			{Name: "Actor2", Type: craft.ActorTypeUser},
 		},
 	}
-	puml, _, err := New().GenerateC4WithFormat(doc, C4ModeBoundaries, false, FormatPUML)
+	puml, _, err := renderPUML(doc, ViewC4)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -350,7 +344,7 @@ func TestC4Diagram_EventsAllRendered(t *testing.T) {
 		},
 		Actors: []craft.Actor{{Name: "Timer", Type: craft.ActorTypeSystem}},
 	}
-	puml, _, err := New().GenerateC4WithFormat(doc, C4ModeBoundaries, false, FormatPUML)
+	puml, _, err := renderPUML(doc, ViewC4)
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -408,7 +402,7 @@ func TestFilterUseCases(t *testing.T) {
 	}
 
 	t.Run("match by slug", func(t *testing.T) {
-		out, missing := FilterUseCases(doc, []string{"one-time-apply"})
+		out, missing := filterUseCases(doc, []string{"one-time-apply"})
 		if len(missing) != 0 {
 			t.Fatalf("expected no missing, got %v", missing)
 		}
@@ -418,7 +412,7 @@ func TestFilterUseCases(t *testing.T) {
 	})
 
 	t.Run("match by exact name", func(t *testing.T) {
-		out, missing := FilterUseCases(doc, []string{"Application rejected"})
+		out, missing := filterUseCases(doc, []string{"Application rejected"})
 		if len(missing) != 0 {
 			t.Fatalf("expected no missing, got %v", missing)
 		}
@@ -428,7 +422,7 @@ func TestFilterUseCases(t *testing.T) {
 	})
 
 	t.Run("multiple values keep source order", func(t *testing.T) {
-		out, missing := FilterUseCases(doc, []string{"application-rejected", "release-due-work"})
+		out, missing := filterUseCases(doc, []string{"application-rejected", "release-due-work"})
 		if len(missing) != 0 {
 			t.Fatalf("expected no missing, got %v", missing)
 		}
@@ -441,7 +435,7 @@ func TestFilterUseCases(t *testing.T) {
 	})
 
 	t.Run("unmatched values reported", func(t *testing.T) {
-		out, missing := FilterUseCases(doc, []string{"release-due-work", "nonexistent"})
+		out, missing := filterUseCases(doc, []string{"release-due-work", "nonexistent"})
 		if len(out.UseCases) != 1 {
 			t.Fatalf("expected 1 matched use case, got %d", len(out.UseCases))
 		}
@@ -451,7 +445,7 @@ func TestFilterUseCases(t *testing.T) {
 	})
 
 	t.Run("empty filter returns all", func(t *testing.T) {
-		out, missing := FilterUseCases(doc, nil)
+		out, missing := filterUseCases(doc, nil)
 		if len(missing) != 0 {
 			t.Fatalf("expected no missing, got %v", missing)
 		}
@@ -461,7 +455,7 @@ func TestFilterUseCases(t *testing.T) {
 	})
 
 	t.Run("filtered doc shares non-usecase fields with source", func(t *testing.T) {
-		out, _ := FilterUseCases(doc, []string{"release-due-work"})
+		out, _ := filterUseCases(doc, []string{"release-due-work"})
 		if len(out.Services) != len(doc.Services) || out.Services[0].Name != doc.Services[0].Name {
 			t.Fatalf("expected Services preserved")
 		}
@@ -471,18 +465,24 @@ func TestFilterUseCases(t *testing.T) {
 	})
 }
 
-func TestMermaidFormatConstants(t *testing.T) {
-	if FormatMermaid != "mermaid" {
-		t.Errorf("FormatMermaid = %q, want %q", FormatMermaid, "mermaid")
-	}
-	if FormatMermaidMD != "mermaid-md" {
-		t.Errorf("FormatMermaidMD = %q, want %q", FormatMermaidMD, "mermaid-md")
-	}
-}
-
 // resolvedDoc analyzes src as a model of one file, exactly as callers of the
 // visualizer do.
 func resolvedDoc(t *testing.T, src string) *craft.CraftDoc {
 	t.Helper()
 	return analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc
+}
+
+// renderPUML and renderMermaid draw diagram source through Render. A C4
+// diagram uses boundaries mode without databases.
+func renderPUML(doc *craft.CraftDoc, v View) ([]byte, string, error) {
+	return renderSource(doc, v, PlantUML)
+}
+
+func renderSource(doc *craft.CraftDoc, v View, backend Backend) ([]byte, string, error) {
+	req := Request{View: v, Backend: backend, Format: FormatSource}
+	if v == ViewC4 {
+		req.C4 = &C4Options{Boundaries: true}
+	}
+	out, err := New(nil).Render(doc, req)
+	return out.Data, out.ContentType, err
 }
