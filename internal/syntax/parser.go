@@ -127,6 +127,11 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 	prevWasUseCase := false
 
 	for !p.atEOF() {
+		if p.atSurfaceDecl() {
+			diags = append(diags, p.parseSurfaceBlock()...)
+			prevWasUseCase = false
+			continue
+		}
 		tok := p.peek()
 		wasUseCase := tok.Type == lexer.TokenKwUseCase
 		switch tok.Type {
@@ -2151,12 +2156,12 @@ func tokenToActorType(tok lexer.Token) (string, bool) {
 // already reported their own diagnostic and ignore it.
 func (p *Parser) resyncToTopLevel() lexer.Token {
 	last := lexer.Token{Type: lexer.TokenEOF}
-	if p.atEOF() || isTopLevelKeyword(p.peek().Type) {
+	if p.atEOF() || isTopLevelKeyword(p.peek().Type) || p.atSurfaceDecl() {
 		return last
 	}
 	p.builder.StartNode(SyntaxKindErrorNode)
 	for !p.atEOF() {
-		if isTopLevelKeyword(p.peek().Type) {
+		if isTopLevelKeyword(p.peek().Type) || p.atSurfaceDecl() {
 			break
 		}
 		last = p.consume()
@@ -3243,4 +3248,151 @@ func (p *Parser) parseDeploymentSpec() []model.Diagnostic {
 	}
 	p.consumeAs(SyntaxKindRParen)
 	return diags
+}
+
+// --- surface parsing (v2.23) ---
+
+// atSurfaceDecl reports whether the next tokens open a surface: the contextual
+// keyword `surface`, then a name (bare or `<domain>/<name>`) and `{`, all on
+// one line. Anywhere else `surface` is an identifier.
+func (p *Parser) atSurfaceDecl() bool {
+	tok := p.peek()
+	if tok.Type != lexer.TokenIdent || tok.Value != "surface" {
+		return false
+	}
+	name := p.peekAt(1)
+	if (name.Type != lexer.TokenIdent && !isKeywordUsedAsIdent(name.Type)) || name.Line != tok.Line {
+		return false
+	}
+	next := p.peekAt(2)
+	if next.Type == lexer.TokenLBrace {
+		return next.Line == tok.Line
+	}
+	brace := p.peekAt(4)
+	return next.Value == "/" && p.peekAt(3).Type == lexer.TokenIdent && brace.Type == lexer.TokenLBrace && brace.Line == tok.Line
+}
+
+// parseSurfaceBlock parses: surface <name> { surface_item* }. The body ends
+// at `}`; a top-level keyword or another surface before it means the block is
+// unclosed, and the parse resumes there.
+func (p *Parser) parseSurfaceBlock() []model.Diagnostic {
+	p.builder.StartNode(SyntaxKindSurfaceDecl)
+	p.attachTrivia()
+	kwTok := p.consumeAs(SyntaxKindKwSurface)
+	diags := p.parseNameSlot("a surface subject")
+	p.consumeAs(SyntaxKindLBrace) // atSurfaceDecl checked it
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !isTopLevelKeyword(p.peek().Type) && !p.atSurfaceDecl() {
+		diags = append(diags, p.parseSurfaceItem()...)
+	}
+	if p.peek().Type != lexer.TokenRBrace {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed surface block (missing `}`)",
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseSurfaceItem parses one line of a surface body: `callers:`, `spec:`, a
+// note or finding, or a `query` / `command` line. Any other line is reported
+// and skipped.
+func (p *Parser) parseSurfaceItem() []model.Diagnostic {
+	tok := p.peek()
+	var diags []model.Diagnostic
+	switch {
+	case tok.Type == lexer.TokenIdent && (tok.Value == "callers" || tok.Value == "spec") && p.peekAt(1).Type == lexer.TokenColon:
+		p.builder.StartNode(SyntaxKindSurfaceField)
+		if tok.Value == "callers" {
+			p.consumeAs(SyntaxKindKwCallers)
+			p.consumeAs(SyntaxKindColon)
+			if n := p.peek(); n.Line != tok.Line || (n.Type != lexer.TokenIdent && n.Type != lexer.TokenString && !isKeywordUsedAsIdent(n.Type)) {
+				diags = append(diags, p.diagUnexpected(n, "a caller name or `unknown`, e.g. `callers: Advisor`"))
+			} else {
+				p.parseRefList()
+			}
+		} else {
+			p.consumeAs(SyntaxKindKwSpec)
+			p.consumeAs(SyntaxKindColon)
+			if s := p.peek(); s.Type == lexer.TokenString && s.Line == tok.Line {
+				p.consumeAs(SyntaxKindString)
+			} else {
+				diags = append(diags, p.diagUnexpected(s, "a quoted spec path, e.g. `spec: \"docs/openapi.yaml\"`"))
+			}
+		}
+		p.builder.FinishNode()
+	case p.atNoteLine():
+		return p.parseNote()
+	case tok.Type == lexer.TokenIdent && (tok.Value == "query" || tok.Value == "command"):
+		return p.parseSurfaceOperation()
+	default:
+		return p.sweepRestOfLine(tok.Line, "`callers:`, `spec:`, `note`, `finding`, `query`, `command` or `}`")
+	}
+	if len(diags) > 0 {
+		// The line is already reported; skip its rest silently.
+		return append(diags, p.skipRestOfLine(tok.Line)...)
+	}
+	return p.sweepRestOfLine(tok.Line, "end of line")
+}
+
+// skipRestOfLine wraps whatever is left on line in an error node without a
+// diagnostic of its own, for a line that has already been reported.
+func (p *Parser) skipRestOfLine(line int) []model.Diagnostic {
+	t := p.peek()
+	if t.Line != line || t.Type == lexer.TokenEOF || t.Type == lexer.TokenRBrace {
+		return nil
+	}
+	p.builder.StartNode(SyntaxKindErrorNode)
+	for t := p.peek(); t.Line == line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace; t = p.peek() {
+		p.consume()
+	}
+	p.builder.FinishNode()
+	return nil
+}
+
+// parseSurfaceOperation parses: query|command [connector] phrase [op]. The
+// operation is the entry's identity, so a line without one is an error and is
+// left out of the model.
+func (p *Parser) parseSurfaceOperation() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindSurfaceOperation)
+	kind := SyntaxKindKwQuery
+	if p.peek().Value == "command" {
+		kind = SyntaxKindKwCommand
+	}
+	kwTok := p.consumeAs(kind)
+	if c := p.peek(); c.Type == lexer.TokenIdent && isSurfaceConnector(c.Value) && c.Line == kwTok.Line {
+		p.consumeAs(SyntaxKindIdent)
+	}
+	start := p.opAnnotationStart(kwTok.Line)
+	p.collectPhrase(kwTok.Line, start)
+	if start >= 0 {
+		diags = append(diags, p.parseOpAnnotation()...)
+	} else {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/missing-operation",
+			Message:  fmt.Sprintf("a `%s` line needs its operation in brackets, e.g. `%s the seeker list  [getUserList]`", kwTok.Value, kwTok.Value),
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+	}
+	p.builder.FinishNode()
+	return diags
+}
+
+// isSurfaceConnector reports whether v is the connector of a surface line: a
+// connector word that is not an article. An article belongs to the noun the
+// line offers (`query the seeker list`), so it stays in the phrase, while a
+// preposition (`query for the daily totals`) is the connector.
+func isSurfaceConnector(v string) bool {
+	switch v {
+	case "a", "an", "the":
+		return false
+	}
+	return isConnectorWord(v)
 }

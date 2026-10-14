@@ -2857,3 +2857,194 @@ func (g GlossaryRelationDecl) RightRef() *RefDecl {
 	}
 	return &RefDecl{node: refs[1]}
 }
+
+// Surfaces returns all SurfaceDecl views, in document order.
+func (f File) Surfaces() []SurfaceDecl {
+	if f.isZero() {
+		return nil
+	}
+	var result []SurfaceDecl
+	for _, n := range f.node.ChildNodes(SyntaxKindSurfaceDecl) {
+		result = append(result, SurfaceDecl{node: n})
+	}
+	return result
+}
+
+// SurfaceDecl is a typed view over a SyntaxKindSurfaceDecl node:
+// `surface <subject> { … }`.
+type SurfaceDecl struct{ node SyntaxNode }
+
+// Keyword returns the `surface` keyword token.
+func (s SurfaceDecl) Keyword() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwSurface) }
+
+// subjectElement returns the subject slot (significant element 1), or nil.
+func (s SurfaceDecl) subjectElement() SyntaxElement {
+	elems := significantElements(s.node)
+	if len(elems) < 2 {
+		return nil
+	}
+	if k := elems[1].Kind(); k != SyntaxKindIdent && k != SyntaxKindRef {
+		return nil
+	}
+	return elems[1]
+}
+
+// SubjectToken returns the first token of the subject, or nil when it is
+// missing.
+func (s SurfaceDecl) SubjectToken() *SyntaxToken {
+	el := s.subjectElement()
+	if el == nil {
+		return nil
+	}
+	return slotFirstToken(el)
+}
+
+// Subject returns the subject as written: `concierge` or `obido/concierge`.
+func (s SurfaceDecl) Subject() string {
+	el := s.subjectElement()
+	if el == nil {
+		return ""
+	}
+	return refAwareText(el)
+}
+
+// field returns the first `callers:` / `spec:` field holding kw, or nil.
+func (s SurfaceDecl) field(kw SyntaxKind) *SyntaxNode {
+	for _, n := range s.node.ChildNodes(SyntaxKindSurfaceField) {
+		if n.ChildToken(kw) != nil {
+			return &n
+		}
+	}
+	return nil
+}
+
+// CallerRefs returns the entries of the `callers:` field, `unknown` included.
+func (s SurfaceDecl) CallerRefs() []RefDecl {
+	f := s.field(SyntaxKindKwCallers)
+	if f == nil {
+		return nil
+	}
+	var out []RefDecl
+	for _, n := range f.ChildNodes(SyntaxKindRef) {
+		out = append(out, RefDecl{node: n})
+	}
+	return out
+}
+
+// Callers returns the caller names as written, `unknown` included.
+func (s SurfaceDecl) Callers() []string {
+	var out []string
+	for _, r := range s.CallerRefs() {
+		toks := r.node.Tokens()
+		if len(toks) == 1 {
+			out = append(out, stringAwareText(toks[0]))
+			continue
+		}
+		out = append(out, r.RefText())
+	}
+	return out
+}
+
+// Spec returns the unquoted `spec:` path, or "".
+func (s SurfaceDecl) Spec() string {
+	f := s.field(SyntaxKindKwSpec)
+	if f == nil {
+		return ""
+	}
+	if t := f.ChildToken(SyntaxKindString); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
+// Notes returns the surface's note and finding lines, in source order.
+func (s SurfaceDecl) Notes() []NoteDecl {
+	var out []NoteDecl
+	for _, n := range s.node.ChildNodes(SyntaxKindNote) {
+		out = append(out, NoteDecl{node: n})
+	}
+	return out
+}
+
+// Operations returns the `query` / `command` lines, in source order, including
+// a line whose operation bracket is missing (OpText is then "").
+func (s SurfaceDecl) Operations() []SurfaceOpDecl {
+	var out []SurfaceOpDecl
+	for _, n := range s.node.ChildNodes(SyntaxKindSurfaceOperation) {
+		out = append(out, SurfaceOpDecl{node: n})
+	}
+	return out
+}
+
+// Line returns the 1-based line of the `surface` keyword using li.
+func (s SurfaceDecl) Line(li green.LineIndex) int {
+	if tok := s.Keyword(); tok != nil {
+		line, _ := li.LineCol(tok.Offset())
+		return line
+	}
+	return nodeFirstTokenLine(s.node, li)
+}
+
+// EndLine returns the 1-based line of the closing `}` using li.
+func (s SurfaceDecl) EndLine(li green.LineIndex) int { return nodeEndLine(s.node, li) }
+
+// Node returns the underlying syntax node.
+func (s SurfaceDecl) Node() SyntaxNode { return s.node }
+
+// SurfaceOpDecl is a typed view over a SyntaxKindSurfaceOperation node:
+// `query|command [connector] <phrase> [op]`.
+type SurfaceOpDecl struct{ node SyntaxNode }
+
+// KeywordToken returns the `query` / `command` keyword.
+func (o SurfaceOpDecl) KeywordToken() *SyntaxToken {
+	return o.node.ChildToken(SyntaxKindKwQuery, SyntaxKindKwCommand)
+}
+
+// Kind returns lang.SurfaceCommand for `command`, lang.SurfaceQuery otherwise.
+func (o SurfaceOpDecl) Kind() lang.SurfaceOpKind {
+	if t := o.KeywordToken(); t != nil && t.Kind() == SyntaxKindKwCommand {
+		return lang.SurfaceCommand
+	}
+	return lang.SurfaceQuery
+}
+
+// Connector returns the preposition between the keyword and the phrase
+// (`query for the daily totals` → "for"), or "".
+func (o SurfaceOpDecl) Connector() string {
+	toks := o.node.Tokens()
+	if len(toks) > 1 && toks[1].Kind() == SyntaxKindIdent && isSurfaceConnector(toks[1].Text()) {
+		return toks[1].Text()
+	}
+	return ""
+}
+
+// PhraseText returns what the line offers, as raw source between the
+// connector (or keyword) and the operation bracket.
+func (o SurfaceOpDecl) PhraseText() string {
+	start := 1
+	if o.Connector() != "" {
+		start = 2
+	}
+	if start >= len(o.node.Tokens()) {
+		return ""
+	}
+	return rawSourceFrom(o.node, start, opAnnotationOffset(o.node))
+}
+
+// OpAnnotation returns the `[op]` node, or nil when it is missing.
+func (o SurfaceOpDecl) OpAnnotation() *SyntaxNode { return opAnnotationOf(o.node) }
+
+// OpText returns the annotation body verbatim, or "".
+func (o SurfaceOpDecl) OpText() string { return opTextOf(o.node) }
+
+// OpVerb returns the recognised protocol verb of the annotation, or "".
+func (o SurfaceOpDecl) OpVerb() string { return opVerbOf(o.node) }
+
+// OpPayload returns the annotation body without its protocol verb, or "".
+func (o SurfaceOpDecl) OpPayload() string { return opPayloadOf(o.node) }
+
+// Line returns the 1-based line of the keyword using li.
+func (o SurfaceOpDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(o.node, li) }
+
+// Node returns the underlying syntax node.
+func (o SurfaceOpDecl) Node() SyntaxNode { return o.node }

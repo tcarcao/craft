@@ -1,0 +1,6 @@
+domain obido {
+    concierge
+}
+
+surface concierge {
+    query the seeker list  [getUserList]

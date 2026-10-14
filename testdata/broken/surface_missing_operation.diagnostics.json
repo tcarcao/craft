@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/missing-operation",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 5,
+        "character": 4
+      },
+      "end": {
+        "line": 5,
+        "character": 9
+      }
+    }
+  }
+]
