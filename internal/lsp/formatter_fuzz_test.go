@@ -53,7 +53,9 @@ func fuzzOutline(src string) string {
 			b.WriteString(" note " + string(n.Kind()) + " " + strconv.Quote(n.Text()) + "\n")
 		}
 		for _, op := range sf.Operations() {
-			b.WriteString(" " + string(op.Kind()) + " [" + op.OpText() + "]\n")
+			// The formatter collapses whitespace inside a bracket, as sema
+			// does when it compares operations.
+			b.WriteString(" " + string(op.Kind()) + " [" + strings.Join(strings.Fields(op.OpText()), " ") + "]\n")
 		}
 	}
 	return b.String()
@@ -88,6 +90,8 @@ func FuzzFormatBranches(f *testing.F) {
 		}
 		f.Add(string(raw))
 	}
+	// Found by the fuzzer: a bracket with inner runs of spaces.
+	f.Add("surface A{query 0[0]\nquery 0[0 0  0]\ncommand 00[0]}")
 	f.Fuzz(func(t *testing.T, src string) {
 		if fuzzFormatterBails(src) {
 			t.Skip("input does not parse cleanly")
