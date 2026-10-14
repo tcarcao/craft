@@ -1,0 +1,8 @@
+domain billing {
+    outbox
+}
+
+use_case "U" {
+    when outbox listens stream.user_event_store
+        outbox notifies nmfbus.FeatureEnabled, nmfbus.FeatureDisabled
+}

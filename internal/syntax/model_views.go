@@ -126,13 +126,18 @@ func (t TriggerDecl) EventRef() string {
 }
 
 // ObjectRef returns the object slot's ref text (the target of a sync action,
-// the event of an async action) when it is written as a typed ref, and ""
+// the (first) event of an async action) when it is written as a typed ref, and ""
 // for a quoted string or a plain name. Other action kinds return "".
 func (a ActionDecl) ObjectRef() string {
 	switch a.Kind() {
-	case lang.ActionSync, lang.ActionAsync:
+	case lang.ActionSync:
 		if elems := significantElements(a.node); len(elems) >= 3 {
 			return refIfWrapped(elems[2])
+		}
+	case lang.ActionAsync:
+		// The first event of a `one of` list.
+		if items := a.EventItems(); len(items) > 0 {
+			return items[0].Ref
 		}
 	}
 	return ""

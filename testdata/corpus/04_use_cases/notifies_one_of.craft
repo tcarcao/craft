@@ -1,0 +1,10 @@
+domain billing {
+    nmf_monetization
+}
+
+use_case "nMF republishes a stored money record onto its bus" {
+    when nmf_monetization listens stream.user_event_store
+        nmf_monetization reads the detail-type off the stored column
+        nmf_monetization notifies one of nmfbus.FeatureEnabled, nmfbus.FeatureDisabled,
+            nmfbus.CreateAutoSchedule, nmfbus.SubAccountBundleUpdated
+}

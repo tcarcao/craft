@@ -465,6 +465,21 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		}
 	}
 
+	// `notifies one of`: every item, and a description that lists them
+	// (spec §8.3). Events stays nil for a single item, as for triggers.
+	var events []string
+	if kind == lang.ActionAsync && a.IsOneOf() {
+		items := a.EventItems()
+		quoted := make([]string, len(items))
+		for i, it := range items {
+			quoted[i] = fmt.Sprintf("%q", it.Value)
+			if len(items) > 1 {
+				events = append(events, it.Value)
+			}
+		}
+		description = fmt.Sprintf("%s notifies one of %s", subject, strings.Join(quoted, ", "))
+	}
+
 	actionLine := 0
 	if toks := a.Tokens(); len(toks) > 0 {
 		actionLine, _ = li.LineCol(toks[0].Offset())
@@ -485,7 +500,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		}
 	}
 	var store *model.StoreRef
-	if kind == lang.ActionAsync {
+	if kind == lang.ActionAsync && !a.IsOneOf() {
 		store = storeRef(a.ObjectRef())
 	}
 	return model.Action{
@@ -495,6 +510,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		Verb:          verb,
 		TargetContext: target,
 		Event:         event,
+		Events:        events,
 		Ref:           a.ObjectRef(),
 		Operation:     operation,
 		Operations:    operations,

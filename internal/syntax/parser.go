@@ -1694,34 +1694,65 @@ func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
 	return diags
 }
 
-// parseNotifiesAction parses the "<event>" or event-ident after `notifies`.
+// parseNotifiesAction parses what follows `notifies`: one event (a quoted
+// string or a ref), or `one of` and an event list. The tree is
+// `KwOne KwOf (EventList | item)` for the list form; a single event keeps the
+// v2.23 tree. A bare list without `one of` is an error on its comma.
 func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 	var diags []model.Diagnostic
 	eventTok := p.peek()
-	if eventTok.Type == lexer.TokenString {
+	of := p.peekAt(1)
+	oneOf := false
+	switch {
+	case eventTok.Type == lexer.TokenIdent && eventTok.Value == "one" &&
+		of.Type == lexer.TokenIdent && of.Value == "of" && of.Line == eventTok.Line &&
+		p.peekAt(2).Line == eventTok.Line && p.eventItemAhead(2):
+		// notifies one of <event list>: one of these, chosen at run time
+		// (spec §8.3). `notifies one` and `notifies one [op]` stay events.
+		oneOf = true
+		p.consumeAs(SyntaxKindKwOne)
+		p.consumeAs(SyntaxKindKwOf)
+		_, d := p.parseEventList()
+		diags = append(diags, d...)
+	case eventTok.Type == lexer.TokenString:
 		p.consumeAs(SyntaxKindString)
-	} else if eventTok.Type == lexer.TokenIdent {
+	case eventTok.Type == lexer.TokenIdent:
 		p.parseRef()
-	} else if isAnyKeywordAsIdent(eventTok.Type) {
+	case isAnyKeywordAsIdent(eventTok.Type):
 		p.consumeAs(SyntaxKindIdent)
-	} else if eventTok.Type == lexer.TokenError {
+	case eventTok.Type == lexer.TokenError:
 		diags = append(diags, p.diagUnterminatedString(eventTok))
 		p.consumeAs(SyntaxKindError)
+	}
+	// A list may wrap, so what follows sits on the line of the last item.
+	line := p.lastConsumed().Line
+	if c := p.peek(); !oneOf && c.Type == lexer.TokenComma && c.Line == line {
+		// A bare list: say which form was meant, and keep the rest of the
+		// line out of the next step.
+		d := p.diagUnexpected(c, "end of line")
+		d.Message = "to publish one of several events write `notifies one of a, b`; to publish several, write one `notifies` per event"
+		diags = append(diags, d)
+		p.builder.StartNode(SyntaxKindErrorNode)
+		for t := p.peek(); t.Line == line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace; t = p.peek() {
+			p.consume()
+		}
+		p.builder.FinishNode()
+		return diags
 	}
 	// notifies has no phrase between the event and a possible annotation:
 	// an event is one name. Extra words (`sync notifies the owners team`)
 	// are reported at the first one and swept, up to a trailing annotation,
 	// so they neither vanish silently nor parse as a step.
-	start := p.opAnnotationStart(eventTok.Line)
-	if t := p.peek(); start != 0 && t.Line == eventTok.Line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace {
+	start := p.opAnnotationStart(line)
+	if t := p.peek(); start != 0 && t.Line == line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace {
 		diags = append(diags, p.diagNotifiesExtraWords(t))
 		p.builder.StartNode(SyntaxKindErrorNode)
-		for n := 0; (start < 0 || n < start) && p.peek().Line == eventTok.Line &&
+		for n := 0; (start < 0 || n < start) && p.peek().Line == line &&
 			p.peek().Type != lexer.TokenEOF && p.peek().Type != lexer.TokenRBrace; n++ {
 			p.consume()
 		}
 		p.builder.FinishNode()
-		start = p.opAnnotationStart(eventTok.Line)
+		start = p.opAnnotationStart(line)
 	}
 	if start == 0 {
 		diags = append(diags, p.parseOpAnnotation()...)

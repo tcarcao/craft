@@ -986,6 +986,11 @@ func validateEventLists(uri string, file syntax.File, li green.LineIndex, hasLI 
 	for _, uc := range file.UseCases() {
 		for _, sc := range uc.Scenarios() {
 			check(sc.Trigger().EventItems())
+			for _, a := range sc.Actions() {
+				if a.IsOneOf() {
+					check(a.EventItems())
+				}
+			}
 		}
 	}
 	return diags

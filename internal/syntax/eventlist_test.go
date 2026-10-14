@@ -2,6 +2,7 @@ package syntax_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -88,5 +89,43 @@ func TestListensList_ExtraWordsAfterAnItemAreNotAStep(t *testing.T) {
 	}
 	if n := len(sc.Steps()); n != 1 {
 		t.Errorf("%d steps, want 1: the extra words are not a step", n)
+	}
+}
+
+func TestNotifiesOneOf(t *testing.T) {
+	src := "use_case \"U\" {\n    when outbox listens stream.user_event_store\n        outbox notifies one of nmfbus.FeatureEnabled,\n                nmfbus.FeatureDisabled  [TOPIC nmfbus]\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	a := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if !a.IsOneOf() || a.EventValue() != "nmfbus.FeatureEnabled" || a.ObjectRef() != "nmfbus.FeatureEnabled" {
+		t.Errorf("oneOf=%v value=%q ref=%q", a.IsOneOf(), a.EventValue(), a.ObjectRef())
+	}
+	if got := itemValues(a.EventItems()); !slices.Equal(got, []string{"nmfbus.FeatureEnabled", "nmfbus.FeatureDisabled"}) {
+		t.Errorf("items = %v", got)
+	}
+	if a.OpText() != "TOPIC nmfbus" {
+		t.Errorf("op = %q", a.OpText())
+	}
+}
+
+func TestNotifiesOneStaysAnEventName(t *testing.T) {
+	for _, line := range []string{"x notifies one", "x notifies one [TOPIC t]", "one notifies of.Ended"} {
+		g, _, diags := syntax.Parse("use_case \"U\" {\n    when O does\n        " + line + "\n}")
+		if len(diags) != 0 {
+			t.Fatalf("%s: %v", line, diags)
+		}
+		a := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0].Actions()[0]
+		if a.IsOneOf() {
+			t.Errorf("%s: read as one of", line)
+		}
+	}
+}
+
+func TestNotifiesBareListIsAnError(t *testing.T) {
+	_, _, diags := syntax.Parse("use_case \"U\" {\n    when O does\n        x notifies a.A, b.B\n}")
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/unexpected-token" || !strings.Contains(diags[0].Message, "notifies one of") {
+		t.Fatalf("diags = %v", diags)
 	}
 }

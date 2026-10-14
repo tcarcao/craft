@@ -2073,40 +2073,79 @@ func (a ActionDecl) TargetCol(li green.LineIndex) int {
 	return col
 }
 
-// EventValue returns the event name for async_action (notifies). The event
-// slot may be a quoted string or a parseRef-wrapped ref (Task 4); refAwareText
-// returns the full ref text for a kind-prefixed slug rather than truncating.
-func (a ActionDecl) EventValue() string {
+// eventSlot returns an async action's event slot element: element 2, or
+// element 4 after `one of`. Nil for any other action, or when the slot is
+// missing.
+func (a ActionDecl) eventSlot() SyntaxElement {
 	if a.Kind() != lang.ActionAsync {
-		return ""
+		return nil
 	}
 	elems := significantElements(a.node)
-	if len(elems) >= 3 {
-		return refAwareText(elems[2])
+	i := 2
+	if a.IsOneOf() {
+		i = 4
+	}
+	if i >= len(elems) || elems[i].Kind() == SyntaxKindOpAnnotation || elems[i].Kind() == SyntaxKindErrorNode {
+		return nil
+	}
+	return elems[i]
+}
+
+// IsOneOf reports whether the action is `notifies one of …` (spec §8.3).
+func (a ActionDecl) IsOneOf() bool {
+	if a.Kind() != lang.ActionAsync {
+		return false
+	}
+	elems := significantElements(a.node)
+	return len(elems) > 3 && elems[2].Kind() == SyntaxKindKwOne && elems[3].Kind() == SyntaxKindKwOf
+}
+
+// OneOfTokens returns the `one` and `of` keywords of a `notifies one of`
+// action; nil for any other action.
+func (a ActionDecl) OneOfTokens() (one, of *SyntaxToken) {
+	if !a.IsOneOf() {
+		return nil, nil
+	}
+	return a.node.ChildToken(SyntaxKindKwOne), a.node.ChildToken(SyntaxKindKwOf)
+}
+
+// EventItems returns the events of an async action in source order: one for
+// `notifies E`, every item for `notifies one of …`.
+func (a ActionDecl) EventItems() []EventItem {
+	if el := a.eventSlot(); el != nil {
+		return eventItemsOf(el)
+	}
+	return nil
+}
+
+// EventValue returns the event name for async_action (notifies): the first
+// item of a `one of` list. The event slot may be a quoted string or a
+// parseRef-wrapped ref (Task 4); refAwareText returns the full ref text for a
+// kind-prefixed slug rather than truncating.
+func (a ActionDecl) EventValue() string {
+	if items := a.EventItems(); len(items) > 0 {
+		return items[0].Value
 	}
 	return ""
 }
 
-// EventCol returns the 1-based column of the event token for async_action using li.
+// EventCol returns the 1-based column of the (first) event token for
+// async_action using li.
 func (a ActionDecl) EventCol(li green.LineIndex) int {
-	if a.Kind() != lang.ActionAsync {
-		return 0
-	}
-	elems := significantElements(a.node)
-	if len(elems) >= 3 {
-		_, col := li.LineCol16(refAwareOffset(elems[2]))
+	if items := a.EventItems(); len(items) > 0 {
+		_, col := li.LineCol16(items[0].Offset)
 		return col
 	}
 	return 0
 }
 
-// EventIsString returns true when the event was a quoted string literal.
+// EventIsString returns true when the (first) event was a quoted string
+// literal.
 func (a ActionDecl) EventIsString() bool {
-	if a.Kind() != lang.ActionAsync {
-		return false
+	if items := a.EventItems(); len(items) > 0 {
+		return items[0].IsString
 	}
-	elems := significantElements(a.node)
-	return len(elems) >= 3 && elems[2].Kind() == SyntaxKindString
+	return false
 }
 
 // VerbToken returns the action's verb token: the asks/notifies/returns keyword,
@@ -2298,6 +2337,10 @@ func (a ActionDecl) eventSourceText() string {
 	elems := significantElements(a.node)
 	if len(elems) < 3 {
 		return ""
+	}
+	if a.IsOneOf() {
+		// `one of` and the items as written, line breaks included.
+		return a.rawTextFrom(tokenIndexAt(elems, 2))
 	}
 	return refAwareRawText(elems[2])
 }

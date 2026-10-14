@@ -1,0 +1,75 @@
+{
+  "useCases": [
+    {
+      "name": "nMF republishes a stored money record onto its bus",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "nmf_monetization",
+            "event": "stream.user_event_store",
+            "ref": "stream.user_event_store",
+            "description": "when nmf_monetization listens \"stream.user_event_store\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "billing/nmf_monetization"
+            },
+            "line": 6,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "nmf_monetization",
+                "verb": "reads",
+                "connector": "the",
+                "phrase": "detail-type off the stored column",
+                "description": "nmf_monetization reads the detail-type off the stored column",
+                "line": 7,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/nmf_monetization"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "nmf_monetization",
+                "event": "nmfbus.FeatureEnabled",
+                "ref": "nmfbus.FeatureEnabled",
+                "events": [
+                  "nmfbus.FeatureEnabled",
+                  "nmfbus.FeatureDisabled",
+                  "nmfbus.CreateAutoSchedule",
+                  "nmfbus.SubAccountBundleUpdated"
+                ],
+                "description": "nmf_monetization notifies one of \"nmfbus.FeatureEnabled\", \"nmfbus.FeatureDisabled\", \"nmfbus.CreateAutoSchedule\", \"nmfbus.SubAccountBundleUpdated\"",
+                "line": 8,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/nmf_monetization"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 5
+    }
+  ],
+  "domains": [
+    {
+      "name": "billing",
+      "boundedContexts": [
+        "nmf_monetization"
+      ]
+    }
+  ]
+}

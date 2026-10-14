@@ -251,3 +251,28 @@ func TestLint_OperationNotInSurfaceChecksEachItem(t *testing.T) {
 		t.Errorf("range = %+v", got[0].Range)
 	}
 }
+
+func TestLint_OneOfSingleEvent(t *testing.T) {
+	if n := lintCodes(t, "use_case \"U\" {\n  when O does\n    x notifies one of a.Ended\n}", "craft/lint/one-of-single-event"); n != 1 {
+		t.Errorf("single: %d", n)
+	}
+	if n := lintCodes(t, "use_case \"U\" {\n  when O does\n    x notifies one of a.Ended, b.Ended\n}", "craft/lint/one-of-single-event"); n != 0 {
+		t.Errorf("two: %d", n)
+	}
+	if n := lintCodes(t, "use_case \"U\" {\n  when O does\n    x notifies one of a.Ended, b.Ended, a.Ended\n}", "craft/lint/duplicate-event-in-list"); n != 1 {
+		t.Errorf("duplicate: %d", n)
+	}
+}
+
+func TestLint_OneOfItemsAreEachPublished(t *testing.T) {
+	src := "use_case \"P\" {\n  when O does\n    x notifies one of a.Ended, b.Ended\n}\nuse_case \"L\" {\n  when y listens b.Ended\n    y does it\n}"
+	var dead []string
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/lint/dead-event" {
+			dead = append(dead, d.Message)
+		}
+	}
+	if len(dead) != 1 || !strings.Contains(dead[0], "a.Ended") {
+		t.Errorf("dead = %v", dead)
+	}
+}

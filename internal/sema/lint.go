@@ -61,6 +61,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintOperationNotInSurface(perFileTrees, ws, lis)...)
 	diags = append(diags, lintRepeatedRequests(perFileTrees, ws, lis)...)
 	diags = append(diags, lintDuplicateEventInList(perFileTrees, lis)...)
+	diags = append(diags, lintOneOfSingleEvent(perFileTrees, lis)...)
 	return diags
 }
 
@@ -101,19 +102,20 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]gr
 				for _, it := range trigger.EventItems() {
 					consumed[it.Value] = true
 				}
+				// Every item of a `notifies one of` list is published, each
+				// at its own position.
 				for _, action := range sc.Actions() {
-					if action.Kind() == lang.ActionAsync {
-						ev := action.EventValue()
-						if ev != "" {
-							if _, seen := published[ev]; !seen {
-								published[ev] = pubSite{
-									uri:      uri,
-									event:    ev,
-									line:     action.Line(li),
-									col:      action.EventCol(li),
-									tokenLen: eventTokenLen(ev, action.EventIsString()),
-								}
-							}
+					for _, it := range action.EventItems() {
+						if _, seen := published[it.Value]; it.Value == "" || seen {
+							continue
+						}
+						line, col := li.LineCol16(it.Offset)
+						published[it.Value] = pubSite{
+							uri:      uri,
+							event:    it.Value,
+							line:     line,
+							col:      col,
+							tokenLen: eventTokenLen(it.Value, it.IsString),
 						}
 					}
 				}
@@ -246,8 +248,9 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 					check(it.Value, uri, line, col, it.IsString)
 				}
 				for _, action := range sc.Actions() {
-					if action.Kind() == lang.ActionAsync {
-						check(action.EventValue(), uri, action.Line(li), action.EventCol(li), action.EventIsString())
+					for _, it := range action.EventItems() {
+						line, col := li.LineCol16(it.Offset)
+						check(it.Value, uri, line, col, it.IsString)
 					}
 				}
 			}
@@ -777,8 +780,9 @@ func lintStoreWithoutChange(perFileTrees map[string]syntax.SyntaxNode, lis map[s
 					}
 				}
 				for _, a := range sc.Actions() {
-					if a.Kind() == lang.ActionAsync {
-						check(a.ObjectRef(), a.Line(li), a.EventCol(li))
+					for _, it := range a.EventItems() {
+						line, col := li.LineCol16(it.Offset)
+						check(it.Ref, line, col)
 					}
 				}
 			}
@@ -896,6 +900,44 @@ func lintDuplicateEventInList(perFileTrees map[string]syntax.SyntaxNode, lis map
 		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
 			for _, sc := range uc.Scenarios() {
 				check(sc.Trigger().EventItems())
+				for _, a := range sc.Actions() {
+					if a.IsOneOf() {
+						check(a.EventItems())
+					}
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── one-of-single-event ───────────────────────────────────────────────────────
+// Warning: `notifies one of` with a single event. The range is `one of`.
+
+func lintOneOfSingleEvent(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				for _, a := range sc.Actions() {
+					if !a.IsOneOf() || len(a.EventItems()) != 1 {
+						continue
+					}
+					one, of := a.OneOfTokens()
+					line, start := li.LineCol16(one.Offset())
+					_, end := li.LineCol16(of.Offset() + green.TextSize(len(of.Text())))
+					diags = append(diags, model.Diagnostic{
+						Code:      "craft/lint/one-of-single-event",
+						Message:   "`notifies one of` names a single event; drop `one of`",
+						Severity:  model.SeverityWarning,
+						SourceURI: uri,
+						Range: model.Range{
+							Start: model.Position{Line: lineToLSP(line), Character: colToLSP(start)},
+							End:   model.Position{Line: lineToLSP(line), Character: colToLSP(end)},
+						},
+					})
+				}
 			}
 		}
 	}
