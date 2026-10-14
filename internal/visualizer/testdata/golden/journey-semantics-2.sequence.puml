@@ -1,0 +1,99 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+actor "Partner" as Partner
+participant "cooker" as cooker
+participant "seshat" as seshat
+boundary "CRON" as CRON
+participant "adstatistics" as adstatistics
+boundary "Ticker" as Ticker <<scheduler>>
+participant "vasscheduler" as vasscheduler
+actor "Operator" as Operator
+boundary "OperatorTool" as OperatorTool <<tool>>
+participant "account" as account
+boundary "Pipeline" as Pipeline <<infra>>
+actor "Seller" as Seller
+participant "frontendplatform" as frontendplatform
+participant "graphql" as graphql
+boundary "AiAssistant" as AiAssistant
+participant "nmf_monetization" as nmf_monetization
+participant "app-manager" as app_manager
+boundary "AwsApiGateway" as AwsApiGateway
+participant "atlas" as atlas
+participant "obidoanalytics" as obidoanalytics
+participant "front" as front
+boundary "ObjectStore" as ObjectStore
+participant "mobile" as mobile
+boundary "ShaperAgent" as ShaperAgent
+
+== Mercury cooks an advert ==
+
+Partner -> cooker : posts an advert
+cooker -> cooker : cooks the advert for its target site
+cooker ->> cooker : notifies "sns.mercury-cooked"
+
+== seshat records a Mercury domain event in the transaction ledger ==
+
+[-> seshat : sns.mercury-advert-state-changed, sns.mercury-vas-state-changed, sns.mercury-message-received (+1 more) (from cooker)
+seshat -> seshat : writes one row per event
+
+== Rebuild a market's daily statistics [sites: imovirtualpt, otodompl, storiaro] [envs: production] ==
+
+CRON -> adstatistics : cron 0 1/2 * * *
+adstatistics -> adstatistics : rebuilds the day's advert facts
+
+== The activation sweep starts due schedules ==
+
+Ticker -> vasscheduler : fires the vasscheduler activation sweep
+vasscheduler -> vasscheduler : starts every schedule that is due
+
+== Operator exports agency portfolio values ==
+
+Operator -> OperatorTool : runs the portfolio export
+OperatorTool -> account : for the agency owner members [backofficeMembersList]
+
+== The pipeline deploys the scheduler ==
+
+Pipeline -> vasscheduler : deploys a new vasscheduler build
+vasscheduler -> vasscheduler : warms its schedule cache
+
+== Seller asks the assistant a question ==
+
+Seller -> frontendplatform : asks the assistant a question
+frontendplatform -> graphql : to stream the answer [assistantStream]
+graphql -> AiAssistant : to stream the reply [POST /api/v1/assistant/chat_streaming]
+loop stream
+AiAssistant --> graphql : streams the reply as META, TOKEN and DONE events
+end
+loop stream
+graphql --> frontendplatform : streams each event to the client
+end
+frontendplatform -> frontendplatform : appends every TOKEN delta to the message
+
+== nMF republishes a stored money record onto its bus ==
+
+[-> nmf_monetization : stream.user_event_store
+nmf_monetization -> nmf_monetization : reads the detail-type off the stored column
+nmf_monetization ->> nmf_monetization : notifies one of "nmfbus.FeatureEnabled", "nmfbus.FeatureDisabled", "nmfbus.CreateAutoSchedule" (+1 more)
+
+== Partner manages an API key and an advert ==
+
+Partner -> app_manager : opens the integration settings
+app_manager -> AwsApiGateway : to create the key and bind it to the plan [CreateApiKey, CreateUsagePlanKey]
+frontendplatform -> atlas : to save or delete the advert [postAdvert, putAdvert, deleteAdvert]
+
+== obido analytics refreshes the market structure ==
+
+CRON -> obidoanalytics : cron 0 18 * * *
+obidoanalytics -> front : for the city, region and developer graph [SQL investment flat city region developer]
+obidoanalytics -> ObjectStore : to take the refreshed snapshot [ADDR SNAPSHOT_DESTINATION]
+
+== Seller resumes a selling draft ==
+
+Seller -> mobile : resumes a selling draft
+mobile -> graphql : to open a selling chat session [agenticSellingStart]
+graphql -[#999999]> ShaperAgent : to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)
+
+@enduml

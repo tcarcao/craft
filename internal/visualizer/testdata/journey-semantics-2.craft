@@ -1,0 +1,139 @@
+// The v2.24 constructs: a listens roster (§4.5), scope tags in the sequence
+// title (§5.3), the scheduler/tool/infra actor kinds (§6.5), streamed replies
+// (§7.1), a notifies one of outbox (§8.3), operation lists (§8.1), and the
+// SQL/ADDR/inferred markers (§9.1).
+actors {
+    user Partner
+    user Operator
+    user Seller
+    system CRON
+    system AwsApiGateway
+    system AiAssistant
+    system ObjectStore
+    system ShaperAgent
+    scheduler Ticker
+    tool OperatorTool
+    infra Pipeline
+}
+
+domain partner {
+    cooker
+    seshat
+}
+
+domain analytics {
+    adstatistics
+    obidoanalytics
+    front
+}
+
+domain vas {
+    vasscheduler
+    account
+    app-manager
+}
+
+domain seller {
+    frontendplatform
+    graphql
+    mobile
+    atlas
+}
+
+domain billing {
+    nmf_monetization
+}
+
+services {
+    PartnerPlatform {
+        contexts: cooker, seshat
+        language: golang
+    }
+    Analytics {
+        contexts: adstatistics, obidoanalytics, front
+        language: python
+    }
+    Vas {
+        contexts: vasscheduler, account, app-manager
+        language: java
+    }
+    SellerPlatform {
+        contexts: frontendplatform, graphql, mobile, atlas
+        language: typescript
+    }
+    Monetization {
+        contexts: nmf_monetization
+        language: golang
+    }
+}
+
+use_case "Mercury cooks an advert" {
+    when Partner posts an advert
+        cooker cooks the advert for its target site
+        cooker notifies sns.mercury-cooked
+}
+
+use_case "seshat records a Mercury domain event in the transaction ledger" {
+    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed,
+            sns.mercury-message-received, sns.mercury-cooked
+        seshat writes one row per event
+}
+
+use_case "Rebuild a market's daily statistics" {
+    tags {
+        sites: imovirtualpt, otodompl, storiaro
+        envs: production
+    }
+
+    when cron "0 1/2 * * *"
+        adstatistics rebuilds the day's advert facts
+}
+
+use_case "The activation sweep starts due schedules" {
+    when Ticker fires the vasscheduler activation sweep
+        vasscheduler starts every schedule that is due
+}
+
+use_case "Operator exports agency portfolio values" {
+    when Operator runs the portfolio export
+        OperatorTool asks account for the agency owner members  [backofficeMembersList]
+}
+
+use_case "The pipeline deploys the scheduler" {
+    when Pipeline deploys a new vasscheduler build
+        vasscheduler warms its schedule cache
+}
+
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+        graphql asks AiAssistant to stream the reply        [POST /api/v1/assistant/chat_streaming]
+        AiAssistant returns stream the reply as META, TOKEN and DONE events
+        graphql returns stream each event to the client
+        frontendplatform appends every TOKEN delta to the message
+}
+
+use_case "nMF republishes a stored money record onto its bus" {
+    when nmf_monetization listens stream.user_event_store
+        nmf_monetization reads the detail-type off the stored column
+        nmf_monetization notifies one of nmfbus.FeatureEnabled, nmfbus.FeatureDisabled,
+            nmfbus.CreateAutoSchedule, nmfbus.SubAccountBundleUpdated
+}
+
+use_case "Partner manages an API key and an advert" {
+    when Partner opens the integration settings
+        app-manager asks AwsApiGateway to create the key and bind it to the plan  [CreateApiKey, CreateUsagePlanKey]
+        frontendplatform asks atlas to save or delete the advert                  [postAdvert, putAdvert, deleteAdvert]
+}
+
+use_case "obido analytics refreshes the market structure" {
+    when cron "0 18 * * *"
+        obidoanalytics asks front for the city, region and developer graph  [SQL investment flat city region developer]
+        obidoanalytics asks ObjectStore to take the refreshed snapshot      [ADDR "SNAPSHOT_DESTINATION"]
+}
+
+use_case "Seller resumes a selling draft" {
+    when Seller resumes a selling draft
+        mobile asks graphql to open a selling chat session  [agenticSellingStart]
+        graphql asks ShaperAgent to initiate the chat       [inferred POST /api/v1/assistant/initiate_chat]
+}

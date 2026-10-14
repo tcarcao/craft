@@ -1,0 +1,68 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Service boundaries
+rectangle "Analytics" as Analytics {
+  frame "adstatistics" as adstatistics
+  frame "front" as front
+  frame "obidoanalytics" as obidoanalytics
+}
+rectangle "Monetization" as Monetization {
+  frame "nmf_monetization" as nmf_monetization
+}
+rectangle "PartnerPlatform" as PartnerPlatform {
+  frame "cooker" as cooker
+  frame "seshat" as seshat
+}
+rectangle "SellerPlatform" as SellerPlatform {
+  frame "atlas" as atlas
+  frame "frontendplatform" as frontendplatform
+  frame "graphql" as graphql
+  frame "mobile" as mobile
+}
+rectangle "Vas" as Vas {
+  frame "vasscheduler" as vasscheduler
+}
+
+' Domain queues
+queue "cooker events" as cooker_events
+queue "nmf_monetization events" as nmf_monetization_events
+
+' Subdomain connections
+obidoanalytics --> front
+nmf_monetization --> nmf_monetization_events
+cooker --> cooker_events
+cooker_events --> seshat
+frontendplatform --> atlas
+frontendplatform --> graphql
+graphql --> frontendplatform
+mobile --> graphql
+
+@enduml

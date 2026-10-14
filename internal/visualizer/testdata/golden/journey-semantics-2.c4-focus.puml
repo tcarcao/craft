@@ -1,0 +1,96 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/java>
+!include <tupadr3/devicons2/javascript>
+!include <tupadr3/devicons2/python>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+Person(Partner, "Partner", "External user")
+
+Enterprise_Boundary(Analytics_boundary, "Analytics") {
+    Container_Boundary(Analytics_adstatistics_Domain_boundary, "adstatistics Domain") {
+        Container_Ext(adstatistics, "adstatistics", "Python Application", "adstatistics [Context]", $sprite="python")
+    }
+    Container_Boundary(Analytics_obidoanalytics_Domain_boundary, "obidoanalytics Domain") {
+        Container_Ext(obidoanalytics, "obidoanalytics", "Python Application", "obidoanalytics [Context]", $sprite="python")
+    }
+    Container_Boundary(Analytics_front_Domain_boundary, "front Domain") {
+        Container_Ext(front, "front", "Python Application", "front [Context]", $sprite="python")
+    }
+}
+
+Enterprise_Boundary(Monetization_boundary, "Monetization") {
+    Container_Boundary(Monetization_nmf_monetization_Domain_boundary, "nmf_monetization Domain") {
+        Container_Ext(nmf_monetization, "nmf_monetization", "Go Application", "nmf_monetization [Context]", $sprite="go")
+    }
+}
+
+Enterprise_Boundary(SellerPlatform_boundary, "SellerPlatform") {
+    Container_Boundary(SellerPlatform_frontendplatform_Domain_boundary, "frontendplatform Domain") {
+        Container_Ext(frontendplatform, "frontendplatform", "TypeScript Application", "frontendplatform [Context]", $sprite="javascript")
+    }
+    Container_Boundary(SellerPlatform_graphql_Domain_boundary, "graphql Domain") {
+        Container_Ext(graphql, "graphql", "TypeScript Application", "graphql [Context]", $sprite="javascript")
+    }
+    Container_Boundary(SellerPlatform_mobile_Domain_boundary, "mobile Domain") {
+        Container_Ext(mobile, "mobile", "TypeScript Application", "mobile [Context]", $sprite="javascript")
+    }
+    Container_Boundary(SellerPlatform_atlas_Domain_boundary, "atlas Domain") {
+        Container_Ext(atlas, "atlas", "TypeScript Application", "atlas [Context]", $sprite="javascript")
+    }
+}
+
+Enterprise_Boundary(Vas_boundary, "Vas") {
+    Container_Boundary(Vas_vasscheduler_Domain_boundary, "vasscheduler Domain") {
+        Container_Ext(vasscheduler, "vasscheduler", "Java Application", "vasscheduler [Context]", $sprite="java")
+    }
+    Container_Boundary(Vas_account_Domain_boundary, "account Domain") {
+        Container_Ext(account, "account", "Java Application", "account [Context]", $sprite="java")
+    }
+    Container_Boundary(Vas_app_manager_Domain_boundary, "app-manager Domain") {
+        Container_Ext(app_manager, "app-manager", "Java Application", "app-manager [Context]", $sprite="java")
+    }
+}
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(PartnerPlatform_boundary, "PartnerPlatform") {
+    Container_Boundary(PartnerPlatform_cooker_Domain_boundary, "cooker Domain") {
+        Container(cooker, "cooker", "Go Application", "cooker [Context]", $sprite="go")
+    }
+    Container_Boundary(PartnerPlatform_seshat_Domain_boundary, "seshat Domain") {
+        Container(seshat, "seshat", "Go Application", "seshat [Context]", $sprite="go")
+    }
+}
+
+Rel(Partner, cooker, "Triggers")
+Rel(Partner, app_manager, "Triggers")
+Rel(cooker, Event_Queue, "sns.mercury-cooked", "Event Publishing")
+Rel(nmf_monetization, Event_Queue, "nmfbus.FeatureEnabled", "Event Publishing")
+Rel(nmf_monetization, Event_Queue, "nmfbus.FeatureDisabled", "Event Publishing")
+Rel(nmf_monetization, Event_Queue, "nmfbus.CreateAutoSchedule", "Event Publishing")
+Rel(nmf_monetization, Event_Queue, "nmfbus.SubAccountBundleUpdated", "Event Publishing")
+Rel(Event_Queue, seshat, "sns.mercury-advert-state-changed", "Event Delivery")
+Rel(Event_Queue, seshat, "sns.mercury-vas-state-changed", "Event Delivery")
+Rel(Event_Queue, seshat, "sns.mercury-message-received", "Event Delivery")
+Rel(Event_Queue, seshat, "sns.mercury-cooked", "Event Delivery")
+Rel(Event_Queue, nmf_monetization, "stream.user_event_store", "Event Delivery")
+
+@enduml

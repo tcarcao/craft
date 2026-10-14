@@ -643,6 +643,53 @@ func TestJourneySemantics_PlantUMLRenders(t *testing.T) {
 	}
 }
 
+func journeySemantics2Doc(t *testing.T) *craft.CraftDoc {
+	t.Helper()
+	src, err := os.ReadFile("testdata/journey-semantics-2.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	return analysis.Workspace([]analysis.FileResult{analysis.File("journey-semantics-2.craft", string(src))}).Doc
+}
+
+// TestJourneySemantics2_MermaidSequenceRenders proves mermaid-cli accepts the
+// v2.24 constructs: `participant X as X (scheduler)` labels, the one-message
+// `loop stream` box, scope in a Note title, and the `(inferred)` suffix.
+// Flow, architecture and C4 are rendered too.
+func TestJourneySemantics2_MermaidSequenceRenders(t *testing.T) {
+	doc := journeySemantics2Doc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			src, err := renderMermaid(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			if v == visualizer.ViewSequence && !strings.Contains(src, "\n    loop stream\n") {
+				t.Fatalf("expected a loop stream box in the sequence source:\n%s", src)
+			}
+			assertMermaidRenders(t, src)
+		})
+	}
+}
+
+// TestJourneySemantics2_PlantUMLRenders renders every view of the
+// journey-semantics-2 fixture on the strict PlantUML server: stereotyped
+// boundaries, `-[#999999]>` inferred arrows, `loop stream` boxes, and C4's
+// SQL/ADDR technologies and egress relation.
+func TestJourneySemantics2_PlantUMLRenders(t *testing.T) {
+	endpoint := plantUMLEndpoint(t)
+	doc := journeySemantics2Doc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			puml, _, err := renderPUML(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			assertRendersClean(t, endpoint, string(puml))
+		})
+	}
+}
+
 // assertMermaidRenders runs mermaid-cli on src in a container and fails when
 // mmdc exits non-zero or writes an empty SVG. It skips when no container
 // runtime is available, like plantUMLEndpoint.

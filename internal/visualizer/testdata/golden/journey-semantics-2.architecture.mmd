@@ -1,0 +1,32 @@
+flowchart LR
+    subgraph Analytics["Analytics"]
+        adstatistics["adstatistics"]
+        front["front"]
+        obidoanalytics["obidoanalytics"]
+    end
+    subgraph Monetization["Monetization"]
+        nmf_monetization["nmf_monetization"]
+    end
+    subgraph PartnerPlatform["PartnerPlatform"]
+        cooker["cooker"]
+        seshat["seshat"]
+    end
+    subgraph SellerPlatform["SellerPlatform"]
+        atlas["atlas"]
+        frontendplatform["frontendplatform"]
+        graphql["graphql"]
+        mobile["mobile"]
+    end
+    subgraph Vas["Vas"]
+        vasscheduler["vasscheduler"]
+    end
+    cooker_events[("cooker events")]
+    nmf_monetization_events[("nmf_monetization events")]
+    obidoanalytics --> front
+    nmf_monetization --> nmf_monetization_events
+    cooker --> cooker_events
+    cooker_events --> seshat
+    frontendplatform --> atlas
+    frontendplatform --> graphql
+    graphql --> frontendplatform
+    mobile --> graphql

@@ -1,0 +1,100 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "account" as account
+frame "adstatistics" as adstatistics
+frame "app-manager" as app_manager
+frame "atlas" as atlas
+frame "cooker" as cooker
+frame "front" as front
+frame "frontendplatform" as frontendplatform
+frame "graphql" as graphql
+frame "mobile" as mobile
+frame "nmf_monetization" as nmf_monetization
+frame "obidoanalytics" as obidoanalytics
+frame "seshat" as seshat
+frame "vasscheduler" as vasscheduler
+
+' Actors
+boundary "AiAssistant" as AiAssistant
+boundary "AwsApiGateway" as AwsApiGateway
+boundary "CRON" as CRON
+boundary "ObjectStore" as ObjectStore
+actor "Operator" as Operator
+boundary "OperatorTool" as OperatorTool <<tool>>
+actor "Partner" as Partner
+boundary "Pipeline" as Pipeline <<infra>>
+actor "Seller" as Seller
+boundary "ShaperAgent" as ShaperAgent
+boundary "Ticker" as Ticker <<scheduler>>
+
+cloud "External" as External
+
+' Domain queues
+queue "cooker events" as cooker_events
+queue "nmf_monetization events" as nmf_monetization_events
+
+' Workflow flows
+Partner --> cooker : 1. posts an advert
+cooker -> cooker : 2. cooks the advert for its target site
+cooker ->> cooker_events : 3. sns.mercury-cooked
+External --> seshat : 4. sns.mercury-advert-state-changed
+External --> seshat : 5. sns.mercury-vas-state-changed
+External --> seshat : 6. sns.mercury-message-received
+cooker_events --> seshat : 7. sns.mercury-cooked
+seshat -> seshat : 8. writes one row per event
+CRON --> adstatistics : 9. cron 0 1/2 * * *
+adstatistics -> adstatistics : 10. rebuilds the day's advert facts
+Ticker --> vasscheduler : 11. fires the vasscheduler activation sweep
+vasscheduler -> vasscheduler : 12. starts every schedule that is due
+Operator --> OperatorTool : 13. runs the portfolio export
+OperatorTool ->> account : 14. for the agency owner members
+Pipeline --> vasscheduler : 15. deploys a new vasscheduler build
+vasscheduler -> vasscheduler : 16. warms its schedule cache
+Seller --> frontendplatform : 17. asks the assistant a question
+frontendplatform ->> graphql : 18. to stream the answer
+graphql ->> AiAssistant : 19. to stream the reply
+AiAssistant --> graphql : 20. streams the reply as META, TOKEN and DONE events
+graphql --> frontendplatform : 21. streams each event to the client
+frontendplatform -> frontendplatform : 22. appends every TOKEN delta to the message
+External --> nmf_monetization : 23. stream.user_event_store
+nmf_monetization -> nmf_monetization : 24. reads the detail-type off the stored column
+nmf_monetization ->> nmf_monetization_events : 25. one of: nmfbus.FeatureEnabled
+nmf_monetization ->> nmf_monetization_events : 26. one of: nmfbus.FeatureDisabled
+nmf_monetization ->> nmf_monetization_events : 27. one of: nmfbus.CreateAutoSchedule
+nmf_monetization ->> nmf_monetization_events : 28. one of: nmfbus.SubAccountBundleUpdated
+Partner --> app_manager : 29. opens the integration settings
+app_manager ->> AwsApiGateway : 30. to create the key and bind it to the plan
+frontendplatform ->> atlas : 31. to save or delete the advert
+CRON --> obidoanalytics : 32. cron 0 18 * * *
+obidoanalytics ->> front : 33. for the city, region and developer graph
+obidoanalytics ->> ObjectStore : 34. to take the refreshed snapshot
+Seller --> mobile : 35. resumes a selling draft
+mobile ->> graphql : 36. to open a selling chat session
+graphql -[#999999]->> ShaperAgent : 37. to initiate the chat (inferred)
+
+@enduml

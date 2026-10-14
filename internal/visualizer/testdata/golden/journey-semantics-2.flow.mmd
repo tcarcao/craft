@@ -1,0 +1,65 @@
+flowchart LR
+    AiAssistant(["AiAssistant"])
+    AwsApiGateway(["AwsApiGateway"])
+    CRON(["CRON"])
+    ObjectStore(["ObjectStore"])
+    Operator(["Operator"])
+    OperatorTool(["OperatorTool"])
+    Partner(["Partner"])
+    Pipeline(["Pipeline"])
+    Seller(["Seller"])
+    ShaperAgent(["ShaperAgent"])
+    Ticker(["Ticker"])
+    account["account"]
+    adstatistics["adstatistics"]
+    app_manager["app-manager"]
+    atlas["atlas"]
+    cooker["cooker"]
+    front["front"]
+    frontendplatform["frontendplatform"]
+    graphql["graphql"]
+    mobile["mobile"]
+    nmf_monetization["nmf_monetization"]
+    obidoanalytics["obidoanalytics"]
+    seshat["seshat"]
+    vasscheduler["vasscheduler"]
+    cooker_events[("cooker events")]
+    nmf_monetization_events[("nmf_monetization events")]
+    External{{"External"}}
+    Partner -- "1. posts an advert" --> cooker
+    cooker -- "2. cooks the advert for its target site" --> cooker
+    cooker -- "3. sns.mercury-cooked" --> cooker_events
+    External -- "4. sns.mercury-advert-state-changed" --> seshat
+    External -- "5. sns.mercury-vas-state-changed" --> seshat
+    External -- "6. sns.mercury-message-received" --> seshat
+    cooker_events -- "7. sns.mercury-cooked" --> seshat
+    seshat -- "8. writes one row per event" --> seshat
+    CRON -- "9. cron 0 1/2 * * *" --> adstatistics
+    adstatistics -- "10. rebuilds the day's advert facts" --> adstatistics
+    Ticker -- "11. fires the vasscheduler activation sweep" --> vasscheduler
+    vasscheduler -- "12. starts every schedule that is due" --> vasscheduler
+    Operator -- "13. runs the portfolio export" --> OperatorTool
+    OperatorTool -- "14. for the agency owner members" --> account
+    Pipeline -- "15. deploys a new vasscheduler build" --> vasscheduler
+    vasscheduler -- "16. warms its schedule cache" --> vasscheduler
+    Seller -- "17. asks the assistant a question" --> frontendplatform
+    frontendplatform -- "18. to stream the answer" --> graphql
+    graphql -- "19. to stream the reply" --> AiAssistant
+    AiAssistant -. "20. streams the reply as META, TOKEN and DONE events" .-> graphql
+    graphql -. "21. streams each event to the client" .-> frontendplatform
+    frontendplatform -- "22. appends every TOKEN delta to the message" --> frontendplatform
+    External -- "23. stream.user_event_store" --> nmf_monetization
+    nmf_monetization -- "24. reads the detail-type off the stored column" --> nmf_monetization
+    nmf_monetization -- "25. one of: nmfbus.FeatureEnabled" --> nmf_monetization_events
+    nmf_monetization -- "26. one of: nmfbus.FeatureDisabled" --> nmf_monetization_events
+    nmf_monetization -- "27. one of: nmfbus.CreateAutoSchedule" --> nmf_monetization_events
+    nmf_monetization -- "28. one of: nmfbus.SubAccountBundleUpdated" --> nmf_monetization_events
+    Partner -- "29. opens the integration settings" --> app_manager
+    app_manager -- "30. to create the key and bind it to the plan" --> AwsApiGateway
+    frontendplatform -- "31. to save or delete the advert" --> atlas
+    CRON -- "32. cron 0 18 * * *" --> obidoanalytics
+    obidoanalytics -- "33. for the city, region and developer graph" --> front
+    obidoanalytics -- "34. to take the refreshed snapshot" --> ObjectStore
+    Seller -- "35. resumes a selling draft" --> mobile
+    mobile -- "36. to open a selling chat session" --> graphql
+    graphql -- "37. to initiate the chat (inferred)" --> ShaperAgent

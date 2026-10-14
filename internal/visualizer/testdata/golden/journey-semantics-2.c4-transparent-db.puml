@@ -1,0 +1,73 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/java>
+!include <tupadr3/devicons2/javascript>
+!include <tupadr3/devicons2/python>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (transparent mode)
+
+System_Ext(CRON, "CRON", "External system")
+System_Ext(ObjectStore, "ObjectStore", "External system")
+Person(Operator, "Operator", "External user")
+Person(Partner, "Partner", "External user")
+System_Ext(Pipeline, "Pipeline", "Platform infrastructure")
+Person(Seller, "Seller", "External user")
+System_Ext(Ticker, "Ticker", "Scheduler")
+
+System_Boundary(Analytics_boundary, "Analytics") {
+    Container(Analytics_Application, "Analytics Application", "Python Application", "Core business logic for Analytics domains: adstatistics, obidoanalytics, front", $sprite="python")
+}
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(Monetization_boundary, "Monetization") {
+    Container(Monetization_Application, "Monetization Application", "Go Application", "Core business logic for Monetization domains: nmf_monetization", $sprite="go")
+}
+
+System_Boundary(PartnerPlatform_boundary, "PartnerPlatform") {
+    Container(PartnerPlatform_Application, "PartnerPlatform Application", "Go Application", "Core business logic for PartnerPlatform domains: cooker, seshat", $sprite="go")
+}
+
+System_Boundary(SellerPlatform_boundary, "SellerPlatform") {
+    Container(SellerPlatform_Application, "SellerPlatform Application", "TypeScript Application", "Core business logic for SellerPlatform domains: frontendplatform, graphql, mobile, atlas", $sprite="javascript")
+}
+
+System_Boundary(Vas_boundary, "Vas") {
+    Container(Vas_Application, "Vas Application", "Java Application", "Core business logic for Vas domains: vasscheduler, account, app-manager", $sprite="java")
+}
+
+Rel(Partner, PartnerPlatform_Application, "Triggers")
+Rel(CRON, Analytics_Application, "Triggers")
+Rel(Ticker, Vas_Application, "Triggers")
+Rel(Pipeline, Vas_Application, "Triggers")
+Rel(Seller, SellerPlatform_Application, "Triggers")
+Rel(Partner, Vas_Application, "Triggers")
+Rel(Analytics_Application, ObjectStore, "to take the refreshed snapshot", "HTTP (bare address)")
+Rel(PartnerPlatform_Application, Event_Queue, "sns.mercury-cooked", "Event Publishing")
+Rel(Monetization_Application, Event_Queue, "nmfbus.FeatureEnabled", "Event Publishing")
+Rel(Monetization_Application, Event_Queue, "nmfbus.FeatureDisabled", "Event Publishing")
+Rel(Monetization_Application, Event_Queue, "nmfbus.CreateAutoSchedule", "Event Publishing")
+Rel(Monetization_Application, Event_Queue, "nmfbus.SubAccountBundleUpdated", "Event Publishing")
+Rel(Event_Queue, PartnerPlatform_Application, "sns.mercury-advert-state-changed", "Event Delivery")
+Rel(Event_Queue, PartnerPlatform_Application, "sns.mercury-vas-state-changed", "Event Delivery")
+Rel(Event_Queue, PartnerPlatform_Application, "sns.mercury-message-received", "Event Delivery")
+Rel(Event_Queue, PartnerPlatform_Application, "sns.mercury-cooked", "Event Delivery")
+Rel(Event_Queue, Monetization_Application, "stream.user_event_store", "Event Delivery")
+
+@enduml
