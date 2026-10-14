@@ -127,7 +127,7 @@ func BlockOps(prev, next []BranchRef) []BlockOp {
 
 // BuildSequence lays out its as a sequence diagram. Use cases with no
 // interactions still get a (empty) section, so a filtered diagram shows what
-// was asked for.
+// was asked for. Each interaction's UseCaseIndex must index doc.UseCases.
 //
 // Each scenario's messages follow its step tree, so a branch that draws
 // nothing still gets a MessageNone. Use cases that share a name are drawn in
@@ -142,23 +142,27 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 		b.onStage = append(b.onStage, map[string]bool{})
 	}
 
-	runs := scenarioRuns(its)
-	next := 0
-	for _, uc := range doc.UseCases {
+	// Interactions by scenario, then by step. UseCaseIndex, not the name,
+	// identifies the use case: names (and per-file scenario IDs) can repeat.
+	type scenarioKey struct {
+		useCase  int
+		scenario string
+	}
+	byScenario := map[scenarioKey]map[int][]interaction.Interaction{}
+	for _, it := range its {
+		k := scenarioKey{it.UseCaseIndex, it.Scenario}
+		if byScenario[k] == nil {
+			byScenario[k] = map[int][]interaction.Interaction{}
+		}
+		byScenario[k][it.Step] = append(byScenario[k][it.Step], it)
+	}
+
+	for ui, uc := range doc.UseCases {
 		idx := byUseCase[uc.Name]
 		for i, sc := range uc.Scenarios {
-			// Runs come in the order of doc's scenarios; skip any for a use
-			// case doc does not show.
-			for next < len(runs) && !hasKey(byUseCase, runs[next].useCase) {
-				next++
-			}
-			l := scenarioLayout{b: &b, idx: idx}
+			l := scenarioLayout{b: &b, idx: idx, bySteps: byScenario[scenarioKey{ui, sc.ID}]}
 			if len(uc.Scenarios) > 1 {
 				l.title = scenarioTitle(i, sc)
-			}
-			if next < len(runs) && runs[next].useCase == uc.Name && runs[next].scenario == sc.ID {
-				l.bySteps = runs[next].bySteps
-				next++
 			}
 			l.emit(0) // the trigger and listens
 			l.walk(sc.Steps, nil)
@@ -170,45 +174,13 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 	return b.seq
 }
 
-func hasKey(m map[string]int, k string) bool {
-	_, ok := m[k]
-	return ok
-}
-
-// scenarioRun is the interactions of one scenario, by step.
-type scenarioRun struct {
-	useCase, scenario string
-	bySteps           map[int][]interaction.Interaction
-}
-
-// scenarioRuns splits its into one run per scenario. Derive lists each
-// scenario's interactions together, scenarios in source order, so a run ends
-// where the use case or scenario ID changes. It also ends where the step
-// number goes back: two use cases with the same name, from files whose
-// scenario IDs collide, may sit side by side. (Matching by use case and
-// scenario ID alone would merge their steps.)
-func scenarioRuns(its []interaction.Interaction) []scenarioRun {
-	var runs []scenarioRun
-	last := -1
-	for _, it := range its {
-		n := len(runs)
-		if n == 0 || runs[n-1].useCase != it.UseCase || runs[n-1].scenario != it.Scenario || it.Step < last {
-			runs = append(runs, scenarioRun{useCase: it.UseCase, scenario: it.Scenario, bySteps: map[int][]interaction.Interaction{}})
-			n++
-		}
-		runs[n-1].bySteps[it.Step] = append(runs[n-1].bySteps[it.Step], it)
-		last = it.Step
-	}
-	return runs
-}
-
 // sequenceBuilder holds what BuildSequence tracks across use cases.
 type sequenceBuilder struct {
 	ns  *nodeSet
 	seq Sequence
 	// order lists participant IDs in order of first appearance.
 	order []string
-	// inbound marks "scenario|event" pairs already drawn as inbound.
+	// inbound marks "use case index|scenario|event" already drawn as inbound.
 	inbound map[string]bool
 	// onStage marks, per section, the participants already drawn in it.
 	onStage []map[string]bool
@@ -250,7 +222,7 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 			msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageAsync
 			break
 		}
-		key := it.Scenario + "|" + it.Event
+		key := fmt.Sprintf("%d|%s|%s", it.UseCaseIndex, it.Scenario, it.Event)
 		if b.inbound[key] {
 			return
 		}

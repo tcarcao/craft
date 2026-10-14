@@ -444,3 +444,58 @@ use_case "Checkout" {
 		t.Errorf("branches of one alt have blocks %q and %q", its[3].Branch[0].Block, its[4].Branch[0].Block)
 	}
 }
+
+// UseCaseIndex identifies the use case exactly, even when two files hold a use
+// case with the same name and their scenario IDs collide.
+func TestDerive_UseCaseIndexAcrossFiles(t *testing.T) {
+	doc := analysis.Workspace([]analysis.FileResult{
+		analysis.File("a.craft", structure+`use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+}
+use_case "Refund" {
+    when Customer asks for a refund
+        Ordering asks Billing to refund the card
+}
+`),
+		analysis.File("b.craft", `use_case "Checkout" {
+    when Customer phones in an order
+        Ordering asks Billing to charge the card
+}
+`),
+	}).Doc
+	if len(doc.UseCases) != 3 {
+		t.Fatalf("got %d use cases, want 3", len(doc.UseCases))
+	}
+	its := interaction.Derive(doc)
+	seen := map[int]int{}
+	for _, it := range its {
+		if it.UseCaseIndex < 0 || it.UseCaseIndex >= len(doc.UseCases) {
+			t.Fatalf("UseCaseIndex %d out of range", it.UseCaseIndex)
+		}
+		uc := doc.UseCases[it.UseCaseIndex]
+		if uc.Name != it.UseCase {
+			t.Errorf("UseCaseIndex %d is %q, interaction says %q", it.UseCaseIndex, uc.Name, it.UseCase)
+		}
+		var scenarioHere bool
+		for _, sc := range uc.Scenarios {
+			scenarioHere = scenarioHere || sc.ID == it.Scenario
+		}
+		if !scenarioHere {
+			t.Errorf("use case %d has no scenario %q", it.UseCaseIndex, it.Scenario)
+		}
+		seen[it.UseCaseIndex]++
+	}
+	// Each use case has a trigger and an ask.
+	for i := range doc.UseCases {
+		if seen[i] != 2 {
+			t.Errorf("use case %d (%s, %s): %d interactions, want 2", i, doc.UseCases[i].Name, doc.UseCases[i].SourceURI, seen[i])
+		}
+	}
+	// The trigger of b.craft's Checkout belongs to b.craft's use case.
+	for _, it := range its {
+		if it.Label == "phones in an order" && doc.UseCases[it.UseCaseIndex].SourceURI != "b.craft" {
+			t.Errorf("b.craft trigger has UseCaseIndex %d (%s)", it.UseCaseIndex, doc.UseCases[it.UseCaseIndex].SourceURI)
+		}
+	}
+}

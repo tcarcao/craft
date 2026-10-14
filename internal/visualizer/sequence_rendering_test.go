@@ -449,3 +449,77 @@ end
 		})
 	}
 }
+
+// Adjacent same-named use cases from two files, both scenario_1, where the
+// first scenario draws only step-0 interactions (its listens): each scenario
+// keeps its own messages.
+func TestSequence_DuplicateUseCaseNamesWithOnlyStepZero(t *testing.T) {
+	first := `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+use_case "Checkout" {
+    when Billing listens "Card Charged"
+}
+`
+	second := `use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+        opt "the card is declined"
+            Billing returns the refusal
+}
+`
+	want := `== Checkout ==
+
+[-> Billing : Card Charged
+Customer -> Ordering : places an order
+Ordering -> Billing : to charge the card
+opt the card is declined
+Billing --> Ordering : returns the refusal
+end
+
+@enduml`
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("a.craft", first), analysis.File("b.craft", second)}).Doc
+	p, _, err := renderSource(doc, ViewSequence, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(string(p), want) {
+		t.Errorf("plantuml:\n--- got\n%s\n--- want suffix\n%s", p, want)
+	}
+}
+
+// A use-case filter keeps the exact use case of each interaction: indices
+// are those of the filtered document.
+func TestSequence_UseCaseFilterKeepsBranches(t *testing.T) {
+	doc := resolvedDoc(t, emptyBranchHead+`        Ordering returns the confirmation
+}
+use_case "Refund" {
+    when Customer asks for a refund
+        Ordering asks Billing to refund the card
+        alt "the card is open"
+            Billing returns the refund
+        else "the card is closed"
+            Billing returns the refusal
+}
+`)
+	out, err := New(nil).Render(doc, Request{View: ViewSequence, Backend: PlantUML, Format: FormatSource, UseCases: []string{"refund"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `== Refund ==
+
+Customer -> Ordering : asks for a refund
+Ordering -> Billing : to refund the card
+alt the card is open
+Billing --> Ordering : returns the refund
+else the card is closed
+Billing --> Ordering : returns the refusal
+end
+
+@enduml`
+	if !strings.HasSuffix(string(out.Data), want) {
+		t.Errorf("plantuml:\n--- got\n%s\n--- want suffix\n%s", out.Data, want)
+	}
+}

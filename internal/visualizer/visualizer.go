@@ -119,7 +119,7 @@ func (r *Renderer) Render(doc *craft.CraftDoc, req Request) (Output, error) {
 			}
 			return Output{}, fmt.Errorf("no use case matches %v (available: %s)", missing, strings.Join(available, ", "))
 		}
-		its = keepUseCases(its, shown)
+		its = keepUseCases(its, doc, shown)
 	}
 
 	src := write(shown, its, req)
@@ -257,14 +257,23 @@ func defaultTitle(doc *craft.CraftDoc, v View) string {
 	return "Domain"
 }
 
-func keepUseCases(its []interaction.Interaction, doc *craft.CraftDoc) []interaction.Interaction {
-	keep := map[string]bool{}
-	for _, uc := range doc.UseCases {
-		keep[uc.Name] = true
+// keepUseCases keeps the interactions of shown's use cases, a filtered copy
+// of doc, and renumbers their UseCaseIndex to index shown.UseCases. The
+// filter keeps doc's order and keeps or drops all use cases of one name
+// together, so matching names in order pairs each kept use case exactly.
+func keepUseCases(its []interaction.Interaction, doc, shown *craft.CraftDoc) []interaction.Interaction {
+	index := map[int]int{} // doc index → shown index
+	j := 0
+	for i, uc := range doc.UseCases {
+		if j < len(shown.UseCases) && shown.UseCases[j].Name == uc.Name {
+			index[i] = j
+			j++
+		}
 	}
 	var out []interaction.Interaction
 	for _, it := range its {
-		if keep[it.UseCase] {
+		if k, ok := index[it.UseCaseIndex]; ok {
+			it.UseCaseIndex = k
 			out = append(out, it)
 		}
 	}

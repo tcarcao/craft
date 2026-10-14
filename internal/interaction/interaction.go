@@ -66,8 +66,14 @@ type Site struct {
 
 // Interaction is one derived communication.
 type Interaction struct {
-	UseCase  string
-	Scenario string
+	UseCase string
+	// UseCaseIndex is the index of the use case in the derived doc's
+	// UseCases: its exact identity within that doc, which UseCase cannot
+	// give, because the same name can appear in several files (whose
+	// scenario IDs, numbered per file, can collide too). A consumer that
+	// filters doc.UseCases must renumber it.
+	UseCaseIndex int
+	Scenario     string
 	// Step is the source position within the scenario: 0 for the trigger,
 	// n for the n-th action. Views number what they draw themselves.
 	Step      int
@@ -114,19 +120,19 @@ func Derive(doc *model.CraftDoc) []Interaction {
 	}
 
 	var out []Interaction
-	for _, uc := range doc.UseCases {
+	for i, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
-			out = append(out, deriveScenario(uc, sc, publishers)...)
+			out = append(out, deriveScenario(uc, i, sc, publishers)...)
 		}
 	}
 	nameEndpoints(out)
 	return out
 }
 
-func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][]Endpoint) []Interaction {
+func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers map[string][]Endpoint) []Interaction {
 	var out []Interaction
 	actions := sc.Actions()
-	base := Interaction{UseCase: uc.Name, Scenario: sc.ID}
+	base := Interaction{UseCase: uc.Name, UseCaseIndex: ucIndex, Scenario: sc.ID}
 	t := sc.Trigger
 	triggerSite := Site{URI: uc.SourceURI, Line: t.Line, Column: t.Column}
 
