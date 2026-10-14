@@ -805,3 +805,51 @@ use_case "Checkout" {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestDerive_ReceivesIsAFoundMessageAndItsReplyIsLost(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Sweep" {
+    when Ordering receives a reindex sweep  [reindex]
+        Ordering asks Billing for the totals  [getTotals]
+        Billing returns the totals
+        Ordering returns the ids
+}
+`})
+	want := `0 trigger unobserved caller->Ordering [a reindex sweep]
+1 request Ordering->Billing [for the totals]
+2 response Billing->Ordering [returns the totals]
+3 response Ordering->unobserved caller [returns the ids]`
+	if got := summary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if its[0].From != interaction.Unobserved || its[0].Operation == nil || its[0].Operation.Text != "reindex" {
+		t.Errorf("trigger = %+v", its[0])
+	}
+	if its[0].Site.Line == 0 || its[0].Site.Length != len("Ordering") {
+		t.Errorf("trigger site = %+v", its[0].Site)
+	}
+}
+
+func TestDerive_ReceivesOpeningWithABlockStillTriggersOnceUpFront(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Sweep" {
+    when Ordering receives a sweep  [reindex]
+        alt "full"
+            Ordering asks Billing for all
+        else "partial"
+            Ordering asks Billing for some
+}
+`})
+	if its[0].Kind != interaction.Trigger || its[0].Branch != nil || its[0].To.Name != "Ordering" {
+		t.Errorf("trigger = %+v", its[0])
+	}
+	n := 0
+	for _, it := range its {
+		if it.Kind == interaction.Trigger {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d triggers, want 1", n)
+	}
+}

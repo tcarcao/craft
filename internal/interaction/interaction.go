@@ -21,7 +21,8 @@ type Kind string
 
 const (
 	// Trigger: an actor outside the system starts a scenario; To is the
-	// subject of the scenario's first action.
+	// subject of the scenario's first action. For a `receives` trigger From
+	// is Unobserved and To is the callee the trigger names.
 	Trigger Kind = "trigger"
 	// Request: a synchronous `asks`.
 	Request Kind = "request"
@@ -57,6 +58,11 @@ func (e Endpoint) IsZero() bool { return e.Key == "" }
 // nobody in the model publishes, or the caller of a return with no caller.
 var External = Endpoint{Key: "External", Name: "External"}
 
+// Unobserved is the caller of a `receives` trigger: someone calls the boundary
+// but the model does not know who. It is distinct from External (an event
+// source outside the model) so views can tell the two apart.
+var Unobserved = Endpoint{Key: "Unobserved", Name: "unobserved caller"}
+
 // Site locates the subject of the action or trigger an interaction came from.
 type Site struct {
 	URI          string
@@ -87,9 +93,10 @@ type Interaction struct {
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
 	// Branch is the path from the outermost block inward to the branch the
-	// action sits in; nil outside blocks. Listen always has a nil Branch; a
-	// Trigger has one only when its scenario opens with a block (its first
-	// step that is not a note). An opening alt or opt gets one trigger per
+	// action sits in; nil outside blocks. Listen always has a nil Branch, and
+	// so does the trigger of a `receives` scenario. Any other Trigger has one
+	// only when its scenario opens with a block (its first step that is not a
+	// note). An opening alt or opt gets one trigger per
 	// branch, each reaching that branch's first action; when it is an opt,
 	// the path where it is skipped also gets a Trigger with a nil Branch, to
 	// the first action after the block (when there is one). An opening par
@@ -221,6 +228,23 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			it.Site.Length = utf16Len(t.Context)
 			out = append(out, it)
 		}
+	case lang.TriggerReceive:
+		if t.Context == "" {
+			break
+		}
+		// The trigger names its target, so the first-action and per-branch
+		// rules above do not apply: one trigger, drawn up front, whatever
+		// the scenario opens with (trigger stays nil: no branch triggers).
+		callee := endpoint(t.Context, t.Subject)
+		it := base
+		it.Kind, it.From, it.To = Trigger, Unobserved, callee
+		it.Label = strings.Join(strings.Fields(t.Connector+" "+t.Phrase), " ")
+		it.Operation = t.Operation
+		it.Site = triggerSite
+		it.Site.Length = utf16Len(t.Context)
+		// An unaddressed reply from the callee answers the unobserved caller.
+		callStack = []frame{{caller: Unobserved, callee: callee}}
+		out = append(out, it)
 	}
 
 	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, trigger: trigger, reached: reached, out: out}

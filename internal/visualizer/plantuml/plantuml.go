@@ -227,8 +227,10 @@ func Sequence(s view.Sequence) string {
 			path = m.Branch
 			switch m.Kind {
 			case view.MessageNone:
-			case view.MessageInbound:
+			case view.MessageInbound, view.MessageFound:
 				fmt.Fprintf(&b, "[-> %s : %s\n", al.of(m.To), m.Label)
+			case view.MessageLost:
+				fmt.Fprintf(&b, "%s -->] : %s\n", al.of(m.From), m.Label)
 			case view.MessageNote:
 				fmt.Fprintf(&b, "note over %s : %s\n", al.of(m.From), m.Label)
 			case view.MessageStepNote, view.MessageFinding:

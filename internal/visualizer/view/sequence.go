@@ -34,6 +34,11 @@ const (
 	MessageAsync   MessageKind = "async"   // publish: drawn on the publisher's own lifeline
 	MessageInbound MessageKind = "inbound" // an event arriving from outside the section
 	MessageNote    MessageKind = "note"    // what an actor does, drawn over its own lifeline
+	// MessageFound comes from the unobserved caller of a `receives` trigger
+	// (From is empty); MessageLost is a reply to it (To is empty). UML draws
+	// both from or to the diagram's edge: the other party is not known.
+	MessageFound MessageKind = "found"
+	MessageLost  MessageKind = "lost"
 	// MessageStepNote is a `note` line and MessageFinding a `finding` line,
 	// drawn over the participants in Over.
 	MessageStepNote MessageKind = "step-note"
@@ -45,7 +50,8 @@ const (
 	MessageNone MessageKind = "none"
 )
 
-// Message is one arrow. From is empty for an inbound message. A MessageNone
+// Message is one arrow. From is empty for an inbound or found message, To for
+// a lost one. A MessageNone
 // is no arrow at all, only a branch position: consumers that draw or count
 // arrows must skip it.
 type Message struct {
@@ -174,8 +180,11 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 			}
 			// An opening par or loop gets an ordinary trigger, drawn before
 			// its box (spec §4.4); only an alt or opt is triggered per branch.
+			// A receives trigger names its target, so it is drawn up front
+			// whatever the scenario opens with (spec §6.4).
 			ob := sc.OpeningBlock()
-			l.opensBlock = ob != nil && (ob.Kind == lang.BlockAlt || ob.Kind == lang.BlockOpt)
+			l.opensBlock = ob != nil && (ob.Kind == lang.BlockAlt || ob.Kind == lang.BlockOpt) &&
+				sc.Trigger.Type != lang.TriggerReceive
 			l.emit(0) // the trigger and listens
 			l.walk(sc.Steps, nil)
 		}
@@ -238,6 +247,10 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	msg := Message{Label: it.Label, Scenario: title, Branch: branchPath(it.Branch)}
 	switch it.Kind {
 	case interaction.Trigger:
+		if it.From == interaction.Unobserved {
+			msg.To, msg.Kind = ns.add(it.To), MessageFound
+			break
+		}
 		msg.From, msg.To, msg.Kind = ns.addActor(it.From), ns.add(it.To), MessageCall
 		if it.From.Key == it.To.Key {
 			// The actor takes the first step itself: the trigger is what
@@ -247,6 +260,10 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	case interaction.Request:
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageCall
 	case interaction.Response:
+		if it.To == interaction.Unobserved {
+			msg.From, msg.Kind = ns.add(it.From), MessageLost
+			break
+		}
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageReply
 	case interaction.Internal:
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.From), MessageSelf
@@ -290,8 +307,10 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 		b.appear(msg.From)
 		onStage[msg.From] = true
 	}
-	b.appear(msg.To)
-	onStage[msg.To] = true
+	if msg.To != "" {
+		b.appear(msg.To)
+		onStage[msg.To] = true
+	}
 	sec := &b.seq.Sections[idx]
 	sec.Messages = append(sec.Messages, msg)
 }
@@ -307,7 +326,7 @@ type scenarioLayout struct {
 	// start is the index of the scenario's first message in the section.
 	start int
 	// opensBlock is true when the scenario's first step that is not a note
-	// is an alt or opt. Its triggers are then not drawn up front (see emit).
+	// is an alt or opt, and its trigger is not a receives. Its triggers are then not drawn up front (see emit).
 	opensBlock bool
 }
 
@@ -416,9 +435,9 @@ func (l *scenarioLayout) anchor() []string {
 		switch m.Kind {
 		case MessageNone, MessageStepNote, MessageFinding:
 			continue
-		case MessageInbound:
+		case MessageInbound, MessageFound:
 			return []string{m.To}
-		case MessageNote:
+		case MessageNote, MessageLost:
 			return []string{m.From}
 		}
 		if m.From == m.To {

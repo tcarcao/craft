@@ -54,6 +54,12 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 		branch = it.Branch
 		switch it.Kind {
 		case interaction.Trigger:
+			if it.From == interaction.Unobserved {
+				// A receives trigger: an "unobserved caller" node calls the
+				// callee (spec §6.5).
+				add(ns.add(it.From), ns.add(it.To), StyleTrigger, it.Label)
+				continue
+			}
 			if it.From.Key == it.To.Key {
 				// The actor takes the first step itself; that step connects
 				// it, and a flow diagram has no note to carry the trigger.
@@ -124,7 +130,7 @@ func BuildArchitecture(doc *model.CraftDoc, its []interaction.Interaction) Archi
 		return e.Kind == "" && (isDeclaredActor(doc, e.Key) || triggering[e.Key] && !acting[e.Key])
 	}
 	inside := func(e interaction.Endpoint) bool {
-		return e != interaction.External && e.Kind != model.ParticipantActor && !outsider(e)
+		return e != interaction.External && e != interaction.Unobserved && e.Kind != model.ParticipantActor && !outsider(e)
 	}
 	addContext := func(e interaction.Endpoint) string {
 		id := ns.add(e)

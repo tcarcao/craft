@@ -816,3 +816,86 @@ func TestFlow_ParAndLoopEdgesNameTheirKind(t *testing.T) {
 		}
 	}
 }
+
+const receivesSrc = `domain ad {
+    graphql
+    atlas
+}
+use_case "Adverts are swept for reindexing" {
+    when graphql receives a reindex sweep  [reindexAdverts]
+        graphql asks atlas for every advert that needs reindexing  [getAlladvertstoreindex]
+        graphql returns the advert ids
+}
+`
+
+func TestSequence_ReceivesDrawsFoundAndLostMessages(t *testing.T) {
+	puml, mmd := sequenceSource(t, receivesSrc)
+	for _, want := range []string{
+		"[-> graphql : a reindex sweep [reindexAdverts]",
+		"graphql -> atlas : for every advert that needs reindexing [getAlladvertstoreindex]",
+		"graphql -->] : returns the advert ids",
+	} {
+		requireLine(t, "plantuml", puml, want)
+	}
+	if strings.Contains(puml, "Unobserved") || strings.Contains(puml, "unobserved") {
+		t.Errorf("plantuml must not declare a participant for the unobserved caller:\n%s", puml)
+	}
+	for _, want := range []string{
+		"participant Unobserved as unobserved caller",
+		"Unobserved->>graphql: a reindex sweep [reindexAdverts]",
+		"graphql-->>Unobserved: returns the advert ids",
+	} {
+		requireLine(t, "mermaid", mmd, want)
+	}
+	if strings.Count(mmd, "participant Unobserved") != 1 {
+		t.Errorf("mermaid declares the unobserved caller more than once:\n%s", mmd)
+	}
+}
+
+// A receives scenario that opens with a block draws its found message once,
+// before the block.
+func TestSequence_ReceivesOpeningWithABlockDrawsTheFoundMessageFirst(t *testing.T) {
+	puml, _ := sequenceSource(t, `domain ad {
+    graphql
+    atlas
+}
+use_case "Sweep" {
+    when graphql receives a sweep  [reindex]
+        alt "full"
+            graphql asks atlas for all
+        else "partial"
+            graphql asks atlas for some
+}
+`)
+	found := strings.Index(puml, "[-> graphql : a sweep [reindex]")
+	alt := strings.Index(puml, "alt full")
+	if found < 0 || alt < 0 || found > alt || strings.Count(puml, "[-> graphql") != 1 {
+		t.Errorf("found message not drawn once before the block:\n%s", puml)
+	}
+}
+
+func TestFlow_ReceivesHasAnUnobservedCallerNode(t *testing.T) {
+	doc := resolvedDoc(t, receivesSrc)
+	out, _, err := renderSource(doc, ViewFlow, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `cloud "unobserved caller"`) {
+		t.Errorf("flow lacks the unobserved caller node:\n%s", out)
+	}
+}
+
+func TestArchitectureAndC4_ReceivesDrawNoUnobservedCaller(t *testing.T) {
+	doc := resolvedDoc(t, receivesSrc)
+	for _, v := range []View{ViewArchitecture, ViewC4} {
+		for _, backend := range []Backend{PlantUML, Mermaid} {
+			out, _, err := renderSource(doc, v, backend)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(strings.ToLower(string(out)), "unobserved") {
+				t.Errorf("%s/%s draws the unobserved caller:\n%s", v, backend, out)
+			}
+		}
+	}
+}

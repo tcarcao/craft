@@ -67,7 +67,7 @@ func (ns *nodeSet) add(e interaction.Endpoint) string {
 	}
 	n := Node{ID: e.Key, Label: e.Name, Kind: NodeContext}
 	switch {
-	case e == interaction.External:
+	case e == interaction.External || e == interaction.Unobserved:
 		n.Kind = NodeExternal
 	case e.Kind == model.ParticipantActor:
 		n.Kind, n.ActorType = NodeActor, ns.actors[e.Key]

@@ -69,7 +69,8 @@ func Architecture(a view.Architecture) string {
 
 // Sequence writes a sequence diagram. Each use case opens with a note across
 // all participants. Mermaid has no "found message", so an event arriving from
-// outside the section comes from an External participant.
+// outside the section comes from an External participant, and the caller of a
+// `receives` trigger is an Unobserved participant (found and lost messages).
 func Sequence(s view.Sequence) string {
 	var b strings.Builder
 	al := newAliases()
@@ -89,6 +90,17 @@ func Sequence(s view.Sequence) string {
 			if m.Kind == view.MessageInbound && external == "" {
 				external = al.of("External")
 				fmt.Fprintf(&b, "    participant %s as External\n", external)
+			}
+		}
+	}
+	// Declare the unobserved caller, once, after External, if any message is
+	// found or lost.
+	unobserved := ""
+	for _, sec := range s.Sections {
+		for _, m := range sec.Messages {
+			if (m.Kind == view.MessageFound || m.Kind == view.MessageLost) && unobserved == "" {
+				unobserved = al.of("Unobserved")
+				fmt.Fprintf(&b, "    participant %s as unobserved caller\n", unobserved)
 			}
 		}
 	}
@@ -120,6 +132,10 @@ func Sequence(s view.Sequence) string {
 			case view.MessageNone:
 			case view.MessageInbound:
 				fmt.Fprintf(&b, "    %s->>%s: %s\n", external, al.of(m.To), label)
+			case view.MessageFound:
+				fmt.Fprintf(&b, "    %s->>%s: %s\n", unobserved, al.of(m.To), label)
+			case view.MessageLost:
+				fmt.Fprintf(&b, "    %s-->>%s: %s\n", al.of(m.From), unobserved, label)
 			case view.MessageNote:
 				fmt.Fprintf(&b, "    Note over %s: %s\n", al.of(m.From), label)
 			case view.MessageStepNote, view.MessageFinding:

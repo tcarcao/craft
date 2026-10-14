@@ -241,7 +241,8 @@ func (b *c4Builder) findEntries() {
 // those whose scenario touches a focused service.
 func (b *c4Builder) findActors() {
 	for _, it := range b.its {
-		if it.Kind != interaction.Trigger {
+		if it.Kind != interaction.Trigger || it.From == interaction.Unobserved {
+			// The caller of a receives trigger is not a known party.
 			continue
 		}
 		if b.hasFocus && !b.scenarioTouchesFocus(it.Scenario) {
