@@ -847,7 +847,7 @@ func (p *Parser) parseUseCaseBlock() []model.Diagnostic {
 		tok := p.peek()
 
 		// `when` is a contextual keyword that lexes as TokenIdent.
-		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
+		if tok.Type == lexer.TokenIdent && (tok.Value == "when" || p.atScenarioName()) {
 			d := p.parseScenario()
 			diags = append(diags, d...)
 		} else if tok.Type == lexer.TokenIdent && tok.Value == "tags" {
@@ -1054,23 +1054,56 @@ func (p *Parser) startsTagKey() bool {
 	return tok.Type == lexer.TokenIdent || isKeywordUsedAsIdent(tok.Type)
 }
 
+// atScenarioName reports whether the next tokens are the contextual keyword
+// `scenario` directly followed by a string, i.e. a `scenario "<label>"` line.
+func (p *Parser) atScenarioName() bool {
+	tok := p.peek()
+	return tok.Type == lexer.TokenIdent && tok.Value == "scenario" &&
+		p.peekAt(1).Type == lexer.TokenString
+}
+
 // parseScenario parses one `when <trigger>` clause plus its following action lines.
 func (p *Parser) parseScenario() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindScenario)
 	var diags []model.Diagnostic
 
-	// consume `when` as contextual keyword
-	whenTok := p.peek()
-	p.consumeAs(SyntaxKindKwWhen)
+	hasWhen := true
+	if p.atScenarioName() {
+		scTok := p.peek()
+		p.builder.StartNode(SyntaxKindScenarioName)
+		p.consumeAs(SyntaxKindKwScenario)
+		p.consumeAs(SyntaxKindString)
+		p.builder.FinishNode()
+		if nt := p.peek(); !(nt.Type == lexer.TokenIdent && nt.Value == "when") {
+			hasWhen = false
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/scenario-without-when",
+				Message:  "`scenario \"…\"` must be followed by a `when` line",
+				Severity: model.SeverityError,
+				Range:    tokenRange(scTok),
+			})
+		}
+	}
 
-	d := p.parseTrigger(whenTok.Line)
-	diags = append(diags, d...)
+	if !hasWhen {
+		// Keep the tree shape uniform for consumers that always expect a
+		// trigger child: an empty one.
+		p.builder.StartNode(SyntaxKindTrigger)
+		p.builder.FinishNode()
+	} else {
+		// consume `when` as contextual keyword
+		whenTok := p.peek()
+		p.consumeAs(SyntaxKindKwWhen)
+
+		d := p.parseTrigger(whenTok.Line)
+		diags = append(diags, d...)
+	}
 
 	// Parse actions until we see `when` (next scenario), `}` (end of use_case), or EOF.
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
 		tok := p.peek()
 		// `when` starts the next scenario — stop here.
-		if tok.Type == lexer.TokenIdent && tok.Value == "when" {
+		if tok.Type == lexer.TokenIdent && (tok.Value == "when" || p.atScenarioName()) {
 			break
 		}
 		d := p.parseAction()

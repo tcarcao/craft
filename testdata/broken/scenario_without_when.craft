@@ -1,0 +1,4 @@
+use_case "U" {
+    scenario "orphan"
+    billdatamgmt records the open cycle
+}

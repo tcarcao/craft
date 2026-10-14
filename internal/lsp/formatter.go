@@ -342,6 +342,10 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	var prevReal *syntax.SyntaxToken
 	prevLedScenario := false
 
+	// afterScenarioName is set from a `scenario "name"` line until the `when`
+	// it names.
+	afterScenarioName := false
+
 	// continuing says the token about to be written carries on a property
 	// value the author wrapped onto another line, rather than starting a new
 	// statement. separatorFor cannot work this out: it sees one token pair and
@@ -403,7 +407,12 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// itself; only the lines after it are indented deeper. Resetting before
 		// the separator is computed is what keeps the `when` line at depth 1
 		// instead of 2.
-		startsWhen := tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1
+		//
+		// A `scenario "name"` line opens a scenario the same way, and the `when`
+		// that follows it is the same scenario, not a new one (no blank line).
+		namesScenario := tok.Kind() == syntax.SyntaxKindKwScenario && braceDepth == 1
+		whenOfNamed := tok.Kind() == syntax.SyntaxKindKwWhen && afterScenarioName
+		startsWhen := (tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1) || namesScenario
 		if startsWhen || leadsScenario {
 			scenarioDepth = 0
 		}
@@ -420,7 +429,12 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// The scenario's blank line goes above the whole run, so only the first
 		// token of it asks for one. A `when` whose comment already opened the
 		// scenario must not ask for a second.
-		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario
+		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario && !whenOfNamed
+		if namesScenario {
+			afterScenarioName = true
+		} else if tok.Kind() == syntax.SyntaxKindKwWhen {
+			afterScenarioName = false
+		}
 
 		// A wrapped value continues only across a line break that follows a
 		// comma or a field colon: `contexts: A,\n B` and `contexts:\n A` both
@@ -564,7 +578,7 @@ func nextRealTokenIsWhen(toks []syntax.SyntaxToken, i int) bool {
 		if k == syntax.SyntaxKindWhitespace || k == syntax.SyntaxKindEOF || isCommentKind(k) {
 			continue
 		}
-		return k == syntax.SyntaxKindKwWhen
+		return k == syntax.SyntaxKindKwWhen || k == syntax.SyntaxKindKwScenario
 	}
 	return false
 }

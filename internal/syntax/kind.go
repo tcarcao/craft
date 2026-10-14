@@ -113,6 +113,10 @@ const (
 	// body is treated as an opaque payload.
 	SyntaxKindOpVerb
 
+	// SyntaxKindKwScenario is the contextual keyword `scenario`, recognised only
+	// at the start of a use_case body line when the next token is a string.
+	SyntaxKindKwScenario
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -157,4 +161,7 @@ const (
 	// an action line, e.g. `[POST /v1/charges]`. It is always the last child of
 	// a SyntaxKindAction node.
 	SyntaxKindOpAnnotation
+
+	// SyntaxKindScenarioName wraps `scenario "<label>"` at the head of a scenario.
+	SyntaxKindScenarioName
 )

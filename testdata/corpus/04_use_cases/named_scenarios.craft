@@ -1,0 +1,25 @@
+domain billing {
+    billdatamgmt
+}
+
+use_case "Apply nMF billing events" {
+    scenario "a new cycle opens"
+    when billdatamgmt listens nmfbus.BillingCycleOpened
+        billdatamgmt records the open cycle
+
+    scenario "the cycle closes with an unpaid balance"
+    when billdatamgmt listens nmfbus.BillingCycleClosed
+        billdatamgmt flags the unpaid balance
+
+    when billdatamgmt listens nmfbus.BillingCycleVoided
+        billdatamgmt drops the cycle
+}
+
+use_case "scenario as a context name still works" {
+    when Ops restarts the job
+        scenario asks billdatamgmt to replay
+}
+
+domain tooling {
+    scenario
+}

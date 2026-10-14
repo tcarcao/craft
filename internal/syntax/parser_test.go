@@ -1594,3 +1594,36 @@ func TestParse_TrailingCommentsAreTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestParseTree_ScenarioName(t *testing.T) {
+	src := "use_case \"U\" {\n  scenario \"a new cycle opens\"\n  when b listens nmfbus.X\n    b records it\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	uc := syntax.AsFile(syntax.Root(g)).UseCases()[0]
+	scs := uc.Scenarios()
+	if len(scs) != 1 {
+		t.Fatalf("got %d scenarios, want 1", len(scs))
+	}
+	if got := scs[0].Name(); got != "a new cycle opens" {
+		t.Errorf("Name() = %q", got)
+	}
+}
+
+func TestParseTree_ScenarioIdentStillAnAction(t *testing.T) {
+	src := "use_case \"U\" {\n  when a does it\n    scenario asks x to replay\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	uc := syntax.AsFile(syntax.Root(g)).UseCases()[0]
+	scs := uc.Scenarios()
+	if len(scs) != 1 || scs[0].Name() != "" {
+		t.Fatalf("scenarios = %d, name %q", len(scs), scs[0].Name())
+	}
+	acts := scs[0].Actions()
+	if len(acts) != 1 {
+		t.Fatalf("got %d actions, want 1", len(acts))
+	}
+}

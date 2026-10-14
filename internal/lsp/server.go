@@ -2179,6 +2179,7 @@ func encodeSemanticTokens(tokens []semanticToken) []uint32 {
 var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwUseCase:      "craft-flow-keyword",
 	syntax.SyntaxKindKwWhen:         "craft-flow-keyword",
+	syntax.SyntaxKindKwScenario:     "craft-flow-keyword",
 	syntax.SyntaxKindKwActor:        "craft-actor-keyword",
 	syntax.SyntaxKindKwActors:       "craft-actors-keyword",
 	syntax.SyntaxKindKwDomain:       "craft-domain-keyword",

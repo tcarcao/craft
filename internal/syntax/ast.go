@@ -1390,6 +1390,19 @@ func (t TagStmt) ValueText() string {
 // ScenarioDecl is a typed view over a SyntaxKindScenario node.
 type ScenarioDecl struct{ node SyntaxNode }
 
+// Name returns the unquoted label of a leading `scenario "<label>"` line, or
+// "" when the scenario is unnamed.
+func (s ScenarioDecl) Name() string {
+	n := s.node.ChildNode(SyntaxKindScenarioName)
+	if n == nil {
+		return ""
+	}
+	if t := n.ChildToken(SyntaxKindString); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
 // When returns the 'when' keyword token that starts this scenario.
 func (s ScenarioDecl) When() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwWhen) }
 

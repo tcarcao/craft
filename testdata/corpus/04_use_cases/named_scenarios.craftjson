@@ -1,0 +1,174 @@
+{
+  "useCases": [
+    {
+      "name": "Apply nMF billing events",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "name": "a new cycle opens",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "billdatamgmt",
+            "event": "nmfbus.BillingCycleOpened",
+            "ref": "nmfbus.BillingCycleOpened",
+            "description": "when billdatamgmt listens \"nmfbus.BillingCycleOpened\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "billing/billdatamgmt"
+            },
+            "line": 7,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "billdatamgmt",
+                "verb": "records",
+                "connector": "the",
+                "phrase": "open cycle",
+                "description": "billdatamgmt records the open cycle",
+                "line": 8,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/billdatamgmt"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario_3",
+          "name": "the cycle closes with an unpaid balance",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "billdatamgmt",
+            "event": "nmfbus.BillingCycleClosed",
+            "ref": "nmfbus.BillingCycleClosed",
+            "description": "when billdatamgmt listens \"nmfbus.BillingCycleClosed\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "billing/billdatamgmt"
+            },
+            "line": 11,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_4",
+                "type": "internal_action",
+                "context": "billdatamgmt",
+                "verb": "flags",
+                "connector": "the",
+                "phrase": "unpaid balance",
+                "description": "billdatamgmt flags the unpaid balance",
+                "line": 12,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/billdatamgmt"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario_5",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "billdatamgmt",
+            "event": "nmfbus.BillingCycleVoided",
+            "ref": "nmfbus.BillingCycleVoided",
+            "description": "when billdatamgmt listens \"nmfbus.BillingCycleVoided\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "billing/billdatamgmt"
+            },
+            "line": 14,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_6",
+                "type": "internal_action",
+                "context": "billdatamgmt",
+                "verb": "drops",
+                "connector": "the",
+                "phrase": "cycle",
+                "description": "billdatamgmt drops the cycle",
+                "line": 15,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/billdatamgmt"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 5
+    },
+    {
+      "name": "scenario as a context name still works",
+      "scenarios": [
+        {
+          "id": "scenario_7",
+          "trigger": {
+            "type": "external",
+            "actor": "Ops",
+            "verb": "restarts",
+            "connector": "the",
+            "phrase": "job",
+            "description": "when Ops restarts the job",
+            "line": 19,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_8",
+                "type": "sync_action",
+                "context": "scenario",
+                "targetContext": "billdatamgmt",
+                "ref": "billdatamgmt",
+                "connector": "to",
+                "phrase": "replay",
+                "description": "scenario asks billdatamgmt to replay",
+                "line": 20,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "tooling/scenario"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "billing/billdatamgmt"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 18
+    }
+  ],
+  "domains": [
+    {
+      "name": "billing",
+      "boundedContexts": [
+        "billdatamgmt"
+      ]
+    },
+    {
+      "name": "tooling",
+      "boundedContexts": [
+        "scenario"
+      ]
+    }
+  ]
+}

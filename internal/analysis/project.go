@@ -165,6 +165,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 			counter++
 			outSc := model.Scenario{
 				ID:      fmt.Sprintf("scenario_%d", counter),
+				Name:    sc.Name(),
 				Trigger: projectTrigger(sc, li),
 				Steps:   []model.Step{},
 			}
