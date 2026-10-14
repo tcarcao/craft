@@ -14,7 +14,7 @@ func node(b *strings.Builder, indent string, al *aliases, n view.Node) {
 	switch n.Kind {
 	case view.NodeActor:
 		fmt.Fprintf(b, "%s%s([\"%s\"])\n", indent, id, label)
-	case view.NodeQueue:
+	case view.NodeQueue, view.NodeStore:
 		fmt.Fprintf(b, "%s%s[(\"%s\")]\n", indent, id, label)
 	case view.NodeExternal:
 		fmt.Fprintf(b, "%s%s{{\"%s\"}}\n", indent, id, label)
@@ -28,7 +28,7 @@ func Flow(f view.Flow) string {
 	var b strings.Builder
 	al := newAliases()
 	b.WriteString("flowchart LR\n")
-	for _, group := range [][]view.Node{f.Actors, f.Contexts, f.Queues, f.Externals} {
+	for _, group := range [][]view.Node{f.Actors, f.Contexts, f.Queues, f.Stores, f.Externals} {
 		for _, n := range group {
 			node(&b, "    ", al, n)
 		}
@@ -76,11 +76,15 @@ func Sequence(s view.Sequence) string {
 	al := newAliases()
 	b.WriteString("sequenceDiagram\n")
 	for _, p := range s.Participants {
-		kind := "participant"
-		if p.Kind == view.NodeActor {
+		kind, label := "participant", strings.ReplaceAll(p.Label, ";", ",")
+		switch p.Kind {
+		case view.NodeActor:
 			kind = "actor"
+		case view.NodeStore:
+			// Mermaid's sequence syntax has no portable database shape.
+			label += " (store)"
 		}
-		fmt.Fprintf(&b, "    %s %s as %s\n", kind, al.declare(p.ID, p.Label), strings.ReplaceAll(p.Label, ";", ","))
+		fmt.Fprintf(&b, "    %s %s as %s\n", kind, al.declare(p.ID, p.Label), label)
 	}
 	// Declare External if any message is inbound. A MessageNone is never
 	// inbound, so the placeholders of empty branches never add it.

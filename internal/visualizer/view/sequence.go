@@ -1,6 +1,7 @@
 package view
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -207,12 +208,15 @@ type sequenceBuilder struct {
 	onStage []map[string]bool
 }
 
-// inboundArrow is an event drawn as arriving from outside a section, and the
-// publishers it arrives from.
+// inboundArrow is an event drawn as arriving from outside a section, or a
+// store read drawn from the reader to the store, and the publishers (writers)
+// it arrives from.
 type inboundArrow struct {
 	section, message int
-	event            string
-	publishers       []string // display names, in arrival order
+	// head starts the label: the event of an inbound arrow, "polls <change>"
+	// of a store read.
+	head       string
+	publishers []string // display names, in arrival order
 	// suffix ends the label: ", <schedule>" for a scheduled listener.
 	suffix string
 }
@@ -226,14 +230,49 @@ const maxNamedPublishers = 3
 // model keeps its bare name.
 func (a *inboundArrow) label() string {
 	if len(a.publishers) == 0 {
-		return a.event + a.suffix
+		return a.head + a.suffix
 	}
 	names := slices.Clone(a.publishers)
 	slices.Sort(names)
 	if len(names) > maxNamedPublishers {
 		names = append(names[:maxNamedPublishers], fmt.Sprintf("+%d more", len(a.publishers)-maxNamedPublishers))
 	}
-	return a.event + " (from " + strings.Join(names, ", ") + ")" + a.suffix
+	return a.head + " (from " + strings.Join(names, ", ") + ")" + a.suffix
+}
+
+// inboundKey identifies the one arrow a listening scenario draws for an event.
+func inboundKey(it interaction.Interaction) string {
+	return fmt.Sprintf("%d|%s|%s", it.UseCaseIndex, it.Scenario, it.Event)
+}
+
+// growInbound adds it's publisher to the arrow already drawn for its
+// listening scenario and event, and reports whether there was one.
+func (b *sequenceBuilder) growInbound(it interaction.Interaction) bool {
+	arrow := b.inbound[inboundKey(it)]
+	if arrow == nil {
+		return false
+	}
+	arrow.addPublisher(it.From)
+	b.seq.Sections[arrow.section].Messages[arrow.message].Label = arrow.label()
+	return true
+}
+
+// newInbound records the arrow it starts, about to be appended to section
+// idx, with its label head.
+func (b *sequenceBuilder) newInbound(idx int, it interaction.Interaction, head string) *inboundArrow {
+	arrow := &inboundArrow{section: idx, message: len(b.seq.Sections[idx].Messages), head: head}
+	if it.Schedule != "" {
+		arrow.suffix = ", " + it.Schedule
+	}
+	arrow.addPublisher(it.From)
+	b.inbound[inboundKey(it)] = arrow
+	return arrow
+}
+
+func (a *inboundArrow) addPublisher(from interaction.Endpoint) {
+	if from != interaction.External && !slices.Contains(a.publishers, from.Name) {
+		a.publishers = append(a.publishers, from.Name)
+	}
 }
 
 func (b *sequenceBuilder) appear(id string) {
@@ -270,9 +309,25 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	case interaction.Internal:
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.From), MessageSelf
 	case interaction.Publish:
+		if !it.Via.IsZero() {
+			// A store write: the store lane shows the hand-off.
+			msg.From, msg.To, msg.Kind = ns.add(it.From), ns.addStore(it.Via), MessageCall
+			msg.Label = cmp.Or(storeChange(it.Event), "writes")
+			break
+		}
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.From), MessageAsync
 		msg.Label = "notifies \"" + it.Event + "\""
 	case interaction.Listen:
+		if !it.Via.IsZero() {
+			// A store read: the reader polls the store, once per listening
+			// scenario, even when a writer is on stage (spec §7.5).
+			if b.growInbound(it) {
+				return
+			}
+			arrow := b.newInbound(idx, it, strings.TrimSpace("polls "+storeChange(it.Event)))
+			msg.From, msg.To, msg.Kind, msg.Label = ns.add(it.To), ns.addStore(it.Via), MessageCall, arrow.label()
+			break
+		}
 		// A publisher already on stage in this use case delivers the
 		// event itself; otherwise the event arrives from outside, once
 		// per listening scenario however many publishers it has. The
@@ -285,23 +340,10 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 			}
 			break
 		}
-		key := fmt.Sprintf("%d|%s|%s", it.UseCaseIndex, it.Scenario, it.Event)
-		arrow := b.inbound[key]
-		if arrow == nil {
-			arrow = &inboundArrow{section: idx, message: len(b.seq.Sections[idx].Messages), event: it.Event}
-			if it.Schedule != "" {
-				arrow.suffix = ", " + it.Schedule
-			}
-			b.inbound[key] = arrow
-		}
-		if it.From != interaction.External && !slices.Contains(arrow.publishers, it.From.Name) {
-			arrow.publishers = append(arrow.publishers, it.From.Name)
-		}
-		if arrow.message < len(b.seq.Sections[arrow.section].Messages) {
-			// Already drawn: only its label grows.
-			b.seq.Sections[arrow.section].Messages[arrow.message].Label = arrow.label()
+		if b.growInbound(it) {
 			return
 		}
+		arrow := b.newInbound(idx, it, it.Event)
 		msg.To, msg.Kind, msg.Label = ns.add(it.To), MessageInbound, arrow.label()
 	default:
 		return

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/analysis"
+	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 )
 
 // sequenceSource draws src as a sequence diagram in both backends.
@@ -971,5 +973,131 @@ use_case "Lead requests are imported" {
 	requireLine(t, "plantuml", puml, "[-> leadimporter : sqs.LeadRequested, every 5m")
 	if !strings.Contains(mmd, "sqs.LeadRequested, every 5m") {
 		t.Errorf("mermaid lacks the schedule:\n%s", mmd)
+	}
+}
+
+const storeSrc = `actors {
+    system CRON
+    system Siren
+}
+domain billing {
+    invoicing
+    smsdispatch
+}
+services {
+    messaging {
+        contexts: invoicing, smsdispatch
+        data-stores: sms_queue
+    }
+}
+use_case "Invoicing queues a payment reminder" {
+    when cron "0 9 * * 1-5"
+        invoicing finds the invoices due in three days
+        invoicing notifies store.sms_queue.inserted
+}
+use_case "The queued reminder is sent" {
+    when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+        smsdispatch claims the unsent rows
+        smsdispatch asks Siren to send the SMS  [sendSmsNotificationEvent]
+}
+`
+
+func TestSequence_StoreHandOff(t *testing.T) {
+	puml, mmd := sequenceSource(t, storeSrc)
+	for _, want := range []string{
+		`database "sms_queue" as sms_queue`,
+		"invoicing -> sms_queue : inserted",
+		"smsdispatch -> sms_queue : polls inserted (from invoicing), cron * 10 * * 1-5",
+	} {
+		requireLine(t, "plantuml", puml, want)
+	}
+	if strings.Contains(puml, `notifies "store.`) {
+		t.Errorf("the self-arrow is replaced:\n%s", puml)
+	}
+	// Participants in order of first appearance.
+	order := []string{`boundary "CRON"`, `participant "invoicing"`, `database "sms_queue"`, `participant "smsdispatch"`, `boundary "Siren"`}
+	last := -1
+	for _, p := range order {
+		i := strings.Index(puml, p)
+		if i < last {
+			t.Errorf("participant %s out of order:\n%s", p, puml)
+		}
+		last = i
+	}
+	for _, want := range []string{
+		"participant sms_queue as sms_queue (store)",
+		"invoicing->>sms_queue: inserted",
+		"smsdispatch->>sms_queue: polls inserted (from invoicing), cron * 10 * * 1-5",
+	} {
+		requireLine(t, "mermaid", mmd, want)
+	}
+}
+
+func TestFlowArchitectureC4_StoreHandOff(t *testing.T) {
+	doc := resolvedDoc(t, storeSrc)
+	flow, _, _ := renderSource(doc, ViewFlow, PlantUML)
+	for _, want := range []string{`database "sms_queue" as sms_queue`, "invoicing ->> sms_queue : 3. inserted", "sms_queue --> smsdispatch : 4. polls inserted"} {
+		if !strings.Contains(string(flow), want) {
+			t.Errorf("flow lacks %q:\n%s", want, flow)
+		}
+	}
+	arch, _, _ := renderSource(doc, ViewArchitecture, PlantUML)
+	for _, want := range []string{"invoicing --> sms_queue", "sms_queue --> smsdispatch"} {
+		if !strings.Contains(string(arch), want) {
+			t.Errorf("architecture lacks %q:\n%s", want, arch)
+		}
+	}
+	if strings.Contains(string(arch), "events") {
+		t.Errorf("a store hand-off is not routed through an event queue:\n%s", arch)
+	}
+	for _, boundaries := range []bool{false, true} {
+		c4 := view.BuildC4(doc, interaction.Derive(doc), view.C4Options{ShowDatabases: true, Boundaries: boundaries})
+		db := "db:messaging/sms_queue"
+		writer, reader := "app:messaging", "app:messaging"
+		if boundaries {
+			writer, reader = "billing/invoicing", "billing/smsdispatch"
+		}
+		var got []string
+		for _, r := range c4.Relations {
+			if r.To == db && r.Technology == "Database Query" {
+				got = append(got, r.From+" "+r.Label)
+			}
+			if r.To == "Event_Queue" || r.From == "Event_Queue" {
+				t.Errorf("boundaries=%v: a store hand-off drawn as a database relation is not also routed through the event queue: %+v", boundaries, r)
+			}
+		}
+		want := writer + " writes inserted|" + reader + " polls"
+		if strings.Join(got, "|") != want {
+			t.Errorf("boundaries=%v: database relations = %q, want %q", boundaries, strings.Join(got, "|"), want)
+		}
+		for _, s := range c4.Systems {
+			if s.ID == "Event_System" {
+				t.Errorf("boundaries=%v: no event queue is drawn when every publish is a store hand-off", boundaries)
+			}
+		}
+	}
+}
+
+// A store read is drawn as the reader polling the store even when the writer
+// is on stage in the same use case; a ref with no change is written "writes".
+func TestSequence_StoreReadWithTheWriterOnStageAndAChangelessWrite(t *testing.T) {
+	puml, _ := sequenceSource(t, `domain d {
+    writer
+    reader
+}
+use_case "Hand-off" {
+    when cron "0 9 * * *"
+        writer notifies store.leads.inserted
+        writer notifies store.redis.pending
+
+    when reader listens store.leads.inserted
+        reader claims the rows
+}
+`)
+	requireLine(t, "plantuml", puml, "writer -> leads : inserted")
+	requireLine(t, "plantuml", puml, "writer -> redis_pending : writes")
+	requireLine(t, "plantuml", puml, "reader -> leads : polls inserted (from writer)")
+	if strings.Contains(puml, "writer ->> reader") {
+		t.Errorf("an on-stage writer does not deliver a store hand-off itself:\n%s", puml)
 	}
 }

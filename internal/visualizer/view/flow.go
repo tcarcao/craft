@@ -1,7 +1,10 @@
 package view
 
 import (
+	"cmp"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
 	"github.com/tcarcao/craft/v2/internal/lang"
@@ -14,6 +17,7 @@ type Flow struct {
 	Contexts  []Node
 	Actors    []Node
 	Queues    []Node
+	Stores    []Node
 	Externals []Node
 	Edges     []FlowEdge
 }
@@ -32,6 +36,13 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 	ns := newNodeSet(doc)
 	var f Flow
 	var branch []interaction.BranchRef // branch of the interaction being laid out
+	// polled holds the store reads drawn: one per listening scenario and
+	// store, however many writers it has.
+	type readKey struct {
+		useCase       int
+		scenario, via string
+	}
+	polled := map[readKey]bool{}
 	add := func(from, to string, style EdgeStyle, label string) {
 		// The flow has no boxes, so an edge inside a block names its
 		// innermost branch instead.
@@ -74,8 +85,20 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 		case interaction.Internal:
 			add(ns.add(it.From), ns.add(it.From), StyleSelf, it.Label)
 		case interaction.Publish:
+			if !it.Via.IsZero() {
+				add(ns.add(it.From), ns.addStore(it.Via), StyleAsync, cmp.Or(storeChange(it.Event), "writes"))
+				continue
+			}
 			add(ns.add(it.From), ns.addQueue(it.From), StyleAsync, it.Label)
 		case interaction.Listen:
+			if !it.Via.IsZero() {
+				k := readKey{it.UseCaseIndex, it.Scenario, it.Via.Key}
+				if !polled[k] {
+					polled[k] = true
+					add(ns.addStore(it.Via), ns.add(it.To), StyleTrigger, strings.TrimSpace("polls "+storeChange(it.Event)))
+				}
+				continue
+			}
 			from := ns.add(it.From)
 			if it.From != interaction.External {
 				from = ns.addQueue(it.From)
@@ -86,6 +109,7 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 	f.Contexts = ns.sorted(NodeContext)
 	f.Actors = ns.sorted(NodeActor)
 	f.Queues = ns.sorted(NodeQueue)
+	f.Stores = ns.sorted(NodeStore)
 	f.Externals = ns.sorted(NodeExternal)
 	return f
 }
@@ -139,6 +163,13 @@ func BuildArchitecture(doc *model.CraftDoc, its []interaction.Interaction) Archi
 		}
 		return id
 	}
+	addStore := func(e interaction.Endpoint) string {
+		id := ns.addStore(e)
+		if e.Service != "" {
+			services[id] = e.Service
+		}
+		return id
+	}
 	edges := map[Edge]bool{}
 	connect := func(from, to string) {
 		if from != to {
@@ -156,10 +187,23 @@ func BuildArchitecture(doc *model.CraftDoc, its []interaction.Interaction) Archi
 				addContext(it.From)
 			}
 		case interaction.Publish:
+			if !it.Via.IsZero() {
+				if inside(it.From) {
+					connect(addContext(it.From), addStore(it.Via))
+				}
+				continue
+			}
 			if inside(it.From) {
 				connect(addContext(it.From), ns.addQueue(it.From))
 			}
 		case interaction.Listen:
+			if !it.Via.IsZero() {
+				// The store is read whoever wrote it.
+				if inside(it.To) {
+					connect(addStore(it.Via), addContext(it.To))
+				}
+				continue
+			}
 			if it.From != interaction.External && inside(it.From) && inside(it.To) {
 				connect(ns.addQueue(it.From), addContext(it.To))
 			}
@@ -168,7 +212,7 @@ func BuildArchitecture(doc *model.CraftDoc, its []interaction.Interaction) Archi
 
 	var a Architecture
 	grouped := map[string][]Node{}
-	for _, n := range ns.sorted(NodeContext) {
+	for _, n := range slices.Concat(ns.sorted(NodeContext), ns.sorted(NodeStore)) {
 		if svc, ok := services[n.ID]; ok {
 			grouped[svc] = append(grouped[svc], n)
 		} else {

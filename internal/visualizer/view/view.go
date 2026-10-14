@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
 
@@ -19,6 +20,7 @@ const (
 	NodeActor    NodeKind = "actor"    // a declared actor
 	NodeQueue    NodeKind = "queue"    // the event queue of one publishing context
 	NodeExternal NodeKind = "external" // whatever lies outside the model
+	NodeStore    NodeKind = "store"    // a data store reached by a store hand-off
 )
 
 // Node is one drawn element. ID is stable and unique within a view; writers
@@ -96,6 +98,23 @@ func (ns *nodeSet) addQueue(publisher interaction.Endpoint) string {
 		ns.byID[id] = Node{ID: id, Label: publisher.Name + " events", Kind: NodeQueue}
 	}
 	return id
+}
+
+// addStore records a store hand-off endpoint as a store node. A data store
+// reached only by `asks` stays a context node; one that is also a hand-off
+// endpoint is drawn as a store throughout the view.
+func (ns *nodeSet) addStore(e interaction.Endpoint) string {
+	id := ns.add(e)
+	n := ns.byID[id]
+	n.Kind = NodeStore
+	ns.byID[id] = n
+	return id
+}
+
+// storeChange is the change a store hand-off's event names ("" for none).
+func storeChange(event string) string {
+	_, ch, _ := lang.ParseStoreRef(event)
+	return string(ch)
 }
 
 // sorted returns the nodes of one kind ordered by label, then ID.

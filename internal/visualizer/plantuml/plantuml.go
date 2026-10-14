@@ -131,6 +131,13 @@ func Flow(f view.Flow) string {
 		}
 		b.WriteString("\n")
 	}
+	if len(f.Stores) > 0 {
+		b.WriteString("' Data stores\n")
+		for _, n := range f.Stores {
+			fmt.Fprintf(&b, "database \"%s\" as %s\n", text(n.Label), al.declare(n.ID, n.Label))
+		}
+		b.WriteString("\n")
+	}
 
 	b.WriteString("' Workflow flows\n")
 	for _, e := range f.Edges {
@@ -164,7 +171,7 @@ func Architecture(a view.Architecture) string {
 		for _, g := range a.Groups {
 			fmt.Fprintf(&b, "rectangle \"%s\" as %s {\n", text(wrap(g.Service.Label, 20)), al.declare(g.Service.ID, g.Service.Label))
 			for _, n := range g.Contexts {
-				fmt.Fprintf(&b, "  frame \"%s\" as %s\n", text(wrap(n.Label, 20)), al.declare(n.ID, n.Label))
+				fmt.Fprintf(&b, "  %s \"%s\" as %s\n", archElement(n), text(wrap(n.Label, 20)), al.declare(n.ID, n.Label))
 			}
 			b.WriteString("}\n")
 		}
@@ -173,7 +180,7 @@ func Architecture(a view.Architecture) string {
 	if len(a.Ungrouped) > 0 {
 		b.WriteString("' Ungrouped subdomains\n")
 		for _, n := range a.Ungrouped {
-			fmt.Fprintf(&b, "frame \"%s\" as %s\n", text(wrap(n.Label, 20)), al.declare(n.ID, n.Label))
+			fmt.Fprintf(&b, "%s \"%s\" as %s\n", archElement(n), text(wrap(n.Label, 20)), al.declare(n.ID, n.Label))
 		}
 		b.WriteString("\n")
 	}
@@ -192,6 +199,15 @@ func Architecture(a view.Architecture) string {
 	return b.String()
 }
 
+// archElement is how an architecture node is drawn: a store as a database,
+// anything else as a frame.
+func archElement(n view.Node) string {
+	if n.Kind == view.NodeStore {
+		return "database"
+	}
+	return "frame"
+}
+
 // Sequence writes a sequence diagram.
 func Sequence(s view.Sequence) string {
 	var b strings.Builder
@@ -199,8 +215,11 @@ func Sequence(s view.Sequence) string {
 	b.WriteString("@startuml\nskinparam backgroundColor white\nskinparam defaultFontName SansSerif\nskinparam sequenceMessageAlign center\n\n")
 	for _, p := range s.Participants {
 		kind := "participant"
-		if p.Kind == view.NodeActor {
+		switch p.Kind {
+		case view.NodeActor:
 			kind = actorElement(p.ActorType)
+		case view.NodeStore:
+			kind = "database"
 		}
 		fmt.Fprintf(&b, "%s \"%s\" as %s\n", kind, text(p.Label), al.declare(p.ID, p.Label))
 	}
