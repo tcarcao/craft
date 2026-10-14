@@ -23,6 +23,10 @@ func fuzzOutline(src string) string {
 				b.WriteString(ind + "action " + a.SubjectName() + " | " + a.VerbValue() + "\n")
 				continue
 			}
+			if n, ok := st.Note(); ok {
+				b.WriteString(ind + "note " + string(n.Kind()) + " " + strconv.Quote(n.Text()) + "\n")
+				continue
+			}
 			blk, _ := st.Block()
 			b.WriteString(ind + string(blk.Kind()) + "\n")
 			for _, br := range blk.Branches() {

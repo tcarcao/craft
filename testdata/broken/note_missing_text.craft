@@ -1,0 +1,5 @@
+use_case "U" {
+    when Ops starts it
+        x does a
+        finding
+}

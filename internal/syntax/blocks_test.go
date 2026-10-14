@@ -35,6 +35,10 @@ func outline(steps []syntax.StepDecl, depth int) string {
 			b.WriteString(ind + "action " + a.SubjectName() + "\n")
 			continue
 		}
+		if n, ok := st.Note(); ok {
+			b.WriteString(ind + "note " + string(n.Kind()) + " " + n.Text() + "\n")
+			continue
+		}
 		blk, _ := st.Block()
 		b.WriteString(ind + string(blk.Kind()) + "\n")
 		for _, br := range blk.Branches() {

@@ -124,6 +124,21 @@ const (
 	SyntaxKindKwOpt
 	SyntaxKindKwElse
 
+	// Journey-semantics contextual keywords (v2.23.0). Each is matched by value
+	// from TokenIdent only in its slot (spec §3.1); elsewhere the word stays an
+	// identifier.
+	SyntaxKindKwPar      // `par` block header
+	SyntaxKindKwAnd      // `and` branch of a par
+	SyntaxKindKwLoop     // `loop` block header
+	SyntaxKindKwNote     // `note "…"`
+	SyntaxKindKwFinding  // `finding "…"`
+	SyntaxKindKwReceives // `when <ctx> receives …`
+	SyntaxKindKwSurface  // top-level `surface <name> {`
+	SyntaxKindKwCallers  // `callers:` in a surface
+	SyntaxKindKwSpec     // `spec:` in a surface
+	SyntaxKindKwQuery    // `query` surface line
+	SyntaxKindKwCommand  // `command` surface line
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -179,4 +194,14 @@ const (
 	SyntaxKindBranch
 	// SyntaxKindBranchHeader wraps `alt|opt|else "<label>"`.
 	SyntaxKindBranchHeader
+
+	// SyntaxKindNote is a `note "…"` / `finding "…"` statement: a step, a
+	// use-case-level line, or a surface line.
+	SyntaxKindNote
+	// SyntaxKindSurfaceDecl is `surface <name> { … }`.
+	SyntaxKindSurfaceDecl
+	// SyntaxKindSurfaceField wraps `callers: …` or `spec: "…"`.
+	SyntaxKindSurfaceField
+	// SyntaxKindSurfaceOperation wraps a `query|command <phrase> [op]` line.
+	SyntaxKindSurfaceOperation
 )

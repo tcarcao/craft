@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -1957,6 +1958,10 @@ func stepOutline(t *testing.T, src string) string {
 			ind := strings.Repeat("  ", depth)
 			if a, ok := st.Action(); ok {
 				b.WriteString(ind + "action " + a.SubjectName() + " " + a.VerbValue() + "\n")
+				continue
+			}
+			if n, ok := st.Note(); ok {
+				b.WriteString(ind + "note " + string(n.Kind()) + " " + strconv.Quote(n.Text()) + "\n")
 				continue
 			}
 			blk, _ := st.Block()

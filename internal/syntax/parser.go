@@ -852,9 +852,11 @@ func (p *Parser) parseUseCaseBlock() []model.Diagnostic {
 			diags = append(diags, d...)
 		} else if tok.Type == lexer.TokenIdent && tok.Value == "tags" {
 			diags = append(diags, p.parseUseCaseTagsBlock()...)
+		} else if p.atNoteLine() {
+			diags = append(diags, p.parseNote()...)
 		} else {
 			// Skip unknown tokens inside the use_case body.
-			diags = append(diags, p.diagUnexpected(tok, "`when`, `tags`, or `}`"))
+			diags = append(diags, p.diagUnexpected(tok, "`when`, `tags`, `note`, `finding`, or `}`"))
 			p.consumeAs(SyntaxKindError)
 		}
 	}
@@ -1191,6 +1193,59 @@ func (p *Parser) isHeader() (string, bool) {
 	return "", false
 }
 
+// atNoteLine reports whether the next tokens are a note statement: `note` or
+// `finding` at the start of a line, followed by a string on that line or by
+// nothing else on it (a missing text). Anything else after the word makes the
+// line an ordinary action, so both words stay valid names.
+func (p *Parser) atNoteLine() bool {
+	tok := p.peek()
+	if tok.Type != lexer.TokenIdent || (tok.Value != "note" && tok.Value != "finding") || !p.peekAtLineStart() {
+		return false
+	}
+	next := p.peekAt(1)
+	return next.Type == lexer.TokenString || next.Type == lexer.TokenEOF || next.Line != tok.Line
+}
+
+// parseNote parses `note "<text>"` or `finding "<text>"`. A note is one line.
+func (p *Parser) parseNote() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindNote)
+	kind := SyntaxKindKwNote
+	if p.peek().Value == "finding" {
+		kind = SyntaxKindKwFinding
+	}
+	kwTok := p.consumeAs(kind)
+	if t := p.peek(); t.Type == lexer.TokenString && t.Line == kwTok.Line {
+		p.consumeAs(SyntaxKindString)
+	} else {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/missing-label",
+			Message:  fmt.Sprintf("`%s` needs a quoted text, e.g. `%s \"a lost callback leaves the invoice open\"`", kwTok.Value, kwTok.Value),
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+	}
+	diags = append(diags, p.sweepRestOfLine(kwTok.Line, "end of line after the note text")...)
+	p.builder.FinishNode()
+	return diags
+}
+
+// sweepRestOfLine wraps whatever is left on line in an error node and reports
+// its first token as unexpected. A `}` or EOF ends the sweep.
+func (p *Parser) sweepRestOfLine(line int, expected string) []model.Diagnostic {
+	t := p.peek()
+	if t.Line != line || t.Type == lexer.TokenEOF || t.Type == lexer.TokenRBrace {
+		return nil
+	}
+	d := p.diagUnexpected(t, expected)
+	p.builder.StartNode(SyntaxKindErrorNode)
+	for t := p.peek(); t.Line == line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace; t = p.peek() {
+		p.consume()
+	}
+	p.builder.FinishNode()
+	return []model.Diagnostic{d}
+}
+
 // atStep reports whether the next token can start a step of the current
 // scenario: anything but `when`, a `scenario "…"` line, `}` or EOF.
 func (p *Parser) atStep() bool {
@@ -1204,7 +1259,7 @@ func (p *Parser) atStep() bool {
 	return true
 }
 
-// parseSteps parses the steps (actions and blocks) of a scenario or of a
+// parseSteps parses the steps (actions, blocks and notes) of a scenario or of a
 // branch body.
 //
 // minCol is the visual column of the enclosing branch header, or 0 at the
@@ -1248,7 +1303,11 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 		}
 
 		if !isHdr {
-			diags = append(diags, p.parseAction()...)
+			if p.atNoteLine() {
+				diags = append(diags, p.parseNote()...)
+			} else {
+				diags = append(diags, p.parseAction()...)
+			}
 			continue
 		}
 		if kw == "else" {
@@ -1317,14 +1376,7 @@ func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
 	}
 
 	// Anything else on the header line after the label is not part of it.
-	if t := p.peek(); t.Line == kwTok.Line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace {
-		diags = append(diags, p.diagUnexpected(t, "end of line after the block label"))
-		p.builder.StartNode(SyntaxKindErrorNode)
-		for t := p.peek(); t.Line == kwTok.Line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace; t = p.peek() {
-			p.consume()
-		}
-		p.builder.FinishNode()
-	}
+	diags = append(diags, p.sweepRestOfLine(kwTok.Line, "end of line after the block label")...)
 	p.builder.FinishNode() // BranchHeader
 
 	// The header line's remainder has been consumed (or is a `}`, which ends

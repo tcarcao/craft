@@ -1,0 +1,5 @@
+use_case "U" {
+    when Ops starts it
+        x does a
+        note "the gateway forwards the session" twice
+}

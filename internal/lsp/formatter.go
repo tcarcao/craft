@@ -739,7 +739,7 @@ func (x *tokenIndex) of(t syntax.SyntaxToken) (int, bool) {
 func firstBodyToken(branch syntax.SyntaxNode) (syntax.SyntaxToken, bool) {
 	for el := range branch.ChildrenIter() {
 		if n, ok := el.(syntax.SyntaxNode); ok &&
-			(n.Kind() == syntax.SyntaxKindAction || n.Kind() == syntax.SyntaxKindBlock) {
+			(n.Kind() == syntax.SyntaxKindAction || n.Kind() == syntax.SyntaxKindBlock || n.Kind() == syntax.SyntaxKindNote) {
 			return firstRealToken(n)
 		}
 	}

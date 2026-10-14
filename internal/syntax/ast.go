@@ -1289,6 +1289,15 @@ func (u UseCaseDecl) Scenarios() []ScenarioDecl {
 	return result
 }
 
+// Notes returns the use-case-level note and finding lines, in source order.
+func (u UseCaseDecl) Notes() []NoteDecl {
+	var out []NoteDecl
+	for _, n := range u.node.ChildNodes(SyntaxKindNote) {
+		out = append(out, NoteDecl{node: n})
+	}
+	return out
+}
+
 // TagsBlock returns the single tags { } block child of this use case, or nil
 // if it has none (Task 3, Slice B). The grammar allows at most one tags
 // block per use_case; if more than one were somehow present, this returns
@@ -1445,7 +1454,7 @@ func flattenActions(sts []StepDecl, out []ActionDecl) []ActionDecl {
 	return out
 }
 
-// steps lists n's Action and Block child nodes, in order, as steps.
+// steps lists n's Action, Block and Note child nodes, in order, as steps.
 func steps(n SyntaxNode) []StepDecl {
 	var result []StepDecl
 	for el := range n.ChildrenIter() {
@@ -1453,15 +1462,15 @@ func steps(n SyntaxNode) []StepDecl {
 		if !ok {
 			continue
 		}
-		if k := c.Kind(); k == SyntaxKindAction || k == SyntaxKindBlock {
+		if k := c.Kind(); k == SyntaxKindAction || k == SyntaxKindBlock || k == SyntaxKindNote {
 			result = append(result, StepDecl{node: c})
 		}
 	}
 	return result
 }
 
-// StepDecl is one step of a scenario or branch: a SyntaxKindAction or a
-// SyntaxKindBlock node.
+// StepDecl is one step of a scenario or branch: an action, a block or a note
+// (a SyntaxKindAction, SyntaxKindBlock or SyntaxKindNote node).
 type StepDecl struct{ node SyntaxNode }
 
 // Action returns the step as an action, if it is one.
@@ -1480,8 +1489,43 @@ func (s StepDecl) Block() (BlockDecl, bool) {
 	return BlockDecl{node: s.node}, true
 }
 
+// Note returns the step as a note, if it is one.
+func (s StepDecl) Note() (NoteDecl, bool) {
+	if s.node.Kind() != SyntaxKindNote {
+		return NoteDecl{}, false
+	}
+	return NoteDecl{node: s.node}, true
+}
+
 // Node returns the underlying syntax node.
 func (s StepDecl) Node() SyntaxNode { return s.node }
+
+// NoteDecl is a typed view over a SyntaxKindNote node: `note "…"` or `finding "…"`.
+type NoteDecl struct{ node SyntaxNode }
+
+// KeywordToken returns the `note` / `finding` keyword.
+func (n NoteDecl) KeywordToken() *SyntaxToken {
+	return n.node.ChildToken(SyntaxKindKwNote, SyntaxKindKwFinding)
+}
+
+// Kind returns lang.NoteFinding for `finding`, lang.NoteText otherwise.
+func (n NoteDecl) Kind() lang.NoteKind {
+	if t := n.KeywordToken(); t != nil && t.Kind() == SyntaxKindKwFinding {
+		return lang.NoteFinding
+	}
+	return lang.NoteText
+}
+
+// Text returns the unquoted text, or "" when it is missing.
+func (n NoteDecl) Text() string {
+	if t := n.node.ChildToken(SyntaxKindString); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
+// Node returns the underlying syntax node.
+func (n NoteDecl) Node() SyntaxNode { return n.node }
 
 // BlockDecl is a typed view over a SyntaxKindBlock node: an alt (one or more
 // branches, the first headed by `alt`, or by an orphan `else` recovered as an
