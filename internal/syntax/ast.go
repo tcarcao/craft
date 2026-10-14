@@ -1683,6 +1683,9 @@ func (t TriggerDecl) Kind() lang.TriggerKind {
 	if len(elems) >= 2 && elems[1].Kind() == SyntaxKindKwListens {
 		return lang.TriggerDomainListen
 	}
+	if len(elems) >= 2 && elems[1].Kind() == SyntaxKindKwReceives {
+		return lang.TriggerReceive
+	}
 	return lang.TriggerExternal
 }
 
@@ -1716,10 +1719,10 @@ func (t TriggerDecl) ActorCol(li green.LineIndex) int {
 	return col
 }
 
-// ContextName returns the subject name for domain_listen triggers, reading a
-// qualified ref (Task 6b) in full via refAwareText.
+// ContextName returns the subject name for domain_listen and receive
+// triggers, reading a qualified ref (Task 6b) in full via refAwareText.
 func (t TriggerDecl) ContextName() string {
-	if t.Kind() != lang.TriggerDomainListen {
+	if k := t.Kind(); k != lang.TriggerDomainListen && k != lang.TriggerReceive {
 		return ""
 	}
 	el := t.subjectElement()
@@ -1751,10 +1754,10 @@ func (t TriggerDecl) EventValue() string {
 }
 
 // rawTextFrom returns the exact raw source substring of this trigger from
-// leaf-token index start to the end of the trigger, trimmed. A trigger line
-// carries no operation annotation, so there is nothing to stop before.
+// leaf-token index start, stopping before any trailing operation annotation
+// (only a receive trigger carries one), trimmed.
 func (t TriggerDecl) rawTextFrom(start int) string {
-	return rawSourceFrom(t.node, start, -1)
+	return rawSourceFrom(t.node, start, opAnnotationOffset(t.node))
 }
 
 // PhraseText returns the free-text phrase for an "external" trigger (e.g.
@@ -1763,7 +1766,7 @@ func (t TriggerDecl) rawTextFrom(start int) string {
 // ActionDecl.PhraseText (Task 1 / Bug 8a) so prose with tight punctuation
 // keeps its original spacing instead of being space-joined.
 func (t TriggerDecl) PhraseText() string {
-	if t.Kind() != lang.TriggerExternal {
+	if k := t.Kind(); k != lang.TriggerExternal && k != lang.TriggerReceive {
 		return ""
 	}
 	tokens := t.node.Tokens()
@@ -1783,7 +1786,7 @@ func (t TriggerDecl) PhraseText() string {
 // its phrase (`when Customer places an order` → "an"), or "" when there is
 // none. PhraseText skips it; diagrams and descriptions put it back.
 func (t TriggerDecl) Connector() string {
-	if t.Kind() != lang.TriggerExternal {
+	if k := t.Kind(); k != lang.TriggerExternal && k != lang.TriggerReceive {
 		return ""
 	}
 	tokens := t.node.Tokens()
@@ -1815,8 +1818,24 @@ func (t TriggerDecl) SourceText() string {
 	var sb strings.Builder
 	sb.WriteString(refAwareRawText(elems[0]))
 	appendSpaced(&sb, t.rawTextFrom(tokenIndexAt(elems, 1)))
+	if op := t.OpText(); op != "" {
+		sb.WriteString(" [" + op + "]")
+	}
 	return sb.String()
 }
+
+// OpAnnotation returns the trailing operation annotation of a receive
+// trigger, or nil when the trigger has none.
+func (t TriggerDecl) OpAnnotation() *SyntaxNode { return opAnnotationOf(t.node) }
+
+// OpText returns the trigger's annotation body verbatim, or "".
+func (t TriggerDecl) OpText() string { return opTextOf(t.node) }
+
+// OpVerb returns the recognised protocol verb of the trigger's annotation, or "".
+func (t TriggerDecl) OpVerb() string { return opVerbOf(t.node) }
+
+// OpPayload returns the trigger's annotation body without its protocol verb, or "".
+func (t TriggerDecl) OpPayload() string { return opPayloadOf(t.node) }
 
 // EventCol returns the 1-based column of the event token using li.
 func (t TriggerDecl) EventCol(li green.LineIndex) int {
@@ -2136,13 +2155,18 @@ func (a ActionDecl) PhraseText() string {
 func (a ActionDecl) rawTextFrom(start int) string {
 	// The annotation is a child of the action node, so its tokens are in
 	// AllTokens() and would otherwise be swept into the text.
-	var endOffset green.TextSize = -1
-	if op := a.OpAnnotation(); op != nil {
+	return rawSourceFrom(a.node, start, opAnnotationOffset(a.node))
+}
+
+// opAnnotationOffset returns the offset of the first token of n's operation
+// annotation, or -1 when n has none: the end offset for rawSourceFrom.
+func opAnnotationOffset(n SyntaxNode) green.TextSize {
+	if op := opAnnotationOf(n); op != nil {
 		if opToks := op.AllTokens(); len(opToks) > 0 {
-			endOffset = opToks[0].Offset()
+			return opToks[0].Offset()
 		}
 	}
-	return rawSourceFrom(a.node, start, endOffset)
+	return -1
 }
 
 // SourceText renders the action as canonical .craft source: the exact line the
@@ -2238,19 +2262,33 @@ func (a ActionDecl) Tokens() []SyntaxToken { return a.node.Tokens() }
 
 // OpAnnotation returns the action's trailing operation annotation node, or nil
 // when the action has none.
-func (a ActionDecl) OpAnnotation() *SyntaxNode {
-	return a.node.ChildNode(SyntaxKindOpAnnotation)
-}
+func (a ActionDecl) OpAnnotation() *SyntaxNode { return opAnnotationOf(a.node) }
 
 // OpText returns the annotation body verbatim, e.g. "POST /v1/charges", or ""
 // when the action has no annotation.
-func (a ActionDecl) OpText() string {
-	n := a.OpAnnotation()
-	if n == nil {
+func (a ActionDecl) OpText() string { return opTextOf(a.node) }
+
+// OpVerb returns the recognised protocol verb of the action's operation
+// annotation (e.g. "POST", "GRPC"), or "" when the annotation has no recognised
+// verb or the action has no annotation.
+func (a ActionDecl) OpVerb() string { return opVerbOf(a.node) }
+
+// OpPayload returns the annotation body with any recognised protocol verb
+// stripped, e.g. "/v1/charges" for `[POST /v1/charges]` and the whole body for
+// `[op1/op2/op3]`. Returns "" when the action has no annotation.
+func (a ActionDecl) OpPayload() string { return opPayloadOf(a.node) }
+
+// opAnnotationOf returns n's operation annotation child node, or nil. Actions
+// and receive triggers share these op views.
+func opAnnotationOf(n SyntaxNode) *SyntaxNode { return n.ChildNode(SyntaxKindOpAnnotation) }
+
+func opTextOf(n SyntaxNode) string {
+	op := opAnnotationOf(n)
+	if op == nil {
 		return ""
 	}
 	var sb strings.Builder
-	for _, tok := range n.AllTokens() {
+	for _, tok := range op.AllTokens() {
 		if tok.Kind() == SyntaxKindLBracket || tok.Kind() == SyntaxKindRBracket {
 			continue
 		}
@@ -2259,33 +2297,23 @@ func (a ActionDecl) OpText() string {
 	return strings.TrimSpace(sb.String())
 }
 
-// OpVerb returns the recognised protocol verb of the action's operation
-// annotation (e.g. "POST", "GRPC"), or "" when the annotation has no recognised
-// verb or the action has no annotation.
-func (a ActionDecl) OpVerb() string {
-	n := a.OpAnnotation()
-	if n == nil {
+func opVerbOf(n SyntaxNode) string {
+	op := opAnnotationOf(n)
+	if op == nil {
 		return ""
 	}
-	if tok := n.ChildToken(SyntaxKindOpVerb); tok != nil {
+	if tok := op.ChildToken(SyntaxKindOpVerb); tok != nil {
 		return tok.Text()
 	}
 	return ""
 }
 
-// OpPayload returns the annotation body with any recognised protocol verb
-// stripped, e.g. "/v1/charges" for `[POST /v1/charges]` and the whole body for
-// `[op1/op2/op3]`. Returns "" when the action has no annotation.
-func (a ActionDecl) OpPayload() string {
-	n := a.OpAnnotation()
-	if n == nil {
-		return ""
-	}
-	verb := a.OpVerb()
+func opPayloadOf(n SyntaxNode) string {
+	verb := opVerbOf(n)
 	if verb == "" {
-		return a.OpText()
+		return opTextOf(n)
 	}
-	return strings.TrimSpace(strings.TrimPrefix(a.OpText(), verb))
+	return strings.TrimSpace(strings.TrimPrefix(opTextOf(n), verb))
 }
 
 // PhraseStartIndex returns the index into a.Tokens() at which the free-text

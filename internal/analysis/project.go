@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/lang"
@@ -279,6 +280,7 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 	t := sc.Trigger()
 	kind := t.Kind()
 	var actor, context, event, verb, connector, phrase, ref string
+	var op *model.Operation
 	schedKind, schedule, scheduled := t.Schedule()
 	switch kind {
 	case lang.TriggerEvent:
@@ -287,6 +289,13 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		context = t.ContextName()
 		event = t.EventValue()
 		ref = t.EventRef()
+	case lang.TriggerReceive:
+		context = t.ContextName()
+		connector = t.Connector()
+		phrase = t.PhraseText()
+		if text := t.OpText(); text != "" {
+			op = &model.Operation{Verb: t.OpVerb(), Payload: t.OpPayload(), Text: text}
+		}
 	default: // external
 		if scheduled {
 			// A schedule runs as the conventional scheduler actor and has no
@@ -307,6 +316,11 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		description = fmt.Sprintf("when %q", event)
 	case kind == lang.TriggerDomainListen:
 		description = fmt.Sprintf("when %s listens %q", context, event)
+	case kind == lang.TriggerReceive:
+		description = strings.TrimSpace(fmt.Sprintf("when %s receives %s", context, joinConnector(connector, phrase)))
+		if op != nil {
+			description += " [" + op.Text + "]"
+		}
 	default:
 		// No trimming: an empty phrase leaves a trailing space, as it always has.
 		description = fmt.Sprintf("when %s %s %s", actor, verb, joinConnector(connector, phrase))
@@ -322,6 +336,7 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		Ref:          ref,
 		Schedule:     schedule,
 		ScheduleKind: schedKind,
+		Operation:    op,
 		Description:  description,
 		Column:       t.ActorCol(li),
 	}

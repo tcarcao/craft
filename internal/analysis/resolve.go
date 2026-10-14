@@ -28,7 +28,7 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 			switch sc.Trigger.Type {
 			case lang.TriggerExternal:
 				sc.Trigger.Subject = resolve(sc.Trigger.Actor)
-			case lang.TriggerDomainListen:
+			case lang.TriggerDomainListen, lang.TriggerReceive:
 				sc.Trigger.Subject = resolve(sc.Trigger.Context)
 			}
 			sc.EachAction(func(a *model.Action) {

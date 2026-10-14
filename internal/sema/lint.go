@@ -56,6 +56,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintIndistinguishableScenarios(perFileTrees, lis)...)
 	diags = append(diags, lintAmbiguousUseCaseRefs(perFileTrees, ws, lis)...)
 	diags = append(diags, lintSingleBranchPar(perFileTrees, lis)...)
+	diags = append(diags, lintReceivesOnActor(perFileTrees, ws, lis)...)
 	return diags
 }
 
@@ -155,10 +156,10 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 					} else if actor := trigger.ActorName(); actor != "" {
 						used[actor] = true
 					}
-				case lang.TriggerDomainListen:
-					// An actor can be the subject of a listens trigger; the parser
-					// stores the subject in Context regardless of whether it is an
-					// actor or a bounded context.
+				case lang.TriggerDomainListen, lang.TriggerReceive:
+					// An actor can be the subject of a listens (or, wrongly, a
+					// receives) trigger; the parser stores the subject in Context
+					// regardless of whether it is an actor or a bounded context.
 					if ctx := trigger.ContextName(); ctx != "" {
 						used[ctx] = true
 					}
@@ -401,7 +402,7 @@ func dependenciesFrom(its []interaction.Interaction) map[pairKey]depInfo {
 //
 // Every participant slot is checked: each action's subject, the target of a
 // sync or return action, and the subject of an external or domain-listen
-// trigger. Each slot is visited once, so one ambiguous name cannot produce two
+// trigger, and the callee of a receive trigger. Each slot is visited once, so one ambiguous name cannot produce two
 // diagnostics at the same position.
 func lintAmbiguousUseCaseRefs(
 	perFileTrees map[string]syntax.SyntaxNode,
@@ -430,7 +431,7 @@ func lintAmbiguousUseCaseRefs(
 				switch trigger.Kind() {
 				case lang.TriggerExternal:
 					check(uri, trigger.ActorName(), line, trigger.ActorCol(li))
-				case lang.TriggerDomainListen:
+				case lang.TriggerDomainListen, lang.TriggerReceive:
 					check(uri, trigger.ContextName(), line, trigger.ActorCol(li))
 				}
 
@@ -658,6 +659,41 @@ func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
 			for _, sc := range uc.Scenarios() {
 				walk(sc.Steps())
+			}
+		}
+	}
+	return diags
+}
+
+// ── receives-on-actor ─────────────────────────────────────────────────────────
+// Warning: a `receives` trigger whose subject is an actor.
+
+func lintReceivesOnActor(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				tr := sc.Trigger()
+				if tr.Kind() != lang.TriggerReceive || sc.When() == nil {
+					continue
+				}
+				name := tr.ContextName()
+				if p, _ := ResolveParticipant(ws, "", name); p.Kind != model.ParticipantActor {
+					continue
+				}
+				line, _ := li.LineCol(sc.When().Offset())
+				start := colToLSP(tr.ActorCol(li))
+				diags = append(diags, model.Diagnostic{
+					Code:      "craft/lint/receives-on-actor",
+					Message:   "an actor starts work with `when <Actor> <verb> …`; `receives` is for a boundary whose caller is not observed",
+					Severity:  model.SeverityWarning,
+					SourceURI: uri,
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(line), Character: start},
+						End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(name)},
+					},
+				})
 			}
 		}
 	}

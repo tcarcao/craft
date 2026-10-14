@@ -30,3 +30,21 @@ func TestLint_SingleBranchPar(t *testing.T) {
 		}
 	}
 }
+
+func TestLint_ReceivesOnActor(t *testing.T) {
+	onActor := "actor user Seller\ndomain d {\n  graphql\n}\nuse_case \"U\" {\n  when Seller receives a sweep  [x]\n    graphql does it\n}"
+	onContext := "domain d {\n  graphql\n}\nuse_case \"U\" {\n  when graphql receives a sweep  [x]\n    graphql does it\n}"
+	if n := lintCodes(t, onActor, "craft/lint/receives-on-actor"); n != 1 {
+		t.Errorf("on actor: %d, want 1", n)
+	}
+	if n := lintCodes(t, onContext, "craft/lint/receives-on-actor"); n != 0 {
+		t.Errorf("on context: %d, want 0", n)
+	}
+}
+
+func TestLint_ReceivesTriggersDifferingByOperationAreDistinguishable(t *testing.T) {
+	src := "domain d {\n  graphql\n}\nuse_case \"U\" {\n  when graphql receives a call  [getA]\n    graphql does a\n  when graphql receives a call  [getB]\n    graphql does b\n}"
+	if n := lintCodes(t, src, "craft/lint/indistinguishable-scenarios"); n != 0 {
+		t.Errorf("%d indistinguishable-scenarios warnings, want 0", n)
+	}
+}

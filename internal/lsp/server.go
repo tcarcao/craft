@@ -1019,7 +1019,7 @@ func extractUseCaseContextsFromView(uc syntax.UseCaseDecl) (entryPoint string, i
 	}
 	for _, sc := range uc.Scenarios() {
 		trigger := sc.Trigger()
-		if trigger.Kind() == lang.TriggerDomainListen {
+		if k := trigger.Kind(); k == lang.TriggerDomainListen || k == lang.TriggerReceive {
 			add(trigger.ContextName())
 		}
 		for _, action := range sc.Actions() {

@@ -1,0 +1,83 @@
+{
+  "useCases": [
+    {
+      "name": "Adverts are swept for reindexing",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "receive",
+            "connector": "a",
+            "phrase": "reindex sweep",
+            "context": "graphql",
+            "operation": {
+              "payload": "reindexAdverts",
+              "text": "reindexAdverts"
+            },
+            "description": "when graphql receives a reindex sweep [reindexAdverts]",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "ad/graphql"
+            },
+            "line": 7,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "graphql",
+                "targetContext": "atlas",
+                "ref": "atlas",
+                "operation": {
+                  "payload": "getAlladvertstoreindex",
+                  "text": "getAlladvertstoreindex"
+                },
+                "connector": "for",
+                "phrase": "every advert that needs reindexing",
+                "description": "graphql asks atlas for every advert that needs reindexing",
+                "line": 8,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "ad/graphql"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "ad/atlas"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "return_action",
+                "context": "graphql",
+                "connector": "the",
+                "phrase": "advert ids",
+                "description": "graphql returns advert ids",
+                "line": 9,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "ad/graphql"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 6
+    }
+  ],
+  "domains": [
+    {
+      "name": "ad",
+      "boundedContexts": [
+        "graphql",
+        "atlas"
+      ]
+    }
+  ]
+}

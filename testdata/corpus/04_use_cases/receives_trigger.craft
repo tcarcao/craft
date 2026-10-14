@@ -1,0 +1,10 @@
+domain ad {
+    graphql
+    atlas
+}
+
+use_case "Adverts are swept for reindexing" {
+    when graphql receives a reindex sweep                          [reindexAdverts]
+        graphql asks atlas for every advert that needs reindexing  [getAlladvertstoreindex]
+        graphql returns the advert ids
+}

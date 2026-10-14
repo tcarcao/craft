@@ -1421,9 +1421,10 @@ func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
 }
 
 // parseTrigger parses the `<actor/domain> <verb> <phrase>` part after `when`.
-// Two forms:
+// Three forms with a name subject:
 //   - external:      `when <actor> <verb> <phrase>`
 //   - domain_listen: `when <domain> listens "<event>"`
+//   - receive:       `when <ctx> receives [connector] <phrase> [op]`
 func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindTrigger)
 	var diags []model.Diagnostic
@@ -1494,6 +1495,21 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 			p.consumeAs(SyntaxKindString)
 		} else if eventTok.Type == lexer.TokenIdent {
 			p.parseRef()
+		}
+		p.builder.FinishNode()
+		return diags
+	}
+
+	if verb == "receives" {
+		// receive: when <ctx> receives [connector_word] [phrase] [op]
+		p.consumeAs(SyntaxKindKwReceives)
+		if c := p.peek(); c.Type == lexer.TokenIdent && isConnectorWord(c.Value) && c.Line == verbTok.Line {
+			p.consumeAs(SyntaxKindIdent)
+		}
+		start := p.opAnnotationStart(verbTok.Line)
+		p.collectPhrase(verbTok.Line, start)
+		if start >= 0 {
+			diags = append(diags, p.parseOpAnnotation()...)
 		}
 		p.builder.FinishNode()
 		return diags
