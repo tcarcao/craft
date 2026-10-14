@@ -112,18 +112,16 @@ VASMgmt -> VASMgmt : 57. schedules a VAS for future application
 VASMgmt ->> VASMgmt_events : 58. VAS scheduled with subscription included
 VASMgmt_events --> Subscription : 59. VAS scheduled with subscription included
 Subscription -> Subscription : 60. creates a VAS Subscription with the details
-VASMgmt --> VASMgmt : 61. identifies a scheduled VAS to apply
-VASMgmt -> VASMgmt : 62. applies a VAS and stores details until when its valid
-VASMgmt ->> VASMgmt_events : 63. VAS Applied
-VASMgmt --> VASMgmt : 64. identifies a VAS expired
-VASMgmt -> VASMgmt : 65. marks the VAS as expired
-VASMgmt ->> VASMgmt_events : 66. VAS expired
-VASMgmt_events --> Subscription : 67. VAS expired
-Subscription -> Subscription : 68. checks if VAS has active associated subscription
-Subscription ->> VASMgmt : 69. to "schedule/apply a new VAS"
-Subscription -> Subscription : 70. renews the VAS Subscription with the VAS
-Susbscription ->> Susbscription_events : 71. VAS Subscription Renewed
-Business_User --> Subscription : 72. stops the VAS Auto-Renewal
-Subscription -> Subscription : 73. cancels the subscription
+VASMgmt -> VASMgmt : 61. applies a VAS and stores details until when its valid
+VASMgmt ->> VASMgmt_events : 62. VAS Applied
+VASMgmt -> VASMgmt : 63. marks the VAS as expired
+VASMgmt ->> VASMgmt_events : 64. VAS expired
+VASMgmt_events --> Subscription : 65. VAS expired
+Subscription -> Subscription : 66. checks if VAS has active associated subscription
+Subscription ->> VASMgmt : 67. to "schedule/apply a new VAS"
+Subscription -> Subscription : 68. renews the VAS Subscription with the VAS
+Susbscription ->> Susbscription_events : 69. VAS Subscription Renewed
+Business_User --> Subscription : 70. stops the VAS Auto-Renewal
+Subscription -> Subscription : 71. cancels the subscription
 
 @enduml

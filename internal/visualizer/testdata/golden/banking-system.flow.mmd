@@ -27,15 +27,14 @@ flowchart LR
     AccountManagement -- "15. to get current balance" --> BalanceTracking
     BalanceTracking -- "16. calculates available balance" --> BalanceTracking
     AccountManagement -. "17. returns balance information" .-> Customer
-    TransactionValidation -- "18. detects suspicious pattern" --> TransactionValidation
-    TransactionValidation -- "19. to freeze account" --> AccountManagement
-    AccountManagement -- "20. applies security hold" --> AccountManagement
-    TransactionValidation -- "21. Account Frozen" --> TransactionValidation_events
-    TransactionValidation_events -- "22. Account Frozen" --> CustomerNotification
-    CustomerNotification -- "23. sends security alert to customer" --> CustomerNotification
-    CustomerNotification -- "24. bank security team" --> CustomerNotification_events
-    CRON -- "25. triggers scheduled payments" --> PaymentProcessing
-    PaymentProcessing -- "26. to get scheduled payments" --> AccountManagement
-    PaymentProcessing -- "27. processes each scheduled payment" --> PaymentProcessing
-    BalanceTracking -- "28. updates balances for processed payments" --> BalanceTracking
-    PaymentProcessing -- "29. Scheduled Payments Processed" --> PaymentProcessing_events
+    TransactionValidation -- "18. to freeze account" --> AccountManagement
+    AccountManagement -- "19. applies security hold" --> AccountManagement
+    TransactionValidation -- "20. Account Frozen" --> TransactionValidation_events
+    TransactionValidation_events -- "21. Account Frozen" --> CustomerNotification
+    CustomerNotification -- "22. sends security alert to customer" --> CustomerNotification
+    CustomerNotification -- "23. bank security team" --> CustomerNotification_events
+    CRON -- "24. triggers scheduled payments" --> PaymentProcessing
+    PaymentProcessing -- "25. to get scheduled payments" --> AccountManagement
+    PaymentProcessing -- "26. processes each scheduled payment" --> PaymentProcessing
+    BalanceTracking -- "27. updates balances for processed payments" --> BalanceTracking
+    PaymentProcessing -- "28. Scheduled Payments Processed" --> PaymentProcessing_events

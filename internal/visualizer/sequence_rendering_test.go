@@ -106,3 +106,25 @@ use_case "Single" {
 		t.Errorf("mermaid scenarios not framed:\n%s", mmd)
 	}
 }
+
+// The flow view has no note form: a trigger on the actor's own first step adds
+// no edge, since the actor is already connected through the step itself.
+func TestFlow_TriggerOnTheActorItselfAddsNoSelfEdge(t *testing.T) {
+	doc := resolvedDoc(t, `actor user Advisor
+domain obido {
+    concierge
+}
+use_case "Advisor reads a seeker file" {
+    when Advisor opens a seeker file
+        Advisor asks concierge for one seeker file
+}
+`)
+	out, _, err := renderSource(doc, ViewFlow, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "Advisor --> Advisor") {
+		t.Errorf("flow has an actor self-edge:\n%s", out)
+	}
+	requireLine(t, "plantuml", string(out), "Advisor ->> concierge : 1. for one seeker file")
+}

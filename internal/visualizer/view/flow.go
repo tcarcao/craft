@@ -36,6 +36,12 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 	for _, it := range its {
 		switch it.Kind {
 		case interaction.Trigger:
+			if it.From.Key == it.To.Key {
+				// The actor takes the first step itself; that step connects
+				// it, and a flow diagram has no note to carry the trigger.
+				ns.addActor(it.From)
+				continue
+			}
 			add(ns.addActor(it.From), ns.add(it.To), StyleTrigger, it.Label)
 		case interaction.Request:
 			add(ns.add(it.From), ns.add(it.To), StyleCall, it.Label)

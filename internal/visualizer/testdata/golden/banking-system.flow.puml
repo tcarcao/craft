@@ -59,17 +59,16 @@ Customer --> AccountManagement : 14. checks balance
 AccountManagement ->> BalanceTracking : 15. to get current balance
 BalanceTracking -> BalanceTracking : 16. calculates available balance
 AccountManagement --> Customer : 17. returns balance information
-TransactionValidation --> TransactionValidation : 18. detects suspicious pattern
-TransactionValidation ->> AccountManagement : 19. to freeze account
-AccountManagement -> AccountManagement : 20. applies security hold
-TransactionValidation ->> TransactionValidation_events : 21. Account Frozen
-TransactionValidation_events --> CustomerNotification : 22. Account Frozen
-CustomerNotification -> CustomerNotification : 23. sends security alert to customer
-CustomerNotification ->> CustomerNotification_events : 24. bank security team
-CRON --> PaymentProcessing : 25. triggers scheduled payments
-PaymentProcessing ->> AccountManagement : 26. to get scheduled payments
-PaymentProcessing -> PaymentProcessing : 27. processes each scheduled payment
-BalanceTracking -> BalanceTracking : 28. updates balances for processed payments
-PaymentProcessing ->> PaymentProcessing_events : 29. Scheduled Payments Processed
+TransactionValidation ->> AccountManagement : 18. to freeze account
+AccountManagement -> AccountManagement : 19. applies security hold
+TransactionValidation ->> TransactionValidation_events : 20. Account Frozen
+TransactionValidation_events --> CustomerNotification : 21. Account Frozen
+CustomerNotification -> CustomerNotification : 22. sends security alert to customer
+CustomerNotification ->> CustomerNotification_events : 23. bank security team
+CRON --> PaymentProcessing : 24. triggers scheduled payments
+PaymentProcessing ->> AccountManagement : 25. to get scheduled payments
+PaymentProcessing -> PaymentProcessing : 26. processes each scheduled payment
+BalanceTracking -> BalanceTracking : 27. updates balances for processed payments
+PaymentProcessing ->> PaymentProcessing_events : 28. Scheduled Payments Processed
 
 @enduml
