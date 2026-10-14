@@ -34,7 +34,14 @@ Every diagram is now drawn from one derivation of who talks to whom, through vie
 - **Names are safe in diagram source.** Identifiers derive from labels with deterministic de-duplication, so a qualified name such as `re/billing` no longer produces invalid PlantUML; a bounded context displays its bare name unless two drawn contexts share it.
 - **Output is deterministic**, including domain and C4 boundaries-mode diagrams that used to depend on map order.
 
+- **Sequence diagrams show each step's operation annotation** after its label (`frontendplatform -> graphql : for the advert [ad]`). The bracket is the step's wire contract and no diagram showed it.
+- **Scenarios are framed.** When a use case has more than one scenario, each is drawn in a frame titled `<n>: <trigger>` (PlantUML `group … end`, Mermaid a shaded `rect` with a note), so alternatives no longer read as one long chain. A single-scenario use case is drawn as before.
+- **A trigger on the actor's own first step is a note.** `when Advisor opens a seeker file` followed by `Advisor asks concierge …` used to draw a call from the actor to itself. The sequence diagram now draws a note over the actor, and the detailed domain diagram draws no edge for it.
+
 ### Fixed
+- **Trigger labels keep their connector word.** `when Customer places an order` was drawn as "places order" and described as "when Customer places order". `Trigger` gains `Connector` (`connector` in `craft check` JSON), mirroring `Action.Connector`.
+- **A `returns` without `to` answers whoever called the returner**, never the returner itself. After `Ordering asks Billing …`, `Ordering returns …` used to draw Ordering --> Ordering; it now reaches the caller of Ordering. The call stack holds (caller, callee) frames.
+- **Architecture diagrams no longer draw actors as contexts** when an answer goes back to an undeclared name that only ever triggers scenarios (the examples' `Customer`, `User`).
 - **`--focus-context` alone no longer marks every service external** in C4 diagrams. A service that hosts a focused context counts as focused.
 - **Service languages match by whole word.** `javascript` no longer gets the Java icon, and `django` or `mongo` no longer resolve to Go.
 - Domain and sequence diagram generation no longer prints the whole diagram to stdout as a side effect.
