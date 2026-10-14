@@ -2245,8 +2245,8 @@ func TestFormat_NoBlankLineInsideScenarioHead(t *testing.T) {
 }
 
 // A tail comment at the body's column stays in the body even when the last
-// step is indented deeper than the body's first step. (The deeper step is a
-// continuation-free action; the parser accepts it as part of the body.)
+// step is indented deeper than the body's first step. (The deeper step is an
+// ordinary action indented deeper; the parser accepts it as part of the body.)
 func TestFormat_TailCommentMeasuredAgainstBodyColumn(t *testing.T) {
 	in := "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n              x does b\n            // tail\n        x ends\n}\n"
 	want := "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            x does b\n            // tail\n        x ends\n}\n"

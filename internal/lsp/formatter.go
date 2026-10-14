@@ -675,9 +675,9 @@ func opensScenario(tok syntax.SyntaxToken) bool {
 // in the deepest body (innermost first) holding prevReal whose column in
 // the source it reaches. A body's column is that of its first step, which is
 // the column the parser's offside rule measures the body by, so a deeper
-// indented last step does not raise the bar. The caller uses the result only when it is
-// deeper than where the comment would go anyway, so this never pulls a
-// comment out of a body and never moves a step.
+// indented last step does not raise the bar. The caller uses the result only
+// when it is deeper than where the comment would go anyway, so this never
+// pulls a comment out of a body and never moves a step.
 //
 // It is idempotent: once formatted the comment sits exactly at its body's
 // step column, which still reaches that body and no deeper one.
