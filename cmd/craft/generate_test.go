@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGenerateCmd_V2Default(t *testing.T) {
@@ -803,4 +804,27 @@ func TestGenerateCmd_Surface(t *testing.T) {
 			t.Errorf("surface file without a surface: %v", got)
 		}
 	})
+}
+
+// A relative and an absolute input used to loop forever: the common directory
+// of "docs/a.craft" climbed to ".", and Dir(".") is ".". The inputs are made
+// absolute first, so they meet at their real common directory.
+func TestModelBaseName_MixedRelativeAndAbsolute(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan string, 1)
+	go func() { done <- modelBaseName([]string{"testdata/a.craft", filepath.Join(wd, "testdata", "b.craft")}) }()
+	select {
+	case got := <-done:
+		if got != "testdata" {
+			t.Errorf("modelBaseName = %q, want %q", got, "testdata")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("modelBaseName did not return for a relative and an absolute input")
+	}
+	if got := modelBaseName([]string{"docs/a.craft", "/elsewhere/b.craft"}); got != "model" {
+		t.Errorf("no shared directory below the root: modelBaseName = %q, want %q", got, "model")
+	}
 }

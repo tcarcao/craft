@@ -261,17 +261,30 @@ func modelBaseName(files []string) string {
 		name := filepath.Base(files[0])
 		return strings.TrimSuffix(name, filepath.Ext(name))
 	}
-	common := filepath.Dir(files[0])
-	for _, f := range files[1:] {
+	// Absolute paths, so a relative and an absolute input meet at their real
+	// common directory instead of climbing to "." forever.
+	abs := make([]string, len(files))
+	for i, f := range files {
+		a, err := filepath.Abs(f)
+		if err != nil {
+			return "model"
+		}
+		abs[i] = a
+	}
+	common := filepath.Dir(abs[0])
+	for _, f := range abs[1:] {
 		for !isWithin(f, common) {
-			common = filepath.Dir(common)
+			parent := filepath.Dir(common)
+			if parent == common {
+				return "model"
+			}
+			common = parent
 		}
 	}
-	abs, err := filepath.Abs(common)
-	if err != nil || filepath.Base(abs) == string(filepath.Separator) {
+	if filepath.Base(common) == string(filepath.Separator) {
 		return "model"
 	}
-	return filepath.Base(abs)
+	return filepath.Base(common)
 }
 
 // isWithin reports whether path lies inside dir.
