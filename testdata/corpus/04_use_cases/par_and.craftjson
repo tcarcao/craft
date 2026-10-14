@@ -1,0 +1,149 @@
+{
+  "useCases": [
+    {
+      "name": "Seeker reads an advert",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seeker",
+            "verb": "opens",
+            "connector": "an",
+            "phrase": "advert",
+            "description": "when Seeker opens an advert",
+            "subject": {
+              "kind": "actor",
+              "id": "Seeker"
+            },
+            "line": 11,
+            "column": 10
+          },
+          "steps": [
+            {
+              "block": {
+                "id": "block_2",
+                "kind": "par",
+                "line": 12,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "the advert",
+                    "line": 12,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_3",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "adcore",
+                          "ref": "adcore",
+                          "operation": {
+                            "verb": "GET",
+                            "payload": "/ads",
+                            "text": "GET /ads"
+                          },
+                          "connector": "for",
+                          "phrase": "the advert",
+                          "description": "graphql asks adcore for the advert",
+                          "line": 13,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/adcore"
+                          }
+                        }
+                      },
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "atlas",
+                          "ref": "atlas",
+                          "operation": {
+                            "payload": "getAdsMappings",
+                            "text": "getAdsMappings"
+                          },
+                          "connector": "for",
+                          "phrase": "the owner",
+                          "description": "graphql asks atlas for the owner",
+                          "line": 14,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/atlas"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "the statistics",
+                    "line": 15,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_5",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "Dapi",
+                          "ref": "Dapi",
+                          "operation": {
+                            "verb": "GET",
+                            "payload": "/projects/{site}_ad_statistics",
+                            "text": "GET /projects/{site}_ad_statistics"
+                          },
+                          "connector": "for",
+                          "phrase": "the page statistics",
+                          "description": "graphql asks Dapi for the page statistics",
+                          "line": 16,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/Dapi"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 10
+    }
+  ],
+  "domains": [
+    {
+      "name": "ad",
+      "boundedContexts": [
+        "graphql",
+        "adcore",
+        "atlas",
+        "Dapi"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seeker",
+      "type": "user",
+      "line": 1
+    }
+  ]
+}

@@ -1,0 +1,221 @@
+{
+  "useCases": [
+    {
+      "name": "Seeker reads an advert",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seeker",
+            "verb": "opens",
+            "connector": "an",
+            "phrase": "advert",
+            "description": "when Seeker opens an advert",
+            "subject": {
+              "kind": "actor",
+              "id": "Seeker"
+            },
+            "line": 11,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "ad",
+                  "text": "ad"
+                },
+                "connector": "for",
+                "phrase": "the advert",
+                "description": "frontendplatform asks graphql for the advert",
+                "line": 12,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "ad/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "ad/graphql"
+                }
+              }
+            },
+            {
+              "block": {
+                "id": "block_3",
+                "kind": "par",
+                "line": 13,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "field resolvers",
+                    "line": 14,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "atlas",
+                          "ref": "atlas",
+                          "operation": {
+                            "payload": "postSeoadvertsbatch",
+                            "text": "postSeoadvertsbatch"
+                          },
+                          "connector": "for",
+                          "phrase": "the SEO title",
+                          "description": "graphql asks atlas for the SEO title",
+                          "line": 14,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/atlas"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "field resolvers",
+                    "line": 15,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_5",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "atlas",
+                          "ref": "atlas",
+                          "operation": {
+                            "payload": "postAdverttargetingbatch",
+                            "text": "postAdverttargetingbatch"
+                          },
+                          "connector": "for",
+                          "phrase": "the targeting data",
+                          "description": "graphql asks atlas for the targeting data",
+                          "line": 15,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/atlas"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "field resolvers",
+                    "line": 16,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_6",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "atlas",
+                          "ref": "atlas",
+                          "operation": {
+                            "payload": "postAdsourcebatch",
+                            "text": "postAdsourcebatch"
+                          },
+                          "phrase": "where the advert came from",
+                          "description": "graphql asks atlas  where the advert came from",
+                          "line": 16,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/atlas"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "split": true
+              }
+            },
+            {
+              "block": {
+                "id": "block_7",
+                "kind": "loop",
+                "line": 17,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "for each image, until all are signed",
+                    "line": 17,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_8",
+                          "type": "sync_action",
+                          "context": "graphql",
+                          "targetContext": "media",
+                          "ref": "media",
+                          "operation": {
+                            "payload": "signUrl",
+                            "text": "signUrl"
+                          },
+                          "connector": "to",
+                          "phrase": "sign the image URL",
+                          "description": "graphql asks media to sign the image URL",
+                          "line": 18,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "ad/graphql"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "ad/media"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 10
+    }
+  ],
+  "domains": [
+    {
+      "name": "ad",
+      "boundedContexts": [
+        "frontendplatform",
+        "graphql",
+        "atlas",
+        "media"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seeker",
+      "type": "user",
+      "line": 1
+    }
+  ]
+}

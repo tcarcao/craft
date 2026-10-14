@@ -1,0 +1,19 @@
+actor user Seeker
+
+domain ad {
+    frontendplatform
+    graphql
+    atlas
+    media
+}
+
+use_case "Seeker reads an advert" {
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert       [ad]
+        par "field resolvers"
+            graphql asks atlas for the SEO title           [postSeoadvertsbatch]
+            graphql asks atlas for the targeting data      [postAdverttargetingbatch]
+            graphql asks atlas where the advert came from  [postAdsourcebatch]
+        loop "for each image, until all are signed"
+            graphql asks media to sign the image URL       [signUrl]
+}

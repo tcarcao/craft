@@ -237,6 +237,27 @@ func projectNote(n syntax.NoteDecl, id string, li green.LineIndex) model.Note {
 func projectBlock(b syntax.BlockDecl, counter *int, li green.LineIndex) *model.Block {
 	*counter++
 	mb := &model.Block{ID: fmt.Sprintf("block_%d", *counter), Kind: b.Kind(), Branches: []model.Branch{}}
+	if b.IsFanOut() {
+		br := b.Branches()[0]
+		if steps := br.Steps(); len(steps) > 0 {
+			// Fan-out: one concurrent branch per body step, every one carrying
+			// the header's label (spec §4.3). The block keeps the header's
+			// position; each branch takes the line of its step.
+			mb.Split = true
+			if tok := br.HeaderToken(); tok != nil {
+				mb.Line, mb.Column = li.LineCol16(tok.Offset())
+			}
+			for _, st := range steps {
+				mbr := model.Branch{Label: br.Label()}
+				if toks := st.Node().Tokens(); len(toks) > 0 {
+					mbr.Line, _ = li.LineCol(toks[0].Offset())
+				}
+				mbr.Steps = projectSteps([]syntax.StepDecl{st}, counter, li)
+				mb.Branches = append(mb.Branches, mbr)
+			}
+			return mb
+		}
+	}
 	for i, br := range b.Branches() {
 		mbr := model.Branch{Label: br.Label()}
 		// A branch without a header token keeps Line 0 (and, for the first

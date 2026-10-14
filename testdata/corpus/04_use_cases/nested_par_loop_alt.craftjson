@@ -1,0 +1,266 @@
+{
+  "useCases": [
+    {
+      "name": "Owners are reconciled",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "fires",
+            "connector": "the",
+            "phrase": "reconciliation",
+            "description": "when CRON fires the reconciliation",
+            "line": 9,
+            "column": 10
+          },
+          "steps": [
+            {
+              "block": {
+                "id": "block_2",
+                "kind": "loop",
+                "line": 10,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "for each owner",
+                    "line": 10,
+                    "steps": [
+                      {
+                        "block": {
+                          "id": "block_3",
+                          "kind": "par",
+                          "line": 11,
+                          "column": 13,
+                          "branches": [
+                            {
+                              "label": "lookups",
+                              "line": 12,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_4",
+                                    "type": "sync_action",
+                                    "context": "sync",
+                                    "targetContext": "directory",
+                                    "ref": "directory",
+                                    "connector": "for",
+                                    "phrase": "the owner profile",
+                                    "description": "sync asks directory for the owner profile",
+                                    "line": 12,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/sync"
+                                    },
+                                    "to": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/directory"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "label": "lookups",
+                              "line": 13,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_5",
+                                    "type": "sync_action",
+                                    "context": "sync",
+                                    "targetContext": "billing",
+                                    "ref": "billing",
+                                    "connector": "for",
+                                    "phrase": "the owner balance",
+                                    "description": "sync asks billing for the owner balance",
+                                    "line": 13,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/sync"
+                                    },
+                                    "to": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/billing"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ],
+                          "split": true
+                        }
+                      },
+                      {
+                        "block": {
+                          "id": "block_6",
+                          "kind": "alt",
+                          "line": 14,
+                          "column": 13,
+                          "branches": [
+                            {
+                              "label": "found",
+                              "line": 14,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_7",
+                                    "type": "internal_action",
+                                    "context": "sync",
+                                    "verb": "records",
+                                    "connector": "the",
+                                    "phrase": "owner",
+                                    "description": "sync records the owner",
+                                    "line": 15,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/sync"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "label": "missing",
+                              "line": 16,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_8",
+                                    "type": "internal_action",
+                                    "context": "sync",
+                                    "verb": "flags",
+                                    "connector": "the",
+                                    "phrase": "owner",
+                                    "description": "sync flags the owner",
+                                    "line": 17,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/sync"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "block": {
+                "id": "block_9",
+                "kind": "par",
+                "line": 18,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "a",
+                    "line": 18,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_10",
+                          "type": "sync_action",
+                          "context": "sync",
+                          "targetContext": "audit",
+                          "ref": "audit",
+                          "connector": "to",
+                          "phrase": "log the run",
+                          "description": "sync asks audit to log the run",
+                          "line": 19,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "owners/sync"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "owners/audit"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "b",
+                    "line": 20,
+                    "steps": [
+                      {
+                        "block": {
+                          "id": "block_11",
+                          "kind": "opt",
+                          "line": 21,
+                          "column": 13,
+                          "branches": [
+                            {
+                              "label": "the run had flags",
+                              "line": 21,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_12",
+                                    "type": "async_action",
+                                    "context": "sync",
+                                    "event": "the",
+                                    "ref": "the",
+                                    "description": "sync notifies \"the\"",
+                                    "line": 22,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "owners/sync"
+                                    }
+                                  }
+                                },
+                                {
+                                  "action": {
+                                    "id": "action_13",
+                                    "type": "internal_action",
+                                    "context": "owners",
+                                    "verb": "team",
+                                    "description": "owners team",
+                                    "line": 22,
+                                    "column": 35,
+                                    "from": {
+                                      "kind": "domain",
+                                      "id": "owners"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 8
+    }
+  ],
+  "domains": [
+    {
+      "name": "owners",
+      "boundedContexts": [
+        "sync",
+        "directory",
+        "billing",
+        "audit"
+      ]
+    }
+  ]
+}

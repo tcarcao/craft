@@ -1,0 +1,13 @@
+actor system CRON
+
+domain obido {
+    otodomintegration
+    obido
+}
+
+use_case "Promotions are synced" {
+    when cron "0 * * * *"
+        loop "for each ad id of one investment"
+            otodomintegration asks obido for the promotion  [getPromotion]
+            otodomintegration records the promotion
+}

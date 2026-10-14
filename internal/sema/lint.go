@@ -55,6 +55,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
 	diags = append(diags, lintIndistinguishableScenarios(perFileTrees, lis)...)
 	diags = append(diags, lintAmbiguousUseCaseRefs(perFileTrees, ws, lis)...)
+	diags = append(diags, lintSingleBranchPar(perFileTrees, lis)...)
 	return diags
 }
 
@@ -614,5 +615,51 @@ func LintCommunication(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSy
 		})
 	}
 
+	return diags
+}
+
+// ── single-branch-par ─────────────────────────────────────────────────────────
+// Warning: a par without `and` whose body has exactly one step: nothing in it
+// runs concurrently.
+
+func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		var walk func([]syntax.StepDecl)
+		walk = func(steps []syntax.StepDecl) {
+			for _, st := range steps {
+				b, ok := st.Block()
+				if !ok {
+					continue
+				}
+				brs := b.Branches()
+				if b.IsFanOut() && len(brs[0].Steps()) == 1 {
+					if tok := brs[0].HeaderToken(); tok != nil {
+						line, col := li.LineCol16(tok.Offset())
+						start := colToLSP(col)
+						diags = append(diags, model.Diagnostic{
+							Code:      "craft/lint/single-branch-par",
+							Message:   "this `par` has one step, so nothing in it runs concurrently; drop the `par` or add the steps that run alongside it",
+							Severity:  model.SeverityWarning,
+							SourceURI: uri,
+							Range: model.Range{
+								Start: model.Position{Line: lineToLSP(line), Character: start},
+								End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(tok.Text())},
+							},
+						})
+					}
+				}
+				for _, br := range brs {
+					walk(br.Steps())
+				}
+			}
+		}
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				walk(sc.Steps())
+			}
+		}
+	}
 	return diags
 }

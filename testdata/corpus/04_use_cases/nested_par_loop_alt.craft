@@ -1,0 +1,23 @@
+domain owners {
+    sync
+    directory
+    billing
+    audit
+}
+
+use_case "Owners are reconciled" {
+    when CRON fires the reconciliation
+        loop "for each owner"
+            par "lookups"
+                sync asks directory for the owner profile
+                sync asks billing for the owner balance
+            alt "found"
+                sync records the owner
+            else "missing"
+                sync flags the owner
+        par "a"
+            sync asks audit to log the run
+        and "b"
+            opt "the run had flags"
+                sync notifies the owners team
+}

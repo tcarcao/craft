@@ -1,0 +1,17 @@
+actor user Seeker
+
+domain ad {
+    graphql
+    adcore
+    atlas
+    Dapi
+}
+
+use_case "Seeker reads an advert" {
+    when Seeker opens an advert
+        par "the advert"
+            graphql asks adcore for the advert         [GET /ads]
+            graphql asks atlas for the owner           [getAdsMappings]
+        and "the statistics"
+            graphql asks Dapi for the page statistics  [GET /projects/{site}_ad_statistics]
+}

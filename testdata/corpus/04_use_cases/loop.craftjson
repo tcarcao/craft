@@ -1,0 +1,103 @@
+{
+  "useCases": [
+    {
+      "name": "Promotions are synced",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "schedule": "0 * * * *",
+            "scheduleKind": "cron",
+            "description": "when cron \"0 * * * *\"",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 9,
+            "column": 10
+          },
+          "steps": [
+            {
+              "block": {
+                "id": "block_2",
+                "kind": "loop",
+                "line": 10,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "for each ad id of one investment",
+                    "line": 10,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_3",
+                          "type": "sync_action",
+                          "context": "otodomintegration",
+                          "targetContext": "obido",
+                          "ref": "obido",
+                          "operation": {
+                            "payload": "getPromotion",
+                            "text": "getPromotion"
+                          },
+                          "connector": "for",
+                          "phrase": "the promotion",
+                          "description": "otodomintegration asks obido for the promotion",
+                          "line": 11,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "obido/otodomintegration"
+                          },
+                          "to": {
+                            "kind": "bounded_context",
+                            "id": "obido/obido"
+                          }
+                        }
+                      },
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "internal_action",
+                          "context": "otodomintegration",
+                          "verb": "records",
+                          "connector": "the",
+                          "phrase": "promotion",
+                          "description": "otodomintegration records the promotion",
+                          "line": 12,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "obido/otodomintegration"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 8
+    }
+  ],
+  "domains": [
+    {
+      "name": "obido",
+      "boundedContexts": [
+        "otodomintegration",
+        "obido"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}
