@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/green"
-
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -298,7 +297,9 @@ func containsStr(s, sub string) bool {
 
 func indistinguishable(t *testing.T, src string) []string {
 	t.Helper()
-	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	g, li, _ := syntax.Parse(src)
+	uri := "file:///test.craft"
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{uri: syntax.Root(g)}, wsWithActors(), map[string]green.LineIndex{uri: li})
 	var out []string
 	for _, d := range diags {
 		if d.Code == "craft/lint/indistinguishable-scenarios" {
@@ -320,6 +321,12 @@ func TestLint_IndistinguishableScenarios(t *testing.T) {
 		{"whitespace only", "use_case \"U\" {\n  when A  does   x\n    S1 acts\n  when A does x\n    S2 acts\n}\n", 1},
 		{"separate use cases", "use_case \"U\" {\n  when A does x\n    S1 acts\n}\nuse_case \"V\" {\n  when A does x\n    S2 acts\n}\n", 0},
 		{"listens repeated", "use_case \"U\" {\n  when x listens e.E\n    S1 acts\n  when x listens e.E\n    S2 acts\n}\n", 1},
+		{"named then unnamed warns on 2nd", "use_case \"U\" {\n  scenario \"one\"\n  when A does x\n    S1 acts\n  when A does x\n    S2 acts\n}\n", 1},
+		{"unnamed then named warns on 2nd", "use_case \"U\" {\n  when A does x\n    S1 acts\n  scenario \"two\"\n  when A does x\n    S2 acts\n}\n", 1},
+		{"named unnamed named warns on 2nd and 3rd", "use_case \"U\" {\n  scenario \"one\"\n  when A does x\n    S1 acts\n  when A does x\n    S2 acts\n  scenario \"three\"\n  when A does x\n    S3 acts\n}\n", 2},
+		{"three-way unnamed repeat", "use_case \"U\" {\n  when A does x\n    S1 acts\n  when A does x\n    S2 acts\n  when A does x\n    S3 acts\n}\n", 2},
+		{"orphan scenario line ignored", "use_case \"U\" {\n  when A does x\n    S1 acts\n  scenario \"x\"\n}\n", 0},
+		{"trailing comment on trigger", "use_case \"U\" {\n  when A does x // first\n    S1 acts\n  when A does x\n    S2 acts\n}\n", 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

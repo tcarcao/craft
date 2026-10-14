@@ -249,6 +249,9 @@ func lintIndistinguishableScenarios(perFileTrees map[string]syntax.SyntaxNode, l
 		li := lis[uri]
 		file := syntax.AsFile(perFileTrees[uri])
 		for _, uc := range file.UseCases() {
+			if len(uc.Scenarios()) < 2 {
+				continue
+			}
 			// seen maps a normalised trigger to "some earlier scenario with it is unnamed".
 			seen := map[string]bool{}
 			for _, sc := range uc.Scenarios() {
