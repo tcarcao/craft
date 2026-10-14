@@ -696,3 +696,41 @@ func TestSequence_InboundEventNamesItsPublishers(t *testing.T) {
 		t.Errorf("plantuml: %d inbound arrows, want one per listening scenario (4):\n%s", n, puml)
 	}
 }
+
+const notesSrc = `actor user Seller
+domain payments {
+    frontendplatform
+    graphql
+    paymentgateway
+}
+use_case "Seller pays an invoice" {
+    finding "nothing retries a failed callback; a lost callback leaves the invoice open"
+    when Seller pays an invoice
+        frontendplatform asks graphql to pay  [payInvoice]
+        note "the gateway forwards the seller's session, not a service token"
+        graphql asks paymentgateway to start the payment  [POST /payments]
+        finding "no idempotency key: a client retry starts a second payment"
+}
+`
+
+func TestSequence_NotesAndFindings(t *testing.T) {
+	puml, mmd := sequenceSource(t, notesSrc)
+	for _, want := range []string{
+		"note over Seller, paymentgateway #FFE4E1 : Finding: nothing retries a failed callback; a lost callback leaves the invoice open",
+		"note over frontendplatform, graphql : the gateway forwards the seller's session, not a service token",
+		"note over graphql, paymentgateway #FFE4E1 : Finding: no idempotency key: a client retry starts a second payment",
+	} {
+		requireLine(t, "plantuml", puml, want)
+	}
+	for _, want := range []string{
+		"Note over Seller,paymentgateway: Finding: nothing retries a failed callback, a lost callback leaves the invoice open",
+		"Note over frontendplatform,graphql: the gateway forwards the seller's session, not a service token",
+		"Note over graphql,paymentgateway: Finding: no idempotency key: a client retry starts a second payment",
+	} {
+		requireLine(t, "mermaid", mmd, want)
+	}
+	// The use-case finding comes before the trigger.
+	if strings.Index(puml, "Finding: nothing retries") > strings.Index(puml, "Seller -> frontendplatform") {
+		t.Errorf("use-case-level finding must open the section:\n%s", puml)
+	}
+}

@@ -109,7 +109,9 @@ func Sequence(s view.Sequence) string {
 				}
 				if m.Scenario != "" {
 					b.WriteString("    rect rgb(245, 245, 245)\n")
-					fmt.Fprintf(&b, "    Note over %s: %s\n", spanAll(s, al), strings.ReplaceAll(m.Scenario, ";", ","))
+					if span := noteOver(s, nil, al, ","); span != "" {
+						fmt.Fprintf(&b, "    Note over %s: %s\n", span, strings.ReplaceAll(m.Scenario, ";", ","))
+					}
 				}
 				group = m.Scenario
 			}
@@ -122,6 +124,15 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "    %s->>%s: %s\n", external, al.of(m.To), label)
 			case view.MessageNote:
 				fmt.Fprintf(&b, "    Note over %s: %s\n", al.of(m.From), label)
+			case view.MessageStepNote, view.MessageFinding:
+				over := noteOver(s, m.Over, al, ",")
+				if over == "" {
+					continue
+				}
+				if m.Kind == view.MessageFinding {
+					label = "Finding: " + label
+				}
+				fmt.Fprintf(&b, "    Note over %s: %s\n", over, label)
 			case view.MessageReply:
 				fmt.Fprintf(&b, "    %s-->>%s: %s\n", al.of(m.From), al.of(m.To), label)
 			case view.MessageAsync:
@@ -154,10 +165,22 @@ func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 	}
 }
 
-// spanAll is the participant range a note across the whole diagram covers.
-func spanAll(s view.Sequence, al *aliases) string {
-	if len(s.Participants) > 1 {
-		return al.of(s.Participants[0].ID) + "," + al.of(s.Participants[len(s.Participants)-1].ID)
+// noteOver spells the participants a note is drawn over: the listed ones, or
+// the first and last participant of the diagram when the list is empty. It is
+// "" when the diagram has no participant.
+func noteOver(s view.Sequence, over []string, al *aliases, sep string) string {
+	if len(over) == 0 {
+		switch len(s.Participants) {
+		case 0:
+			return ""
+		case 1:
+			return al.of(s.Participants[0].ID)
+		}
+		over = []string{s.Participants[0].ID, s.Participants[len(s.Participants)-1].ID}
 	}
-	return al.of(s.Participants[0].ID)
+	names := make([]string, len(over))
+	for i, id := range over {
+		names[i] = al.of(id)
+	}
+	return strings.Join(names, sep)
 }

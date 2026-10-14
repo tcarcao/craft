@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -74,6 +75,7 @@ use_case "Checkout" {
     when Customer places an order
         Ordering asks Billing to first
         alt "a"
+            note "x"
             alt "a-inner"
                 Billing asks Ordering to second
             else "a-inner-empty"
@@ -85,6 +87,7 @@ use_case "Checkout" {
             opt "c-inner"
                 Ordering asks Billing to fifth
         Ordering asks Billing to sixth
+        finding "y"
     scenario "phone order"
     when Customer phones in an order
         alt "x"
@@ -115,7 +118,7 @@ use_case "Checkout" {
 		}
 		var got []Message
 		for _, m := range seq.Sections[0].Messages {
-			if m.Scenario == title && m.Kind != MessageNone {
+			if m.Scenario == title && m.Kind != MessageNone && m.Kind != MessageStepNote && m.Kind != MessageFinding {
 				got = append(got, m)
 			}
 		}
@@ -165,5 +168,54 @@ use_case "Checkout" {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestNotes_AnchorOverThePreviousMessage(t *testing.T) {
+	src := `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+use_case "U" {
+    finding "use-case level"
+    when Customer places an order
+        note "after the trigger"
+        Ordering asks Billing to charge
+        alt "declined"
+            Billing returns the refusal
+        note "after the block"
+        opt "audit"
+            note "only a note"
+    when "Order Placed"
+        note "nothing drawn yet"
+        Ordering records it
+}
+`
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("t.craft", src)}).Doc
+	seq := BuildSequence(doc, interaction.Derive(doc))
+	type got struct {
+		kind  MessageKind
+		label string
+		over  string
+	}
+	var notes []got
+	for _, m := range seq.Sections[0].Messages {
+		if m.Kind == MessageNone {
+			t.Errorf("unexpected MessageNone: a branch holding only a note is not empty")
+		}
+		if m.Kind == MessageStepNote || m.Kind == MessageFinding {
+			notes = append(notes, got{m.Kind, m.Label, strings.Join(m.Over, ",")})
+		}
+	}
+	want := []got{
+		{MessageFinding, "use-case level", ""},
+		{MessageStepNote, "after the trigger", "Customer,shop/Ordering"},
+		{MessageStepNote, "after the block", "shop/Billing,shop/Ordering"},
+		{MessageStepNote, "only a note", "shop/Billing,shop/Ordering"},
+		{MessageStepNote, "nothing drawn yet", ""},
+	}
+	if !slices.Equal(notes, want) {
+		t.Errorf("notes:\n%v\nwant:\n%v", notes, want)
 	}
 }

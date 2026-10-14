@@ -34,6 +34,10 @@ const (
 	MessageAsync   MessageKind = "async"   // publish: drawn on the publisher's own lifeline
 	MessageInbound MessageKind = "inbound" // an event arriving from outside the section
 	MessageNote    MessageKind = "note"    // what an actor does, drawn over its own lifeline
+	// MessageStepNote is a `note` line and MessageFinding a `finding` line,
+	// drawn over the participants in Over.
+	MessageStepNote MessageKind = "step-note"
+	MessageFinding  MessageKind = "finding"
 	// MessageNone draws nothing. It stands for a branch that adds no message
 	// (no drawable interaction, or only an inbound event already drawn), so
 	// writers still open (or switch to) that branch: an empty outcome is still
@@ -57,6 +61,9 @@ type Message struct {
 	// close native blocks from the change between consecutive messages (see
 	// BlockOps).
 	Branch []BranchRef
+	// Over lists the participant IDs a MessageStepNote or MessageFinding is
+	// drawn over; empty means across the diagram (first to last participant).
+	Over []string
 }
 
 // BranchRef locates a message inside one branch of a block.
@@ -153,8 +160,15 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 
 	for ui, uc := range doc.UseCases {
 		idx := byUseCase[uc.Name]
+		// Use-case-level notes open the section, across the diagram.
+		for _, n := range uc.Notes {
+			b.seq.Sections[idx].Messages = append(b.seq.Sections[idx].Messages, Message{Kind: noteKind(n), Label: n.Text})
+		}
 		for i, sc := range uc.Scenarios {
-			l := scenarioLayout{b: &b, idx: idx, bySteps: byScenario[scenarioKey{ui, sc.ID}]}
+			l := scenarioLayout{
+				b: &b, idx: idx, bySteps: byScenario[scenarioKey{ui, sc.ID}],
+				start: len(b.seq.Sections[idx].Messages),
+			}
 			if len(uc.Scenarios) > 1 {
 				l.title = scenarioTitle(i, sc)
 			}
@@ -287,6 +301,8 @@ type scenarioLayout struct {
 	title   string // frame title; "" for a use case with one scenario
 	bySteps map[int][]interaction.Interaction
 	step    int // actions seen so far, numbered as interaction numbers them
+	// start is the index of the scenario's first message in the section.
+	start int
 	// opensBlock is true when the scenario's first step is a block. Its
 	// triggers are then not drawn up front (see emit).
 	opensBlock bool
@@ -351,6 +367,8 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 			// TestSequenceStepsMatchInteractionSteps guards the pairing.
 			l.step++
 			l.emit(l.step)
+		case st.Note != nil:
+			l.note(*st.Note, path)
 		case st.Block != nil:
 			skip = skip || (len(path) == 0 && i == 0 && l.opensBlock && st.Block.Kind == lang.BlockOpt)
 			for bi, br := range st.Block.Branches {
@@ -364,6 +382,47 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 			}
 		}
 	}
+}
+
+// noteKind is the message kind that draws n.
+func noteKind(n model.Note) MessageKind {
+	if n.Kind == model.NoteKindFinding {
+		return MessageFinding
+	}
+	return MessageStepNote
+}
+
+// note draws a note over the participants of the last message drawn before it
+// in this scenario (spec §5.4 anchor rule).
+func (l *scenarioLayout) note(n model.Note, path []BranchRef) {
+	sec := &l.b.seq.Sections[l.idx]
+	sec.Messages = append(sec.Messages, Message{
+		Kind: noteKind(n), Label: n.Text, Scenario: l.title,
+		Branch: slices.Clone(path), Over: l.anchor(),
+	})
+}
+
+// anchor returns the participants of the last drawn message of this scenario:
+// From and To, deduplicated; only To for a message from outside the section,
+// only From for what an actor does itself. Nil when nothing has been drawn yet.
+func (l *scenarioLayout) anchor() []string {
+	msgs := l.b.seq.Sections[l.idx].Messages
+	for i := len(msgs) - 1; i >= l.start; i-- {
+		m := msgs[i]
+		switch m.Kind {
+		case MessageNone, MessageStepNote, MessageFinding:
+			continue
+		case MessageInbound:
+			return []string{m.To}
+		case MessageNote:
+			return []string{m.From}
+		}
+		if m.From == m.To {
+			return []string{m.From}
+		}
+		return []string{m.From, m.To}
+	}
+	return nil
 }
 
 // scenarioTitle titles the i-th scenario's frame: its name, else its trigger.

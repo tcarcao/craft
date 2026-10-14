@@ -231,6 +231,16 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "[-> %s : %s\n", al.of(m.To), m.Label)
 			case view.MessageNote:
 				fmt.Fprintf(&b, "note over %s : %s\n", al.of(m.From), m.Label)
+			case view.MessageStepNote, view.MessageFinding:
+				over := noteOver(s, m.Over, al, ", ")
+				if over == "" {
+					continue
+				}
+				colour, label := "", m.Label
+				if m.Kind == view.MessageFinding {
+					colour, label = " #FFE4E1", "Finding: "+m.Label
+				}
+				fmt.Fprintf(&b, "note over %s%s : %s\n", over, colour, label)
 			case view.MessageReply:
 				fmt.Fprintf(&b, "%s --> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
 			case view.MessageAsync:
@@ -247,6 +257,25 @@ func Sequence(s view.Sequence) string {
 	}
 	b.WriteString("@enduml")
 	return b.String()
+}
+
+// noteOver spells the participants a note is drawn over: the listed ones, or
+// the first and last participant of the diagram when the list is empty.
+func noteOver(s view.Sequence, over []string, al *aliases, sep string) string {
+	if len(over) == 0 {
+		switch len(s.Participants) {
+		case 0:
+			return ""
+		case 1:
+			return al.of(s.Participants[0].ID)
+		}
+		over = []string{s.Participants[0].ID, s.Participants[len(s.Participants)-1].ID}
+	}
+	names := make([]string, len(over))
+	for i, id := range over {
+		names[i] = al.of(id)
+	}
+	return strings.Join(names, sep)
 }
 
 // writeBlockOps draws alt/opt block lines. A close is a bare end: its
