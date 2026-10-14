@@ -21,7 +21,7 @@ func nodeLines(node syntax.SyntaxNode, li green.LineIndex) (int, int) {
 	return start, end
 }
 
-func lineRange(start, end int) protocol.Range {
+func symbolLineRange(start, end int) protocol.Range {
 	return protocol.Range{
 		Start: protocol.Position{Line: lspLine(start)},
 		End:   protocol.Position{Line: lspLine(max(end, start))},
@@ -55,13 +55,13 @@ func blockSymbols(steps []syntax.StepDecl, li green.LineIndex) []protocol.Docume
 		for _, br := range b.Branches() {
 			children = append(children, blockSymbols(br.Steps(), li)...)
 		}
-		r := lineRange(start, end)
+		r := symbolLineRange(start, end)
 		out = append(out, protocol.DocumentSymbol{
 			Name:           blockSymbolName(b),
 			Kind:           protocol.SymbolKindEnumMember,
 			Detail:         string(b.Kind()),
 			Range:          r,
-			SelectionRange: lineRange(start, start),
+			SelectionRange: symbolLineRange(start, start),
 			Children:       children,
 		})
 	}
@@ -80,15 +80,16 @@ func scenarioSymbols(uc syntax.UseCaseDecl, li green.LineIndex) []protocol.Docum
 		start, end := nodeLines(sc.Node(), li)
 		name := sc.Name()
 		if name == "" {
-			whenLine, _ := li.LineCol(when.Offset())
-			name = strings.TrimSpace(strings.Split(li.Src(), "\n")[whenLine-1])
+			name = "when " + sc.Trigger().SourceText()
 		}
+		// Kinds: a scenario is a named behaviour of its use case (Method); a
+		// block is one of a closed set of branch variants (EnumMember).
 		out = append(out, protocol.DocumentSymbol{
 			Name:           name,
 			Kind:           protocol.SymbolKindMethod,
 			Detail:         "scenario",
-			Range:          lineRange(start, end),
-			SelectionRange: lineRange(start, start),
+			Range:          symbolLineRange(start, end),
+			SelectionRange: symbolLineRange(start, start),
 			Children:       blockSymbols(sc.Steps(), li),
 		})
 	}

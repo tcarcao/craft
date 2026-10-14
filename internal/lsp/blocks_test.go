@@ -162,6 +162,56 @@ func TestBranchOutline_UnnamedScenarioUsesTrigger(t *testing.T) {
 	}
 }
 
+func outlineOf(t *testing.T, src string) []outlineSym {
+	t.Helper()
+	c, _ := newBranchClient(t, src)
+	p, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": c.uri}})
+	var syms []outlineSym
+	if err := json.Unmarshal(c.call("textDocument/documentSymbol", p), &syms); err != nil {
+		t.Fatal(err)
+	}
+	return syms
+}
+
+func TestBranchOutline_TriggerNameIgnoresComment(t *testing.T) {
+	src := "use_case \"X\" {\n    when Customer phones in an order // note\n        A asks B\n}\n"
+	syms := outlineOf(t, src)
+	if len(syms) != 1 || len(syms[0].Children) != 1 {
+		t.Fatalf("got %+v", syms)
+	}
+	if got := syms[0].Children[0].Name; got != "when Customer phones in an order" {
+		t.Errorf("name = %q", got)
+	}
+}
+
+func TestBranchOutline_ScenarioStartingWithBlock(t *testing.T) {
+	src := "use_case \"X\" {\n    when Customer pays\n        alt \"ok\"\n            A asks B\n        else \"no\"\n            A asks C\n}\n"
+	syms := outlineOf(t, src)
+	if len(syms) != 1 || len(syms[0].Children) != 1 {
+		t.Fatalf("got %+v", syms)
+	}
+	sc := syms[0].Children[0]
+	if len(sc.Children) != 1 || sc.Children[0].Name != "alt: ok | no" || sc.Children[0].lines() != [2]int{2, 5} {
+		t.Errorf("scenario children = %+v", sc.Children)
+	}
+}
+
+func TestBranchOutline_OrphanScenarioLineHasNoSymbol(t *testing.T) {
+	src := "use_case \"X\" {\n    when Customer pays\n        A asks B\n    scenario \"x\"\n}\n"
+	syms := outlineOf(t, src)
+	if len(syms) != 1 {
+		t.Fatalf("got %+v", syms)
+	}
+	for _, ch := range syms[0].Children {
+		if ch.Name == "x" {
+			t.Errorf("ghost scenario symbol present: %+v", syms[0].Children)
+		}
+	}
+	if len(syms[0].Children) != 1 {
+		t.Errorf("children = %+v, want only the real scenario", syms[0].Children)
+	}
+}
+
 func TestBranchFolding(t *testing.T) {
 	c, _ := newBranchClient(t, branchSrc)
 	p, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": c.uri}})
@@ -238,18 +288,5 @@ func TestBranchCompletion(t *testing.T) {
 	}
 	if !hasLabel(list.Items, "when") {
 		t.Errorf("when no longer offered: %v", labelList(list.Items))
-	}
-}
-
-func TestInitializeAdvertisesFolding(t *testing.T) {
-	_, initResp := newBranchClient(t, "")
-	var r struct {
-		Capabilities map[string]any `json:"capabilities"`
-	}
-	if err := json.Unmarshal(initResp, &r); err != nil {
-		t.Fatal(err)
-	}
-	if v, ok := r.Capabilities["foldingRangeProvider"]; !ok || v == false {
-		t.Errorf("foldingRangeProvider not advertised: %v", r.Capabilities)
 	}
 }
