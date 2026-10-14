@@ -388,6 +388,9 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	}
 
 	toks := node.AllTokens()
+	// tokIndex maps a token's offset to its index in toks. keepInBody builds
+	// it on first use, so a declaration with no blocks never pays for it.
+	var tokIndex map[int]int
 	for i, tok := range toks {
 		if tok.Kind() == syntax.SyntaxKindEOF {
 			continue
@@ -415,8 +418,22 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// line, which is the same comment re-indentation this lookahead exists
 		// to remove.
 		startsOwnLine := prev == nil || strings.Contains(gap, "\n")
+
+		// A full-line comment after the last step of a branch body may be
+		// indented under that body even though the parser attached it to the
+		// dedented line below. keepInBody answers that; a comment it keeps in
+		// a body does not lead the next scenario.
+		blockDepth := branchDepth(tok)
+		keptInBody := false
+		if isCommentKind(tok.Kind()) && startsOwnLine && prevReal != nil && braceDepth == 1 {
+			if d := keepInBody(toks, i, *prevReal, &tokIndex); d > blockDepth {
+				blockDepth = d
+				keptInBody = true
+			}
+		}
+
 		leadsScenario := isCommentKind(tok.Kind()) && braceDepth == 1 &&
-			startsOwnLine && nextRealTokenOpensScenario(toks, i)
+			startsOwnLine && !keptInBody && nextRealTokenOpensScenario(toks, i)
 
 		// A `when` at the use_case's own brace depth closes any scenario body
 		// that was open (it, the leading comment above, and the enclosing `}`
@@ -482,7 +499,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// depends on the author's columns, and a refused parse (any §3.2
 		// diagnostic) never gets here, so the tree's block membership is the
 		// one the author's offside layout meant.
-		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth+branchDepth(tok), startsScenario, cfg, continuing)
+		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth+blockDepth, startsScenario, cfg, continuing)
 		sb.WriteString(sep)
 		sb.WriteString(tok.Text())
 
@@ -620,6 +637,108 @@ func opensScenario(tok syntax.SyntaxToken) bool {
 	return false
 }
 
+// sourceTabWidth is the tab stop the parser's offside rule uses (a tab
+// advances to the next multiple of 4). keepInBody compares source columns the
+// way the parser does, so it uses the same width.
+const sourceTabWidth = 4
+
+// keepInBody returns the branch depth at which the full-line comment toks[i]
+// stays, when it follows the last step of a branch body, or -1.
+//
+// The parser attaches a comment to the line below it, so a comment written
+// under the last step of a body, before a dedent, would follow the dedent
+// out of the body. The author's columns say otherwise: the comment is kept
+// in the deepest body (innermost first) holding prevReal whose step column
+// in the source it reaches. The caller uses the result only when it is
+// deeper than where the comment would go anyway, so this never pulls a
+// comment out of a body and never moves a step.
+//
+// It is idempotent: once formatted the comment sits exactly at its body's
+// step column, which still reaches that body and no deeper one.
+func keepInBody(toks []syntax.SyntaxToken, i int, prevReal syntax.SyntaxToken, tokIndex *map[int]int) int {
+	if branchDepth(prevReal) == 0 {
+		return -1
+	}
+	col := lineIndentAt(toks, i)
+	below := (*syntax.SyntaxNode)(nil)
+	for n := prevReal.Parent(); n != nil; below, n = n, n.Parent() {
+		switch n.Kind() {
+		case syntax.SyntaxKindScenario, syntax.SyntaxKindUseCaseDecl:
+			return -1
+		case syntax.SyntaxKindBranch:
+			// below is the step of this body that holds prevReal, unless
+			// prevReal is in the branch's own header.
+			if below == nil || below.Kind() == syntax.SyntaxKindBranchHeader {
+				continue
+			}
+			first, ok := firstRealToken(*below)
+			if !ok {
+				continue
+			}
+			if *tokIndex == nil {
+				*tokIndex = make(map[int]int, len(toks))
+				for k, t := range toks {
+					(*tokIndex)[int(t.Offset())] = k
+				}
+			}
+			k, ok := (*tokIndex)[int(first.Offset())]
+			if !ok {
+				continue
+			}
+			if lineIndentAt(toks, k) <= col {
+				return branchDepth(first)
+			}
+		}
+	}
+	return -1
+}
+
+// firstRealToken returns the first token of n that is neither whitespace nor
+// a comment.
+func firstRealToken(n syntax.SyntaxNode) (syntax.SyntaxToken, bool) {
+	for el := range n.ChildrenIter() {
+		switch e := el.(type) {
+		case syntax.SyntaxNode:
+			if t, ok := firstRealToken(e); ok {
+				return t, true
+			}
+		case syntax.SyntaxToken:
+			if k := e.Kind(); k != syntax.SyntaxKindWhitespace && !isCommentKind(k) {
+				return e, true
+			}
+		}
+	}
+	return syntax.SyntaxToken{}, false
+}
+
+// lineIndentAt returns the source indentation of the line toks[i] is on, as
+// a visual column with tabs at sourceTabWidth, 0-based.
+func lineIndentAt(toks []syntax.SyntaxToken, i int) int {
+	var parts []string
+	for j := i - 1; j >= 0; j-- {
+		t := toks[j].Text()
+		if k := strings.LastIndexByte(t, '\n'); k >= 0 {
+			parts = append(parts, t[k+1:])
+			break
+		}
+		parts = append(parts, t)
+	}
+	col := 0
+	for j := len(parts) - 1; j >= 0; j-- {
+		for _, r := range parts[j] {
+			switch r {
+			case '\t':
+				col = (col/sourceTabWidth + 1) * sourceTabWidth
+			case ' ':
+				col++
+			default:
+				return col
+			}
+		}
+	}
+	return col
+}
+
 // branchDepth is the number of alt/opt branch bodies tok sits in. A header
 // line (`alt`, `opt`, `else` and its label) sits at its block's own level,
 // one less than its body, so `else` aligns with its `alt`.
@@ -627,7 +746,9 @@ func opensScenario(tok syntax.SyntaxToken) bool {
 // Comments are answered from their own place in the tree too. The parser
 // attaches leading trivia to the node of the token after it, so a full-line
 // comment indents with the line below it: inside a body when a body step
-// follows, at the header's level when an `else` follows. A trailing comment
+// follows, at the header's level when an `else` follows. The one exception
+// is a comment after a body's last step that the author indented under that
+// body; keepInBody handles it. A trailing comment
 // takes no indent, so whatever its node says is never written.
 func branchDepth(tok syntax.SyntaxToken) int {
 	d := 0

@@ -2123,3 +2123,69 @@ func TestFormat_BranchFixturesRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// A full-line comment after the last step of a branch body, before a dedent,
+// stays in the deepest body whose step column it reaches in the source.
+// Otherwise it follows the line below it, as before. Steps never move.
+func TestFormat_TrailingCommentsKeepTheirBranchBody(t *testing.T) {
+	cases := map[string]struct{ in, want string }{
+		"(a) tail stays in the body": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      x does a\n      // tail of one\n    x ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            // tail of one\n        x ends\n}\n",
+		},
+		"(a) before else, when and }": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      x does a\n      // end of one\n    else \"two\"\n      x does b\n      // end of two\n  when O does other\n    opt \"three\"\n      x does c\n      // end of three\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            // end of one\n        else \"two\"\n            x does b\n            // end of two\n\n    when O does other\n        opt \"three\"\n            x does c\n            // end of three\n}\n",
+		},
+		"(b) outer column goes to the outer level": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      x does a\n    // about the end\n    x ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n        // about the end\n        x ends\n}\n",
+		},
+		"(b) between columns follows the next line": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n        x does a\n      // between\n    x ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n        // between\n        x ends\n}\n",
+		},
+		"(c) nested close of two levels": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      x does a\n      opt \"two\"\n        x does b\n      // still in one\n    x ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            opt \"two\"\n                x does b\n            // still in one\n        x ends\n}\n",
+		},
+		"(c) nested, innermost and outer in one run": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      opt \"two\"\n        x does b\n        // in two\n      // in one\n    // at scenario level\n    x ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            opt \"two\"\n                x does b\n                // in two\n            // in one\n        // at scenario level\n        x ends\n}\n",
+		},
+		"(e) blank line before the comment survives": {
+			in:   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      x does a\n\n      // after a gap\n    x ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n\n            // after a gap\n        x ends\n}\n",
+		},
+		"tab-indented tail": {
+			in:   "use_case \"U\" {\n\twhen O does it\n\t\talt \"one\"\n\t\t\tx does a\n\t\t\t// tail\n\t\tx ends\n}\n",
+			want: "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            // tail\n        x ends\n}\n",
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := FormatDocument(c.in)
+			if got != c.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, c.want)
+			}
+			// (d) idempotent
+			if again := FormatDocument(got); again != got {
+				t.Errorf("not idempotent:\n%s", again)
+			}
+			if before, after := stepOutline(t, c.in), stepOutline(t, got); before != after {
+				t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+			}
+		})
+	}
+	// (d) idempotent at another indent width too.
+	cfg := fmtconfig.Defaults()
+	cfg.Indent = 2
+	for name, c := range cases {
+		t.Run(name+"/indent=2", func(t *testing.T) {
+			once := FormatDocumentWith(c.in, cfg)
+			if twice := FormatDocumentWith(once, cfg); twice != once {
+				t.Errorf("not idempotent:\nfirst:\n%s\nsecond:\n%s", once, twice)
+			}
+		})
+	}
+}
