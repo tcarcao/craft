@@ -214,3 +214,42 @@ func TestDetectContext_NonASCIIMatchesASCIITwin(t *testing.T) {
 		}
 	}
 }
+
+// TestSemanticTokens_ScenarioKeyword checks that the `scenario` keyword of a
+// named scenario is highlighted as a flow keyword, like `when`, while a
+// `scenario` used as a context name is not.
+func TestSemanticTokens_ScenarioKeyword(t *testing.T) {
+	const uri = "file:///test.craft"
+	src := "use_case \"U\" {\n  scenario \"a\"\n  when b listens nmfbus.X\n    scenario asks b to replay\n}\n"
+	s := &Server{ws: workspace.New(nil)}
+	s.ws.Open(uri, src)
+	res, err := s.SemanticTokensFull(context.Background(), &protocol.SemanticTokensParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+	})
+	if err != nil {
+		t.Fatalf("SemanticTokensFull: %v", err)
+	}
+	flow := uint32(0)
+	for i, n := range semanticTokenLegend {
+		if n == "craft-flow-keyword" {
+			flow = uint32(i)
+		}
+	}
+	typeAt := map[[2]uint32]uint32{}
+	var line, char uint32
+	for i := 0; i+4 < len(res.Data); i += 5 {
+		if d := res.Data[i]; d > 0 {
+			line += d
+			char = res.Data[i+1]
+		} else {
+			char += res.Data[i+1]
+		}
+		typeAt[[2]uint32{line, char}] = res.Data[i+3]
+	}
+	if got, ok := typeAt[[2]uint32{1, 2}]; !ok || got != flow {
+		t.Errorf("`scenario \"a\"` keyword: type %d (present=%v), want flow keyword %d", got, ok, flow)
+	}
+	if got, ok := typeAt[[2]uint32{3, 4}]; ok && got == flow {
+		t.Errorf("`scenario` as a context name must not be a flow keyword")
+	}
+}

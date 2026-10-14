@@ -1067,12 +1067,12 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindScenario)
 	var diags []model.Diagnostic
 
-	hasWhen := true
+	nameWithoutWhen := false
 	if p.atScenarioName() {
 		scTok := p.peek()
 		nt := p.peekAt(2)
-		orphan := !(nt.Type == lexer.TokenIdent && nt.Value == "when")
-		if orphan {
+		nameWithoutWhen = !(nt.Type == lexer.TokenIdent && nt.Value == "when")
+		if nameWithoutWhen {
 			// No `when` follows: the name is dropped. The tokens are wrapped
 			// in an error node so ScenarioDecl.Name() does not read them.
 			p.builder.StartNode(SyntaxKindError)
@@ -1082,8 +1082,7 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 		p.consumeAs(SyntaxKindKwScenario)
 		p.consumeAs(SyntaxKindString)
 		p.builder.FinishNode()
-		if orphan {
-			hasWhen = false
+		if nameWithoutWhen {
 			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/scenario-without-when",
 				Message:  "`scenario \"…\"` must be followed by a `when` line",
@@ -1093,7 +1092,7 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 		}
 	}
 
-	if !hasWhen {
+	if nameWithoutWhen {
 		// Keep the tree shape uniform for consumers that always expect a
 		// trigger child: an empty one.
 		p.builder.StartNode(SyntaxKindTrigger)

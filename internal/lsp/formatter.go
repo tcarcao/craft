@@ -410,10 +410,14 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		//
 		// A `scenario "name"` line opens a scenario the same way, and the `when`
 		// that follows it is the same scenario, not a new one (no blank line).
+		//
+		// TODO(Task 9): known bug in these scenario-name booleans (namesScenario,
+		// whenOfNamed, afterScenarioName): `scenario "n"`, then a `// note`
+		// line, then `when` gets an extra blank line. Layout is fixed in Task 9.
 		namesScenario := tok.Kind() == syntax.SyntaxKindKwScenario && braceDepth == 1
 		whenOfNamed := tok.Kind() == syntax.SyntaxKindKwWhen && afterScenarioName
-		startsWhen := (tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1) || namesScenario
-		if startsWhen || leadsScenario {
+		startsScenarioHead := (tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1) || namesScenario
+		if startsScenarioHead || leadsScenario {
 			scenarioDepth = 0
 		}
 
@@ -429,7 +433,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// The scenario's blank line goes above the whole run, so only the first
 		// token of it asks for one. A `when` whose comment already opened the
 		// scenario must not ask for a second.
-		startsScenario := (startsWhen || leadsScenario) && !prevLedScenario && !whenOfNamed
+		startsScenario := (startsScenarioHead || leadsScenario) && !prevLedScenario && !whenOfNamed
 		if namesScenario {
 			afterScenarioName = true
 		} else if tok.Kind() == syntax.SyntaxKindKwWhen {

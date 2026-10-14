@@ -1635,9 +1635,27 @@ func TestParseTree_OrphanScenarioNameDropped(t *testing.T) {
 		t.Fatalf("diags = %v, want exactly scenario-without-when", diags)
 	}
 	scs := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()
+	if len(scs) != 1 {
+		t.Fatalf("got %d scenarios, want 1 recovered node", len(scs))
+	}
+	if scs[0].When() != nil {
+		t.Errorf("recovered orphan must have no when token")
+	}
 	for _, sc := range scs {
 		if sc.Name() != "" {
 			t.Errorf("Name() = %q, want empty for orphan", sc.Name())
 		}
+	}
+}
+
+func TestParseTree_ScenarioNameWithCommentBeforeWhen(t *testing.T) {
+	src := "use_case \"U\" {\n  scenario \"x\"\n  // note\n  when b listens nmfbus.X\n    b records it\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	scs := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()
+	if len(scs) != 1 || scs[0].Name() != "x" || scs[0].When() == nil {
+		t.Fatalf("scenarios = %d, want one named x with a when", len(scs))
 	}
 }

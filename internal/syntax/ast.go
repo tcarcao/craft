@@ -1403,7 +1403,9 @@ func (s ScenarioDecl) Name() string {
 	return ""
 }
 
-// When returns the 'when' keyword token that starts this scenario.
+// When returns the 'when' keyword token that starts this scenario. It is nil
+// for the ghost scenario left by recovering an orphan `scenario "…"` line
+// (no `when` follows); actions under such a ghost are dropped from the model.
 func (s ScenarioDecl) When() *SyntaxToken { return s.node.ChildToken(SyntaxKindKwWhen) }
 
 // Trigger returns the trigger sub-node of this scenario.
