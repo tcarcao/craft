@@ -2238,7 +2238,8 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 // that meets one before its `}` is unclosed, and the parse resumes there
 // instead of swallowing the declaration. A keyword that can also name a
 // bounded context (`service`, `domain`, …) counts only when a `{` follows on
-// its line, so an unindented context list keeps parsing; an indented line is
+// its line (`actor` only when an actor kind and a name follow), so an
+// unindented context list keeps parsing; an indented line is
 // never a declaration, so `surface asks …` in a scenario stays an action.
 func (p *Parser) atColumnOneDecl() bool {
 	tok := p.peek()
@@ -2253,6 +2254,13 @@ func (p *Parser) atColumnOneDecl() bool {
 	}
 	if !isDomainNameToken(tok.Type) {
 		return true
+	}
+	if tok.Type == lexer.TokenKwActor {
+		// `actor <kind> <name>` on one line: a bare `actor` stays a context.
+		kind, name := p.peekAt(1), p.peekAt(2)
+		_, isKind := tokenToActorType(kind)
+		return isKind && kind.Line == tok.Line && name.Line == tok.Line &&
+			(name.Type == lexer.TokenIdent || name.Type == lexer.TokenString || isAnyKeywordAsIdent(name.Type))
 	}
 	for i := 1; i <= 2; i++ {
 		n := p.peekAt(i)

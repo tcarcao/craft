@@ -121,6 +121,37 @@ func TestUnclosedBlock_StopsAtColumnOneDeclaration(t *testing.T) {
 	}
 }
 
+// `actor <kind> <name>` at column 1 is a declaration too: an unclosed domain
+// or use case stops there, and the actor is declared. A context line that is
+// just `actor` still parses as a context.
+func TestUnclosedBlock_StopsAtColumnOneActor(t *testing.T) {
+	for name, src := range map[string]string{
+		"domain then actor":   "domain d {\n    c\nactor user Seeker\n",
+		"use case then actor": "use_case \"U\" {\n    when O does\n        x asks y for z\nactor system CRON\n",
+	} {
+		g, _, diags := syntax.Parse(src)
+		var unclosed []int
+		for _, d := range diags {
+			if d.Code == "craft/syntax/unclosed-block" {
+				unclosed = append(unclosed, d.Range.Start.Line+1)
+			}
+		}
+		if len(unclosed) != 1 || unclosed[0] != 1 {
+			t.Errorf("%s: unclosed-block lines = %v, want [1]; diags = %v", name, unclosed, diags)
+		}
+		if n := len(syntax.AsFile(syntax.Root(g)).Actors()); n != 1 {
+			t.Errorf("%s: actors = %d, want 1", name, n)
+		}
+	}
+	g, _, diags := syntax.Parse("domain d {\nactor\nc\n}\n")
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if n := len(syntax.AsFile(syntax.Root(g)).Actors()); n != 0 {
+		t.Errorf("a bare `actor` context line became %d actors", n)
+	}
+}
+
 // Indented, `surface` is still a step subject, and an unindented context list
 // still parses.
 func TestUnclosedBlock_IndentedSurfaceIsAnAction(t *testing.T) {

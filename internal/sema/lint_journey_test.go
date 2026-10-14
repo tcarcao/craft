@@ -144,6 +144,38 @@ use_case "Autocomplete" {
 	}
 }
 
+// A call chain is not two clients: when the second subject was asked earlier
+// in the same list, it is relaying the request, so nothing is reported. And
+// each (target, operation, subject) pair warns once: A, B, B gives one warning.
+func TestLint_RepeatedRequest_SkipsCallChainsAndRepeats(t *testing.T) {
+	src := `domain web {
+  frontendplatform
+  mobile
+  graphql
+  locationmapper
+  sphere
+}
+use_case "Chain" {
+  when Seeker opens a location
+    graphql asks sphere for the locations  [getLocations]
+    graphql asks locationmapper to map the location
+    locationmapper asks sphere for the locations  [getLocations]
+  when Seeker types a query
+    frontendplatform asks graphql for suggestions  [autocomplete]
+    mobile asks graphql for suggestions  [autocomplete]
+    mobile asks graphql for suggestions  [autocomplete]
+}`
+	var lines []int
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/lint/repeated-request" {
+			lines = append(lines, d.Range.Start.Line)
+		}
+	}
+	if len(lines) != 1 || lines[0] != 14 {
+		t.Errorf("warnings on lines %v, want only [14] (the first mobile line)", lines)
+	}
+}
+
 func TestLint_OperationNotInSurface_ServiceSurfaceCoversItsContexts(t *testing.T) {
 	src := "domain d {\n  app\n  concierge\n  ledger\n}\nservices {\n  obidozoe {\n    contexts: concierge, ledger\n  }\n}\n" +
 		"surface obidozoe {\n  query the list  [getUserList]\n}\nsurface ledger {\n  query the balances  [getBalances]\n}\n" +

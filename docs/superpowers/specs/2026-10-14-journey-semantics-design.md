@@ -37,7 +37,7 @@ files), measured on 2026-10-14 after the tidy wave.
 | C | G13 | New trigger form `when <ctx> receives <phrase> [op]`. It is drawn as a found message (`[->`), and an unaddressed reply to it is drawn as a lost message (`-->]`). This retires `NoObservedCaller`. There is no event-side form (§12). |
 | D | G8 (+ G14 follow-up) | No new action grammar. `store.<name>.<change>` refs are recognised as a **store hand-off**: a database participant, writer → store and reader → store arrows, writer/reader pairing. A listens trigger takes an optional trailing schedule, `when X listens <ref> cron "…"` or `every "…"`, which replaces the `polls` tag. |
 | E | G5 | New top-level `surface <boundary> { … }` block with `callers:`, `spec:`, notes/findings and `query`/`command` operation lines. It has no sequence view. `craft generate --type surface` writes a Markdown table with computed "used by". New lint `operation-not-in-surface`. |
-| F | G1 | **No grammar.** Use a canonical client plus the `channels` tag, or an opening `alt` (which v2.22 already triggers per branch). New lint `repeated-request` points at the remaining 8 cases. |
+| F | G1 | **No grammar.** Use a canonical client plus the `channels` tag, or an opening `alt` (which v2.22 already triggers per branch). New lint `repeated-request` points at the remaining cases (1 at release, §9). |
 
 ## 3. Shared mechanics
 
@@ -784,7 +784,11 @@ operations (genuinely different requests). 15 use cases already declare `channel
 scenario or branch body, at any distance) with different subjects, the same resolved target, and the same
 non-empty operation text. The range is the second one. Message: "`mobile` and `frontendplatform` make the
 same request `[autocomplete]` to `graphql`; if they are alternatives, write it once with a `channels` tag,
-or open the scenario with `alt "on the web"` / `else "in the app"`". Today's corpus has 8 hits in 7 files.
+or open the scenario with `alt "on the web"` / `else "in the app"`". A second subject that was the target of
+an earlier `asks` in the same list is relaying the request (a call chain), not a second client, so it is
+not reported; and each subject is reported once per request (`A`, `B`, `B` warns once). The planning count
+was 8 hits in 7 files; on the corpus at release time (2026-10-14) the lint reports 1 hit
+(`ad/apollo-file-ttls-are-renewed.craft`: two backends extend files in one batch job).
 
 ## 10. Consumers and cross-cutting work
 
@@ -885,7 +889,7 @@ v2.23.0 (this also brings the v2.22 schedule fields).
 - **CLI:** `generate --type surface` (file, `--stdout`, `--force`), and `--type all` with and without
   surfaces.
 - **Dogfood:** `craft validate` on re-arch-central stays at 0 errors before migration. The only new
-  warnings are `repeated-request` (8) and none of the others. The atlas-invoice SMS file, rewritten with
+  warnings are `repeated-request` (1 at release, §9) and none of the others. The atlas-invoice SMS file, rewritten with
   the listens schedule, and `seeker-advert-detail.craft`, rewritten with a fan-out `par`, are rendered as
   the acceptance examples.
 
@@ -918,7 +922,7 @@ v2.23.0, module path `github.com/tcarcao/craft/v2`, minor (additive). The CHANGE
    contract…") becomes a finding. Open questions and `NOT TRACED` stay comments.
 5. **G9/G18.** R5 gains "concurrent requests → `par`; repetition, retries and polling loops → `loop`".
    Pilot: the native-branch batch calls in `ad/seeker-advert-detail.craft`.
-6. **G1.** Work off the 8 `repeated-request` warnings with `channels` or an opening `alt`.
+6. **G1.** Work off the `repeated-request` warnings (1 at release) with `channels` or an opening `alt`.
 7. DOMAIN-MAP header: "Requires craft ≥ 2.23.0".
 
 ## 12. Deliberately left out

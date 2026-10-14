@@ -778,7 +778,9 @@ func lintStoreWithoutChange(perFileTrees map[string]syntax.SyntaxNode, lis map[s
 // ── repeated-request ──────────────────────────────────────────────────────────
 // Warning: two asks in one step list (a scenario body or a branch body, at any
 // distance) from different subjects to the same resolved target with the same
-// operation. Usually two clients making one request: write it once.
+// operation. Usually two clients making one request: write it once. A subject
+// that was the target of an earlier ask in the list is relaying the request
+// (a call chain), and each subject is reported once per request.
 
 func lintRepeatedRequests(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
 	var diags []model.Diagnostic
@@ -794,6 +796,8 @@ func lintRepeatedRequests(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 		visit = func(steps []syntax.StepDecl) {
 			type first struct{ subject, subjectID string }
 			seen := map[string]first{}
+			asked := map[string]bool{}    // targets asked earlier in this list
+			reported := map[string]bool{} // key + subject already warned
 			for _, st := range steps {
 				if b, ok := st.Block(); ok {
 					for _, br := range b.Branches() {
@@ -805,20 +809,26 @@ func lintRepeatedRequests(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 				if !ok || a.Kind() != lang.ActionSync || a.TargetName() == "" || a.SubjectName() == "" {
 					continue
 				}
+				subj := id(a.SubjectName())
+				relays := asked[subj]
+				asked[id(a.TargetName())] = true
 				op := strings.Join(strings.Fields(a.OpText()), " ")
 				if op == "" {
 					continue
 				}
 				key := id(a.TargetName()) + "\x00" + op
-				subj := id(a.SubjectName())
 				f, dup := seen[key]
 				if !dup {
 					seen[key] = first{a.SubjectName(), subj}
 					continue
 				}
-				if f.subjectID == subj {
+				// The same subject again, a subject that was itself asked
+				// earlier (a call chain relaying the request), or a pair
+				// already reported: not two clients making one request.
+				if f.subjectID == subj || relays || reported[key+"\x00"+subj] {
 					continue
 				}
+				reported[key+"\x00"+subj] = true
 				line, start := a.Line(li), colToLSP(a.SubjectCol(li))
 				diags = append(diags, model.Diagnostic{
 					Code: "craft/lint/repeated-request",

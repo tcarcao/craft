@@ -297,6 +297,13 @@ func TestJourneySemanticTokens(t *testing.T) {
 	check(notes, 10, 13, regularString, "note text")
 	rec := semanticTokensAt(t, journeyReceivesSrc)
 	check(rec, 5, 17, flowKeyword, "receives")
+	const exposureKeyword, toProperty, languageProperty, asksVerb = 11, 19, 16, 23
+	sf := semanticTokensAt(t, journeySurfaceSrc)
+	check(sf, 8, 0, exposureKeyword, "surface")
+	check(sf, 9, 4, toProperty, "callers")
+	check(sf, 10, 4, languageProperty, "spec")
+	check(sf, 13, 4, asksVerb, "query")
+	check(sf, 15, 4, asksVerb, "command")
 }
 
 const journeySurfaceSrc = `actors {
