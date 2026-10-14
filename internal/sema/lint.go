@@ -59,6 +59,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintReceivesOnActor(perFileTrees, ws, lis)...)
 	diags = append(diags, lintStoreWithoutChange(perFileTrees, lis)...)
 	diags = append(diags, lintOperationNotInSurface(perFileTrees, ws, lis)...)
+	diags = append(diags, lintRepeatedRequests(perFileTrees, ws, lis)...)
 	return diags
 }
 
@@ -768,6 +769,73 @@ func lintStoreWithoutChange(perFileTrees map[string]syntax.SyntaxNode, lis map[s
 						check(a.ObjectRef(), a.Line(li), a.EventCol(li))
 					}
 				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── repeated-request ──────────────────────────────────────────────────────────
+// Warning: two asks in one step list (a scenario body or a branch body, at any
+// distance) from different subjects to the same resolved target with the same
+// operation. Usually two clients making one request: write it once.
+
+func lintRepeatedRequests(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	id := func(name string) string {
+		if p, _ := ResolveParticipant(ws, "", name); p.Kind != "" {
+			return p.ID
+		}
+		return name
+	}
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		var visit func([]syntax.StepDecl)
+		visit = func(steps []syntax.StepDecl) {
+			type first struct{ subject, subjectID string }
+			seen := map[string]first{}
+			for _, st := range steps {
+				if b, ok := st.Block(); ok {
+					for _, br := range b.Branches() {
+						visit(br.Steps())
+					}
+					continue
+				}
+				a, ok := st.Action()
+				if !ok || a.Kind() != lang.ActionSync || a.TargetName() == "" || a.SubjectName() == "" {
+					continue
+				}
+				op := strings.Join(strings.Fields(a.OpText()), " ")
+				if op == "" {
+					continue
+				}
+				key := id(a.TargetName()) + "\x00" + op
+				subj := id(a.SubjectName())
+				f, dup := seen[key]
+				if !dup {
+					seen[key] = first{a.SubjectName(), subj}
+					continue
+				}
+				if f.subjectID == subj {
+					continue
+				}
+				line, start := a.Line(li), colToLSP(a.SubjectCol(li))
+				diags = append(diags, model.Diagnostic{
+					Code: "craft/lint/repeated-request",
+					Message: fmt.Sprintf("`%s` and `%s` make the same request `[%s]` to `%s`; if they are alternatives, write it once with a `channels` tag, or open the scenario with `alt \"on the web\"` / `else \"in the app\"`",
+						a.SubjectName(), f.subject, op, a.TargetName()),
+					Severity:  model.SeverityWarning,
+					SourceURI: uri,
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(line), Character: start},
+						End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(a.SubjectName())},
+					},
+				})
+			}
+		}
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				visit(sc.Steps())
 			}
 		}
 	}

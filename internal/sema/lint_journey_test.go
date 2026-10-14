@@ -118,3 +118,28 @@ func TestLint_StoreWithoutName(t *testing.T) {
 		t.Errorf("ranges = %s, want 6:15-29 8:17-30 10:15-21", s)
 	}
 }
+
+func TestLint_RepeatedRequest(t *testing.T) {
+	src := `domain web {
+  frontendplatform
+  mobile
+  graphql
+}
+use_case "Autocomplete" {
+  when Seeker types a query
+    frontendplatform asks graphql for suggestions  [autocomplete]
+    graphql returns the suggestions
+    mobile asks graphql for suggestions  [autocomplete]
+  when Seeker types again
+    frontendplatform asks graphql for suggestions  [autocomplete]
+    frontendplatform asks graphql for more  [autocomplete]
+    mobile asks graphql for suggestions  [suggest]
+    alt "on the web"
+      frontendplatform asks graphql for x  [search]
+    else "in the app"
+      mobile asks graphql for x  [search]
+}`
+	if n := lintCodes(t, src, "craft/lint/repeated-request"); n != 1 {
+		t.Errorf("%d warnings, want 1 (only the mobile line of the first scenario)", n)
+	}
+}
