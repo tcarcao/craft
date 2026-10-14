@@ -544,6 +544,11 @@ func TestFlow_EdgesInsideABranchCarryTheBranchLabel(t *testing.T) {
 		if strings.Contains(s, "[the card is declined] returns the refusal") {
 			t.Errorf("%v: innermost label must win:\n%s", backend, s)
 		}
+		for _, line := range strings.Split(s, "\n") {
+			if strings.Contains(line, "places an order") && strings.Contains(line, "[") {
+				t.Errorf("%v: trigger edge has a branch prefix: %q", backend, line)
+			}
+		}
 		if strings.Contains(s, "] to charge the card") || strings.Contains(s, "] returns the confirmation") {
 			t.Errorf("%v: edge outside a block has a prefix:\n%s", backend, s)
 		}
