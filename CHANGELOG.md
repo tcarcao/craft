@@ -35,7 +35,7 @@
 - **C4 names the technology of a request**: `SQL (shared tables)` for a `SQL` item, `HTTP (bare address)` for an `ADDR` item, `Service API` otherwise. An `ADDR` request to an actor is now drawn as a relation to that actor, shown as an external system (C4 drew service-to-service requests only).
 
 ### Fixed
-- **An actor of a kind outside `user`/`system`/`service` was named after its kind.** `actors { scheduler Ticker }` declared an actor named `scheduler`, so a second line of the same kind was a duplicate-name error and `Ticker` did not exist. The declared name is now the second identifier. Present in 2.23.0 and earlier.
+- **An actor of a kind outside `user`/`system`/`service` was named after its kind.** `actors { scheduler Ticker }` declared an actor named `scheduler`, so a second line of the same kind was a duplicate-name error and `Ticker` did not exist. The declared name is now the second identifier. Present in 2.23.0 and earlier. A file that uses the `scheduler`/`tool`/`infra` kinds needs craft ≥ 2.24.0; 2.23.0 reads it with duplicate-name errors.
 
 ## [2.23.0] — 2026-10-14
 

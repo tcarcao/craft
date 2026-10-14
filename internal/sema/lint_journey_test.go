@@ -304,6 +304,7 @@ func TestLint_UnquotedAddress(t *testing.T) {
 	for src, col := range map[string]int{
 		"use_case \"U\" {\n  when O does\n    o asks s to take it  [inferred ADDR //cdn.example.com/x]\n}": 35,
 		"use_case \"U\" {\n  when O does\n    o asks s to take it  [GET /x, ADDR //cdn.example.com/y]\n}":  34,
+		"use_case \"U\" {\n  when O does\n    o asks s to take it  [ADDR //host/ADDR/path]\n}":             26,
 	} {
 		var got []model.Diagnostic
 		for _, d := range analyzeSingleFileForTest(t, src) {

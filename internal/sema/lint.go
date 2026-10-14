@@ -1079,8 +1079,14 @@ func lintUnquotedAddress(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 					text := src[start : start+end]
 					// The range is the last ADDR: `[inferred ADDR //…` and
 					// `[GET /x, ADDR //…` are cut the same way.
-					at := strings.LastIndex(text, lang.OpVerbAddr)
-					if at < 0 || strings.LastIndex(text[:at], "[") < 0 || !strings.Contains(text[at:], "//") {
+					// Search only before the comment: the cut address may itself
+					// contain ADDR (`[ADDR //host/ADDR/path]`).
+					cut := strings.Index(text, "//")
+					if cut < 0 {
+						continue
+					}
+					at := strings.LastIndex(text[:cut], lang.OpVerbAddr)
+					if at < 0 || strings.LastIndex(text[:at], "[") < 0 {
 						continue
 					}
 					col := lspLen(text[:at])

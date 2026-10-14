@@ -110,6 +110,8 @@ These codes are never shown to end users by default; they appear only in `$/logT
 | Code | Severity | Meaning | Origin |
 |------|----------|---------|--------|
 | `craft/internal/parser-panic` | error | Unexpected panic recovered in the parser tier; LastGoodAST is used as fallback for semantic features | S3 |
+| `craft/internal/formatter-content-drift` | error | The formatter's output would change the document's non-whitespace content; the edit is refused | 2.16 |
+| `craft/internal/tree-text-mismatch` | error | The lossless tree's text does not reproduce the source; parsing falls back | 2.17 |
 
 ---
 
