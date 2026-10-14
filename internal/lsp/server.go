@@ -57,6 +57,14 @@ type Server struct {
 	mu         sync.Mutex
 	traceLevel protocol.TraceValue
 
+	// rootPath is the workspace root from initialize ("" when none); hovers
+	// print file names relative to it.
+	rootPath string
+	// sourceRoots maps a repo slug (or "*" for the directory holding every
+	// repo) to a local checkout, from initializationOptions.sourceRoots.
+	// //@ cites become document links only when it is set.
+	sourceRoots map[string]string
+
 	// debounce state for publishDiagnostics
 	debounce struct {
 		mu     sync.Mutex
@@ -216,8 +224,12 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 	if params != nil && params.RootURI != "" {
 		rootPath := uriToPath(string(params.RootURI))
 		if rootPath != "" {
+			s.rootPath = rootPath
 			go s.ws.Initialize(rootPath)
 		}
+	}
+	if params != nil {
+		s.sourceRoots = readSourceRoots(params.InitializationOptions)
 	}
 
 	if params != nil && params.Trace != "" {
@@ -240,6 +252,14 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			RenameProvider:             true,
 			FoldingRangeProvider:       true,
 			DocumentFormattingProvider: true,
+			// References: the links to a use case. Code actions: the
+			// link-to-former-title quick fix.
+			ReferencesProvider: true,
+			CodeActionProvider: &protocol.CodeActionOptions{CodeActionKinds: []protocol.CodeActionKind{protocol.QuickFix}},
+			// Document links: //@ cites, only when the client sent
+			// initializationOptions.sourceRoots (without them there is no
+			// link to make, and AGENT.md §3 forbids a no-op capability).
+			DocumentLinkProvider: s.documentLinkOptions(),
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
@@ -316,10 +336,6 @@ func (s *Server) SetTrace(_ context.Context, params *protocol.SetTraceParams) er
 	return nil
 }
 
-func (s *Server) CodeAction(_ context.Context, _ *protocol.CodeActionParams) ([]protocol.CodeAction, error) {
-	return nil, nil
-}
-
 func (s *Server) CodeLens(_ context.Context, _ *protocol.CodeLensParams) ([]protocol.CodeLens, error) {
 	return nil, nil
 }
@@ -363,6 +379,10 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	rm := s.ws.ResolutionMap()
 	wsSym := s.ws.WorkspaceSymbols()
 
+	// A link title goes to its target's use_case title.
+	if locs, ok := s.linkDefinition(f, uri, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
+		return locs, nil
+	}
 	// A listens item goes to the `notifies` lines that publish it.
 	if locs, ok := s.eventDefinition(file, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
 		return locs, nil
@@ -758,10 +778,6 @@ func (s *Server) DocumentColor(_ context.Context, _ *protocol.DocumentColorParam
 }
 
 func (s *Server) DocumentHighlight(_ context.Context, _ *protocol.DocumentHighlightParams) ([]protocol.DocumentHighlight, error) {
-	return nil, nil
-}
-
-func (s *Server) DocumentLink(_ context.Context, _ *protocol.DocumentLinkParams) ([]protocol.DocumentLink, error) {
 	return nil, nil
 }
 
@@ -1597,7 +1613,41 @@ func (s *Server) clearFormatBlocked(docURI protocol.DocumentURI) {
 	s.formatBlocked.mu.Unlock()
 }
 
-func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
+func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
+	if params == nil {
+		return nil, nil
+	}
+	uri := string(params.TextDocument.URI)
+	f := s.ws.Get(uri)
+	if f == nil {
+		return nil, nil
+	}
+	plain := func(v string) *protocol.Hover {
+		return &protocol.Hover{Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: v}}
+	}
+	offset := f.LineIndex.OffsetFromUTF16(int(params.Position.Line)+1, int(params.Position.Character))
+	if v, ok := s.citeHover(f, uri, offset); ok {
+		return plain(v), nil
+	}
+	if v, ok := s.linkHover(f, uri, offset); ok {
+		return plain(v), nil
+	}
+	h, err := s.hoverBase(ctx, params)
+	if err != nil {
+		return h, err
+	}
+	// The verb or opening keyword of a cited step adds its sources.
+	if src, ok := s.sourcesHover(f, uri, offset); ok {
+		if h == nil || h.Contents.Value == "" {
+			return plain(src), nil
+		}
+		return plain(h.Contents.Value + "\n\n" + src), nil
+	}
+	return h, nil
+}
+
+// hoverBase is the hover of everything but cites and links.
+func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
 	if params == nil {
 		return nil, nil
 	}
@@ -1834,10 +1884,6 @@ func (s *Server) PrepareRename(_ context.Context, params *protocol.PrepareRename
 }
 
 func (s *Server) RangeFormatting(_ context.Context, _ *protocol.DocumentRangeFormattingParams) ([]protocol.TextEdit, error) {
-	return nil, nil
-}
-
-func (s *Server) References(_ context.Context, _ *protocol.ReferenceParams) ([]protocol.Location, error) {
 	return nil, nil
 }
 
@@ -2235,13 +2281,16 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwOf:       "craft-flow-keyword",
 	syntax.SyntaxKindKwStream:   "craft-flow-keyword",
 	syntax.SyntaxKindKwInferred: "craft-flow-keyword",
-	syntax.SyntaxKindKwActor:    "craft-actor-keyword",
-	syntax.SyntaxKindKwActors:   "craft-actors-keyword",
-	syntax.SyntaxKindKwDomain:   "craft-domain-keyword",
-	syntax.SyntaxKindKwDomains:  "craft-domain-keyword",
-	syntax.SyntaxKindKwServices: "craft-services-keyword",
-	syntax.SyntaxKindKwArch:     "craft-arch-keyword",
-	syntax.SyntaxKindKwExposure: "craft-exposure-keyword",
+	// Link steps (v2.25): `includes` / `continues` open a step like `note`.
+	syntax.SyntaxKindKwIncludes:  "craft-flow-keyword",
+	syntax.SyntaxKindKwContinues: "craft-flow-keyword",
+	syntax.SyntaxKindKwActor:     "craft-actor-keyword",
+	syntax.SyntaxKindKwActors:    "craft-actors-keyword",
+	syntax.SyntaxKindKwDomain:    "craft-domain-keyword",
+	syntax.SyntaxKindKwDomains:   "craft-domain-keyword",
+	syntax.SyntaxKindKwServices:  "craft-services-keyword",
+	syntax.SyntaxKindKwArch:      "craft-arch-keyword",
+	syntax.SyntaxKindKwExposure:  "craft-exposure-keyword",
 	// A surface is a boundary declaration like an exposure; `callers:` lists
 	// who reaches it, like an exposure's `to:`; `spec:` holds one value, like
 	// `language:`; `query`/`command` stand where an action's verb would.
@@ -2922,6 +2971,15 @@ func (s *Server) applyStringTypeOverrides(tokens []semanticToken, f *workspace.F
 					overrides[posKey{pos.Line, pos.Character}] = evStringIdx
 				}
 			}
+			// A link names a use case by its title, like the use_case line.
+			eachStep(sc.Steps(), func(st syntax.StepDecl) {
+				if l, ok := st.Link(); ok {
+					if t := l.TitleToken(); t != nil {
+						pos := lspPosFromOffset(li, t.Offset())
+						overrides[posKey{pos.Line, pos.Character}] = ucStringIdx
+					}
+				}
+			})
 			for _, action := range sc.Actions() {
 				if action.Kind() == lang.ActionAsync && action.EventIsString() {
 					actionLine := action.Line(li)

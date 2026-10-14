@@ -36,6 +36,7 @@ const (
 	ctxOpItem            // cursor after `, ` inside an asks bracket: another item
 	ctxTagKey            // a blank line of a tags block
 	ctxTagValue          // cursor after `sites: ` or `envs: `
+	ctxLinkTitle         // cursor inside the quotes after `includes` / `continues`
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -174,6 +175,11 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 
 	lineStart := li.OffsetFromUTF16(cursorLine+1, 0)
 	linePrefix := li.Src()[lineStart:cursorOffset]
+
+	// Inside the quotes of a link title: a use-case title.
+	if linkTitleRe.MatchString(linePrefix) {
+		return ctxLinkTitle
+	}
 
 	// After `, ` inside a closed bracket: the next item of an operation list.
 	if ann := findEnclosingOpAnnotation(root, cursorOffset); ann != nil && opItemRe.MatchString(linePrefix) {
@@ -458,6 +464,10 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return tagKeyCompletions()
 	case ctxTagValue:
 		return tagValueCompletions(ws, f.LineIndex, cursorLine, cursorCol)
+	case ctxLinkTitle:
+		lineStart := f.LineIndex.OffsetFromUTF16(cursorLine+1, 0)
+		cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine+1, cursorCol)
+		return linkTitleCompletions(ws, f.LineIndex.Src()[lineStart:cursorOffset], cursorLine)
 	case ctxSurfaceBody:
 		return surfaceBodyCompletions()
 	case ctxUseCaseAction:

@@ -78,13 +78,19 @@ func findingSymbols(notes []syntax.NoteDecl, li green.LineIndex) []protocol.Docu
 	return out
 }
 
-// blockSymbols returns the outline symbols for every block and finding among
-// steps, recursing into branch bodies.
+// blockSymbols returns the outline symbols for every block, finding and link
+// among steps, recursing into branch bodies.
 func blockSymbols(steps []syntax.StepDecl, li green.LineIndex) []protocol.DocumentSymbol {
 	var out []protocol.DocumentSymbol
 	for _, st := range steps {
 		if n, ok := st.Note(); ok {
 			if sym, ok := findingSymbol(n, li); ok {
+				out = append(out, sym)
+			}
+			continue
+		}
+		if l, ok := st.Link(); ok {
+			if sym, ok := linkSymbol(l, li); ok {
 				out = append(out, sym)
 			}
 			continue
