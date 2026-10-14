@@ -29,6 +29,8 @@ type FlowEdge struct {
 	Number   int
 	Label    string
 	Style    EdgeStyle
+	// Inferred draws the edge grey; its label ends in "(inferred)".
+	Inferred bool
 }
 
 // BuildFlow lays out its as a detailed domain diagram.
@@ -36,6 +38,7 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 	ns := newNodeSet(doc)
 	var f Flow
 	var branch []interaction.BranchRef // branch of the interaction being laid out
+	inferred := false                  // the interaction being laid out is inferred
 	// polled holds the store reads drawn: one per listening scenario and
 	// store, however many writers it has.
 	type readKey struct {
@@ -59,10 +62,14 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 				label = "[" + br.Label + "] " + label
 			}
 		}
-		f.Edges = append(f.Edges, FlowEdge{From: from, To: to, Number: len(f.Edges) + 1, Label: label, Style: style})
+		if inferred {
+			label += " (inferred)"
+		}
+		f.Edges = append(f.Edges, FlowEdge{From: from, To: to, Number: len(f.Edges) + 1, Label: label, Style: style, Inferred: inferred})
 	}
 	for _, it := range its {
 		branch = it.Branch
+		inferred = it.Inferred
 		switch it.Kind {
 		case interaction.Trigger:
 			if it.From == interaction.Unobserved {

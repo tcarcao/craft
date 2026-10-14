@@ -1339,3 +1339,99 @@ use_case "nMF republishes a stored money record onto its bus" {
 		t.Errorf("flow:\n%s", flow)
 	}
 }
+
+const egressSrc = `actors {
+    system CRON
+    system ObjectStore
+}
+domain obido {
+    obidoanalytics
+    front
+}
+use_case "obido analytics refreshes the market structure" {
+    when cron "0 18 * * *"
+        obidoanalytics asks front for the city, region and developer graph  [SQL investment flat city region developer]
+        obidoanalytics asks ObjectStore to take the refreshed snapshot  [ADDR "SNAPSHOT_DESTINATION"]
+}
+`
+
+const inferredSrc = `actors {
+    user Seller
+    system ShaperAgent
+}
+domain seller {
+    mobile
+    graphql
+}
+use_case "Seller resumes a selling draft" {
+    when Seller resumes a selling draft
+        mobile asks graphql to open a selling chat session  [agenticSellingStart]
+        graphql asks ShaperAgent to initiate the chat  [inferred POST /api/v1/assistant/initiate_chat]
+}
+`
+
+func TestSequence_EgressAndInferred(t *testing.T) {
+	puml, _ := sequenceSource(t, egressSrc)
+	requireLine(t, "plantuml", puml, "obidoanalytics -> front : for the city, region and developer graph [SQL investment flat city region developer]")
+	requireLine(t, "plantuml", puml, "obidoanalytics -> ObjectStore : to take the refreshed snapshot [ADDR SNAPSHOT_DESTINATION]")
+	puml, mmd := sequenceSource(t, inferredSrc)
+	requireLine(t, "plantuml", puml, "graphql -[#999999]> ShaperAgent : to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)")
+	requireLine(t, "mermaid", mmd, "graphql->>ShaperAgent: to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)")
+	flow, _, _ := renderSource(resolvedDoc(t, inferredSrc), ViewFlow, PlantUML)
+	if !strings.Contains(string(flow), "-[#999999]->> ShaperAgent : 3. to initiate the chat (inferred)") {
+		t.Errorf("flow:\n%s", flow)
+	}
+}
+
+func TestSequence_InferredReplyAndBareInferred(t *testing.T) {
+	puml, _ := sequenceSource(t, `domain seller {
+    mobile
+    graphql
+}
+use_case "U" {
+    when mobile opens it
+        mobile asks graphql to open it  [inferred]
+        graphql returns the session  [inferred]
+}
+`)
+	requireLine(t, "plantuml", puml, "mobile -[#999999]> graphql : to open it (inferred)")
+	requireLine(t, "plantuml", puml, "graphql -[#999999]-> mobile : returns the session (inferred)")
+}
+
+func TestC4_EgressTechnologyAndInferredLabel(t *testing.T) {
+	doc := resolvedDoc(t, `domain shop {
+    a
+    b
+}
+services {
+    SvcA {
+        contexts: a
+    }
+    SvcB {
+        contexts: b
+    }
+}
+use_case "U" {
+    when a starts
+        a asks b for rows  [SQL t1 t2]
+        a asks b for x  [inferred getX]
+        a asks b for the file  [ADDR "https://x.example/f"]
+        a asks b for y  [getY]
+}
+`)
+	out, _, err := renderSource(doc, ViewC4, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		`"for rows", "SQL (shared tables)"`,
+		`"for x (inferred)", "Service API"`,
+		`"for the file", "HTTP (bare address)"`,
+		`"for y", "Service API"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("c4 lacks %s:\n%s", want, s)
+		}
+	}
+}

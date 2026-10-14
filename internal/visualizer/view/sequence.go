@@ -71,6 +71,8 @@ type Message struct {
 	// Over lists the participant IDs a MessageStepNote or MessageFinding is
 	// drawn over; empty means across the diagram (first to last participant).
 	Over []string
+	// Inferred draws the message grey, with an "(inferred)" suffix.
+	Inferred bool
 }
 
 // BranchRef locates a message inside one branch of a block.
@@ -311,8 +313,12 @@ func (b *sequenceBuilder) addOneOf(idx int, pubs []interaction.Interaction, titl
 	from := b.ns.add(pubs[0].From)
 	msg := Message{From: from, To: from, Kind: MessageAsync, Scenario: title, Branch: branchPath(pubs[0].Branch),
 		Label: "notifies one of " + capList(quoted)}
-	if op := pubs[0].Operation; op != nil && op.Text != "" {
-		msg.Label += " [" + op.Text + "]"
+	if op := opLabel(pubs[0]); op != "" {
+		msg.Label += " [" + op + "]"
+	}
+	if pubs[0].Inferred {
+		msg.Label += " (inferred)"
+		msg.Inferred = true
 	}
 	b.appear(from)
 	b.onStage[idx][from] = true
@@ -427,11 +433,15 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	default:
 		return
 	}
-	if it.Operation != nil && it.Operation.Text != "" {
+	if op := opLabel(it); op != "" {
 		// The operation is the step's wire contract; a sequence diagram
 		// is where a reader looks for it. A trigger with no phrase is
 		// labelled by the operation alone.
-		msg.Label = strings.TrimSpace(msg.Label + " [" + it.Operation.Text + "]")
+		msg.Label = strings.TrimSpace(msg.Label + " [" + op + "]")
+	}
+	if it.Inferred {
+		msg.Label += " (inferred)"
+		msg.Inferred = true
 	}
 	if msg.From != "" {
 		b.appear(msg.From)
@@ -443,6 +453,27 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	}
 	sec := &b.seq.Sections[idx]
 	sec.Messages = append(sec.Messages, msg)
+}
+
+// opLabel is the bracket a label ends with: each operation as written,
+// except that an ADDR address drops its quotes (spec §9.5).
+func opLabel(it interaction.Interaction) string {
+	ops := it.Operations
+	if len(ops) == 0 && it.Operation != nil {
+		ops = []model.Operation{*it.Operation}
+	}
+	parts := make([]string, 0, len(ops))
+	for _, op := range ops {
+		if op.Text == "" {
+			continue
+		}
+		if op.Verb == lang.OpVerbAddr {
+			parts = append(parts, strings.TrimSpace(op.Verb+" "+lang.UnquoteAddress(op.Payload)))
+			continue
+		}
+		parts = append(parts, op.Text)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // scenarioLayout draws one scenario into section idx by walking its step

@@ -153,20 +153,35 @@ func Flow(f view.Flow) string {
 
 	b.WriteString("' Workflow flows\n")
 	for _, e := range f.Edges {
-		fmt.Fprintf(&b, "%s %s %s : %d. %s\n", al.of(e.From), flowArrow(e.Style), al.of(e.To), e.Number, e.Label)
+		fmt.Fprintf(&b, "%s %s %s : %d. %s\n", al.of(e.From), flowArrow(e.Style, e.Inferred), al.of(e.To), e.Number, e.Label)
 	}
 	b.WriteString("\n@enduml")
 	return b.String()
 }
 
-func flowArrow(s view.EdgeStyle) string {
+// flowArrow is the PlantUML arrow of a flow edge: grey when inferred
+// (`-[#999999]->>`, spec §9.5).
+func flowArrow(s view.EdgeStyle, inferred bool) string {
+	arrow := "-->"
 	switch s {
 	case view.StyleCall, view.StyleAsync:
-		return "->>"
+		arrow = "->>"
 	case view.StyleSelf:
-		return "->"
+		arrow = "->"
 	}
-	return "-->"
+	if inferred {
+		return "-[#999999]" + arrow
+	}
+	return arrow
+}
+
+// seqArrow is the PlantUML arrow of a sequence message: grey when inferred
+// (`-[#999999]>`, `-[#999999]->` for a reply).
+func seqArrow(arrow string, inferred bool) string {
+	if !inferred {
+		return arrow
+	}
+	return "-[#999999]" + strings.TrimPrefix(arrow, "-")
 }
 
 // Architecture writes a domain architecture diagram.
@@ -275,11 +290,11 @@ func Sequence(s view.Sequence) string {
 				}
 				fmt.Fprintf(&b, "note over %s%s : %s\n", over, colour, label)
 			case view.MessageReply:
-				fmt.Fprintf(&b, "%s --> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
+				fmt.Fprintf(&b, "%s %s %s : %s\n", al.of(m.From), seqArrow("-->", m.Inferred), al.of(m.To), m.Label)
 			case view.MessageAsync:
-				fmt.Fprintf(&b, "%s ->> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
+				fmt.Fprintf(&b, "%s %s %s : %s\n", al.of(m.From), seqArrow("->>", m.Inferred), al.of(m.To), m.Label)
 			default:
-				fmt.Fprintf(&b, "%s -> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
+				fmt.Fprintf(&b, "%s %s %s : %s\n", al.of(m.From), seqArrow("->", m.Inferred), al.of(m.To), m.Label)
 			}
 		}
 		writeBlockOps(&b, view.BlockOps(path, nil))

@@ -496,7 +496,11 @@ func (b *c4Builder) relateServices() {
 			}
 			from, to := b.serviceOf(it.From), b.serviceOf(it.To)
 			if from != "" && to != "" && from != to {
-				b.relate(b.containerOf(it.From), b.containerOf(it.To), it.Label, "Service API")
+				label := it.Label
+				if it.Inferred {
+					label += " (inferred)"
+				}
+				b.relate(b.containerOf(it.From), b.containerOf(it.To), label, requestTechnology(it))
 			}
 		case interaction.Response:
 			from, to := b.serviceOf(it.From), b.serviceOf(it.To)
@@ -528,6 +532,24 @@ func (b *c4Builder) relateServices() {
 			}
 		}
 	}
+}
+
+// requestTechnology names a service-to-service request: shared tables for
+// a SQL item, a bare address for an ADDR item, else a service API (spec §9.5).
+func requestTechnology(it interaction.Interaction) string {
+	ops := it.Operations
+	if len(ops) == 0 && it.Operation != nil {
+		ops = []model.Operation{*it.Operation}
+	}
+	for _, op := range ops {
+		switch op.Verb {
+		case lang.OpVerbSQL:
+			return "SQL (shared tables)"
+		case lang.OpVerbAddr:
+			return "HTTP (bare address)"
+		}
+	}
+	return "Service API"
 }
 
 // storeDrawn reports whether it is a store hand-off drawn as a relation to a
