@@ -260,6 +260,8 @@ func (s *Server) Initialize(_ context.Context, params *protocol.InitializeParams
 			// initializationOptions.sourceRoots (without them there is no
 			// link to make, and AGENT.md §3 forbids a no-op capability).
 			DocumentLinkProvider: s.documentLinkOptions(),
+			// Code lens: "N use cases in this journey" on each journey tag.
+			CodeLensProvider: &protocol.CodeLensOptions{ResolveProvider: false},
 			// SemanticTokensProvider is interface{} in this protocol version;
 			// use an inline struct so it serialises with Legend + Full fields.
 			SemanticTokensProvider: semanticTokensOptions(),
@@ -336,10 +338,6 @@ func (s *Server) SetTrace(_ context.Context, params *protocol.SetTraceParams) er
 	return nil
 }
 
-func (s *Server) CodeLens(_ context.Context, _ *protocol.CodeLensParams) ([]protocol.CodeLens, error) {
-	return nil, nil
-}
-
 func (s *Server) CodeLensResolve(_ context.Context, params *protocol.CodeLens) (*protocol.CodeLens, error) {
 	return params, nil
 }
@@ -379,6 +377,10 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	rm := s.ws.ResolutionMap()
 	wsSym := s.ws.WorkspaceSymbols()
 
+	// A journey tag value goes to the other members, in spine order.
+	if locs, ok := s.spineDefinition(f, uri, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
+		return locs, nil
+	}
 	// A link title goes to its target's use_case title.
 	if locs, ok := s.linkDefinition(f, uri, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
 		return locs, nil
@@ -1630,6 +1632,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		return plain(v), nil
 	}
 	if v, ok := s.linkHover(f, uri, offset); ok {
+		return plain(v), nil
+	}
+	if v, ok := s.spineHover(f, offset); ok {
 		return plain(v), nil
 	}
 	h, err := s.hoverBase(ctx, params)

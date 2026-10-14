@@ -384,3 +384,97 @@ func TestSources_HoverOnEachStepKind(t *testing.T) {
 		}
 	}
 }
+
+const (
+	spineBooksURI   = "file:///ws/vas/nmf-books-the-draws.craft"
+	spinePromoteURI = "file:///ws/vas/seller-promotes-an-advert.craft"
+)
+
+// spineClient opens the two journey-spine fixtures; its uri is the promote
+// file.
+func spineClient(t *testing.T) *branchClient {
+	t.Helper()
+	read := func(name string) string {
+		raw, err := os.ReadFile(filepath.Join("..", "visualizer", "testdata", "journey-spine", "vas", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	return newWorkspaceClient(t, linksRoot, "",
+		wsFile{spinePromoteURI, read("seller-promotes-an-advert.craft")},
+		wsFile{spineBooksURI, read("nmf-books-the-draws.craft")})
+}
+
+func TestSpine_Hover(t *testing.T) {
+	c := spineClient(t)
+	want := "journey seller-promotes-an-advert: 3 use cases\n" +
+		"1. Seller promotes an advert (vas/seller-promotes-an-advert.craft)\n" +
+		"2. nMF books the draws of a scheduled VAS (vas/nmf-books-the-draws.craft)\n" +
+		"3. Seller pays at the checkout (vas/seller-promotes-an-advert.craft)"
+	for _, pos := range [][2]int{{13, 17}, {25, 30}} {
+		if got := hoverText(c, pos[0], pos[1]); got != want {
+			t.Errorf("hover %v = %q, want %q", pos, got, want)
+		}
+	}
+	if got := hoverText(c, 13, 10); strings.HasPrefix(got, "journey ") {
+		t.Errorf("hover on the tag key = %q, want no spine", got)
+	}
+}
+
+func TestSpine_HoverCycle(t *testing.T) {
+	src := "use_case \"A\" {\n    tags {\n        journey: j\n    }\n    when a listens e.B\n        a notifies e.A\n}\n" +
+		"use_case \"B\" {\n    tags {\n        journey: j\n    }\n    when b listens e.A\n        b notifies e.B\n}\n"
+	c := newWorkspaceClient(t, linksRoot, "", wsFile{"file:///ws/c.craft", src})
+	if got := hoverText(c, 2, 18); !strings.HasSuffix(got, "\ncycle") {
+		t.Errorf("hover = %q, want a cycle line", got)
+	}
+}
+
+func TestSpine_Definition(t *testing.T) {
+	c := spineClient(t)
+	var locs []lspLocation
+	json.Unmarshal(c.at("textDocument/definition", 13, 20), &locs) //nolint:errcheck
+	if len(locs) != 2 || locs[0].URI != spineBooksURI || locs[0].Range.Start.Line != 0 ||
+		locs[1].URI != spinePromoteURI || locs[1].Range.Start.Line != 23 {
+		t.Errorf("definition = %+v, want books (0) then checkout (23)", locs)
+	}
+}
+
+func TestSpine_CodeLens(t *testing.T) {
+	c := spineClient(t)
+	lenses := func(uri string) []struct {
+		Range struct {
+			Start struct{ Line int } `json:"start"`
+		} `json:"range"`
+		Command struct {
+			Title string `json:"title"`
+		} `json:"command"`
+	} {
+		p, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": uri}})
+		var out []struct {
+			Range struct {
+				Start struct{ Line int } `json:"start"`
+			} `json:"range"`
+			Command struct {
+				Title string `json:"title"`
+			} `json:"command"`
+		}
+		if err := json.Unmarshal(c.call("textDocument/codeLens", p), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	got := lenses(spinePromoteURI)
+	if len(got) != 2 || got[0].Range.Start.Line != 13 || got[1].Range.Start.Line != 25 {
+		t.Fatalf("lenses = %+v, want lines 13 and 25", got)
+	}
+	for _, l := range got {
+		if l.Command.Title != "3 use cases in this journey" {
+			t.Errorf("lens title = %q", l.Command.Title)
+		}
+	}
+	if got := lenses(spineBooksURI); len(got) != 1 || got[0].Range.Start.Line != 2 {
+		t.Errorf("books lenses = %+v", got)
+	}
+}

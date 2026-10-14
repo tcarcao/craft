@@ -17,6 +17,9 @@ func TestCapabilities_Advertised(t *testing.T) {
 				CodeActionKinds []string `json:"codeActionKinds"`
 			} `json:"codeActionProvider"`
 			DocumentLinkProvider *struct{} `json:"documentLinkProvider"`
+			CodeLensProvider     *struct {
+				ResolveProvider bool `json:"resolveProvider"`
+			} `json:"codeLensProvider"`
 		} `json:"capabilities"`
 	}
 	if err := json.Unmarshal(initResp, &res); err != nil {
@@ -28,6 +31,9 @@ func TestCapabilities_Advertised(t *testing.T) {
 	}
 	if caps.CodeActionProvider == nil || !slices.Contains(caps.CodeActionProvider.CodeActionKinds, "quickfix") {
 		t.Errorf("codeActionProvider with quickfix not advertised: %+v", caps.CodeActionProvider)
+	}
+	if caps.CodeLensProvider == nil || caps.CodeLensProvider.ResolveProvider {
+		t.Errorf("codeLensProvider (no resolve) not advertised: %+v", caps.CodeLensProvider)
 	}
 	if caps.DocumentLinkProvider != nil {
 		t.Error("documentLinkProvider advertised without sourceRoots")
