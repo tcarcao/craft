@@ -13,7 +13,7 @@
 
 ### Changed — diagrams
 - **An event from another use case names its publisher.** The inbound arrow of a sequence diagram (`[-> consumer : event`, Mermaid `External->>consumer`) is labelled `event (from <publisher>)`, several sorted by display name and capped at 3 with `+N more`. An event with no publisher in the model keeps its bare label. No participant is added.
-- **A trigger reaches every branch when its scenario opens with a block.** The trigger is drawn inside each branch, to that branch's first action (recursing into a nested opening block); a branch with no action gets none. `Interaction.Branch` (internal) is now set on such triggers, and each branch's call stack starts with its own trigger frame. Flow diagrams prefix these triggers with their branch label.
+- **A trigger reaches every branch when its scenario opens with a block.** The trigger is drawn inside each branch, to that branch's first action (recursing into a nested opening block); a branch with no action gets none. When the opening block is an `opt`, the path where it is skipped also gets a trigger (no branch) to the first action after the block. `Interaction.Branch` (internal) is now set on such triggers, and each branch's call stack starts with its own trigger frame. Flow diagrams prefix these triggers with their branch label.
 
 ## [2.21.0] — 2026-10-14
 

@@ -1,7 +1,9 @@
 package view
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/analysis"
@@ -130,5 +132,38 @@ use_case "Checkout" {
 				t.Errorf("%s: message %d = %q in %+v, want %q in %+v (step %d)", title, i, got[i].Label, got[i].Branch, it.Label, branchPath(it.Branch), it.Step)
 			}
 		}
+	}
+}
+
+// An opening opt draws the trigger inside its box and, for the path where it
+// is skipped, again just before the first step after it. An actor that takes
+// the first step itself is a note either way.
+func TestSequenceOpeningOptTriggersBothPaths(t *testing.T) {
+	src := `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+use_case "Checkout" {
+    when Customer places an order
+        opt "with a voucher"
+            Billing applies the voucher
+        Ordering charges the card
+}
+`
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc
+	seq := BuildSequence(doc, interaction.Derive(doc))
+	var got []string
+	for _, m := range seq.Sections[0].Messages {
+		got = append(got, fmt.Sprintf("%s->%s %q in %d", m.From, m.To, m.Label, len(m.Branch)))
+	}
+	want := []string{
+		`Customer->shop/Billing "places an order" in 1`,
+		`shop/Billing->shop/Billing "applies the voucher" in 1`,
+		`Customer->shop/Ordering "places an order" in 0`,
+		`shop/Ordering->shop/Ordering "charges the card" in 0`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

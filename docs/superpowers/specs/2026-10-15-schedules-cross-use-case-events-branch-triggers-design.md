@@ -67,13 +67,21 @@ subject only, and the other branches get no incoming arrow.
   carries that branch's `Branch` path.
 - A branch with no action gets no trigger. A first step that is an action keeps today's single trigger
   with a nil `Branch`.
+- When the opening block is an `opt`, the path where it is skipped is a real path too: `Derive` also emits
+  one Trigger with a nil `Branch`, to the first action after the block (when there is one). The view draws
+  it just before that action, so the trigger appears inside the opt box and again before the first step
+  after it. An `alt` always takes one of its branches, so it gets no such trigger. An actor-is-subject
+  trigger is still a note.
+- A branch is triggered when it has a target; the first action in source order having no subject does not
+  stop the other branches from being triggered.
 - The call stack for each branch starts with that branch's trigger frame; the per-branch stack rules of
   v2.21.0 are unchanged.
 - The sequence view therefore draws the trigger inside each branch box: `alt on the web` →
   `Seeker -> frontendplatform : opens …`, `else in the app` → `Seeker -> mobile : opens …`. The same
   dedup rules apply (an actor-is-subject trigger is a note).
 - Docs: `Interaction.Branch` comment ("Trigger and Listen always have a nil Branch") becomes "Listen
-  always has a nil Branch; a Trigger has one only when its scenario opens with a block".
+  always has a nil Branch; a Trigger has one only when its scenario opens with a block (an opening `opt` also
+  gets one unbranched Trigger for its skipped path)".
 
 ## Testing
 TDD per item; golden diffs reviewed; `go vet`, `go test ./...` and the fuzz target stay green.

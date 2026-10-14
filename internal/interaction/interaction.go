@@ -89,8 +89,10 @@ type Interaction struct {
 	// Branch is the path from the outermost block inward to the branch the
 	// action sits in; nil outside blocks. Listen always has a nil Branch; a
 	// Trigger has one only when its scenario opens with a block, which gets
-	// one trigger per branch, each reaching that branch's first action. Each
-	// interaction owns its slice.
+	// one trigger per branch, each reaching that branch's first action. When
+	// the opening block is an opt, the path where it is skipped also gets a
+	// Trigger with a nil Branch, to the first action after the block (when
+	// there is one). Each interaction owns its slice.
 	Branch []BranchRef
 }
 
@@ -234,6 +236,9 @@ type walker struct {
 // order takes the trigger instead. walk reports whether it emitted a trigger.
 func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (triggered bool) {
 	pending := opening
+	// skipped: the scenario opens with an opt, so the path where it is not
+	// taken still needs a trigger, into the first action after the block.
+	skipped := false
 	for i, st := range steps {
 		switch {
 		case st.Block != nil:
@@ -241,12 +246,16 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 				if w.walkBlock(st.Block, path, true) {
 					pending, triggered = false, true
 				}
+				skipped = len(path) == 0 && w.trigger != nil && st.Block.Kind == lang.BlockOpt
 			} else {
 				w.walkBlock(st.Block, path, false)
 			}
 		case st.Action != nil:
 			if pending && w.branchTrigger(*st.Action, path) {
-				pending, triggered = false, true
+				pending, triggered, skipped = false, true, false
+			}
+			if skipped && w.branchTrigger(*st.Action, nil) {
+				skipped = false
 			}
 			// Keep in step with scenarioLayout.walk in
 			// visualizer/view/sequence.go: both number actions in the same
@@ -260,6 +269,14 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 
 // branchTrigger draws the scenario's trigger into the branch at path, to a,
 // that branch's first action. The branch's call stack starts with it alone.
+//
+// A branch trigger is how the sequence view knows where to draw it: it has
+// Step 0 and a Branch. The view skips Step 0 triggers that have a Branch when
+// it draws the step-0 interactions, and draws them when its walk enters that
+// branch (scenarioLayout.emitTriggers in visualizer/view/sequence.go). An
+// opening opt also gets an unbranched Step 0 trigger to the first action after
+// it (the skipped path); the view draws that one just before that action
+// (scenarioLayout.emitSkipTrigger).
 func (w *walker) branchTrigger(a model.Action, path []BranchRef) bool {
 	if w.trigger == nil || a.Context == "" {
 		return false

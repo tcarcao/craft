@@ -650,3 +650,43 @@ func TestDerive_TriggerIgnoresABranchWithoutAContext(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// An opening opt may be skipped: besides the trigger inside its body, the
+// scenario is triggered, outside any branch, into the first action after it.
+func TestDerive_OpeningOptAlsoTriggersTheStepAfterIt(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        opt "with a voucher"
+            Billing applies the voucher
+        Ordering charges the card
+}
+`})
+	want := `0 trigger Customer->Billing {opt:with a voucher#0}
+1 internal Billing->Billing {opt:with a voucher#0}
+0 trigger Customer->Ordering {}
+2 internal Ordering->Ordering {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// With nothing after the opt there is no skipped path to trigger; an alt never
+// gets one, since one of its branches always runs.
+func TestDerive_OpeningOptWithoutAStepAfterItAndAltGetNoSkipTrigger(t *testing.T) {
+	for _, src := range []string{`
+        opt "with a voucher"
+            Billing applies the voucher`, `
+        alt "a"
+            Billing applies the voucher
+        else "b"
+            Shipping books a courier
+        Ordering charges the card`} {
+		its := derive(t, map[string]string{"a.craft": structure + "\nuse_case \"Checkout\" {\n    when Customer places an order" + src + "\n}\n"})
+		for _, it := range its {
+			if it.Kind == interaction.Trigger && it.Branch == nil {
+				t.Errorf("unexpected unbranched trigger in:%s\n%s", src, branchSummary(its))
+			}
+		}
+	}
+}

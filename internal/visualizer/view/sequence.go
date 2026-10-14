@@ -158,6 +158,7 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 			if len(uc.Scenarios) > 1 {
 				l.title = scenarioTitle(i, sc)
 			}
+			l.opensBlock = len(sc.Steps) > 0 && sc.Steps[0].Block != nil
 			l.emit(0) // the trigger and listens
 			l.walk(sc.Steps, nil)
 		}
@@ -286,14 +287,23 @@ type scenarioLayout struct {
 	title   string // frame title; "" for a use case with one scenario
 	bySteps map[int][]interaction.Interaction
 	step    int // actions seen so far, numbered as interaction numbers them
+	// opensBlock is true when the scenario's first step is a block. Its
+	// triggers are then not drawn up front (see emit).
+	opensBlock bool
 }
 
 // emit draws the interactions of the step-th action (0: the trigger and
-// listens). A trigger that sits in a branch (its scenario opens with a block)
-// is drawn by emitTriggers when the walk enters that branch instead.
+// listens).
+//
+// Two mechanisms draw a trigger when the scenario opens with a block, both
+// keyed on interaction.walker.branchTrigger: it gives each trigger Step 0
+// plus a Branch, and emit skips those at step 0. emitTriggers draws them when
+// the walk enters that branch. The unbranched trigger of an opening opt (the
+// path where the opt is skipped) is skipped here too and drawn by
+// emitSkipTrigger just before the first action after the block.
 func (l *scenarioLayout) emit(step int) {
 	for _, it := range l.bySteps[step] {
-		if step == 0 && it.Branch != nil {
+		if step == 0 && it.Kind == interaction.Trigger && (it.Branch != nil || l.opensBlock) {
 			continue
 		}
 		l.b.add(l.idx, it, l.title)
@@ -310,23 +320,41 @@ func (l *scenarioLayout) emitTriggers(path []BranchRef) {
 	}
 }
 
+// emitSkipTrigger draws the unbranched trigger of a scenario that opens with
+// an opt, for the path where the opt is skipped.
+func (l *scenarioLayout) emitSkipTrigger() {
+	for _, it := range l.bySteps[0] {
+		if it.Kind == interaction.Trigger && it.Branch == nil {
+			l.b.add(l.idx, it, l.title)
+		}
+	}
+}
+
 // walk draws steps, which sit at path. A branch counts as empty when walking
 // it adds no message to the section, including when its only interactions
 // draw nothing (an inbound event already drawn); it then gets a MessageNone,
 // so writers still draw its header.
 func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 	sec := &l.b.seq.Sections[l.idx]
-	for _, st := range steps {
+	// skip: the scenario opens with an opt; the first action after it is
+	// reached by the unbranched trigger.
+	skip := false
+	for i, st := range steps {
 		switch {
 		case st.Action != nil:
+			if skip {
+				l.emitSkipTrigger()
+				skip = false
+			}
 			// Keep in step with interaction's walker (walk in
 			// interaction.go): both number actions in the same order.
 			// TestSequenceStepsMatchInteractionSteps guards the pairing.
 			l.step++
 			l.emit(l.step)
 		case st.Block != nil:
-			for i, br := range st.Block.Branches {
-				inner := append(slices.Clone(path), BranchRef{Block: st.Block.ID, Kind: st.Block.Kind, Label: br.Label, Index: i})
+			skip = skip || (len(path) == 0 && i == 0 && l.opensBlock && st.Block.Kind == lang.BlockOpt)
+			for bi, br := range st.Block.Branches {
+				inner := append(slices.Clone(path), BranchRef{Block: st.Block.ID, Kind: st.Block.Kind, Label: br.Label, Index: bi})
 				before := len(sec.Messages)
 				l.emitTriggers(inner)
 				l.walk(br.Steps, inner)
