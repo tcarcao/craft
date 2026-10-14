@@ -92,6 +92,10 @@ func FuzzFormatBranches(f *testing.F) {
 	}
 	// Found by the fuzzer: a bracket with inner runs of spaces.
 	f.Add("surface A{query 0[0]\nquery 0[0 0  0]\ncommand 00[0]}")
+	// Found by the fuzzer: a `]` after the bracket's own `]`. Moving the `}`
+	// to its own line used to turn the prose `[0]{]` into an annotation plus
+	// two phantom actions.
+	f.Add("use_CAse\"\"{when A A0\nA A[0]{]}")
 	f.Fuzz(func(t *testing.T, src string) {
 		if fuzzFormatterBails(src) {
 			t.Skip("input does not parse cleanly")

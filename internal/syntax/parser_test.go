@@ -3,6 +3,7 @@ package syntax_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1134,6 +1135,69 @@ func TestOpAnnotation_NotifiesStrayTokenBeforeBracketStaysUnopened(t *testing.T)
 	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
 	if a.OpAnnotation() != nil {
 		t.Errorf("expected no op annotation when a stray token precedes `[`, got OpText() = %q", a.OpText())
+	}
+}
+
+// The annotation is the last `[` on a line that ends in `]`, and it closes at
+// the first `]` after it. Tokens between that `]` and the line's last `]` are
+// reported as unexpected, whether or not a `}` follows on the same line. Found
+// by the formatter fuzzer: `A A[0]{]}` parsed as prose (the `}` ended the
+// scan as a brace "inside" the annotation), but once `craft fmt` moved the
+// `}` to its own line the parser anchored on `[0]` and left `{]` behind as two
+// phantom actions on a file that had reported clean.
+func TestOpAnnotation_TokensAfterClosedAnnotationAreUnexpected(t *testing.T) {
+	for name, tc := range map[string]struct{ src, op, rest string }{
+		"brace on the same line": {"use_case \"X\" {\n  when U does x\n    A A [0]{]}", "0", "{"},
+		"brace on the next line": {"use_case \"X\" {\n  when U does x\n    A A [0]{]\n}", "0", "{"},
+		"bracket inside payload": {"use_case \"X\" {\n  when U does x\n    A asks B for c [GET /a[0]]\n}", "0", "]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			g, _, diags := syntax.Parse(tc.src)
+			if len(diags) != 1 || diags[0].Code != "craft/syntax/unexpected-token" || !strings.Contains(diags[0].Message, strconv.Quote(tc.rest)) {
+				t.Fatalf("expected one unexpected-token diagnostic on %q, got %v", tc.rest, diags)
+			}
+			ucs := syntax.AsFile(syntax.Root(g)).UseCases()
+			if len(ucs) != 1 {
+				t.Fatalf("expected 1 use case, got %d", len(ucs))
+			}
+			actions := ucs[0].Scenarios()[0].Actions()
+			if len(actions) != 1 {
+				t.Fatalf("expected 1 action, got %d", len(actions))
+			}
+			if got := actions[0].OpText(); got != tc.op {
+				t.Errorf("OpText() = %q, want %q", got, tc.op)
+			}
+			if got := reassembleGreen(g); got != tc.src {
+				t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", tc.src, got)
+			}
+		})
+	}
+}
+
+// A phrase brace ends the line for collectPhrase even after an earlier,
+// closed bracket. The scan used to honour braces once any `[` had been seen,
+// so `[x] {y} [POST /z]` returned the last `[` while collectPhrase stopped at
+// the `}`, and parseOpAnnotation consumed that `}` as the opening bracket.
+// Braces now count only inside an open bracket, as in
+// TestOpAnnotation_BalancedBraceInPhraseDoesNotOpenAnnotation.
+func TestOpAnnotation_PhraseBraceAfterClosedBracketDoesNotOpenAnnotation(t *testing.T) {
+	src := `use_case "X" {
+  when U does x
+    Billing asks Gateway to charge [x] {amount} [POST /pay]
+}`
+	g, _, diags := syntax.Parse(src)
+	if len(diags) == 0 {
+		t.Fatal("expected a diagnostic for the unconsumed bracket, got none")
+	}
+	actions := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0].Actions()
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].OpAnnotation() != nil {
+		t.Errorf("a phrase brace must not open an annotation, got OpText() = %q", actions[0].OpText())
+	}
+	if got := reassembleGreen(g); got != src {
+		t.Errorf("round-trip mismatch\nwant: %q\ngot:  %q", src, got)
 	}
 }
 

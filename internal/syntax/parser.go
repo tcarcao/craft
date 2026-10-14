@@ -1751,40 +1751,48 @@ func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 // lookahead index of the `[` that opens a trailing operation annotation, or -1
 // when the line has none.
 //
-// The annotation is the LAST `[` on the line whose matching `]` is the line's
-// final token. Anchoring on the last bracket rather than the first is what lets
-// a phrase keep using `[` as prose: `record [batch] entries [POST /v1/entries]`
-// puts `[batch]` in the phrase and `[POST /v1/entries]` in the annotation.
-// Requiring the line to end in `]` is what lets an unclosed `[` stay prose, so
-// files that do not use the feature keep today's sweep-everything behaviour.
+// The annotation is the LAST `[` on a line that ends in `]`. parseOpAnnotation
+// stops at the first `]` after it and reports any token left on the line
+// (`[0]{]`, `[GET /a[0]]`) as unexpected. Anchoring on the last bracket rather
+// than the first is what lets a phrase keep using `[` as prose: `record [batch] entries [POST /v1/entries]` puts `[batch]` in
+// the phrase and `[POST /v1/entries]` in the annotation. Requiring the line to
+// end in `]` is what lets an unclosed `[` stay prose, so files that do not use
+// the feature keep today's sweep-everything behaviour.
 //
-// A `}` only terminates the scan at brace depth 0 AND before the first `[`.
-// Braces are only tracked once an opening `[` has been seen, because a
-// templated path payload such as `[POST /v1/accounts/{id}/charges]` is by
-// definition inside the annotation. Restricting depth tracking that way keeps
-// this scan in step with collectPhrase, which returns unconditionally at the
-// first `}`: a balanced `{...}` in the PHRASE (`charge {amount} [POST /pay]`)
-// must terminate both, or the two disagree about where the line ends and
-// parseOpAnnotation mis-anchors on the `}` instead of the `[`. A genuine
-// block-closing `}` still terminates the scan exactly as before.
+// A `}` terminates the scan unless it closes a `{` opened inside a still-open
+// `[`. Braces are only tracked inside a bracket, because a templated path
+// payload such as `[POST /v1/accounts/{id}/charges]` is by definition inside
+// the annotation. Restricting depth tracking that way keeps this scan in step
+// with collectPhrase, which returns unconditionally at the first `}`: a
+// balanced `{...}` in the PHRASE (`charge {amount} [POST /pay]`, also after a
+// closed bracket: `[x] {amount} [POST /pay]`) must terminate both, or the two
+// disagree about where the line ends and parseOpAnnotation mis-anchors on the
+// `}` instead of the `[`. A genuine block-closing `}` still terminates the
+// scan exactly as before.
 func (p *Parser) opAnnotationStart(actionLine int) int {
 	lastLBracket, lastTok := -1, -1
+	inBracket := false
 	depth := 0
+scan:
 	for i := 0; ; i++ {
 		t := p.peekAt(i)
 		if t.Type == lexer.TokenEOF || t.Line != actionLine {
 			break
 		}
-		if t.Type == lexer.TokenRBrace {
-			if depth == 0 || lastLBracket < 0 {
-				break
+		switch t.Type {
+		case lexer.TokenRBrace:
+			if !inBracket || depth == 0 {
+				break scan
 			}
 			depth--
-		} else if t.Type == lexer.TokenLBrace {
-			depth++
-		}
-		if t.Type == lexer.TokenLBracket {
-			lastLBracket = i
+		case lexer.TokenLBrace:
+			if inBracket {
+				depth++
+			}
+		case lexer.TokenLBracket:
+			lastLBracket, inBracket, depth = i, true, 0
+		case lexer.TokenRBracket:
+			inBracket, depth = false, 0
 		}
 		lastTok = i
 	}
@@ -1832,7 +1840,9 @@ func (p *Parser) parseOpAnnotation() []model.Diagnostic {
 		}
 	}
 
+	rbLine := -1
 	if p.peek().Type == lexer.TokenRBracket {
+		rbLine = p.peek().Line
 		p.consumeAs(SyntaxKindRBracket)
 	} else {
 		// Defensive: opAnnotationStart guarantees the `]` exists.
@@ -1840,6 +1850,13 @@ func (p *Parser) parseOpAnnotation() []model.Diagnostic {
 	}
 
 	p.builder.FinishNode()
+	// The annotation closes at its first `]`. When the line ends in a later
+	// `]` (`[0]{]`, `[GET /a[0]]`), the tokens in between are not prose and
+	// not payload: report them, so the formatter refuses the file instead of
+	// moving them.
+	if rbLine >= 0 {
+		diags = append(diags, p.sweepRestOfLine(rbLine, "the end of the line after the operation annotation")...)
+	}
 	return diags
 }
 
