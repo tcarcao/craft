@@ -1283,11 +1283,21 @@ craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' -
   - `store`: the same, for a store hand-off;
   - `continues`: A has a `continues` link to B.
   An `includes` link adds no edge: the included flow is shown in place by its `ref` frame.
-- **Order:** a topological sort of the members over the edges (Kahn). When several members are ready,
-  the one with the smallest (source file, line) comes first. When none is ready (a cycle), the member
-  with the smallest (source file, line) among those a placed member hands off to comes next (among all
-  remaining members when no placed member reaches one), so the cycle is entered where the flow reaches it,
-  and the result records `Cycle: true`; the CLI
+- **Namesake:** the member the journey is named after. In order of preference: a member whose title,
+  slugified (lowercase, each run of characters that are not letters or digits becomes `-`, trimmed), is
+  the slug; a member in a file whose base name without `.craft` is the slug; a member in a file named
+  after one of its own `formerly_journey` values (`;`-separated). Within one class the earliest
+  (source file, line) wins. A journey may have no namesake.
+- **Order:** a topological sort of the members over the edges (Kahn).
+  1. Members with an edge to or from another member (connected) come first. When several are ready,
+     the next is (a) a successor of the member placed last, so independent chains do not interleave
+     (E1, E1-next, E2, E2-next); then (b) the namesake; then (c) the smallest (source file, line).
+  2. Unconnected members come after every connected one: the namesake first, then by (source file,
+     line). Being unconnected outranks being the namesake.
+  3. When no connected member is ready (a cycle), the next is one that a placed member hands off to,
+     so the cycle is entered where the flow reaches it; when no placed member reaches one, the
+     namesake, then the smallest (source file, line). Rules (a)–(c) break ties inside each case, and
+     the result records `Cycle: true`; the CLI
   prints `note: journey <slug> has a hand-off cycle; its members are ordered by source position` to
   stderr. The order is deterministic.
 

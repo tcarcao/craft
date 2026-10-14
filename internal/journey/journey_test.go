@@ -86,3 +86,57 @@ func TestSlugs(t *testing.T) {
 		t.Errorf("slugs = %v", got)
 	}
 }
+
+// ucFormer is uc with a formerly_journey tag.
+func ucFormer(name, slug, former, body string) string {
+	return "use_case \"" + name + "\" {\n  tags {\n    journey: " + slug + "\n    formerly_journey: " + former + "\n  }\n" + body + "}\n"
+}
+
+// TestBuild_TieBreak pins the spec §17.2 choice among ready members: the
+// last placed member's successors first, then the namesake, then file and
+// line; unconnected members last.
+func TestBuild_TieBreak(t *testing.T) {
+	chain := func(head, next, ev string) string {
+		return uc(head, "j-k", "  when S starts "+ev+"\n    p notifies e."+ev+"\n") +
+			uc(next, "j-k", "  when n listens e."+ev+"\n    n does it\n")
+	}
+	cases := []struct {
+		name  string
+		files map[string]string
+		want  []string
+		cycle bool
+	}{
+		// Two independent chains, interleaved by line in the file, do not
+		// interleave in the spine.
+		{"two independent chains", map[string]string{"a.craft": uc("E1", "j-k", "  when S starts\n    p notifies e.One\n") +
+			uc("E2", "j-k", "  when S starts again\n    q notifies e.Two\n") +
+			uc("E1 next", "j-k", "  when n listens e.One\n    n does it\n") +
+			uc("E2 next", "j-k", "  when m listens e.Two\n    m does it\n")}, []string{"E1", "E1 next", "E2", "E2 next"}, false},
+		// The member whose title slugifies to the slug starts the spine.
+		{"namesake by title", map[string]string{"a.craft": chain("X", "X then", "X") + chain("J, k!", "J then", "J")}, []string{"J, k!", "J then", "X", "X then"}, false},
+		// A file named after the slug.
+		{"namesake by file", map[string]string{"a.craft": chain("X", "X then", "X"), "j-k.craft": chain("N", "N then", "N")}, []string{"N", "N then", "X", "X then"}, false},
+		// A file named after one of the member's former journeys.
+		{"namesake by former journey file", map[string]string{"a.craft": chain("X", "X then", "X"),
+			"old-j.craft": ucFormer("N", "j-k", "old-j", "  when S starts N\n    p notifies e.N\n") + uc("N then", "j-k", "  when n listens e.N\n    n does it\n")}, []string{"N", "N then", "X", "X then"}, false},
+		// A file named after the slug beats one named after a member's
+		// former journey.
+		{"slug file beats former journey file", map[string]string{"a-old.craft": ucFormer("O", "j-k", "a-old", "  when S starts O\n    p notifies e.O\n") + uc("O then", "j-k", "  when o listens e.O\n    o does it\n"),
+			"j-k.craft": chain("N", "N then", "N")}, []string{"N", "N then", "O", "O then"}, false},
+		// A title match beats a file match.
+		{"title beats file", map[string]string{"j-k.craft": chain("N", "N then", "N"), "z.craft": chain("J K", "J then", "J")}, []string{"J K", "J then", "N", "N then"}, false},
+		// Unconnected members come last, even the namesake; among them the
+		// namesake first, then file and line.
+		{"unconnected namesake last", map[string]string{"a.craft": uc("U", "j-k", "  when S looks\n    u does it\n") + chain("A", "B", "A") +
+			uc("J K", "j-k", "  when S reads\n    v does it\n")}, []string{"A", "B", "J K", "U"}, false},
+		// Nothing hands into the cycle: it is entered at the namesake.
+		{"cycle entered at the namesake", map[string]string{"a.craft": uc("A", "j-k", "  when a listens e.B\n    a notifies e.A\n") +
+			uc("J K", "j-k", "  when b listens e.A\n    b notifies e.B\n")}, []string{"J K", "A"}, true},
+	}
+	for _, c := range cases {
+		j := journey.Build(docOf(t, c.files), "j-k")
+		if got := order(j); !slices.Equal(got, c.want) || j.Cycle != c.cycle {
+			t.Errorf("%s: got %v cycle=%v, want %v cycle=%v", c.name, got, j.Cycle, c.want, c.cycle)
+		}
+	}
+}

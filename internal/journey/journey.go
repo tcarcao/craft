@@ -4,9 +4,12 @@ package journey
 
 import (
 	"cmp"
+	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
@@ -38,11 +41,13 @@ func Slugs(doc *model.CraftDoc) []string {
 }
 
 // Build returns the spine of slug: every member, the edges between members,
-// and a topological order over the edges (Kahn). Among ready members the one
-// with the smallest (source file, line) goes first. When none is ready (a
-// cycle), the cycle is entered at the smallest (source file, line) of the
-// members a placed member hands off to (of all remaining members when there
-// is none), and Cycle is set.
+// and a topological order over the edges (Kahn; see topoOrder). Connected
+// members come first: among ready ones, a successor of the member placed
+// last, then the namesake (the member the journey is named after), then
+// (source file, line). When none is ready (a cycle), the cycle is entered
+// where a placed member hands off into it, else at the namesake, else by
+// (source file, line), and Cycle is set. Members with no hand-off to or from
+// another member come last, namesake first.
 func Build(doc *model.CraftDoc, slug string) model.Journey {
 	j := model.Journey{Slug: slug}
 	if doc == nil || slug == "" {
@@ -55,7 +60,7 @@ func Build(doc *model.CraftDoc, slug string) model.Journey {
 		}
 	}
 	edges := edgesBetween(doc, members) // From/To index members
-	order, cycle := topoOrder(doc, members, edges)
+	order, cycle := topoOrder(doc, slug, members, edges)
 	pos := make(map[int]int, len(order))
 	for p, m := range order {
 		pos[m] = p
@@ -170,16 +175,27 @@ func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 }
 
 // topoOrder orders members (indices into members) by Kahn's algorithm over
-// edges, ties broken by (source file, line). When no member is ready (a
-// cycle), it places the first by (source file, line) of the members a placed
-// member hands off to, or of all the rest when there is none, and reports
-// the cycle.
-func topoOrder(doc *model.CraftDoc, members []int, edges []model.JourneyEdge) (order []int, cycle bool) {
+// edges (spec §17.2). Members connected by a hand-off come first, then the
+// unconnected ones. The next member is chosen by tier, then preference:
+//
+//	tier 0: a connected member with no unplaced predecessor (ready);
+//	tier 1: a connected member a placed member hands off to (a cycle, entered
+//	        where the flow reaches it);
+//	tier 2: any other connected member (a cycle nothing hands into);
+//	tier 3: an unconnected member.
+//
+// Within a tier: a successor of the member placed last (so independent
+// chains do not interleave), then the namesake (see namesake), then the
+// smallest (source file, line). Placing a member of tier 1 or 2 reports a
+// cycle.
+func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.JourneyEdge) (order []int, cycle bool) {
 	n := len(members)
 	indeg := make([]int, n)
 	succ := make([][]int, n)
+	connected := make([]bool, n)
 	seen := map[[2]int]bool{}
 	for _, e := range edges {
+		connected[e.From], connected[e.To] = true, true
 		if p := [2]int{e.From, e.To}; !seen[p] {
 			seen[p] = true
 			indeg[e.To]++
@@ -196,12 +212,12 @@ func topoOrder(doc *model.CraftDoc, members []int, edges []model.JourneyEdge) (o
 		}
 		return x < y
 	}
-	// rank orders the unplaced members: ready ones first; then, to break a
-	// cycle, ones a placed member hands off to, so the cycle is entered
-	// where the flow reaches it; then the rest.
+	named := namesake(doc, slug, members, before)
 	reached := make([]bool, n)
-	rank := func(m int) int {
+	tier := func(m int) int {
 		switch {
+		case !connected[m]:
+			return 3
 		case indeg[m] == 0:
 			return 0
 		case reached[m]:
@@ -209,26 +225,96 @@ func topoOrder(doc *model.CraftDoc, members []int, edges []model.JourneyEdge) (o
 		}
 		return 2
 	}
+	last := -1
+	follows := func(m int) bool { return last >= 0 && slices.Contains(succ[last], m) }
+	better := func(m, cur int) bool {
+		if tm, tc := tier(m), tier(cur); tm != tc {
+			return tm < tc
+		}
+		if fm, fc := follows(m), follows(cur); fm != fc {
+			return fm
+		}
+		if m == named || cur == named {
+			return m == named
+		}
+		return before(m, cur)
+	}
 	placed := make([]bool, n)
 	for len(order) < n {
 		next := -1
 		for m := range n {
-			if placed[m] {
-				continue
-			}
-			if next < 0 || rank(m) < rank(next) || rank(m) == rank(next) && before(m, next) {
+			if !placed[m] && (next < 0 || better(m, next)) {
 				next = m
 			}
 		}
-		if indeg[next] > 0 {
+		if t := tier(next); t == 1 || t == 2 {
 			cycle = true
 		}
 		placed[next] = true
 		order = append(order, next)
+		last = next
 		for _, s := range succ[next] {
 			indeg[s]--
 			reached[s] = true
 		}
 	}
 	return order, cycle
+}
+
+// namesake returns the member the journey is named after, or -1. In order
+// of preference, ties to the first by before: a member whose title slugifies
+// to slug; a member in a file whose base name, without .craft, is slug; a
+// member in a file named after one of its own formerly_journey values.
+func namesake(doc *model.CraftDoc, slug string, members []int, before func(x, y int) bool) int {
+	const none = 4
+	best, bestRank := -1, none
+	for m, i := range members {
+		uc := doc.UseCases[i]
+		base := strings.TrimSuffix(path.Base(filepath.ToSlash(uc.SourceURI)), ".craft")
+		rank := none
+		switch {
+		case slugify(uc.Name) == slug:
+			rank = 1
+		case base == slug:
+			rank = 2
+		case formerlyIn(uc, base):
+			rank = 3
+		}
+		if rank < bestRank || rank == bestRank && rank < none && before(m, best) {
+			best, bestRank = m, rank
+		}
+	}
+	return best
+}
+
+// formerlyIn reports whether slug is one of uc's formerly_journey values.
+func formerlyIn(uc model.UseCase, slug string) bool {
+	for _, v := range uc.TagValues[lang.TagFormerlyJourney] {
+		for _, former := range strings.Split(v, ";") {
+			if strings.TrimSpace(former) == slug {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// slugify lowercases s and turns every run of characters that are not
+// letters or digits into one '-', trimmed at both ends:
+// "Seller promotes an advert" → "seller-promotes-an-advert".
+func slugify(s string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if dash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			dash = false
+			b.WriteRune(r)
+			continue
+		}
+		dash = true
+	}
+	return b.String()
 }

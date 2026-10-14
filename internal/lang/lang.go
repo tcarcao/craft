@@ -147,6 +147,9 @@ const (
 const (
 	TagJourney        = "journey"         // the spine a use case belongs to
 	TagFormerlyTitled = "formerly_titled" // earlier titles, `;`-separated
+	// TagFormerlyJourney lists earlier journey slugs (`;`-separated). A spine
+	// reads it only to find its namesake file (spec §17.2).
+	TagFormerlyJourney = "formerly_journey"
 )
 
 // JourneyEdgeKind is what connects two members of a journey spine.
