@@ -1,0 +1,9 @@
+domain geo {
+    x
+    y
+}
+
+use_case "Nearest paths" {
+    when x listens sns.position-changed
+        x asks y for the nearest paths  [GET /nearest/paths/{latitude},{longitude}]
+}

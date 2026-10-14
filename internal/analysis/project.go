@@ -473,6 +473,17 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 	if text := a.OpText(); text != "" {
 		operation = &model.Operation{Verb: a.OpVerb(), Payload: a.OpPayload(), Text: text}
 	}
+	// A bracket of two or more items is also kept item by item (spec §8.2);
+	// Operation keeps the whole body.
+	var operations []model.Operation
+	if operation != nil {
+		if items := lang.SplitOperationItems(operation.Text); len(items) > 1 {
+			for _, it := range items {
+				verb, payload := lang.ParseOperationItem(it.Text)
+				operations = append(operations, model.Operation{Verb: verb, Payload: payload, Text: it.Text})
+			}
+		}
+	}
 	var store *model.StoreRef
 	if kind == lang.ActionAsync {
 		store = storeRef(a.ObjectRef())
@@ -486,6 +497,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		Event:         event,
 		Ref:           a.ObjectRef(),
 		Operation:     operation,
+		Operations:    operations,
 		Store:         store,
 		Connector:     connector,
 		Phrase:        phrase,

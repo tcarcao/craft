@@ -1,0 +1,121 @@
+{
+  "useCases": [
+    {
+      "name": "Partner keys and adverts",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "partner",
+            "event": "sns.partner-onboarded",
+            "ref": "sns.partner-onboarded",
+            "description": "when partner listens \"sns.partner-onboarded\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "ad/partner"
+            },
+            "line": 12,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "appmanager",
+                "targetContext": "AwsApiGateway",
+                "ref": "AwsApiGateway",
+                "operation": {
+                  "payload": "CreateApiKey, CreateUsagePlanKey",
+                  "text": "CreateApiKey, CreateUsagePlanKey"
+                },
+                "operations": [
+                  {
+                    "payload": "CreateApiKey",
+                    "text": "CreateApiKey"
+                  },
+                  {
+                    "payload": "CreateUsagePlanKey",
+                    "text": "CreateUsagePlanKey"
+                  }
+                ],
+                "connector": "to",
+                "phrase": "create the key and bind it to the plan",
+                "description": "appmanager asks AwsApiGateway to create the key and bind it to the plan",
+                "line": 13,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "ad/appmanager"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "AwsApiGateway"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "partner",
+                "targetContext": "atlas",
+                "ref": "atlas",
+                "operation": {
+                  "payload": "postAdvert, putAdvert, deleteAdvert",
+                  "text": "postAdvert, putAdvert, deleteAdvert"
+                },
+                "operations": [
+                  {
+                    "payload": "postAdvert",
+                    "text": "postAdvert"
+                  },
+                  {
+                    "payload": "putAdvert",
+                    "text": "putAdvert"
+                  },
+                  {
+                    "payload": "deleteAdvert",
+                    "text": "deleteAdvert"
+                  }
+                ],
+                "connector": "to",
+                "phrase": "save or delete the advert",
+                "description": "partner asks atlas to save or delete the advert",
+                "line": 14,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "ad/partner"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "ad/atlas"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 11
+    }
+  ],
+  "domains": [
+    {
+      "name": "ad",
+      "boundedContexts": [
+        "appmanager",
+        "atlas",
+        "partner"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "AwsApiGateway",
+      "type": "system",
+      "line": 2
+    }
+  ]
+}

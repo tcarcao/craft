@@ -988,3 +988,16 @@ use_case "Ledger" {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
 }
+
+func TestDerive_OperationListIsCopied(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Keys" {
+    when Customer asks for a key
+        Ordering asks Billing to create the key and bind it  [CreateApiKey, CreateUsagePlanKey]
+}
+`})
+	req := its[1]
+	if req.Operation == nil || req.Operation.Text != "CreateApiKey, CreateUsagePlanKey" || len(req.Operations) != 2 || req.Operations[1].Text != "CreateUsagePlanKey" {
+		t.Errorf("request = %+v", req)
+	}
+}

@@ -1,0 +1,64 @@
+{
+  "useCases": [
+    {
+      "name": "Nearest paths",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "x",
+            "event": "sns.position-changed",
+            "ref": "sns.position-changed",
+            "description": "when x listens \"sns.position-changed\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "geo/x"
+            },
+            "line": 7,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "x",
+                "targetContext": "y",
+                "ref": "y",
+                "operation": {
+                  "verb": "GET",
+                  "payload": "/nearest/paths/{latitude},{longitude}",
+                  "text": "GET /nearest/paths/{latitude},{longitude}"
+                },
+                "connector": "for",
+                "phrase": "the nearest paths",
+                "description": "x asks y for the nearest paths",
+                "line": 8,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "geo/x"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "geo/y"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 6
+    }
+  ],
+  "domains": [
+    {
+      "name": "geo",
+      "boundedContexts": [
+        "x",
+        "y"
+      ]
+    }
+  ]
+}

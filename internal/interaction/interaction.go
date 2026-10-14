@@ -89,7 +89,10 @@ type Interaction struct {
 	Event     string
 	Label     string
 	Operation *model.Operation
-	Site      Site
+	// Operations is copied from model.Action.Operations: each item of a
+	// bracket that lists two or more; nil otherwise.
+	Operations []model.Operation
+	Site       Site
 	// Targeted is true for a Response written with an explicit `to` target,
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
@@ -423,6 +426,7 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 	it.From = endpoint(a.Context, a.From)
 	it.Label = label(a)
 	it.Operation = a.Operation
+	it.Operations = a.Operations
 	it.Site = Site{URI: w.uri, Line: a.Line, Column: a.Column, Length: utf16Len(a.Context)}
 	switch a.Type {
 	case lang.ActionSync:

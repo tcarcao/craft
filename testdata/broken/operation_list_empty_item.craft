@@ -1,0 +1,9 @@
+domain keys {
+    appmanager
+    gateway
+}
+
+use_case "U" {
+    when appmanager listens sns.key-requested
+        appmanager asks gateway to create the key  [CreateApiKey, , CreateUsagePlanKey]
+}

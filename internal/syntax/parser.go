@@ -1842,9 +1842,20 @@ func (p *Parser) parseOpAnnotation() []model.Diagnostic {
 	}
 
 	rbLine := -1
-	if p.peek().Type == lexer.TokenRBracket {
-		rbLine = p.peek().Line
+	if rbTok := p.peek(); rbTok.Type == lexer.TokenRBracket {
+		rbLine = rbTok.Line
 		p.consumeAs(SyntaxKindRBracket)
+		// An operation list (`[a, b]`, spec §8.1) must not hold an empty item.
+		if rbTok.Offset > lbTok.End {
+			if items := lang.SplitOperationItems(p.src[lbTok.End:rbTok.Offset]); len(items) > 1 {
+				for _, it := range items {
+					if it.Text == "" {
+						diags = append(diags, p.diagEmptyOpAnnotationItem(lbTok, rbTok))
+						break
+					}
+				}
+			}
+		}
 	} else {
 		// Defensive: opAnnotationStart guarantees the `]` exists.
 		diags = append(diags, p.diagUnexpected(p.peek(), "]"))
@@ -2494,6 +2505,14 @@ func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
 		Severity: model.SeverityError,
 		Range:    r,
 	}
+}
+
+// diagEmptyOpAnnotationItem reports an empty item of an operation list
+// (`[a, , b]`, `[a, ]`), over the whole bracket.
+func (p *Parser) diagEmptyOpAnnotationItem(lb, rb lexer.Token) model.Diagnostic {
+	d := p.diagEmptyOpAnnotation(lb, rb)
+	d.Message = "an operation bracket item is empty; write each item, e.g. [CreateApiKey, CreateUsagePlanKey]"
+	return d
 }
 
 // diagKindPrefixInSlot produces a craft/syntax/kind-prefix-in-target

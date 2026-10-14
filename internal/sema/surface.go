@@ -96,6 +96,29 @@ func annotationRange(op *syntax.SyntaxNode, li green.LineIndex, hasLI bool) mode
 	}
 }
 
+// opItemRange is the range of one item of an action's bracket: the body
+// starts at the first token after `[` that is neither whitespace nor the
+// `inferred` marker, and the item sits it.Start bytes into the body text.
+func opItemRange(op *syntax.SyntaxNode, it lang.OpItem, li green.LineIndex) model.Range {
+	if op == nil {
+		return model.Range{}
+	}
+	for _, tok := range op.AllTokens() {
+		switch tok.Kind() {
+		case syntax.SyntaxKindLBracket, syntax.SyntaxKindWhitespace, syntax.SyntaxKindKwInferred:
+			continue
+		}
+		start := tok.Offset() + green.TextSize(it.Start)
+		line, col := li.LineCol16(start)
+		_, endCol := li.LineCol16(start + green.TextSize(len(it.Text)))
+		return model.Range{
+			Start: model.Position{Line: lineToLSP(line), Character: colToLSP(col)},
+			End:   model.Position{Line: lineToLSP(line), Character: colToLSP(endCol)},
+		}
+	}
+	return model.Range{}
+}
+
 // resolveSurfaces checks every surface's subject and callers against the
 // workspace, and reports a second surface for the same boundary. Files are
 // walked in sorted order, so the first surface in that order is the one the
@@ -204,6 +227,15 @@ func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 			for _, op := range s.Operations() {
 				if text := CollapseOperation(op.OpText()); text != "" {
 					ops[text] = true
+					// A surface line that lists several operations offers
+					// each of them.
+					if items := lang.SplitOperationItems(op.OpText()); len(items) > 1 {
+						for _, it := range items {
+							if t := CollapseOperation(it.Text); t != "" {
+								ops[t] = true
+							}
+						}
+					}
 				}
 			}
 			surfaces[p.ID] = surfaceOps{subject: s.Subject(), ops: ops}
@@ -232,16 +264,29 @@ func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 						continue
 					}
 					s := surfaces[boundary]
-					if s.ops[text] {
+					report := func(item string, r model.Range) {
+						diags = append(diags, model.Diagnostic{
+							Code:      "craft/lint/operation-not-in-surface",
+							Message:   fmt.Sprintf("`[%s]` is not an operation of the `%s` surface; add it to the surface or fix the operation name", item, s.subject),
+							Severity:  model.SeverityWarning,
+							SourceURI: uri,
+							Range:     r,
+						})
+					}
+					items := lang.SplitOperationItems(a.OpText())
+					if len(items) < 2 {
+						if !s.ops[text] {
+							report(text, annotationRange(a.OpAnnotation(), li, true))
+						}
 						continue
 					}
-					diags = append(diags, model.Diagnostic{
-						Code:      "craft/lint/operation-not-in-surface",
-						Message:   fmt.Sprintf("`[%s]` is not an operation of the `%s` surface; add it to the surface or fix the operation name", text, s.subject),
-						Severity:  model.SeverityWarning,
-						SourceURI: uri,
-						Range:     annotationRange(a.OpAnnotation(), li, true),
-					})
+					// An operation list (spec §8.4): one warning per item the
+					// surface does not list, at the item.
+					for _, it := range items {
+						if item := CollapseOperation(it.Text); item != "" && !s.ops[item] {
+							report(item, opItemRange(a.OpAnnotation(), it, li))
+						}
+					}
 				}
 			}
 		}

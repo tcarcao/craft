@@ -1,0 +1,15 @@
+actors {
+    system AwsApiGateway
+}
+
+domain ad {
+    appmanager
+    atlas
+    partner
+}
+
+use_case "Partner keys and adverts" {
+    when partner listens sns.partner-onboarded
+        appmanager asks AwsApiGateway to create the key and bind it to the plan  [CreateApiKey, CreateUsagePlanKey]
+        partner asks atlas to save or delete the advert                          [postAdvert, putAdvert, deleteAdvert]
+}

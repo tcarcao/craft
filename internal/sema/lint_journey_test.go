@@ -234,3 +234,20 @@ func TestLint_PerItemEventLints(t *testing.T) {
 		t.Errorf("past-tense = %v (want one, on the continuation line)", past)
 	}
 }
+
+func TestLint_OperationNotInSurfaceChecksEachItem(t *testing.T) {
+	src := "domain ad {\n  atlas\n  partner\n}\nsurface atlas {\n  callers: partner\n  command save the advert  [postAdvert]\n  command delete it  [deleteAdvert]\n}\nuse_case \"U\" {\n  when partner listens x.Y\n    partner asks atlas to save or delete the advert  [postAdvert, putAdvert, deleteAdvert]\n}"
+	var got []model.Diagnostic
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/lint/operation-not-in-surface" {
+			got = append(got, d)
+		}
+	}
+	if len(got) != 1 || !strings.Contains(got[0].Message, "[putAdvert]") {
+		t.Fatalf("got %v", got)
+	}
+	// "    partner asks atlas to save or delete the advert  [" is 54 columns; putAdvert starts after "postAdvert, ".
+	if got[0].Range.Start.Character != 66 || got[0].Range.End.Character != 75 {
+		t.Errorf("range = %+v", got[0].Range)
+	}
+}
