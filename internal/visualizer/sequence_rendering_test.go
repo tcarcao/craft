@@ -523,3 +523,29 @@ end
 		t.Errorf("plantuml:\n--- got\n%s\n--- want suffix\n%s", out.Data, want)
 	}
 }
+
+func TestFlow_EdgesInsideABranchCarryTheBranchLabel(t *testing.T) {
+	doc := resolvedDoc(t, branchesSrc)
+	for _, backend := range []Backend{PlantUML, Mermaid} {
+		out, _, err := renderSource(doc, ViewFlow, backend)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(out)
+		for _, want := range []string{
+			"[the card is declined] for a second opinion",
+			"[the bank also declines] returns the refusal",
+			"[the card is accepted] returns the receipt",
+		} {
+			if !strings.Contains(s, want) {
+				t.Errorf("%v flow lacks %q:\n%s", backend, want, s)
+			}
+		}
+		if strings.Contains(s, "[the card is declined] returns the refusal") {
+			t.Errorf("%v: innermost label must win:\n%s", backend, s)
+		}
+		if strings.Contains(s, "] to charge the card") || strings.Contains(s, "] returns the confirmation") {
+			t.Errorf("%v: edge outside a block has a prefix:\n%s", backend, s)
+		}
+	}
+}

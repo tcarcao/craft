@@ -30,10 +30,17 @@ type FlowEdge struct {
 func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 	ns := newNodeSet(doc)
 	var f Flow
+	var branch []interaction.BranchRef // branch of the interaction being laid out
 	add := func(from, to string, style EdgeStyle, label string) {
+		// The flow has no boxes, so an edge inside a block names its
+		// innermost branch instead.
+		if len(branch) > 0 {
+			label = "[" + branch[len(branch)-1].Label + "] " + label
+		}
 		f.Edges = append(f.Edges, FlowEdge{From: from, To: to, Number: len(f.Edges) + 1, Label: label, Style: style})
 	}
 	for _, it := range its {
+		branch = it.Branch
 		switch it.Kind {
 		case interaction.Trigger:
 			if it.From.Key == it.To.Key {
