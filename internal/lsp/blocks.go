@@ -215,21 +215,30 @@ func blockHover(file syntax.File, li green.LineIndex, cursorLine int) (string, b
 }
 
 // keywordHovers are the hover texts of the journey-semantics keywords that
-// have no declaration to resolve (spec §5.5, §6.6).
+// have no declaration to resolve (spec §5.5, §6.6; v2.24 §8.7, §9.6).
 var keywordHovers = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwNote:     "note — drawn over the previous step",
 	syntax.SyntaxKindKwFinding:  "finding — drawn highlighted and exported to CraftDoc (`Step.Note`)",
 	syntax.SyntaxKindKwReceives: "callee-side trigger: the caller is not observed; drawn as a found message",
+	syntax.SyntaxKindKwInferred: "inferred hop: drawn grey",
+	syntax.SyntaxKindKwOne:      "notifies one of: one event per run, chosen at run time",
+	syntax.SyntaxKindKwOf:       "notifies one of: one event per run, chosen at run time",
 }
 
 // keywordHover returns the hover text of the keyword under offset, if any.
 func keywordHover(root syntax.SyntaxNode, offset green.TextSize) (string, bool) {
 	var toks []syntax.SyntaxToken
+	// The token whose first character is under the cursor comes first:
+	// TokenAtOffset reports a token's start offset as Between its
+	// neighbours, which misses `inferred` right after `[`.
+	if tok, ok := tokenUnder(root, offset); ok {
+		toks = append(toks, tok)
+	}
 	switch at := root.TokenAtOffset(offset).(type) {
 	case syntax.Single:
-		toks = []syntax.SyntaxToken{at.Token}
+		toks = append(toks, at.Token)
 	case syntax.Between:
-		toks = []syntax.SyntaxToken{at.Right, at.Left}
+		toks = append(toks, at.Right, at.Left)
 	}
 	for _, tok := range toks {
 		if v, ok := keywordHovers[tok.Kind()]; ok {
@@ -237,6 +246,16 @@ func keywordHover(root syntax.SyntaxNode, offset green.TextSize) (string, bool) 
 		}
 	}
 	return "", false
+}
+
+// tokenUnder returns the token holding the character at offset.
+func tokenUnder(root syntax.SyntaxNode, offset green.TextSize) (syntax.SyntaxToken, bool) {
+	for _, tok := range root.AllTokens() {
+		if r := tok.TextRange(); offset >= r.Start && offset < r.End {
+			return tok, true
+		}
+	}
+	return syntax.SyntaxToken{}, false
 }
 
 // prevLineInPar reports whether the last non-blank line above cursorLine

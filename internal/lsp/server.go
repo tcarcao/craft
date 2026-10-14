@@ -363,6 +363,10 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	rm := s.ws.ResolutionMap()
 	wsSym := s.ws.WorkspaceSymbols()
 
+	// A listens item goes to the `notifies` lines that publish it.
+	if locs, ok := s.eventDefinition(file, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
+		return locs, nil
+	}
 	// An `asks` bracket goes to its surface operation; a store ref to its
 	// `data-stores:` entry.
 	if loc, ok := s.journeyDefinition(file, f.LineIndex, cursorLine, int(params.Position.Character)); ok {
@@ -1614,6 +1618,11 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 		}, nil
 	}
+	if val, ok := s.v224Hover(file, f, cursorOffset); ok {
+		return &protocol.Hover{
+			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
+		}, nil
+	}
 	if val, ok := s.journeyHover(file, f.LineIndex, cursorLine, int(params.Position.Character), cursorOffset); ok {
 		return &protocol.Hover{
 			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
@@ -2222,6 +2231,10 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwNote:     "craft-flow-keyword",
 	syntax.SyntaxKindKwFinding:  "craft-flow-keyword",
 	syntax.SyntaxKindKwReceives: "craft-flow-keyword",
+	syntax.SyntaxKindKwOne:      "craft-flow-keyword",
+	syntax.SyntaxKindKwOf:       "craft-flow-keyword",
+	syntax.SyntaxKindKwStream:   "craft-flow-keyword",
+	syntax.SyntaxKindKwInferred: "craft-flow-keyword",
 	syntax.SyntaxKindKwActor:    "craft-actor-keyword",
 	syntax.SyntaxKindKwActors:   "craft-actors-keyword",
 	syntax.SyntaxKindKwDomain:   "craft-domain-keyword",

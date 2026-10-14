@@ -153,18 +153,26 @@ func surfaceOpFor(ws *workspace.Workspace, target, op string) (syntax.SurfaceOpD
 }
 
 // askBracketAt returns the `asks` action whose `[op]` bracket contains
-// offset, and its collapsed operation text.
+// offset, and its collapsed operation text. When the bracket lists two or
+// more operations, the text is the item under the cursor (spec §8.7), and
+// ok is false between items.
 func askBracketAt(file syntax.File, offset green.TextSize) (syntax.ActionDecl, string, bool) {
 	for _, uc := range file.UseCases() {
 		for _, sc := range uc.Scenarios() {
 			for _, a := range sc.Actions() {
-				ann := a.OpAnnotation()
-				if a.Kind() != lang.ActionSync || ann == nil {
+				if a.Kind() != lang.ActionSync {
 					continue
 				}
-				if r := ann.TextRange(); offset >= r.Start && offset <= r.End {
+				items, i, ok := bracketItemAt(a, offset)
+				switch {
+				case !ok:
+					continue
+				case len(items) < 2:
 					return a, sema.CollapseOperation(a.OpText()), true
+				case i >= 0:
+					return a, sema.CollapseOperation(items[i].Text), true
 				}
+				return syntax.ActionDecl{}, "", false
 			}
 		}
 	}
