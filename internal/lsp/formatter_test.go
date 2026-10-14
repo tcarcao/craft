@@ -1965,6 +1965,10 @@ func stepOutline(t *testing.T, src string) string {
 				b.WriteString(ind + "note " + string(n.Kind()) + " " + strconv.Quote(n.Text()) + "\n")
 				continue
 			}
+			if l, ok := st.Link(); ok {
+				b.WriteString(ind + "link:" + string(l.Kind()) + ":" + strconv.Quote(l.Title()) + "\n")
+				continue
+			}
 			blk, _ := st.Block()
 			b.WriteString(ind + string(blk.Kind()) + "\n")
 			for _, br := range blk.Branches() {

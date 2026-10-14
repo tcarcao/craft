@@ -1465,7 +1465,7 @@ func flattenActions(sts []StepDecl, out []ActionDecl) []ActionDecl {
 	return out
 }
 
-// steps lists n's Action, Block and Note child nodes, in order, as steps.
+// steps lists n's Action, Block, Note and Link child nodes, in order, as steps.
 func steps(n SyntaxNode) []StepDecl {
 	var result []StepDecl
 	for el := range n.ChildrenIter() {
@@ -1473,15 +1473,16 @@ func steps(n SyntaxNode) []StepDecl {
 		if !ok {
 			continue
 		}
-		if k := c.Kind(); k == SyntaxKindAction || k == SyntaxKindBlock || k == SyntaxKindNote {
+		if k := c.Kind(); k == SyntaxKindAction || k == SyntaxKindBlock || k == SyntaxKindNote || k == SyntaxKindLink {
 			result = append(result, StepDecl{node: c})
 		}
 	}
 	return result
 }
 
-// StepDecl is one step of a scenario or branch: an action, a block or a note
-// (a SyntaxKindAction, SyntaxKindBlock or SyntaxKindNote node).
+// StepDecl is one step of a scenario or branch: an action, a block, a note or
+// a link (a SyntaxKindAction, SyntaxKindBlock, SyntaxKindNote or
+// SyntaxKindLink node).
 type StepDecl struct{ node SyntaxNode }
 
 // Action returns the step as an action, if it is one.
@@ -1508,8 +1509,54 @@ func (s StepDecl) Note() (NoteDecl, bool) {
 	return NoteDecl{node: s.node}, true
 }
 
+// IsNoteOrLink reports whether the step is a note or a link: a line that is
+// not an action, so it makes no fan-out branch and is never "the first step".
+func (s StepDecl) IsNoteOrLink() bool {
+	k := s.node.Kind()
+	return k == SyntaxKindNote || k == SyntaxKindLink
+}
+
+// Link returns the step as a link, if it is one.
+func (s StepDecl) Link() (LinkDecl, bool) {
+	if s.node.Kind() != SyntaxKindLink {
+		return LinkDecl{}, false
+	}
+	return LinkDecl{node: s.node}, true
+}
+
 // Node returns the underlying syntax node.
 func (s StepDecl) Node() SyntaxNode { return s.node }
+
+// LinkDecl is a typed view over a SyntaxKindLink node: `includes "<title>"`
+// or `continues "<title>"`.
+type LinkDecl struct{ node SyntaxNode }
+
+// KeywordToken returns the `includes` / `continues` keyword.
+func (l LinkDecl) KeywordToken() *SyntaxToken {
+	return l.node.ChildToken(SyntaxKindKwIncludes, SyntaxKindKwContinues)
+}
+
+// Kind returns lang.LinkContinues for `continues`, lang.LinkIncludes otherwise.
+func (l LinkDecl) Kind() lang.LinkKind {
+	if t := l.KeywordToken(); t != nil && t.Kind() == SyntaxKindKwContinues {
+		return lang.LinkContinues
+	}
+	return lang.LinkIncludes
+}
+
+// TitleToken returns the quoted title, or nil when it is missing.
+func (l LinkDecl) TitleToken() *SyntaxToken { return l.node.ChildToken(SyntaxKindString) }
+
+// Title returns the unquoted title, or "".
+func (l LinkDecl) Title() string {
+	if t := l.TitleToken(); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
+// Node returns the underlying syntax node.
+func (l LinkDecl) Node() SyntaxNode { return l.node }
 
 // NoteDecl is a typed view over a SyntaxKindNote node: `note "…"` or `finding "…"`.
 type NoteDecl struct{ node SyntaxNode }

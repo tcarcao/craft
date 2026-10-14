@@ -717,12 +717,12 @@ func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 	return diags
 }
 
-// countNonNotes counts the steps that are not notes: notes do not make a
-// fan-out par branch (spec §4.1 rule 2).
+// countNonNotes counts the steps that are not notes or links: neither makes
+// a fan-out par branch (spec §4.1 rule 2, v2.25 §13).
 func countNonNotes(steps []syntax.StepDecl) int {
 	n := 0
 	for _, st := range steps {
-		if _, isNote := st.Note(); !isNote {
+		if !st.IsNoteOrLink() {
 			n++
 		}
 	}

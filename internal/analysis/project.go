@@ -208,6 +208,18 @@ func projectSteps(steps []syntax.StepDecl, counter *int, li green.LineIndex) []m
 			out = append(out, model.Step{Note: &note})
 			continue
 		}
+		if l, ok := st.Link(); ok {
+			*counter++
+			link := model.Link{ID: fmt.Sprintf("link_%d", *counter), Kind: l.Kind(), Title: l.Title()}
+			if tok := l.KeywordToken(); tok != nil {
+				link.Line, _ = li.LineCol(tok.Offset())
+			}
+			if tok := l.TitleToken(); tok != nil {
+				_, link.Column = li.LineCol16(tok.Offset())
+			}
+			out = append(out, model.Step{Link: &link})
+			continue
+		}
 		if a, ok := st.Action(); ok {
 			if a.IsIncomplete() {
 				*counter += 2
@@ -221,7 +233,7 @@ func projectSteps(steps []syntax.StepDecl, counter *int, li green.LineIndex) []m
 		if blk, ok := st.Block(); ok {
 			out = append(out, model.Step{Block: projectBlock(blk, counter, li)})
 		}
-		// A step that is none of note, action or block is unreachable by
+		// A step that is none of note, link, action or block is unreachable by
 		// construction: the parser only builds step nodes of those kinds.
 		// Should it ever happen, the node is dropped without consuming a
 		// counter value, and nothing panics.
@@ -239,15 +251,15 @@ func projectNote(n syntax.NoteDecl, id string, li green.LineIndex) model.Note {
 }
 
 // fanOutGroups splits the body of a par written without `and` into its
-// concurrent branches: one per step that is not a note. Notes do not count as
-// steps (spec §4.1 rule 2): each joins the branch of the step before it, and
-// notes before the first step join the first branch. A body of notes only is
-// one branch. Source order is kept, so IDs stay in source order.
+// concurrent branches: one per step that is not a note or a link. Notes and
+// links do not count as steps (spec §4.1 rule 2, v2.25 §13): each joins the
+// branch of the step before it, and those before the first step join the
+// first branch. A body of notes and links only is one branch. Source order is kept, so IDs stay in source order.
 func fanOutGroups(steps []syntax.StepDecl) [][]syntax.StepDecl {
 	var groups [][]syntax.StepDecl
 	var lead []syntax.StepDecl
 	for _, st := range steps {
-		if _, isNote := st.Note(); isNote {
+		if st.IsNoteOrLink() {
 			if len(groups) == 0 {
 				lead = append(lead, st)
 			} else {
@@ -265,10 +277,10 @@ func fanOutGroups(steps []syntax.StepDecl) [][]syntax.StepDecl {
 }
 
 // firstNonNote returns the index of the first step of group that is not a
-// note, or 0 when every step is one.
+// note or a link, or 0 when every step is one.
 func firstNonNote(group []syntax.StepDecl) int {
 	for i, st := range group {
-		if _, isNote := st.Note(); !isNote {
+		if !st.IsNoteOrLink() {
 			return i
 		}
 	}

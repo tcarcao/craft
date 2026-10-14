@@ -1,0 +1,8 @@
+domain web {
+    frontendplatform
+}
+
+use_case "U" {
+    when frontendplatform listens sns.session-opened
+        includes
+}

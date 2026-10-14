@@ -1235,6 +1235,44 @@ func (p *Parser) parseNote() []model.Diagnostic {
 	return diags
 }
 
+// atLinkLine reports whether the next tokens are a link step: `includes` or
+// `continues` at the start of a line, followed by a string on that line or
+// by nothing else on it (a missing title). Anything else keeps the line an
+// action, so both words stay valid names.
+func (p *Parser) atLinkLine() bool {
+	tok := p.peek()
+	if tok.Type != lexer.TokenIdent || (tok.Value != "includes" && tok.Value != "continues") || !p.peekAtLineStart() {
+		return false
+	}
+	next := p.peekAt(1)
+	return next.Type == lexer.TokenString || next.Type == lexer.TokenEOF || next.Line != tok.Line
+}
+
+// parseLink parses `includes "<title>"` or `continues "<title>"`. A link is
+// one line.
+func (p *Parser) parseLink() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindLink)
+	kind := SyntaxKindKwIncludes
+	if p.peek().Value == "continues" {
+		kind = SyntaxKindKwContinues
+	}
+	kwTok := p.consumeAs(kind)
+	if t := p.peek(); t.Type == lexer.TokenString && t.Line == kwTok.Line {
+		p.consumeAs(SyntaxKindString)
+	} else {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/missing-label",
+			Message:  fmt.Sprintf("`%s` needs a quoted use-case title, e.g. `%s \"Seller pays at the checkout\"`", kwTok.Value, kwTok.Value),
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+	}
+	diags = append(diags, p.sweepRestOfLine(kwTok.Line, "end of line after the use-case title")...)
+	p.builder.FinishNode()
+	return diags
+}
+
 // sweepRestOfLine wraps whatever is left on line in an error node and reports
 // its first token as unexpected. A `}` or EOF ends the sweep.
 func (p *Parser) sweepRestOfLine(line int, expected string) []model.Diagnostic {
@@ -1287,7 +1325,7 @@ func (p *Parser) atStep() bool {
 	return true
 }
 
-// parseSteps parses the steps (actions, blocks and notes) of a scenario or of a
+// parseSteps parses the steps (actions, blocks, notes and links) of a scenario or of a
 // branch body.
 //
 // minCol is the visual column of the enclosing branch header, or 0 at the
@@ -1333,6 +1371,8 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 		if !isHdr {
 			if p.atNoteLine() {
 				diags = append(diags, p.parseNote()...)
+			} else if p.atLinkLine() {
+				diags = append(diags, p.parseLink()...)
 			} else {
 				diags = append(diags, p.parseAction()...)
 			}

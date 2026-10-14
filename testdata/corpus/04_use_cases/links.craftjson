@@ -1,0 +1,242 @@
+{
+  "useCases": [
+    {
+      "name": "Seller asks the assistant a question",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "asks",
+            "connector": "the",
+            "phrase": "assistant a question",
+            "description": "when Seller asks the assistant a question",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 11,
+            "column": 10
+          },
+          "steps": [
+            {
+              "link": {
+                "id": "link_2",
+                "kind": "includes",
+                "title": "Site session preamble",
+                "line": 12,
+                "column": 18
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "assistantStream",
+                  "text": "assistantStream"
+                },
+                "connector": "to",
+                "phrase": "stream the answer",
+                "description": "frontendplatform asks graphql to stream the answer",
+                "line": 13,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 10
+    },
+    {
+      "name": "Seller promotes an advert",
+      "scenarios": [
+        {
+          "id": "scenario_4",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "promotes",
+            "connector": "an",
+            "phrase": "advert",
+            "description": "when Seller promotes an advert",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 17,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_5",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "promotionOffers",
+                  "text": "promotionOffers"
+                },
+                "connector": "for",
+                "phrase": "the promotion offers",
+                "description": "frontendplatform asks graphql for the promotion offers",
+                "line": 18,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            },
+            {
+              "link": {
+                "id": "link_6",
+                "kind": "continues",
+                "title": "Seller pays at the checkout",
+                "line": 19,
+                "column": 19
+              }
+            }
+          ]
+        }
+      ],
+      "line": 16
+    },
+    {
+      "name": "Site session preamble",
+      "scenarios": [
+        {
+          "id": "scenario_7",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "opens",
+            "connector": "the",
+            "phrase": "site",
+            "description": "when Seller opens the site",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 23,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_8",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "session",
+                  "text": "session"
+                },
+                "connector": "for",
+                "phrase": "the session",
+                "description": "frontendplatform asks graphql for the session",
+                "line": 24,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 22
+    },
+    {
+      "name": "Seller pays at the checkout",
+      "scenarios": [
+        {
+          "id": "scenario_9",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "opens",
+            "connector": "the",
+            "phrase": "checkout",
+            "description": "when Seller opens the checkout",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 28,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_10",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "startPayment",
+                  "text": "startPayment"
+                },
+                "connector": "to",
+                "phrase": "start the payment",
+                "description": "frontendplatform asks graphql to start the payment",
+                "line": 29,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 27
+    }
+  ],
+  "domains": [
+    {
+      "name": "seller",
+      "boundedContexts": [
+        "frontendplatform",
+        "graphql"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 2
+    }
+  ]
+}

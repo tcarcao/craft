@@ -186,10 +186,10 @@ func blockHover(file syntax.File, li green.LineIndex, cursorLine int) (string, b
 					if line, _ := li.LineCol(tok.Offset()); line == cursorLine {
 						n, tail := len(b.Branches()), ""
 						if b.IsFanOut() {
-							// Each step that is not a note is its own branch.
+							// Each step that is not a note or a link is its own branch.
 							n, tail = 0, "; each step runs concurrently"
 							for _, s := range br.Steps() {
-								if _, isNote := s.Note(); !isNote {
+								if !s.IsNoteOrLink() {
 									n++
 								}
 							}

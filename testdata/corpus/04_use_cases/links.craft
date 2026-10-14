@@ -1,0 +1,30 @@
+actors {
+    user Seller
+}
+
+domain seller {
+    frontendplatform
+    graphql
+}
+
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        includes "Site session preamble"
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+}
+
+use_case "Seller promotes an advert" {
+    when Seller promotes an advert
+        frontendplatform asks graphql for the promotion offers  [promotionOffers]
+        continues "Seller pays at the checkout"
+}
+
+use_case "Site session preamble" {
+    when Seller opens the site
+        frontendplatform asks graphql for the session  [session]
+}
+
+use_case "Seller pays at the checkout" {
+    when Seller opens the checkout
+        frontendplatform asks graphql to start the payment  [startPayment]
+}
