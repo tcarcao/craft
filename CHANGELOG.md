@@ -1,5 +1,43 @@
 # Changelog
 
+## [Unreleased]
+
+**Why a minor version.** No exported `pkg/craft` identifier is removed or changes type. A `Step` can now hold a `Note`, so a consumer that assumes every step is an `Action` or a `Block` must handle the third case. `when X receives …` changes meaning (see **Changed**).
+
+### Added
+- **`par` / `and` and `loop` blocks.** `par "<label>"` runs steps concurrently and `and "<label>"` adds a branch at the `par`'s column, as `else` does for `alt`. A `par` without `and` is the fan-out form: each step of its body is its own branch (`Block.Split`), and every branch carries the header's label. `loop "<condition>"` has one branch, like `opt`. All block kinds nest in each other. `BlockKind` gains `par` and `loop`.
+- **`note` and `finding` statements.** A one-line `note "…"` or `finding "…"` stands wherever a step can (`Step.Note`), at use-case level before the first scenario (`UseCase.Notes`), or in a surface. Notes are not actions: they get no interaction and do not count as steps.
+- **`when <ctx> receives <phrase> [op]`**, a callee-side trigger for a boundary whose caller is not observed: `Trigger.Type` `receive`, with the bracket in `Trigger.Operation`. Sequence diagrams draw a found message, and an unaddressed `returns` a lost one.
+- **Store hand-offs.** A bare `store.<name>.<change>` ref (change `inserted`, `updated` or `deleted`) in a `notifies` or a `listens` is a hand-off through a data store: `Action.Store` and `Trigger.Store` (`StoreRef{Name, Change, Participant}`), resolved against `data-stores:` entries. `Event` and `Ref` keep the full text, so publish/listen pairing is unchanged.
+- **A listens trigger takes a schedule**: `when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"` or `… every "5m"`. It fills `Trigger.Schedule` / `ScheduleKind` and is checked by `craft/sema/invalid-schedule`. It replaces the `polls` tag.
+- **`surface <boundary> { … }`**, a top-level inventory of a boundary's operations: `callers:` (`unknown` for no observed caller), `spec:`, notes and findings, and `query`/`command` lines that each end in a required `[operation]`. Merged across files into `CraftDoc.Surfaces`; the subject resolves to a bounded context, a service or an actor.
+- **`craft generate --type surface`** writes `<base>-surface.md`: one table per surface with a computed "Used by" column (use cases that ask the boundary for that operation, and `receives` triggers marked `(unobserved caller)`). A surface on a service also covers the bounded contexts it deploys that have no surface of their own. `--stdout` works; overwriting an `.md` needs `--force`.
+- **Diagnostics.** Syntax: `craft/syntax/orphan-and`, `missing-operation` and `missing-phrase` (errors). Sema: `craft/sema/invalid-surface-subject` and `duplicate-operation` (errors). Lint (warnings): `craft/lint/single-branch-par`, `receives-on-actor`, `store-without-change`, `store-without-name`, `operation-not-in-surface` and `repeated-request` (two subjects in one step list make the same request to the same target; a call chain is not reported). See `docs/DIAGNOSTICS.md`.
+- **Formatter**: `par`/`and`/`loop` bodies indent like `alt`/`else`, notes indent like steps, the listens tail is written with single spaces, and surfaces get a 4-space body with aligned operation brackets. `orphan-and` and `missing-operation` make `craft fmt` refuse a file.
+- **Language server**: outline, folding, hover and completion for `par`/`and`/`loop`, findings in the outline, `note`/`finding`/`receives`/listens-tail completion and hover; surfaces in the outline (operations as children), hover on the subject and on an `asks` bracket, definition from an `asks` bracket to the surface line, completion of a target's operations inside `[`; hover and definition on store refs; semantic tokens for every new keyword.
+- **`pkg/craft`**: `Note`, `NoteKind` (`NoteKindNote`, `NoteKindFinding`), `Surface`, `SurfaceOperation`, `SurfaceOpKind` (`SurfaceQuery`, `SurfaceCommand`), `StoreRef`, `StoreChange` (`StoreInserted`, `StoreUpdated`, `StoreDeleted`), `TriggerTypeReceive`, `BlockAlt`/`BlockOpt`/`BlockPar`/`BlockLoop`, `UnknownCaller`; fields `Step.Note`, `UseCase.Notes`, `Block.Split`, `Trigger.Operation`, `Trigger.Store`, `Action.Store`, `CraftDoc.Surfaces`; methods `Scenario.OpeningBlock` and `Block.FirstAction`.
+
+### Changed
+- **`when X receives …` is a callee-side trigger.** It used to be an external trigger with actor `X` and verb `receives`. There are no known uses.
+- **Store refs draw a store participant** instead of a self-arrow `notifies "store.…"` and an inbound event arrow.
+- **`craft/syntax/orphan-else`** also fires for an `else` under a `par` or `loop`, and its message names `and`: "`else` continues an `alt` at the same column; a `par` continues with `and`". `missing-label`, `empty-branch` and `inconsistent-indent` cover the new headers, `missing-label` also a bare `note`/`finding`, and `unresolved-reference` and `duplicate-name` cover surfaces.
+- **An unclosed use case or domain stops at a column-1 declaration** (`surface <name> {`, `actor <kind> <name>`, or a top-level keyword) instead of swallowing it.
+- **Tokens left on a line after an operation annotation are an error.** `A asks B for c [0]{]` used to be read as an annotation plus stray tokens or as prose, depending on whether a `}` followed on the same line; the tokens after the annotation's `]` are now one `craft/syntax/unexpected-token`. A phrase brace after a closed bracket (`[x] {amount} [POST /pay]`) ends the line, as one before any bracket already did.
+- **Writers no longer print a trailing space after an empty block label** (`else ` becomes `else`).
+- **`--type all`** also writes `<base>-surface.md` when the model declares a surface; overwriting an existing one needs `--force`. Models without a surface get the same files as before.
+
+### Changed — diagrams
+- **Sequence**: native `par` and `loop` frames (PlantUML separates branches with `else`, Mermaid with `and`; a fan-out branch after the first has no label). A scenario that opens with a `par` or a `loop` draws one trigger before the frame (and a trigger into a branch only when its first action has another subject).
+- **Sequence**: notes over the participants of the message before them (across the diagram when there is none, and for use-case-level notes); findings prefixed `Finding: ` and coloured `#FFE4E1` in PlantUML.
+- **Sequence**: found and lost messages for `receives` (`[-> graphql`, `graphql -->]`); Mermaid declares a participant `Unobserved` as `unobserved caller`.
+- **Sequence**: a store is a `database` participant (Mermaid: `<name> (store)`). A write draws `writer -> store : <change>`; a read draws `reader -> store : polls <change> (from <writers>)`, then `, <schedule>` when the listener has one. A scheduled listen that is not a store ref appends `, <schedule>` to its inbound label.
+- **Flow**: `[par: <label>]` and `[loop: <label>]` step prefixes (`alt`/`opt` keep `[label]`); an `unobserved caller` node; store nodes with writer → store and store → reader edges in place of the writer's event queue.
+- **Architecture**: store nodes, grouped in their owning service when the store resolves.
+- **C4**: a store hand-off never goes through `Event_Queue`. A declared store with databases shown draws `writes <change>` and `polls` relations to the database; otherwise one `Shared store` relation from each writer to each reader in another container.
+
+### Fixed
+- **`craft generate` no longer hangs on a relative and an absolute input** (for example `docs/topology.craft /tmp/x.craft`): the shared output name climbed to `.` and stayed there. Present since 2.20.
+
 ## [2.22.0] — 2026-10-14
 
 ### Added

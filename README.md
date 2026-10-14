@@ -83,6 +83,70 @@ Run `craft validate`, `craft generate`, or `craft inspect` on any `.craft` file.
 
 ---
 
+## Journeys: concurrency, loops, notes, unobserved callers, store hand-offs
+
+A scenario can run steps concurrently with `par`, repeat them with `loop`, and carry `note` and `finding` lines. A `par` without `and` runs each step as its own branch:
+
+```craft
+use_case "Seeker reads an advert" {
+    finding "nothing caches the resolver answers"
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert  [ad]
+        par "field resolvers"
+            graphql asks atlas for the SEO title  [postSeoadvertsbatch]
+            graphql asks atlas for the targeting data  [postAdverttargetingbatch]
+        loop "for each image, until all are signed"
+            graphql asks media to sign the image URL  [signUrl]
+        note "the media service signs one URL per call"
+}
+```
+
+`when <context> receives …` starts a scenario at a boundary whose caller is not observed (drawn as a found message):
+
+```craft
+use_case "Adverts are swept for reindexing" {
+    when graphql receives a reindex sweep  [reindexAdverts]
+        graphql asks atlas for every advert that needs reindexing  [getAlladvertstoreindex]
+}
+```
+
+A `store.<name>.<change>` ref is a hand-off through a data store, and a listener can say when it polls:
+
+```craft
+invoicing notifies store.sms_queue.inserted
+when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+```
+
+See [Use Cases](https://tcarcao.github.io/craft/language/use-cases) for the rules and the diagrams.
+
+## Surfaces
+
+A `surface` lists the operations a boundary offers, as queries (no side effect) and commands (state change):
+
+```craft
+surface concierge {
+    callers: Advisor
+    spec: "obidozoe/docs/openapi.yaml"
+    note "every route takes the shared HTTP Basic pair plus a bidder identity header"
+    finding "a read-only credential is refused only at persistence, after the write ran"
+    query the seeker list, unpaged, newest first, filtered by a typed status  [getUserList]
+    query the seeker audit trail                                             [getUserLogs]
+    command delete a seeker's account                                        [deleteAccount]
+}
+```
+
+`craft generate --type surface` writes a Markdown table whose "Used by" column is computed from the use cases:
+
+| Operation | Kind | What it offers | Used by |
+|---|---|---|---|
+| `getUserList` | query | the seeker list, unpaged, newest first, filtered by a typed status | Advisor works a task |
+| `getUserLogs` | query | the seeker audit trail | — |
+| `deleteAccount` | command | delete a seeker's account | Seeker removes their concierge account (unobserved caller) |
+
+`craft validate` warns (`craft/lint/operation-not-in-surface`) when an `asks` names an operation that the target's surface does not list.
+
+---
+
 ## VS Code Extension
 
 The [Craft VS Code extension](https://github.com/tcarcao/craft-vscode-extension) adds syntax highlighting, domain/services tree views, and live diagram previews. Install from [GitHub releases](https://github.com/tcarcao/craft-vscode-extension/releases).

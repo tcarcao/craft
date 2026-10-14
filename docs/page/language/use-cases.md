@@ -91,6 +91,91 @@ The trigger context also accepts a **qualified** `<domain>/<name>` reference, e.
 
 In a sequence diagram, an event published in another use case arrives from outside the listener's section, labelled with its publishers: `order.OrderCreated (from Ordering)`, at most three names and then `+N more`.
 
+A listener that polls on a schedule says so after the ref, with `cron "<expression>"` or `every "<interval>"` (the same rules as [scheduled triggers](#scheduled-triggers)):
+
+```craft
+when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+when leadimporter listens sqs.lead-requests every "5m"
+```
+
+The model keeps the schedule in `trigger.schedule` and `trigger.scheduleKind`, and the sequence label ends with `, cron * 10 * * 1-5`. This replaces a `polls` tag.
+
+### Store Hand-offs
+
+When one context writes rows to a table that another context polls, write the hand-off as a **store ref**, `store.<name>.<change>`, where the change is `inserted`, `updated` or `deleted`. There is no new syntax: the writer `notifies` the ref and the reader `listens` to it.
+
+```craft
+actors {
+    system CRON
+    system Siren
+}
+
+use_case "Invoicing queues a payment reminder" {
+    when cron "0 9 * * 1-5"
+        invoicing finds the invoices due in three days
+        invoicing notifies store.sms_queue.inserted
+}
+
+use_case "The queued reminder is sent" {
+    when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+        smsdispatch claims the unsent rows
+        smsdispatch asks Siren to send the SMS  [sendSmsNotificationEvent]
+}
+```
+
+A ref is a store ref when it is written bare and its first segment is `store`. The last segment is the change when it is `inserted`, `updated` or `deleted`, and the segments between are the store name (`store.redis.leads.inserted` names `redis.leads`). The name resolves to a service's `data-stores:` entry when one matches. The model sets `action.store` and `trigger.store` (`{name, change, participant}`); `event` and `ref` keep the full text, so publish/listen pairing is unchanged.
+
+Diagrams draw the store as its own participant instead of an event:
+
+```plantuml
+boundary "CRON" as CRON
+participant "invoicing" as invoicing
+database "sms_queue" as sms_queue
+participant "smsdispatch" as smsdispatch
+boundary "Siren" as Siren
+
+== Invoicing queues a payment reminder ==
+
+CRON -> invoicing : cron 0 9 * * 1-5
+invoicing -> invoicing : finds the invoices due in three days
+invoicing -> sms_queue : inserted
+
+== The queued reminder is sent ==
+
+smsdispatch -> sms_queue : polls inserted (from invoicing), cron * 10 * * 1-5
+smsdispatch -> smsdispatch : claims the unsent rows
+smsdispatch -> Siren : to send the SMS [sendSmsNotificationEvent]
+```
+
+Mermaid has no database shape in sequence diagrams, so the participant is labelled `sms_queue (store)`. Flow and architecture diagrams draw a database node with writer → store and store → reader edges. C4 never routes a store hand-off through the event queue: when the store is a declared data store and databases are shown (the default; `--no-databases` hides them), it draws `writes <change>` and `polls` relations to the database. Otherwise it draws one `Shared store` relation from each writer to each reader in another container.
+
+`craft/lint/store-without-change` warns about a store ref with no recognised change, and `craft/lint/store-without-name` about a ref such as `store.inserted` that names no store (it is drawn as a plain event).
+
+### Unobserved Callers (`receives`)
+
+Sometimes the code shows that a boundary receives a request, but not who sends it. Name the callee with `receives` instead of inventing a caller:
+
+```craft
+use_case "Adverts are swept for reindexing" {
+    when graphql receives a reindex sweep  [reindexAdverts]
+        graphql asks atlas for every advert that needs reindexing  [getAlladvertstoreindex]
+        graphql returns the advert ids
+}
+```
+
+**Syntax:**
+```craft
+when <context> receives [connector_word] [phrase] [[operation]]
+```
+
+The subject takes the qualified `<domain>/<name>` form. The trigger has `type: "receive"`, and its `operation` holds the bracket. Sequence diagrams draw the UML found message, `[-> graphql : a reindex sweep [reindexAdverts]`, and an unaddressed `returns` becomes a lost message, `graphql -->] : returns the advert ids`. Mermaid has no found message, so it declares a participant `unobserved caller`. Flow diagrams draw an `unobserved caller` node; architecture and C4 draw nothing for it.
+
+`craft/lint/receives-on-actor` warns when the subject is an actor: an actor starts work with `when <Actor> <verb> …`.
+
+::: warning Changed in 2.23
+Before 2.23, `when X receives …` was an external trigger with actor `X` and verb `receives`.
+:::
+
 ### CRON Triggers
 
 Scheduled tasks:
@@ -309,7 +394,74 @@ When a use case has several scenarios, each is drawn in a frame titled `<n>: <na
 
 `craft validate` warns with `craft/lint/indistinguishable-scenarios` when two scenarios in one use case have the same trigger text and at least one has no name. Fix it with `alt` if they are outcomes, or with `scenario` names if they are separate entries.
 
+`craft/lint/repeated-request` warns when two different subjects in one step list ask the same target for the same operation, usually two clients (`frontendplatform` and `mobile`) making one request. Write it once with a `channels` tag, or open the scenario with `alt "on the web"` / `else "in the app"`. A call chain (the second subject was asked earlier in the list and relays the request) is not reported.
+
 `scenario`, `alt`, `opt` and `else` stay valid names for actors and contexts. They are keywords only at the start of a line and only before a quoted label. Syntax errors for blocks are listed in the [diagnostics codebook](https://github.com/tcarcao/craft/blob/main/docs/DIAGNOSTICS.md).
+
+## Concurrent and Repeated Steps
+
+`par` runs steps concurrently, and `loop` repeats them. Both use the offside rule of `alt`/`opt`, and every block kind nests inside every other.
+
+```craft
+use_case "Seeker reads an advert" {
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert  [ad]
+        par "field resolvers"
+            graphql asks atlas for the SEO title  [postSeoadvertsbatch]
+            graphql asks atlas for the targeting data  [postAdverttargetingbatch]
+            graphql asks atlas where the advert came from  [postAdsourcebatch]
+        loop "for each image, until all are signed"
+            graphql asks media to sign the image URL  [signUrl]
+}
+```
+
+A `par` without `and` is the **fan-out form**: each step of its body (an action or a nested block) is its own concurrent branch. That is the usual case, one caller issuing several independent requests. When a branch has several steps in sequence, give each branch a header with `and`, at the column of its `par`:
+
+```craft
+        par "the advert"
+            graphql asks adcore for the advert  [GET /ads]
+            graphql asks atlas for the owner  [getAdsMappings]
+        and "the statistics"
+            graphql asks Dapi for the page statistics  [GET /projects/{site}_ad_statistics]
+```
+
+`loop "<condition>"` has one branch, like `opt`. Its label is the condition or the iteration ("for each owner", "until ten polls"). Diagrams draw one iteration.
+
+In the model, `block.kind` is `par` or `loop`; a fan-out `par` has `split: true` and one branch per step, each carrying the header's label. Sequence diagrams draw native `par` and `loop` frames (PlantUML separates branches with `else`, Mermaid with `and`). Flow diagrams prefix each step with the block, for example `3. [par: field resolvers] for the SEO title`.
+
+An `else` cannot continue a `par` or a `loop` (`craft/syntax/orphan-else`), and an `and` cannot continue an `alt`, `opt` or `loop` (`craft/syntax/orphan-and`). `craft/lint/single-branch-par` warns about a `par` with only one step, where nothing runs concurrently.
+
+## Notes and Findings
+
+A `note` records a fact about the flow that is not a step; a `finding` records a defect or a risk the author found:
+
+```craft
+use_case "Seller pays an invoice" {
+    finding "nothing retries a failed callback; a lost callback leaves the invoice open"
+    when Seller pays an invoice
+        frontendplatform asks graphql to pay  [payInvoice]
+        note "the gateway forwards the seller's session, not a service token"
+        graphql asks paymentgateway to start the payment  [POST /payments]
+        finding "no idempotency key: a client retry starts a second payment"
+}
+```
+
+A note is one line: the keyword and one quoted text. Write several notes for more. It can stand wherever a step can, or at use-case level after `tags { }` and before the first `scenario`/`when`. A note is not an action: it gets no interaction and does not count as a step. A branch that holds only a note is not empty.
+
+Sequence diagrams draw a note over the participants of the message before it (across the diagram when there is none). A finding is prefixed `Finding: ` and, in PlantUML, coloured:
+
+```plantuml
+note over Seller, paymentgateway #FFE4E1 : Finding: nothing retries a failed callback; a lost callback leaves the invoice open
+Seller -> frontendplatform : pays an invoice
+frontendplatform -> graphql : to pay [payInvoice]
+note over frontendplatform, graphql : the gateway forwards the seller's session, not a service token
+graphql -> paymentgateway : to start the payment [POST /payments]
+note over graphql, paymentgateway #FFE4E1 : Finding: no idempotency key: a client retry starts a second payment
+```
+
+The model keeps step notes as `step.note` and use-case-level notes in `useCase.notes`, each `{kind, text}` with `kind` `note` or `finding`. Flow, architecture and C4 diagrams do not draw notes.
+
+`par`, `and`, `loop`, `note`, `finding` and `receives` stay valid names, like `alt` and `opt`: each is a keyword only in its own position.
 
 ## Operation Annotations
 
@@ -425,6 +577,69 @@ Use-case actions and triggers can emit these:
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, in any participant slot: any action's subject, the `asks` or `returns` target, or the trigger's actor or listening context. Qualify it as `<domain>/<name>`. |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (an empty segment like `re/ billing` or `re//billing`, or more than two segments like `re/a/b`) in any bounded-context slot: any action's subject, the `asks` target, the `returns` target, or the trigger context. |
 | `craft/sema/duplicate-tag` | warning | the same tag key is set twice in one `use_case`. The last value wins. |
+| `craft/syntax/orphan-and` | error | an `and` has no open `par` at its column. |
+| `craft/syntax/missing-label` | error | a block header (`alt`, `opt`, `else`, `par`, `and`, `loop`) has no quoted label, or a `note`/`finding` has no quoted text. |
+| `craft/lint/single-branch-par` | warning | a `par` without `and` has only one step, so nothing runs concurrently. |
+| `craft/lint/receives-on-actor` | warning | the subject of a `receives` trigger is an actor. |
+| `craft/lint/store-without-change` | warning | a store ref does not end in `inserted`, `updated` or `deleted`. |
+| `craft/lint/store-without-name` | warning | a ref starts with `store.` but names no store. |
+| `craft/lint/repeated-request` | warning | two subjects in one step list make the same request to the same target. |
+| `craft/lint/operation-not-in-surface` | warning | an `asks` names an operation that the target's [surface](#surfaces) does not list. |
+
+## Surfaces
+
+A `surface` lists the operations one boundary offers, whether or not a use case calls them. The boundary is a bounded context, a service, or an actor that stands for an external system.
+
+```craft
+surface concierge {
+    callers: Advisor
+    spec: "obidozoe/docs/openapi.yaml"
+    note "every route takes the shared HTTP Basic pair plus a bidder identity header"
+    finding "a read-only credential is refused only at persistence, after the write ran"
+    query the seeker list, unpaged, newest first, filtered by a typed status  [getUserList]
+    query the seeker audit trail                                             [getUserLogs]
+    command delete a seeker's account                                        [deleteAccount]
+}
+```
+
+- `query` marks an operation with no side effect, `command` one that changes state. The line reads like an action without a subject: a phrase that says what the operation offers, then the required `[operation]`.
+- `callers:` lists who calls the boundary: actors, contexts or services. `unknown` means no caller was observed, and it can stand next to named callers.
+- `spec:` points at the API specification. Craft keeps it verbatim and does not read the file.
+- `note` and `finding` hold facts that apply to the whole surface.
+
+`craft generate --type surface` writes `<base>-surface.md` (`--stdout` works too). The "Used by" column is computed: an operation is used by every use case with an `asks` to the boundary and the same operation text, and by a `receives` trigger on the boundary with that operation, marked `(unobserved caller)`. A surface on a service also covers the bounded contexts it deploys that have no surface of their own.
+
+```markdown
+# Surfaces
+
+## concierge
+
+Callers: Advisor
+Spec: `obidozoe/docs/openapi.yaml`
+
+> every route takes the shared HTTP Basic pair plus a bidder identity header
+
+> **Finding:** a read-only credential is refused only at persistence, after the write ran
+
+| Operation | Kind | What it offers | Used by |
+|---|---|---|---|
+| `getUserList` | query | the seeker list, unpaged, newest first, filtered by a typed status | Advisor works a task |
+| `getUserLogs` | query | the seeker audit trail | — |
+| `deleteAccount` | command | delete a seeker's account | Seeker removes their concierge account (unobserved caller) |
+```
+
+`--type all` writes the surface file only when the model declares a surface; overwriting an existing `.md` needs `--force`. Sequence, flow, architecture and C4 diagrams ignore surfaces.
+
+| Code | Severity | When |
+|------|----------|------|
+| `craft/syntax/missing-operation` | error | a `query`/`command` line has no `[operation]`. The line is dropped. |
+| `craft/syntax/missing-phrase` | error | a `query`/`command` line has its `[operation]` but no phrase before it. |
+| `craft/syntax/unclosed-block` | error | the surface has no `}`. |
+| `craft/sema/unresolved-reference` | error | the subject, or a `callers:` entry other than `unknown`, does not resolve. |
+| `craft/sema/invalid-surface-subject` | error | the subject is a domain or a data store. |
+| `craft/sema/duplicate-name` | error / warning | a second surface for the same subject; the first one in sorted file order is used. |
+| `craft/sema/duplicate-operation` | error | the same operation appears twice in one surface. |
+| `craft/lint/operation-not-in-surface` | warning | an `asks <target> … [op]` names an operation that the target's surface does not list. |
 
 ## Deprecated: Quoted Event Strings
 

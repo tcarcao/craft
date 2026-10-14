@@ -432,6 +432,28 @@ use_case "Purchase Item" {
 }
 ```
 
+**Journey constructs (v2.23).** Use them instead of prose comments:
+
+```craft
+use_case "Seeker reads an advert" {
+    finding "nothing retries a failed resolver call"
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert  [ad]
+        par "field resolvers"
+            graphql asks atlas for the SEO title  [postSeoadvertsbatch]
+            graphql asks atlas for the targeting data  [postAdverttargetingbatch]
+        loop "for each image, until all are signed"
+            graphql asks media to sign the image URL  [signUrl]
+        note "media signs one URL per call"
+}
+```
+
+- `par "<label>"` runs steps concurrently. Without `and`, each body step is its own branch (one caller fanning out N requests). With branches of several steps, add `and "<label>"` at the `par`'s column. `loop "<condition>"` repeats its body. Both nest like `alt`/`opt`.
+- `note "…"` and `finding "…"` are one-line statements in a step position, at use-case level before the first `when`, or in a surface. A finding records a defect or risk.
+- `when <context> receives <phrase> [op]` starts a scenario at a boundary whose caller is not observed. Do not invent a caller actor.
+- `notifies store.<name>.<change>` / `when <context> listens store.<name>.<change>` (change `inserted`, `updated` or `deleted`) is a hand-off through a data store. A polling listener adds `cron "<expr>"` or `every "<interval>"` after the ref.
+- `surface <boundary> { callers: …  spec: "…"  query <phrase> [op]  command <phrase> [op] }` lists every operation a context, service or external actor offers; `craft generate --type surface` tabulates which use cases call each one, and `craft/lint/operation-not-in-surface` flags an `asks` to an operation the surface does not list.
+
 ### Deprecated: Quoted Event Strings
 
 The old free-text form — `notifies "Order Created"` / `when X listens "Order Created"` — still **parses**, for backward compatibility with existing files. But it is **deprecated**: `craft validate` emits a `craft/lint/deprecated-string-ref` warning on every quoted event string, pointing at the typed-ref form above. Always generate the typed-ref form in new or extended files; only leave quoted strings in place if the user's existing file already uses them and isn't being migrated.

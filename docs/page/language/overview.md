@@ -29,6 +29,7 @@ A Craft file can contain any combination of these blocks:
 - **Exposures** - Define external access points
 - **Context Map** - Classify bounded-context relationships with DDD strategic patterns
 - **Glossary** - Relate ubiquitous-language terms across bounded contexts
+- **Surfaces** - List the operations a boundary offers, as queries and commands (see [Use Cases](/language/use-cases#surfaces))
 
 ## Basic Syntax Rules
 

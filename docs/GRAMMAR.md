@@ -39,13 +39,16 @@ top_decl    = arch
             | domain_def
             | domains_def
             | actors_def
-            | actor_def ;
+            | actor_def
+            | surface_decl ;      (* 2.23, §8.2 *)
 ```
 
 Every top-level declaration is recoverable independently: a parse failure inside one block MUST NOT prevent the parser from recognising the next top-level keyword (island parsing — see `ARCHITECTURE.md`).
 
 **Top-level keywords (the re-sync anchor set for error recovery):**
-`arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`.
+`arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`, and `surface` when a name and `{` follow on its line.
+
+A use case, domain or surface whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration.
 
 ---
 
@@ -189,18 +192,27 @@ At least one of `presentation:` / `gateway:` must appear. Order is not significa
 This is the richest construct in the language and the primary source of parser complexity.
 
 ```ebnf
-use_case     = 'use_case' STRING '{' NL* scenario* '}' NL* ;
+use_case      = 'use_case' STRING '{' NL* use_case_body '}' NL* ;
+use_case_body = tags_block? (note_stmt NL+)* scenario* ;
 scenario      = scenario_name? trigger step* ;   (* trigger includes 'when' and its NL+ *)
 scenario_name = 'scenario' STRING NL+ ;
-step          = action | block ;
-block         = alt_block | opt_block ;
+step          = action | block | note_stmt NL+ ;
+block         = alt_block | opt_block | par_block | loop_block ;
 alt_block     = 'alt' STRING NL+ body ('else' STRING NL+ body)* ;
 opt_block     = 'opt' STRING NL+ body ;
+par_block     = 'par' STRING NL+ body ('and' STRING NL+ body)* ;   (* no `and`: each body step is a branch *)
+loop_block    = 'loop' STRING NL+ body ;
+note_stmt     = ('note' | 'finding') STRING ;
 body          = step+ ;        (* offside rule: every line deeper than its header's column *)
 
-trigger      = 'when' domain 'listens' quoted_event NL+
+trigger      = 'when' domain_listen                NL+
+             | 'when' receive_trigger              NL+
+             | 'when' ('cron' | 'every') STRING    NL+
              | 'when' external_trigger             NL+
              | 'when' quoted_event                 NL+ ;
+
+domain_listen   = name_slot 'listens' (quoted_event | ref) (('cron' | 'every') STRING)? ;
+receive_trigger = name_slot 'receives' connector_word? phrase? op_annotation? ;
 
 external_trigger = actor verb connector_word? phrase? ;
 
@@ -229,18 +241,58 @@ domain = identifier ;
 verb   = identifier ;
 
 quoted_event = STRING ;
+
+name_slot     = identifier | identifier '/' identifier ;  (* a name, or the qualified <domain>/<name> form *)
+ref           = identifier ;                              (* a bare event ref; IDENTIFIER admits `.`, e.g. store.sms_queue.inserted *)
+op_annotation = '[' ~[\r\n]+ ']' ;                         (* the last `[` on a line that ends in `]`; tokens after its first `]` are unexpected *)
+name_list     = name_slot (',' name_slot)* ;
+tags_block    = 'tags' '{' NL* (identifier ':' tag_value NL+)* '}' NL+ ;
 ```
 
 **Offside rule.** A block header's body is every following line whose first token sits in a column greater than the header's. The body ends at the first line at or left of the header's column, or at `when`, `scenario` or `}`. An `else` must start at exactly the column of its `alt`. Blocks nest to any depth. For the comparison a tab advances to the next multiple of 4, and comments are trivia: a comment line never closes a body. Outside a block body, indentation stays insignificant.
 
 **Contextual keywords.** `scenario`, `alt`, `opt` and `else` are keywords only at the start of a line and only when a STRING follows. A line such as `alt asks billing for a quote` is still an ordinary action whose subject is named `alt`. A header with no label is an error (`craft/syntax/missing-label`) and is parsed as a header with an empty label.
 
+**`par`, `and` and `loop` (2.23).** `par "<label>"` opens a concurrent block, and `and "<label>"` adds a branch to the nearest open `par` whose header is at the same column, as `else` does for an `alt`. A `par` with no `and` is the **fan-out form**: each step of its body (an action or a nested block) runs as its own concurrent branch, and every branch carries the header's label. Notes do not count as steps: a note joins the branch of the step before it. `loop "<condition>"` opens a block with one branch, like `opt`; diagrams draw one iteration. An `else` cannot continue a `par` or a `loop` (`craft/syntax/orphan-else`), and an `and` cannot continue an `alt`, `opt` or `loop` (`craft/syntax/orphan-and`).
+
+**Notes and findings (2.23).** `note "…"` and `finding "…"` are one-line statements: the keyword and one STRING. A note is a step anywhere a step may stand (it obeys the offside rule, and a branch whose only step is a note is not empty), a use-case-level line after `tags { }` and before the first `scenario`/`when`, or a line in a surface body. A note never opens or closes a block, gets no interaction and does not count as an action. A `finding` is a note that records a defect or risk; diagrams draw it highlighted.
+
+**`receives` (2.23).** `when <ctx> receives <phrase> [op]` is a callee-side trigger: it names the boundary that receives a request whose caller is not observed. The subject takes the qualified `<domain>/<name>` form. The operation bracket is optional. Sequence diagrams draw a found message (and a lost message for an unaddressed `returns`).
+
+**Listens schedule (2.23).** A `listens` trigger takes an optional trailing schedule, `when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"` or `… every "5m"`, with the same rules as `when cron` / `when every` (`craft/sema/invalid-schedule`).
+
+**Store refs (2.23, no new grammar).** A bare (unquoted) ref whose first segment is `store` is a **store hand-off**: `notifies store.<name>.<change>` writes to a data store and `when <ctx> listens store.<name>.<change>` polls it. When the last segment is `inserted`, `updated` or `deleted` it is the change, and the segments before it (joined with `.`) are the store name; otherwise every segment after `store.` is the name and the change is empty (`craft/lint/store-without-change`). A ref that names no store (`store.inserted`, `store.`) is a plain event (`craft/lint/store-without-name`). The name resolves to a `data-stores:` entry when one matches; the views draw a database participant either way.
+
 **Trigger disambiguation rule:** after `when`, the parser must look ahead to decide between the three trigger alternatives:
 1. If the next token is a STRING → `'when' quoted_event NL+` (event-on-its-own).
 2. Else if `identifier 'listens' STRING` matches → domain listener.
 3. Else → external-trigger (actor verb connector? phrase?).
 
-The second alternative shadows the first identifier in external-trigger when followed by `listens`. This is a **contextual** disambiguation; `listens` is not a reserved word (see §11).
+The second alternative shadows the first identifier in external-trigger when followed by `listens`. In the same slot, `receives` selects `receive_trigger` (2.23). This is a **contextual** disambiguation; neither `listens` nor `receives` is a reserved word (see §11). `when X receives …` used to be an external trigger with actor `X` and verb `receives`.
+
+### 8.2 Surfaces (2.23)
+
+A surface is the operation inventory of one boundary: a bounded context, a service, or an actor that stands for an external system.
+
+```ebnf
+surface_decl  = 'surface' name_slot '{' NL* (surface_item NL+)* '}' ;
+surface_item  = 'callers' ':' name_list           (* actors, contexts, services, or `unknown` *)
+              | 'spec' ':' STRING
+              | note_stmt
+              | ('query' | 'command') connector_word? phrase op_annotation ;
+```
+
+```craft
+surface concierge {
+    callers: Advisor
+    spec: "obidozoe/docs/openapi.yaml"
+    note "every route takes the shared HTTP Basic pair plus a bidder identity header"
+    query the seeker list, unpaged, newest first, filtered by a typed status  [getUserList]
+    command delete a seeker's account                                        [deleteAccount]
+}
+```
+
+A `query` has no side effect and a `command` changes state. The operation bracket is required (`craft/syntax/missing-operation`), and so is the phrase before it (`craft/syntax/missing-phrase`). `callers: unknown` says that no caller was observed. `spec:` is kept verbatim; Craft does not read it. Properties keep their source order. `craft generate --type surface` writes the surfaces as a Markdown table with a computed "used by" column.
 
 ---
 
@@ -324,6 +376,20 @@ All of the following appear in the `identifier` production (§9) and can therefo
 | `deployment` | Service property | Any `identifier` position |
 
 `scenario`, `alt`, `opt` and `else` are also contextual (see the offside rule in §8). They remain identifiers: each is recognised as a keyword only at the start of a use-case-body line and only when followed by a STRING, and an action always needs a verb after its subject.
+
+The 2.23 words are contextual in the same way:
+
+| Word | Is a keyword only when | Otherwise |
+|---|---|---|
+| `par`, `and`, `loop` | at the start of a step line and followed by a STRING, or alone on the line (`missing-label`) | an identifier (subject, verb, phrase word) |
+| `note`, `finding` | at the start of a step line, at use-case level before the first scenario, or in a surface body; followed by a STRING, or alone on the line | an identifier |
+| `receives` | in a trigger, as the second token after the subject (the slot where `listens` is recognised) | an identifier |
+| `cron`, `every` (listens tail) | directly after the event ref of a `listens` trigger, on the same line, followed by a STRING | an identifier |
+| `surface` | at top level, followed by a name and `{` on the same line | an identifier |
+| `callers`, `spec` | in a surface body, followed by `:` | an identifier |
+| `query`, `command` | at the start of a surface body line | an identifier |
+
+Only `receives` changes the meaning of input that parsed before; every other form was a syntax error before 2.23.
 
 ### 11.2 Connector words (part of `phrase_word`)
 

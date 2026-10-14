@@ -69,14 +69,14 @@ Parses the file(s) and writes diagram files. Default output is PlantUML (`.puml`
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--type` | `all` | Diagram type: `c4`, `domain`, `sequence`, or `all` |
+| `--type` | `all` | Diagram type: `c4`, `domain`, `sequence`, `surface`, or `all`. `surface` writes `<base>-surface.md`, a Markdown table of each `surface` block's operations and the use cases that call them, whatever `--format` says; `all` includes it only when the model declares a surface |
 | `--mode` | `detailed` | Domain diagram detail: `detailed` or `architecture` |
 | `-o, --output` | (same dir as input) | Directory to write output files |
 | `--format` | `puml` | Output format: `puml`, `mermaid`, or `mermaid-md` |
 | `--use-case` | (none) | Comma-separated use case slugs or names to render *(detailed-domain and sequence only)* |
 | `--split` | false | Emit one file per use case *(detailed-domain and sequence only)* |
 | `--stdout` | false | Write to stdout instead of files (single diagram only; mutually exclusive with `--output`, `--split`, `--type all`) |
-| `--force` | false | Allow overwriting existing `.md` files when `--format=mermaid-md` |
+| `--force` | false | Allow overwriting existing `.md` files (`--format=mermaid-md`, or `--type surface`) |
 | `--boundaries` | `boundaries` | *(C4 only)* Boundaries rendering: `boundaries` or `transparent` |
 | `--no-databases` | false | *(C4 only)* Hide data-store containers from the C4 diagram |
 | `--focus` | (none) | *(C4 only)* Comma-separated service names to focus on; unfocused services render as external |
@@ -110,6 +110,7 @@ craft generate docs/payments.craft --type domain --split -o diagrams/
 # Mermaid output for GitHub-rendered docs:
 craft generate docs/payments.craft --type all --format mermaid -o diagrams/
 craft generate docs/payments.craft --type sequence --format mermaid-md -o docs/
+craft generate docs/**/*.craft --type surface -o docs/   # one model → docs-surface.md
 
 # Pipe to clipboard for PR / chat:
 craft generate docs/payments.craft --type sequence --format mermaid --stdout | pbcopy

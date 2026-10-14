@@ -33,6 +33,21 @@ One step of a use case: a participant doing something, asking another participan
 **Event**:
 A named fact published by a bounded context and listened to by others.
 
+**Store hand-off**:
+An event whose ref names a data store, `store.<name>.<change>`: the writer notifies it and the reader polls it with `listens`. Views draw the store as its own participant between them.
+_Avoid_: queue event, table event
+
+**Note**:
+A one-line remark (`note "…"`) attached to a use case, a step position or a surface. It is not an action: it gets no interaction and draws over the step before it.
+
+**Finding**:
+A note (`finding "…"`) that records a defect or a risk the author found. It is exported to the model and drawn highlighted.
+_Avoid_: issue, warning (reserved for diagnostics)
+
+**Surface**:
+The inventory of operations one boundary offers (`surface <name> { … }`), each marked `query` or `command`, with its callers. Coverage ("used by") is computed from the use cases.
+_Avoid_: API, exposure (an exposure says who may reach a context, not what it offers)
+
 ### Analysis
 
 **Model**:
@@ -46,6 +61,10 @@ _Avoid_: node, party, entity
 **Interaction**:
 One derived communication between two participants — a request, a return, an event publication, an event listen, or an external trigger.
 _Avoid_: relationship (reserved for context-map relationships), edge, call
+
+**Unobserved caller**:
+The unknown sender of a request that a `when <ctx> receives …` trigger starts from. It is not a participant: views draw a found message into the callee and a lost message for its reply.
+_Avoid_: NoObservedCaller, anonymous actor
 
 ### Diagrams
 
