@@ -1496,6 +1496,17 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 		} else if eventTok.Type == lexer.TokenIdent {
 			p.parseRef()
 		}
+		// Optional polling cadence: `listens <ref> cron "…"` / `every "…"`.
+		if t := p.peek(); t.Line == verbTok.Line && t.Type == lexer.TokenIdent && (t.Value == "cron" || t.Value == "every") {
+			if s := p.peekAt(1); s.Type == lexer.TokenString && s.Line == t.Line {
+				kind := SyntaxKindKwCron
+				if t.Value == "every" {
+					kind = SyntaxKindKwEvery
+				}
+				p.consumeAs(kind)
+				p.consumeAs(SyntaxKindString)
+			}
+		}
 		p.builder.FinishNode()
 		return diags
 	}

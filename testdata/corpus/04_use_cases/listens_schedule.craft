@@ -1,0 +1,16 @@
+actor system CRON
+
+domain leads {
+    leadimporter
+    smsdispatch
+}
+
+use_case "Lead requests are imported" {
+    when leadimporter listens sqs.LeadRequested every "5m"
+        leadimporter imports the lead
+}
+
+use_case "Queued reminders are sent" {
+    when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+        smsdispatch claims the unsent rows
+}

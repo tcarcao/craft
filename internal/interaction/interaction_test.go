@@ -912,3 +912,22 @@ use_case "Reads" {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// A listens trigger with a trailing schedule carries its cadence on each Listen.
+func TestDerive_ListenCarriesItsSchedule(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Ship" {
+    when Shipping listens "Payment Settled" every "5m"
+        Shipping books a courier
+}
+`})
+	var listens []interaction.Interaction
+	for _, it := range its {
+		if it.Kind == interaction.Listen {
+			listens = append(listens, it)
+		}
+	}
+	if len(listens) != 1 || listens[0].Schedule != "every 5m" {
+		t.Errorf("listens = %+v, want one with Schedule \"every 5m\"", listens)
+	}
+}

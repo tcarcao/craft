@@ -107,6 +107,9 @@ type Interaction struct {
 	// same way, at that branch's path, before the box. Each interaction owns
 	// its slice.
 	Branch []BranchRef
+	// Schedule is the polling cadence of a Listen from a scheduled listens
+	// trigger, as "cron <expr>" or "every <dur>"; "" otherwise.
+	Schedule string
 }
 
 // BranchRef locates an interaction inside one branch of a block.
@@ -228,6 +231,7 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			it.Kind, it.From, it.To, it.Event, it.Label = Listen, src, listener, t.Event, t.Event
 			it.Site = triggerSite
 			it.Site.Length = utf16Len(t.Context)
+			it.Schedule = scheduleLabel(t)
 			out = append(out, it)
 		}
 	case lang.TriggerReceive:
@@ -257,10 +261,19 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 // triggerLabel is the text on a trigger arrow: the schedule for a scheduled
 // trigger (`cron 0 7 * * 1-5`, `every 5m`), else what the actor does.
 func triggerLabel(t model.Trigger) string {
-	if t.ScheduleKind != "" {
-		return strings.TrimSpace(string(t.ScheduleKind) + " " + t.Schedule)
+	if l := scheduleLabel(t); l != "" {
+		return l
 	}
 	return strings.Join(strings.Fields(t.Verb+" "+t.Connector+" "+t.Phrase), " ")
+}
+
+// scheduleLabel is a trigger's schedule as `cron 0 7 * * 1-5` or `every 5m`,
+// or "" when the trigger has none.
+func scheduleLabel(t model.Trigger) string {
+	if t.ScheduleKind == "" {
+		return ""
+	}
+	return strings.TrimSpace(string(t.ScheduleKind) + " " + t.Schedule)
 }
 
 // walker visits a scenario's steps depth-first, in source order, numbering

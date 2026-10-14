@@ -1,0 +1,106 @@
+{
+  "useCases": [
+    {
+      "name": "Lead requests are imported",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "leadimporter",
+            "event": "sqs.LeadRequested",
+            "ref": "sqs.LeadRequested",
+            "schedule": "5m",
+            "scheduleKind": "every",
+            "description": "when leadimporter listens \"sqs.LeadRequested\" every \"5m\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "leads/leadimporter"
+            },
+            "line": 9,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "leadimporter",
+                "verb": "imports",
+                "connector": "the",
+                "phrase": "lead",
+                "description": "leadimporter imports the lead",
+                "line": 10,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "leads/leadimporter"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 8
+    },
+    {
+      "name": "Queued reminders are sent",
+      "scenarios": [
+        {
+          "id": "scenario_3",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "smsdispatch",
+            "event": "store.sms_queue.inserted",
+            "ref": "store.sms_queue.inserted",
+            "schedule": "* 10 * * 1-5",
+            "scheduleKind": "cron",
+            "description": "when smsdispatch listens \"store.sms_queue.inserted\" cron \"* 10 * * 1-5\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "leads/smsdispatch"
+            },
+            "line": 14,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_4",
+                "type": "internal_action",
+                "context": "smsdispatch",
+                "verb": "claims",
+                "connector": "the",
+                "phrase": "unsent rows",
+                "description": "smsdispatch claims the unsent rows",
+                "line": 15,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "leads/smsdispatch"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 13
+    }
+  ],
+  "domains": [
+    {
+      "name": "leads",
+      "boundedContexts": [
+        "leadimporter",
+        "smsdispatch"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}

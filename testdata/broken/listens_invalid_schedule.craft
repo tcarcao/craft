@@ -1,0 +1,8 @@
+domain messaging {
+    smsdispatch
+}
+
+use_case "U" {
+    when smsdispatch listens store.sms_queue.inserted cron "0 7 * *"
+        smsdispatch claims the unsent rows
+}

@@ -922,12 +922,13 @@ func validateSchedules(uri string, file syntax.File, li green.LineIndex, hasLI b
 		for _, sc := range uc.Scenarios() {
 			trigger := sc.Trigger()
 			kind, expr, ok := trigger.Schedule()
-			if !ok {
-				continue
-			}
 			tok := trigger.ScheduleToken()
-			if tok == nil {
-				continue // the parser already reported the missing string
+			if !ok {
+				kind, expr, ok = trigger.ListenSchedule()
+				tok = trigger.ListenScheduleToken()
+			}
+			if !ok || tok == nil {
+				continue // a missing string is reported by the parser
 			}
 			msg := scheduleError(kind, expr)
 			if msg == "" {

@@ -326,6 +326,9 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		context = t.ContextName()
 		event = t.EventValue()
 		ref = t.EventRef()
+		if k, e, ok := t.ListenSchedule(); ok {
+			schedKind, schedule = k, e
+		}
 	case lang.TriggerReceive:
 		context = t.ContextName()
 		connector = t.Connector()
@@ -353,6 +356,9 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		description = fmt.Sprintf("when %q", event)
 	case kind == lang.TriggerDomainListen:
 		description = fmt.Sprintf("when %s listens %q", context, event)
+		if schedKind != "" {
+			description += fmt.Sprintf(` %s "%s"`, schedKind, schedule)
+		}
 	case kind == lang.TriggerReceive:
 		description = strings.TrimSpace(fmt.Sprintf("when %s receives %s", context, joinConnector(connector, phrase)))
 		if op != nil {

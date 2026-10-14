@@ -52,6 +52,34 @@ func (t TriggerDecl) ScheduleKeyword() *SyntaxToken {
 	return &toks[0]
 }
 
+// ListenSchedule reports the trailing schedule of a listens trigger
+// (`listens <ref> cron "…"`), its kind and unquoted expression.
+func (t TriggerDecl) ListenSchedule() (kind lang.ScheduleKind, expr string, ok bool) {
+	tok := t.ListenScheduleToken()
+	if tok == nil {
+		return "", "", false
+	}
+	elems := significantElements(t.node)
+	kind = lang.ScheduleCron
+	if elems[3].Kind() == SyntaxKindKwEvery {
+		kind = lang.ScheduleEvery
+	}
+	return kind, stringAwareText(*tok), true
+}
+
+// ListenScheduleToken returns the quoted expression of a listens trigger's
+// trailing schedule, or nil.
+func (t TriggerDecl) ListenScheduleToken() *SyntaxToken {
+	if t.Kind() != lang.TriggerDomainListen {
+		return nil
+	}
+	elems := significantElements(t.node)
+	if len(elems) < 5 || (elems[3].Kind() != SyntaxKindKwCron && elems[3].Kind() != SyntaxKindKwEvery) || elems[4].Kind() != SyntaxKindString {
+		return nil
+	}
+	return slotFirstToken(elems[4])
+}
+
 // RefName is the participant the trigger's subject slot refers to: the actor
 // name of an external trigger, or the scheduler actor (CRON) for a scheduled
 // one, whose `cron` / `every` keyword stands in for it. "" otherwise.

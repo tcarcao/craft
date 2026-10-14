@@ -958,3 +958,18 @@ func TestFlow_ParOrLoopOpeningAnAltBranchLabelsTheTriggerWithTheAltBranch(t *tes
 		}
 	}
 }
+
+func TestSequence_ScheduledListenWithoutPublisherShowsTheScheduleOnTheInboundArrow(t *testing.T) {
+	puml, mmd := sequenceSource(t, `domain leads {
+    leadimporter
+}
+use_case "Lead requests are imported" {
+    when leadimporter listens sqs.LeadRequested every "5m"
+        leadimporter imports the lead
+}
+`)
+	requireLine(t, "plantuml", puml, "[-> leadimporter : sqs.LeadRequested, every 5m")
+	if !strings.Contains(mmd, "sqs.LeadRequested, every 5m") {
+		t.Errorf("mermaid lacks the schedule:\n%s", mmd)
+	}
+}

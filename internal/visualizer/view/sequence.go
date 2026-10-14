@@ -213,6 +213,8 @@ type inboundArrow struct {
 	section, message int
 	event            string
 	publishers       []string // display names, in arrival order
+	// suffix ends the label: ", <schedule>" for a scheduled listener.
+	suffix string
 }
 
 // maxNamedPublishers is how many publishers an inbound label names before
@@ -224,14 +226,14 @@ const maxNamedPublishers = 3
 // model keeps its bare name.
 func (a *inboundArrow) label() string {
 	if len(a.publishers) == 0 {
-		return a.event
+		return a.event + a.suffix
 	}
 	names := slices.Clone(a.publishers)
 	slices.Sort(names)
 	if len(names) > maxNamedPublishers {
 		names = append(names[:maxNamedPublishers], fmt.Sprintf("+%d more", len(a.publishers)-maxNamedPublishers))
 	}
-	return a.event + " (from " + strings.Join(names, ", ") + ")"
+	return a.event + " (from " + strings.Join(names, ", ") + ")" + a.suffix
 }
 
 func (b *sequenceBuilder) appear(id string) {
@@ -278,12 +280,18 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 		// stays about its own use case.
 		if onStage[it.From.Key] {
 			msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageAsync
+			if it.Schedule != "" {
+				msg.Label = it.Label + ", " + it.Schedule
+			}
 			break
 		}
 		key := fmt.Sprintf("%d|%s|%s", it.UseCaseIndex, it.Scenario, it.Event)
 		arrow := b.inbound[key]
 		if arrow == nil {
 			arrow = &inboundArrow{section: idx, message: len(b.seq.Sections[idx].Messages), event: it.Event}
+			if it.Schedule != "" {
+				arrow.suffix = ", " + it.Schedule
+			}
 			b.inbound[key] = arrow
 		}
 		if it.From != interaction.External && !slices.Contains(arrow.publishers, it.From.Name) {
