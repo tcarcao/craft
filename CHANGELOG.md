@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.23.0] — 2026-10-14
 
 **Why a minor version.** No exported `pkg/craft` identifier is removed or changes type. A `Step` can now hold a `Note`, so a consumer that assumes every step is an `Action` or a `Block` must handle the third case. `when X receives …` changes meaning (see **Changed**).
 
@@ -15,7 +15,7 @@
 - **Diagnostics.** Syntax: `craft/syntax/orphan-and`, `missing-operation` and `missing-phrase` (errors). Sema: `craft/sema/invalid-surface-subject` and `duplicate-operation` (errors). Lint (warnings): `craft/lint/single-branch-par`, `receives-on-actor`, `store-without-change`, `store-without-name`, `operation-not-in-surface` and `repeated-request` (two subjects in one step list make the same request to the same target; a call chain is not reported). See `docs/DIAGNOSTICS.md`.
 - **Formatter**: `par`/`and`/`loop` bodies indent like `alt`/`else`, notes indent like steps, the listens tail is written with single spaces, and surfaces get a 4-space body with aligned operation brackets. `orphan-and` and `missing-operation` make `craft fmt` refuse a file.
 - **Language server**: outline, folding, hover and completion for `par`/`and`/`loop`, findings in the outline, `note`/`finding`/`receives`/listens-tail completion and hover; surfaces in the outline (operations as children), hover on the subject and on an `asks` bracket, definition from an `asks` bracket to the surface line, completion of a target's operations inside `[`; hover and definition on store refs; semantic tokens for every new keyword.
-- **`pkg/craft`**: `Note`, `NoteKind` (`NoteKindNote`, `NoteKindFinding`), `Surface`, `SurfaceOperation`, `SurfaceOpKind` (`SurfaceQuery`, `SurfaceCommand`), `StoreRef`, `StoreChange` (`StoreInserted`, `StoreUpdated`, `StoreDeleted`), `TriggerTypeReceive`, `BlockAlt`/`BlockOpt`/`BlockPar`/`BlockLoop`, `UnknownCaller`; fields `Step.Note`, `UseCase.Notes`, `Block.Split`, `Trigger.Operation`, `Trigger.Store`, `Action.Store`, `CraftDoc.Surfaces`; methods `Scenario.OpeningBlock` and `Block.FirstAction`.
+- **`pkg/craft`**: `Note`, `NoteKind` (`NoteKindNote`, `NoteKindFinding`), `Surface`, `SurfaceOperation`, `SurfaceOpKind` (`SurfaceQuery`, `SurfaceCommand`), `StoreRef`, `StoreChange` (`StoreInserted`, `StoreUpdated`, `StoreDeleted`), `TriggerTypeReceive`, `BlockPar`/`BlockLoop`, `UnknownCaller`; fields `Step.Note`, `UseCase.Notes`, `Block.Split`, `Trigger.Operation`, `Trigger.Store`, `Action.Store`, `CraftDoc.Surfaces`; methods `Scenario.OpeningBlock` and `Block.FirstAction`.
 
 ### Changed
 - **`when X receives …` is a callee-side trigger.** It used to be an external trigger with actor `X` and verb `receives`. There are no known uses.

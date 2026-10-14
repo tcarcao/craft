@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14
 **Owner:** Tiago Carção (design decisions delegated; each one is recorded with its reason in §13)
-**Status:** Proposed
+**Status:** Implemented (v2.23.0)
 **Release:** v2.23.0, additive. No `pkg/craft` name, field or JSON key changes or disappears. One
 existing input changes meaning (`when X receives …`, §5.1); neither the corpus nor `testdata/` uses it.
 **Builds on:** `2026-10-14-scenario-branches-and-names-design.md` (v2.21.0: Step/Block/Branch, offside
