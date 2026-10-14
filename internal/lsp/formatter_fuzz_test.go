@@ -10,8 +10,9 @@ import (
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
-// fuzzOutline renders the step tree of src: use cases, scenarios, block
-// kinds, branch labels and action subjects. Formatting must not change it.
+// fuzzOutline renders the step tree of src: use cases, scenarios, triggers,
+// block kinds, branch labels, action subjects, notes, and surface operations.
+// Formatting must not change it.
 func fuzzOutline(src string) string {
 	g, _, _ := syntax.Parse(src)
 	var b strings.Builder
@@ -37,9 +38,22 @@ func fuzzOutline(src string) string {
 	}
 	for _, uc := range syntax.AsFile(syntax.Root(g)).UseCases() {
 		b.WriteString("use_case " + uc.Name() + "\n")
+		for _, n := range uc.Notes() {
+			b.WriteString(" note " + string(n.Kind()) + " " + strconv.Quote(n.Text()) + "\n")
+		}
 		for _, sc := range uc.Scenarios() {
-			b.WriteString(" scenario " + strconv.Quote(sc.Name()) + "\n")
+			tr := sc.Trigger()
+			b.WriteString(" scenario " + strconv.Quote(sc.Name()) + " " + string(tr.Kind()) + " " + tr.ContextName() + "\n")
 			walk(sc.Steps(), 1)
+		}
+	}
+	for _, sf := range syntax.AsFile(syntax.Root(g)).Surfaces() {
+		b.WriteString("surface " + sf.Subject() + " callers " + strings.Join(sf.Callers(), ",") + "\n")
+		for _, n := range sf.Notes() {
+			b.WriteString(" note " + string(n.Kind()) + " " + strconv.Quote(n.Text()) + "\n")
+		}
+		for _, op := range sf.Operations() {
+			b.WriteString(" " + string(op.Kind()) + " [" + op.OpText() + "]\n")
 		}
 	}
 	return b.String()
@@ -56,10 +70,19 @@ func fuzzFormatterBails(src string) bool {
 }
 
 // FuzzFormatBranches checks the formatter's invariants on arbitrary edits of
-// the branch-block fixtures. Seeds run in a plain `go test`.
+// the branch-block fixtures and the journey-semantics fixtures (par/and/loop,
+// notes and findings, receives, the listens schedule tail, store hand-offs,
+// surfaces). Seeds run in a plain `go test`.
 func FuzzFormatBranches(f *testing.F) {
-	for _, name := range []string{"alt_else", "opt", "nested_blocks", "branch_tabs", "branches_full"} {
-		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", "04_use_cases", name+".craft"))
+	for _, name := range []string{
+		"04_use_cases/alt_else", "04_use_cases/opt", "04_use_cases/nested_blocks",
+		"04_use_cases/branch_tabs", "04_use_cases/branches_full",
+		"04_use_cases/par_fanout", "04_use_cases/par_and", "04_use_cases/loop",
+		"04_use_cases/nested_par_loop_alt", "04_use_cases/notes_findings",
+		"04_use_cases/receives_trigger", "04_use_cases/listens_schedule", "04_use_cases/store_handoff",
+		"09_surfaces/surface_basic", "09_surfaces/surface_notes_callers_unknown",
+	} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", filepath.FromSlash(name)+".craft"))
 		if err != nil {
 			f.Fatal(err)
 		}

@@ -261,13 +261,17 @@ func bailsFormatting(d craft.Diagnostic) bool {
 
 // refusingSyntaxCodes are the syntax diagnostics that make the formatter
 // refuse a file: the spec §3.2 ones for alt/opt/else blocks and scenario names,
-// plus craft/syntax/unexpected-token. That code is general, but it is also what
+// their journey-semantics siblings (an `and` outside a `par`, and a surface
+// operation line without `[op]`, which may be a half-typed line the aligner
+// would move), plus craft/syntax/unexpected-token. That code is general, but it is also what
 // a verbless action line and text after a block label report, and formatting
 // either could move a line between blocks. See bailsFormatting.
 var refusingSyntaxCodes = map[string]bool{
 	"craft/syntax/empty-branch":          true,
 	"craft/syntax/inconsistent-indent":   true,
 	"craft/syntax/orphan-else":           true,
+	"craft/syntax/orphan-and":            true,
+	"craft/syntax/missing-operation":     true,
 	"craft/syntax/missing-label":         true,
 	"craft/syntax/scenario-without-when": true,
 	"craft/syntax/unexpected-token":      true,

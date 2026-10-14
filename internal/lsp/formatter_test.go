@@ -12,6 +12,7 @@ import (
 
 	"github.com/tcarcao/craft/v2/internal/fmtconfig"
 	"github.com/tcarcao/craft/v2/internal/syntax"
+	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
 // The braces here are minified and the statements are not, which is exactly
@@ -2264,5 +2265,98 @@ func TestFormat_TailCommentMeasuredAgainstBodyColumn(t *testing.T) {
 	}
 	if before, after := stepOutline(t, in), stepOutline(t, got); before != after {
 		t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestFormat_JourneySemanticsCanonical(t *testing.T) {
+	in := "use_case \"U\" {\n  finding \"nothing retries a failed callback\"\n  when Seeker opens an advert\n      x asks y for it\n      par \"field resolvers\"\n        y asks z for a\n        y asks z for b\n      loop \"for each image\"\n         y asks m to sign\n      par \"the advert\"\n          y asks a for the advert\n      and \"the statistics\"\n          y asks d for stats\n          note \"cached for a minute\"\n}\n"
+	want := "use_case \"U\" {\n    finding \"nothing retries a failed callback\"\n\n    when Seeker opens an advert\n        x asks y for it\n        par \"field resolvers\"\n            y asks z for a\n            y asks z for b\n        loop \"for each image\"\n            y asks m to sign\n        par \"the advert\"\n            y asks a for the advert\n        and \"the statistics\"\n            y asks d for stats\n            note \"cached for a minute\"\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+	if stepOutline(t, in) != stepOutline(t, got) {
+		t.Error("block membership changed")
+	}
+}
+
+func TestFormat_ReceivesBracketJoinsTheActionRun(t *testing.T) {
+	in := "use_case \"U\" {\n    when graphql receives a reindex sweep [reindexAdverts]\n        graphql asks atlas for every advert [getAll]\n}\n"
+	lines := strings.Split(FormatDocument(in), "\n")
+	if a, b := strings.Index(lines[1], "["), strings.Index(lines[2], "["); a != b || a < 0 {
+		t.Errorf("brackets not aligned:\n%s\n%s", lines[1], lines[2])
+	}
+}
+
+func TestFormat_ListensTailSingleSpaces(t *testing.T) {
+	in := "use_case \"U\" {\n    when smsdispatch listens store.sms_queue.inserted   cron   \"* 10 * * 1-5\"\n        smsdispatch claims the rows\n}\n"
+	if got := FormatDocument(in); !strings.Contains(got, "listens store.sms_queue.inserted cron \"* 10 * * 1-5\"\n") {
+		t.Errorf("got:\n%s", got)
+	}
+	every := "use_case \"U\" {\n    when smsdispatch listens store.sms_queue.inserted\tevery  \"5m\"\n        smsdispatch claims the rows\n}\n"
+	if got := FormatDocument(every); !strings.Contains(got, "listens store.sms_queue.inserted every \"5m\"\n") {
+		t.Errorf("got:\n%s", got)
+	}
+}
+
+func TestFormat_Surface(t *testing.T) {
+	in := "surface concierge {\n  callers: Advisor\n  spec:  \"obido/openapi.yaml\"\n  note \"shared basic auth\"\n  query the seeker list [getUserList]\n  command delete an account   [deleteAccount]\n}\n"
+	want := "surface concierge {\n    callers: Advisor\n    spec: \"obido/openapi.yaml\"\n    note \"shared basic auth\"\n    query the seeker list      [getUserList]\n    command delete an account  [deleteAccount]\n}\n"
+	if got := FormatDocument(in); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestFormat_RefusesOrphanAnd(t *testing.T) {
+	in := "use_case \"U\" {\n  when O does\n    x does it\n    and \"b\"\n      x does more\n}\n"
+	got, d := FormatDocumentChecked(in)
+	if d == nil {
+		t.Fatal("expected the formatter to refuse a file with an orphan and")
+	}
+	if got != in {
+		t.Errorf("a refused file must come back byte-identical, got:\n%s", got)
+	}
+}
+
+// Every journey-semantics corpus file keeps its step outline (block
+// membership, notes) through formatting; the corpus-wide tests check
+// canonical form and model equality, this pins the tree shape directly.
+func TestFormat_JourneyCorpusKeepsStepOutline(t *testing.T) {
+	for _, rel := range []string{
+		"04_use_cases/notes_findings.craft", "04_use_cases/par_fanout.craft", "04_use_cases/par_and.craft",
+		"04_use_cases/loop.craft", "04_use_cases/nested_par_loop_alt.craft", "04_use_cases/receives_trigger.craft",
+		"04_use_cases/listens_schedule.craft", "04_use_cases/store_handoff.craft",
+		"09_surfaces/surface_basic.craft", "09_surfaces/surface_notes_callers_unknown.craft",
+	} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := string(raw)
+		got := FormatDocument(src)
+		if again := FormatDocument(got); again != got {
+			t.Errorf("%s: not idempotent", rel)
+		}
+		if stepOutline(t, src) != stepOutline(t, got) {
+			t.Errorf("%s: block membership changed", rel)
+		}
+	}
+}
+
+// The refusal set names the journey-semantics structure codes even though
+// both are errors today, so a later downgrade to a warning keeps the refusal
+// (an orphan `and` is placed by recovery; a surface line without `[op]` may
+// be a half-typed operation the aligner would move).
+func TestRefusingSyntaxCodes_JourneySemantics(t *testing.T) {
+	for _, code := range []string{"craft/syntax/orphan-and", "craft/syntax/missing-operation"} {
+		if !refusingSyntaxCodes[code] {
+			t.Errorf("%s is not in refusingSyntaxCodes", code)
+		}
+		if !bailsFormatting(craft.Diagnostic{Code: code, Severity: craft.SeverityWarning}) {
+			t.Errorf("%s as a warning does not make the formatter refuse", code)
+		}
 	}
 }
