@@ -160,6 +160,9 @@ type Symbols struct {
 	Services  []ServiceSymbol
 	UseCases  []UseCaseSymbol
 	Exposures []ExposureSymbol
+	// Surfaces holds the file's surface declarations, checked against the
+	// workspace in AnalyzeWorkspace.
+	Surfaces []SurfaceSymbol
 	// UseCaseRefs collects all name references from within use-case bodies
 	// so AnalyzeWorkspace can resolve them cross-file.
 	UseCaseRefs []UseCaseRef
@@ -615,6 +618,9 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	diags = append(diags, validateUseCaseTags(uri, file, lineIdx, hasLI)...)
 	diags = append(diags, validateSchedules(uri, file, lineIdx, hasLI)...)
 
+	syms.Surfaces = collectSurfaces(uri, file, lineIdx, hasLI)
+	diags = append(diags, validateSurfaces(uri, file, lineIdx, hasLI)...)
+
 	return syms, diags
 }
 
@@ -964,6 +970,8 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 			diags = append(diags, glossaryLintDiags(ws, site, glossarySeenVerb, glossaryVerbsForPair, glossaryConflictReported)...)
 		}
 	}
+
+	diags = append(diags, resolveSurfaces(perFile, ws)...)
 
 	return rm, diags
 }

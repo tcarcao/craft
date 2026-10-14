@@ -52,6 +52,24 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 		}
 	}
 
+	// A boundary keeps its first surface in sorted file order (ruling 6);
+	// sema reports the others as duplicate-name.
+	var surfaces []model.Surface
+	seenSurface := map[string]bool{}
+	for _, s := range doc.Surfaces {
+		s.Participant = resolve(s.Subject)
+		key := "?" + s.Subject
+		if s.Participant != nil {
+			key = s.Participant.ID
+		}
+		if seenSurface[key] {
+			continue
+		}
+		seenSurface[key] = true
+		surfaces = append(surfaces, s)
+	}
+	doc.Surfaces = surfaces
+
 	for i := range doc.Services {
 		svc := &doc.Services[i]
 		if len(svc.Contexts) == 0 {

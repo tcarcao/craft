@@ -1,0 +1,13 @@
+actor user Advisor
+
+domain obido {
+    concierge
+}
+
+surface concierge {
+    callers: Advisor
+    spec: "obidozoe/docs/openapi.yaml"
+    query the seeker list, unpaged, newest first, filtered by a typed status  [getUserList]
+    query the seeker audit trail                                              [getUserLogs]
+    command delete a seeker's account                                         [deleteAccount]
+}

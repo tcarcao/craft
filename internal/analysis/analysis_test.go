@@ -215,3 +215,21 @@ func TestWorkspace_AmbiguousParticipantStaysUnresolved(t *testing.T) {
 		t.Error("want an ambiguous-bc error")
 	}
 }
+
+func TestWorkspace_SurfacesFirstPerBoundaryWins(t *testing.T) {
+	res := workspaceOf(map[string]string{
+		"b.craft": "surface concierge {\n    query the logs  [getUserLogs]\n}\n",
+		"a.craft": "domain obido {\n    concierge\n}\nsurface concierge {\n    callers: unknown\n    query the list  [getUserList]\n}\n",
+		"c.craft": "surface ghost {\n    query x  [x]\n}\n",
+	})
+	ss := res.Doc.Surfaces
+	if len(ss) != 2 {
+		t.Fatalf("surfaces = %+v", ss)
+	}
+	if ss[0].SourceURI != "a.craft" || ss[0].Participant == nil || ss[0].Participant.ID != "obido/concierge" || ss[0].Operations[0].Operation.Text != "getUserList" {
+		t.Errorf("first = %+v", ss[0])
+	}
+	if ss[1].Subject != "ghost" || ss[1].Participant != nil {
+		t.Errorf("second = %+v", ss[1])
+	}
+}

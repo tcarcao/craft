@@ -1,0 +1,61 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "obido",
+      "boundedContexts": [
+        "concierge"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Advisor",
+      "type": "user",
+      "line": 1
+    }
+  ],
+  "surfaces": [
+    {
+      "subject": "concierge",
+      "participant": {
+        "kind": "bounded_context",
+        "id": "obido/concierge"
+      },
+      "callers": [
+        "Advisor"
+      ],
+      "spec": "obidozoe/docs/openapi.yaml",
+      "operations": [
+        {
+          "kind": "query",
+          "phrase": "the seeker list, unpaged, newest first, filtered by a typed status",
+          "operation": {
+            "payload": "getUserList",
+            "text": "getUserList"
+          },
+          "line": 10
+        },
+        {
+          "kind": "query",
+          "phrase": "the seeker audit trail",
+          "operation": {
+            "payload": "getUserLogs",
+            "text": "getUserLogs"
+          },
+          "line": 11
+        },
+        {
+          "kind": "command",
+          "phrase": "delete a seeker's account",
+          "operation": {
+            "payload": "deleteAccount",
+            "text": "deleteAccount"
+          },
+          "line": 12
+        }
+      ],
+      "line": 7
+    }
+  ]
+}

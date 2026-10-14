@@ -1,0 +1,11 @@
+domain obido {
+    obidoanalytics
+}
+
+surface obidoanalytics {
+    callers: unknown
+    note "read-only replica; every route answers from the nightly copy"
+    finding "the totals route has no authentication"
+    query for the daily totals   [GET /totals]
+    command rebuild the replica  [POST /rebuild]
+}

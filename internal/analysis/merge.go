@@ -63,6 +63,7 @@ func mergeDocs(docs []*model.CraftDoc) *model.CraftDoc {
 		merged.Actors = append(merged.Actors, d.Actors...)
 		merged.ContextMap = append(merged.ContextMap, d.ContextMap...)
 		merged.Glossary = append(merged.Glossary, d.Glossary...)
+		merged.Surfaces = append(merged.Surfaces, d.Surfaces...)
 	}
 	merged.Services = firstByName(merged.Services, func(s model.Service) string { return s.Name })
 	merged.Domains = firstByName(merged.Domains, func(d model.Domain) string { return d.Name })

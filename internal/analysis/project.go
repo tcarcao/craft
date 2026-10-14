@@ -101,6 +101,8 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 		})
 	}
 
+	doc.Surfaces = projectSurfaces(file, li, sourceURI)
+
 	for _, cm := range file.ContextMaps() {
 		for _, e := range cm.Edges() {
 			left, verb, right := e.Left(), e.Verb(), e.Right()
@@ -535,4 +537,41 @@ func projectArchComponent(c syntax.ArchComponent) model.Component {
 		chain = append(chain, link)
 	}
 	return model.Component{Type: model.ComponentTypeFlow, Chain: chain}
+}
+
+// projectSurfaces projects the file's surfaces in source order. A line without
+// an operation (craft/syntax/missing-operation) is not an entry.
+func projectSurfaces(file syntax.File, li green.LineIndex, sourceURI string) []model.Surface {
+	var out []model.Surface
+	for _, s := range file.Surfaces() {
+		if s.SubjectToken() == nil {
+			continue
+		}
+		ms := model.Surface{
+			Subject:    s.Subject(),
+			Callers:    s.Callers(),
+			Spec:       s.Spec(),
+			Operations: []model.SurfaceOperation{},
+			SourceURI:  sourceURI,
+			Line:       s.Line(li),
+		}
+		for _, n := range s.Notes() {
+			ms.Notes = append(ms.Notes, projectNote(n, "", li))
+		}
+		for _, op := range s.Operations() {
+			text := op.OpText()
+			if text == "" {
+				continue
+			}
+			ms.Operations = append(ms.Operations, model.SurfaceOperation{
+				Kind:      op.Kind(),
+				Connector: op.Connector(),
+				Phrase:    op.PhraseText(),
+				Operation: model.Operation{Verb: op.OpVerb(), Payload: op.OpPayload(), Text: text},
+				Line:      op.Line(li),
+			})
+		}
+		out = append(out, ms)
+	}
+	return out
 }

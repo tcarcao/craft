@@ -1,0 +1,61 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "obido",
+      "boundedContexts": [
+        "obidoanalytics"
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "subject": "obidoanalytics",
+      "participant": {
+        "kind": "bounded_context",
+        "id": "obido/obidoanalytics"
+      },
+      "callers": [
+        "unknown"
+      ],
+      "notes": [
+        {
+          "kind": "note",
+          "text": "read-only replica; every route answers from the nightly copy",
+          "line": 7,
+          "column": 5
+        },
+        {
+          "kind": "finding",
+          "text": "the totals route has no authentication",
+          "line": 8,
+          "column": 5
+        }
+      ],
+      "operations": [
+        {
+          "kind": "query",
+          "connector": "for",
+          "phrase": "the daily totals",
+          "operation": {
+            "verb": "GET",
+            "payload": "/totals",
+            "text": "GET /totals"
+          },
+          "line": 9
+        },
+        {
+          "kind": "command",
+          "phrase": "rebuild the replica",
+          "operation": {
+            "verb": "POST",
+            "payload": "/rebuild",
+            "text": "POST /rebuild"
+          },
+          "line": 10
+        }
+      ],
+      "line": 5
+    }
+  ]
+}
