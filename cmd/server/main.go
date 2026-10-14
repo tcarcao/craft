@@ -368,6 +368,90 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 	}
 }
 
+// JourneyRequest names a journey over several files (a journey spans files,
+// so the journey endpoints take files instead of one dsl string).
+type JourneyRequest struct {
+	Files  map[string]string `json:"files"`
+	Slug   string            `json:"slug,omitempty"`
+	Format string            `json:"format,omitempty"` // png, svg, pdf, puml (PlantUML preview only)
+}
+
+// JourneysResponse lists the journey slugs of the posted files.
+type JourneysResponse struct {
+	Success     bool               `json:"success"`
+	Slugs       []string           `json:"slugs"`
+	Diagnostics []craft.Diagnostic `json:"diagnostics,omitempty"`
+}
+
+// parseFiles analyses the posted files as one model.
+func parseFiles(files map[string]string) (*craft.CraftDoc, []craft.Diagnostic) {
+	in := make(map[string][]byte, len(files))
+	for name, src := range files {
+		in[name] = []byte(src)
+	}
+	doc, diags, _ := craft.ParseFiles(in)
+	return doc, diags
+}
+
+// handleJourneys returns the journey slugs of the posted files, sorted.
+func (s *Server) handleJourneys() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req JourneyRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		doc, diags := parseFiles(req.Files)
+		slugs := craft.JourneySlugs(doc)
+		if slugs == nil {
+			slugs = []string{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(JourneysResponse{Success: true, Slugs: slugs, Diagnostics: diags})
+	}
+}
+
+// journeyPreview renders the spine of req.Slug over req.Files with backend
+// and format. An empty or unknown slug answers 400.
+func (s *Server) journeyPreview(w http.ResponseWriter, r *http.Request, backend visualizer.Backend, format func(string) visualizer.Format) (visualizer.Output, []craft.Diagnostic, bool) {
+	var req JourneyRequest
+	if !decode(w, r, &req) {
+		return visualizer.Output{}, nil, false
+	}
+	if req.Slug == "" {
+		respondWithError(w, http.StatusBadRequest, "slug is required: name the journey to draw (POST /journeys lists them)")
+		return visualizer.Output{}, nil, false
+	}
+	doc, diags := parseFiles(req.Files)
+	out, ok := s.render(w, doc, visualizer.Request{
+		View: visualizer.ViewSequence, Backend: backend, Format: format(req.Format), Journey: req.Slug,
+	})
+	return out, diags, ok
+}
+
+// handlePreviewJourney renders a journey spine with PlantUML. Response.Data
+// is base64.
+func (s *Server) handlePreviewJourney() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		out, diags, ok := s.journeyPreview(w, r, visualizer.PlantUML, plantUMLFormat)
+		if !ok {
+			return
+		}
+		respondJSON(w, PreviewResponse{Success: true, Data: base64.StdEncoding.EncodeToString(out.Data), Diagnostics: diags})
+	}
+}
+
+// handlePreviewMermaidJourney returns the Mermaid source of a journey spine.
+// Response.Data is plain text, NOT base64.
+func (s *Server) handlePreviewMermaidJourney() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		out, diags, ok := s.journeyPreview(w, r, visualizer.Mermaid, func(string) visualizer.Format { return visualizer.FormatSource })
+		if !ok {
+			return
+		}
+		respondJSON(w, PreviewResponse{Success: true, Data: string(out.Data), Diagnostics: diags})
+	}
+}
+
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	log.Printf("[%d] %s", code, message)
 	response := PreviewResponse{
@@ -459,6 +543,9 @@ func main() {
 	r.HandleFunc("/preview/mermaid/sequence", server.handlePreviewMermaidSequence()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/c4", server.handlePreviewMermaidC4()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
+	r.HandleFunc("/journeys", server.handleJourneys()).Methods("POST")
+	r.HandleFunc("/preview/journey", server.handlePreviewJourney()).Methods("POST")
+	r.HandleFunc("/preview/mermaid/journey", server.handlePreviewMermaidJourney()).Methods("POST")
 
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
 	r.HandleFunc("/download/c4", server.handleDownloadC4Diagram()).Methods("POST")
