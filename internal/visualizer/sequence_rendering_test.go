@@ -1567,3 +1567,66 @@ use_case "U" {
 		}
 	}
 }
+
+const linksSrc = `actors {
+    user Seller
+}
+domain seller {
+    frontendplatform
+    graphql
+}
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        includes "Site session preamble"
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+}
+use_case "Seller promotes an advert" {
+    when Seller promotes an advert
+        frontendplatform asks graphql for the promotion offers  [promotionOffers]
+        continues "Seller pays at the checkout"
+}
+`
+
+// A link step is an interaction use: PlantUML's ref frame, a Mermaid note
+// (spec §15.5), anchored like a note.
+func TestSequence_LinksAreRefFrames(t *testing.T) {
+	puml, mmd := sequenceSource(t, linksSrc)
+	requireLine(t, "plantuml", puml, "ref over Seller, frontendplatform : Site session preamble")
+	requireLine(t, "plantuml", puml, "ref over frontendplatform, graphql : continues: Seller pays at the checkout")
+	requireLine(t, "mermaid", mmd, "Note over Seller,frontendplatform: ref: Site session preamble")
+	requireLine(t, "mermaid", mmd, "Note over frontendplatform,graphql: continues: Seller pays at the checkout")
+}
+
+// A branch that holds only a link is not empty: the ref frame is drawn inside
+// it.
+func TestSequence_LinkAloneInABranch(t *testing.T) {
+	puml, mmd := sequenceSource(t, `actors {
+    user Seller
+}
+domain seller {
+    frontendplatform
+    graphql
+}
+use_case "Seller pays" {
+    when Seller pays
+        frontendplatform asks graphql to pay  [payInvoice]
+        alt "card declined"
+            continues "Seller retries the payment"
+}
+`)
+	if got, want := trimmedLines(between(t, "plantuml", puml, "alt card declined", "\nend")), []string{"alt card declined", "ref over frontendplatform, graphql : continues: Seller retries the payment", "end"}; !slices.Equal(got, want) {
+		t.Errorf("plantuml alt = %q, want %q", got, want)
+	}
+	if got, want := trimmedLines(between(t, "mermaid", mmd, "alt card declined", "    end")), []string{"alt card declined", "Note over frontendplatform,graphql: continues: Seller retries the payment", "end"}; !slices.Equal(got, want) {
+		t.Errorf("mermaid alt = %q, want %q", got, want)
+	}
+}
+
+// trimmedLines splits out into trimmed lines.
+func trimmedLines(out string) []string {
+	var lines []string
+	for _, l := range strings.Split(out, "\n") {
+		lines = append(lines, strings.TrimSpace(l))
+	}
+	return lines
+}

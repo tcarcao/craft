@@ -44,6 +44,9 @@ const (
 	// drawn over the participants in Over.
 	MessageStepNote MessageKind = "step-note"
 	MessageFinding  MessageKind = "finding"
+	// MessageRef is an includes/continues link, drawn over Over as an
+	// interaction use; Label is the title, or "continues: <title>".
+	MessageRef MessageKind = "ref"
 	// MessageNone draws nothing. It stands for a branch that adds no message
 	// (no drawable interaction, or only an inbound event already drawn), so
 	// writers still open (or switch to) that branch: an empty outcome is still
@@ -68,8 +71,8 @@ type Message struct {
 	// close native blocks from the change between consecutive messages (see
 	// BlockOps).
 	Branch []BranchRef
-	// Over lists the participant IDs a MessageStepNote or MessageFinding is
-	// drawn over; empty means across the diagram (first to last participant).
+	// Over lists the participant IDs a MessageStepNote, MessageFinding or
+	// MessageRef is drawn over; empty means across the diagram (first to last participant).
 	Over []string
 	// Inferred draws the message grey, with an "(inferred)" suffix.
 	Inferred bool
@@ -573,6 +576,8 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 			l.emit(l.step)
 		case st.Note != nil:
 			l.note(*st.Note, path)
+		case st.Link != nil:
+			l.ref(*st.Link, path)
 		case st.Block != nil:
 			skip = skip || (len(path) == 0 && i == first && l.opensBlock && st.Block.Kind == lang.BlockOpt)
 			for bi, br := range st.Block.Branches {
@@ -606,6 +611,18 @@ func (l *scenarioLayout) note(n model.Note, path []BranchRef) {
 	})
 }
 
+// ref draws a link step as an interaction use over the participants of the
+// last message (spec §15.5).
+func (l *scenarioLayout) ref(link model.Link, path []BranchRef) {
+	label := link.Title
+	if link.Kind == model.LinkContinues {
+		label = "continues: " + link.Title
+	}
+	sec := &l.b.seq.Sections[l.idx]
+	sec.Messages = append(sec.Messages, Message{Kind: MessageRef, Label: label, Scenario: l.title,
+		Branch: slices.Clone(path), Over: l.anchor()})
+}
+
 // anchor returns the participants of the last drawn message of this scenario:
 // From and To, deduplicated; only To for a message from outside the section,
 // only From for what an actor does itself. Nil when nothing has been drawn yet.
@@ -614,7 +631,7 @@ func (l *scenarioLayout) anchor() []string {
 	for i := len(msgs) - 1; i >= l.start; i-- {
 		m := msgs[i]
 		switch m.Kind {
-		case MessageNone, MessageStepNote, MessageFinding:
+		case MessageNone, MessageStepNote, MessageFinding, MessageRef:
 			continue
 		case MessageInbound, MessageFound:
 			return []string{m.To}

@@ -161,6 +161,17 @@ func Sequence(s view.Sequence) string {
 					label = "Finding: " + label
 				}
 				fmt.Fprintf(&b, "    Note over %s: %s\n", over, label)
+			case view.MessageRef:
+				// Mermaid has no interaction use: a note, prefixed "ref: "
+				// for an includes (a continues already says so).
+				over := noteOver(s, m.Over, al, ",")
+				if over == "" {
+					continue
+				}
+				if !strings.HasPrefix(m.Label, "continues: ") {
+					label = "ref: " + label
+				}
+				fmt.Fprintf(&b, "    Note over %s: %s\n", over, label)
 			case view.MessageReply:
 				fmt.Fprintf(&b, "    %s-->>%s: %s\n", al.of(m.From), al.of(m.To), label)
 			case view.MessageAsync:

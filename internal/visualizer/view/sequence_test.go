@@ -138,7 +138,7 @@ use_case "Checkout" {
 		}
 		var got []Message
 		for _, m := range seq.Sections[0].Messages {
-			if m.Scenario == title && m.Kind != MessageNone && m.Kind != MessageStepNote && m.Kind != MessageFinding {
+			if m.Scenario == title && m.Kind != MessageNone && m.Kind != MessageStepNote && m.Kind != MessageFinding && m.Kind != MessageRef {
 				got = append(got, m)
 			}
 		}
@@ -354,5 +354,46 @@ func TestBlockOps_SplitPar(t *testing.T) {
 	}
 	if got := BlockOps([]BranchRef{r2}, nil); !reflect.DeepEqual(got, []BlockOp{{Kind: BlockClose, BlockKind: lang.BlockPar, Label: ""}}) {
 		t.Errorf("close = %+v", got)
+	}
+}
+
+// A link anchors like a note: over the last message's participants, or across
+// the diagram when nothing is drawn yet; a branch holding only a link is not
+// empty (spec §15.5).
+func TestLinks_AreRefMessages(t *testing.T) {
+	src := `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+use_case "U" {
+    when "Order Placed"
+        includes "Shared preamble"
+        Ordering asks Billing to charge
+        alt "declined"
+            continues "Customer retries"
+}
+`
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("t.craft", src)}).Doc
+	seq := BuildSequence(doc, interaction.Derive(doc))
+	type got struct {
+		label, over string
+		branched    bool
+	}
+	var refs []got
+	for _, m := range seq.Sections[0].Messages {
+		if m.Kind == MessageNone {
+			t.Errorf("unexpected MessageNone: a branch holding only a link is not empty")
+		}
+		if m.Kind == MessageRef {
+			refs = append(refs, got{m.Label, strings.Join(m.Over, ","), len(m.Branch) > 0})
+		}
+	}
+	want := []got{
+		{"Shared preamble", "", false},
+		{"continues: Customer retries", "shop/Ordering,shop/Billing", true},
+	}
+	if !slices.Equal(refs, want) {
+		t.Errorf("refs:\n%v\nwant:\n%v", refs, want)
 	}
 }

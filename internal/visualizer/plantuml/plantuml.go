@@ -292,6 +292,10 @@ func Sequence(s view.Sequence) string {
 					colour, label = " #FFE4E1", "Finding: "+m.Label
 				}
 				fmt.Fprintf(&b, "note over %s%s : %s\n", over, colour, label)
+			case view.MessageRef:
+				if over := noteOver(s, m.Over, al, ", "); over != "" {
+					fmt.Fprintf(&b, "ref over %s : %s\n", over, m.Label)
+				}
 			case view.MessageReply:
 				fmt.Fprintf(&b, "%s %s %s : %s\n", al.of(m.From), seqArrow("-->", m.Inferred), al.of(m.To), m.Label)
 			case view.MessageAsync:
