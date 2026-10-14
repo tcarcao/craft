@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.20.0] — 2026-10-14
 
 **Why a minor version.** No exported `pkg/craft` identifier is removed or changes type. Behaviour does change: `Parse` now reports cross-reference and lint diagnostics, `ParseFiles` keeps one copy of a service or domain declared in several files, and `craft generate` draws all its inputs as one model and refuses a model with errors. Read the entries below before upgrading.
 
