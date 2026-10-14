@@ -202,6 +202,13 @@ use_case "U" {
     when "Order Placed"
         note "nothing drawn yet"
         Ordering records it
+        note "after an internal step"
+    when Billing listens "Invoice Sent"
+        note "after an incoming event"
+    when Customer opens the basket
+        note "after what the actor does itself"
+        Customer asks Ordering for the basket
+        note "it says \"empty\""
 }
 `
 	doc := analysis.Workspace([]analysis.FileResult{analysis.File("t.craft", src)}).Doc
@@ -226,6 +233,10 @@ use_case "U" {
 		{MessageStepNote, "after the block", "shop/Billing,shop/Ordering"},
 		{MessageStepNote, "only a note", "shop/Billing,shop/Ordering"},
 		{MessageStepNote, "nothing drawn yet", ""},
+		{MessageStepNote, "after an internal step", "shop/Ordering"},
+		{MessageStepNote, "after an incoming event", "shop/Billing"},
+		{MessageStepNote, "after what the actor does itself", "Customer"},
+		{MessageStepNote, `it says "empty"`, "Customer,shop/Ordering"},
 	}
 	if !slices.Equal(notes, want) {
 		t.Errorf("notes:\n%v\nwant:\n%v", notes, want)

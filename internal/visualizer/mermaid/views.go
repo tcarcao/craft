@@ -93,11 +93,8 @@ func Sequence(s view.Sequence) string {
 		}
 	}
 	for _, sec := range s.Sections {
-		switch {
-		case len(s.Participants) > 1:
-			fmt.Fprintf(&b, "    Note over %s,%s: %s\n", al.of(s.Participants[0].ID), al.of(s.Participants[len(s.Participants)-1].ID), sec.Title)
-		case len(s.Participants) == 1:
-			fmt.Fprintf(&b, "    Note over %s: %s\n", al.of(s.Participants[0].ID), sec.Title)
+		if span := noteOver(s, nil, al, ","); span != "" {
+			fmt.Fprintf(&b, "    Note over %s: %s\n", span, sec.Title)
 		}
 		group := ""
 		var path []view.BranchRef
