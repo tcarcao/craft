@@ -3,6 +3,8 @@ package sema_test
 import (
 	"testing"
 
+	"github.com/tcarcao/craft/v2/internal/green"
+
 	"github.com/tcarcao/craft/v2/internal/sema"
 	"github.com/tcarcao/craft/v2/internal/syntax"
 )
@@ -290,4 +292,63 @@ func containsStr(s, sub string) bool {
 			}
 			return false
 		}())
+}
+
+// ── indistinguishable-scenarios ──────────────────────────────────────────────
+
+func indistinguishable(t *testing.T, src string) []string {
+	t.Helper()
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{"file:///test.craft": parseTree(src)}, wsWithActors())
+	var out []string
+	for _, d := range diags {
+		if d.Code == "craft/lint/indistinguishable-scenarios" {
+			out = append(out, d.Message)
+		}
+	}
+	return out
+}
+
+func TestLint_IndistinguishableScenarios(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want int
+	}{
+		{"unnamed twins warn", "use_case \"U\" {\n  when A does x\n    S1 acts\n  when A does x\n    S2 acts\n}\n", 1},
+		{"both named", "use_case \"U\" {\n  scenario \"one\"\n  when A does x\n    S1 acts\n  scenario \"two\"\n  when A does x\n    S2 acts\n}\n", 0},
+		{"differing triggers", "use_case \"U\" {\n  when A does x\n    S1 acts\n  when A does y\n    S2 acts\n}\n", 0},
+		{"whitespace only", "use_case \"U\" {\n  when A  does   x\n    S1 acts\n  when A does x\n    S2 acts\n}\n", 1},
+		{"separate use cases", "use_case \"U\" {\n  when A does x\n    S1 acts\n}\nuse_case \"V\" {\n  when A does x\n    S2 acts\n}\n", 0},
+		{"listens repeated", "use_case \"U\" {\n  when x listens e.E\n    S1 acts\n  when x listens e.E\n    S2 acts\n}\n", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := indistinguishable(t, c.src); len(got) != c.want {
+				t.Errorf("want %d warnings, got %v", c.want, got)
+			}
+		})
+	}
+}
+
+func TestLint_IndistinguishableScenarios_Ranges(t *testing.T) {
+	src := "use_case \"U\" {\n    when CRON fires the schedule\n        sp a\n    when CRON fires the schedule\n        sp b\n    scenario \"named twin\"\n    when CRON fires the schedule\n        sp c\n}\n"
+	g, li, _ := syntax.Parse(src)
+	uri := "file:///test.craft"
+	diags := sema.LintWorkspace(map[string]syntax.SyntaxNode{uri: syntax.Root(g)}, wsWithActors(), map[string]green.LineIndex{uri: li})
+	var lines []int
+	for _, d := range diags {
+		if d.Code != "craft/lint/indistinguishable-scenarios" {
+			continue
+		}
+		lines = append(lines, d.Range.Start.Line)
+		if d.Range.Start.Character != 4 || d.Range.End.Character != 8 {
+			t.Errorf("range = %+v, want the 4-char `when` at column 4", d.Range)
+		}
+		if want := `scenario repeats the trigger "when CRON fires the schedule"; use alt "…" for different outcomes, or scenario "…" names for different ways in`; d.Message != want {
+			t.Errorf("message = %q", d.Message)
+		}
+	}
+	if len(lines) != 2 || lines[0] != 3 || lines[1] != 6 {
+		t.Errorf("warning lines = %v, want [3 6]", lines)
+	}
 }

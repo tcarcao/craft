@@ -53,6 +53,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintDeadEvents(perFileTrees, lis)...)
 	diags = append(diags, lintUnusedActors(perFileTrees, ws)...)
 	diags = append(diags, lintEventPastTense(perFileTrees, lis)...)
+	diags = append(diags, lintIndistinguishableScenarios(perFileTrees, lis)...)
 	diags = append(diags, lintAmbiguousUseCaseRefs(perFileTrees, ws, lis)...)
 	return diags
 }
@@ -231,6 +232,50 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 						check(action.EventValue(), uri, action.Line(li), action.EventCol(li), action.EventIsString())
 					}
 				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── indistinguishable-scenarios ───────────────────────────────────────────────
+// Warning: within one use case, a scenario repeats the trigger of an earlier
+// scenario and either of them lacks a `scenario "name"`, so a reader cannot
+// tell the two apart. One warning per repeating scenario, on its `when`.
+
+func lintIndistinguishableScenarios(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		file := syntax.AsFile(perFileTrees[uri])
+		for _, uc := range file.UseCases() {
+			// seen maps a normalised trigger to "some earlier scenario with it is unnamed".
+			seen := map[string]bool{}
+			for _, sc := range uc.Scenarios() {
+				when := sc.When()
+				if when == nil {
+					continue // recovered orphan
+				}
+				key := strings.Join(strings.Fields(sc.Trigger().SourceText()), " ")
+				unnamed := sc.Name() == ""
+				earlierUnnamed, dup := seen[key]
+				if dup {
+					if unnamed || earlierUnnamed {
+						line, col := li.LineCol16(when.Offset())
+						start := colToLSP(col)
+						diags = append(diags, model.Diagnostic{
+							Code:     "craft/lint/indistinguishable-scenarios",
+							Message:  fmt.Sprintf("scenario repeats the trigger \"when %s\"; use alt \"…\" for different outcomes, or scenario \"…\" names for different ways in", key),
+							Severity: model.SeverityWarning,
+							Range: model.Range{
+								Start: model.Position{Line: lineToLSP(line), Character: start},
+								End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(when.Text())},
+							},
+							SourceURI: uri,
+						})
+					}
+				}
+				seen[key] = earlierUnnamed || unnamed
 			}
 		}
 	}
