@@ -89,6 +89,7 @@ func FuzzFormatBranches(f *testing.F) {
 		"04_use_cases/listens_list_multiline", "04_use_cases/notifies_one_of",
 		"04_use_cases/operation_list", "04_use_cases/op_inferred", "04_use_cases/op_sql",
 		"04_use_cases/op_addr_quoted", "04_use_cases/returns_stream_to",
+		"04_use_cases/links", "04_use_cases/sources",
 		"09_surfaces/surface_basic", "09_surfaces/surface_notes_callers_unknown",
 	} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", filepath.FromSlash(name)+".craft"))
@@ -103,6 +104,8 @@ func FuzzFormatBranches(f *testing.F) {
 	// to its own line used to turn the prose `[0]{]` into an annotation plus
 	// two phantom actions.
 	f.Add("use_CAse\"\"{when A A0\nA A[0]{]}")
+	// Found by the fuzzer: a trailing //@ with a blank after it.
+	f.Add("ACtor A //@ \nA")
 	f.Fuzz(func(t *testing.T, src string) {
 		if fuzzFormatterBails(src) {
 			t.Skip("input does not parse cleanly")
@@ -113,6 +116,9 @@ func FuzzFormatBranches(f *testing.F) {
 		}
 		if a, b := fuzzOutline(src), fuzzOutline(once); a != b {
 			t.Fatalf("step outline changed:\nbefore:\n%s\nafter:\n%s\noutput:\n%s", a, b, once)
+		}
+		if a, b := sourceCites(src), sourceCites(once); a != b {
+			t.Fatalf("//@ cites changed:\nbefore:\n%s\nafter:\n%s", a, b)
 		}
 		inComment := multilineCommentLines(once)
 		for i, line := range strings.Split(once, "\n") {
@@ -125,6 +131,20 @@ func FuzzFormatBranches(f *testing.F) {
 			}
 		}
 	})
+}
+
+// sourceCites lists the //@ comments of src in order, verbatim but for
+// trailing blanks (the formatter trims those after a trailing comment). The
+// formatter moves a cite with its step but never rewrites it.
+func sourceCites(src string) string {
+	g, _, _ := syntax.Parse(src)
+	var b strings.Builder
+	for _, tok := range syntax.Root(g).AllTokens() {
+		if syntax.IsSourceComment(tok) {
+			b.WriteString(strconv.Quote(strings.TrimRight(tok.Text(), " \t")) + "\n")
+		}
+	}
+	return b.String()
 }
 
 // multilineCommentLines marks the lines of src that continue a comment token

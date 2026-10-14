@@ -2410,3 +2410,32 @@ func TestFormat_OneLineListsAndEgress(t *testing.T) {
 		t.Errorf("not idempotent:\n%s", again)
 	}
 }
+
+// TestFormat_SourcesAndLinks pins //@ cites and link steps: a cite stays
+// under its step at that step's body column, its text is not rewritten, and
+// a link indents like an action of its body.
+func TestFormat_SourcesAndLinks(t *testing.T) {
+	in := "use_case \"U\" {\n  when S does it\n     //@ a/b.go:1 -- trigger\n   includes   \"Site session preamble\"\n      alt \"x\"\n        x asks y for it  [op]\n          //@ c/d.go:5-9\n      else \"y\"\n        continues \"Pay\"\n}\n"
+	want := "use_case \"U\" {\n    when S does it\n        //@ a/b.go:1 -- trigger\n        includes \"Site session preamble\"\n        alt \"x\"\n            x asks y for it  [op]\n            //@ c/d.go:5-9\n        else \"y\"\n            continues \"Pay\"\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+	if stepOutline(t, in) != stepOutline(t, got) {
+		t.Error("block membership changed")
+	}
+}
+
+// TestFormat_SourceCiteTextIsVerbatim: the formatter moves a //@ line but
+// never touches its content, odd spacing included.
+func TestFormat_SourceCiteTextIsVerbatim(t *testing.T) {
+	cite := "//@  repo   a/b.go:1,3-4  --   keep   this  spacing  "
+	in := "use_case \"U\" {\n  when S does it\n    x asks y for it\n " + cite + "\n}\n"
+	got := FormatDocument(in)
+	if want := "use_case \"U\" {\n    when S does it\n        x asks y for it\n        " + cite + "\n}\n"; got != want {
+		t.Errorf("cite text rewritten or misplaced:\n%q", got)
+	}
+}

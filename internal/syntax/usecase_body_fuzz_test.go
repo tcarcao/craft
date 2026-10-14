@@ -29,6 +29,14 @@ func FuzzParseUseCaseBody(f *testing.F) {
 		"    when Seller resumes a selling draft\n        mobile asks graphql to open a selling chat session  [agenticSellingStart]\n        graphql asks ShaperAgent to initiate the chat  [inferred POST /api/v1/assistant/initiate_chat]\n        graphql asks ShaperAgent to ping  [inferred]\n",
 		// v2.24: a dangling list comma at end of input.
 		"    when s listens a.A,\n",
+		// v2.25: //@ source cites (spec §14.1).
+		"    when nmf_monetization listens nmfbus.AddOnPurchased\n        //@ re-monetization-framework functions/eb_email_sender/eb_email_sender.go:5 -- one rule, eight detail-types\n        nmf_monetization picks the mail resolver from the event type alone\n        //@ eb_email_sender.go:5-40\n        nmf_monetization asks Siren to send the purchase mail  [POST /api/v1/event]\n        //@ pkg/siren/siren.go:63-115 -- a 423 for a suppressed address counts as delivered\n",
+		// v2.25: includes/continues links (spec §15.1).
+		"    when Seller asks the assistant a question\n        includes \"Site session preamble\"\n        frontendplatform asks graphql to stream the answer  [assistantStream]\n",
+		"    when Seller promotes an advert\n        frontendplatform asks graphql for the promotion offers  [promotionOffers]\n        alt \"pays now\"\n            continues \"Seller pays at the checkout\"\n",
+		"    when S does\n        //@\n",
+		"    when S does\n        includes\n",
+		"    when S does\n        //@ :3,5-4 --\n        continues \"\"\n",
 	} {
 		f.Add(body, true)
 	}
@@ -45,6 +53,10 @@ func FuzzParseUseCaseBody(f *testing.F) {
 			for _, st := range steps {
 				if n, ok := st.Note(); ok {
 					_, _ = n.Kind(), n.Text()
+					continue
+				}
+				if l, ok := st.Link(); ok {
+					_, _ = l.Kind(), l.Title()
 					continue
 				}
 				if a, ok := st.Action(); ok {
