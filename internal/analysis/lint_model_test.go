@@ -197,6 +197,33 @@ func TestLinks_Lints(t *testing.T) {
 	}
 }
 
+// Two use cases of one file that share a former title are not "in 2 files":
+// the message counts use cases, and files only when there are several.
+func TestLinks_AmbiguousMessage(t *testing.T) {
+	msg := func(files map[string]string) string {
+		for _, d := range linkWorkspace(files).Diagnostics {
+			if d.Code == "craft/sema/ambiguous-use-case" {
+				return d.Message
+			}
+		}
+		t.Fatal("no ambiguous-use-case")
+		return ""
+	}
+	former := func(name string) string {
+		return "use_case \"" + name + "\" {\n  tags {\n    formerly_titled: \"Old\"\n  }\n  when S does\n    y does it\n}\n"
+	}
+	sameFile := msg(map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    includes \"Old\"\n    x does it\n}\n" + former("B") + former("C")})
+	if want := `"Old" names 2 use cases; rename one of them: a link names one use case`; sameFile != want {
+		t.Errorf("same file: %q, want %q", sameFile, want)
+	}
+	twoFiles := msg(map[string]string{
+		"a.craft": "use_case \"A\" {\n  when S does\n    includes \"Old\"\n    x does it\n}\n" + former("B"),
+		"b.craft": former("C")})
+	if want := `"Old" names 2 use cases in 2 files; rename one of them: a link names one use case`; twoFiles != want {
+		t.Errorf("two files: %q, want %q", twoFiles, want)
+	}
+}
+
 func TestLinks_LintRangeIsTheTitle(t *testing.T) {
 	res := linkWorkspace(map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    includes \"Nowhere\"\n    x does it\n}\n"})
 	for _, d := range res.Diagnostics {

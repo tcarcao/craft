@@ -31,7 +31,7 @@ implementation slice records the exact baseline from `craft validate` when it la
 | **G16** streaming | `seller-tooling/ai-assistant-chat.craft:39-43`: `frontendplatform asks graphql to stream the answer [assistantStream]`, then `graphql relays each upstream event to the client as META, TOKEN or DONE` as an internal step. The seller-tooling report (N2): "`asks` has one response; token streaming … cannot be shown". | 2 files, 4 `asks … to stream`, 2 relay steps. |
 | **G17** operation lists, dynamic events | One hop with several operations is already written as a comma list in one bracket: `Partner asks ad/atlas-advert to save or delete the advert [postAdvert, putAdvert, deleteAdvert]`, `[files.list, files.get]`, `[CreateApiKey, CreateUsagePlanKey]`. The hub reads each as one operation named `postAdvert, putAdvert, deleteAdvert`, which resolves to nothing. `billing/nmf-user-event-outbox.craft` reads the detail type "off the stored column rather than naming an event", so it has 0 `notifies` (billing report N3). | 6 step lines with a comma list in a bracket. 1 outbox file with no publish. |
 | **G20** confidence and egress | `obido/obido-market-ingestion.craft:12`: `obidoanalytics asks front for the city, region, developer and project reference graph`, no bracket, with the comment "Raw SQL over the monolith's own `investment`, `flat`, `city`, `region` and `developer` tables". `partner/mercury-lead-message-handoff.craft:32`: "Probably whatever serves SiteHooksApi; NOT TRACED". `ad/seller-resumes-an-agentic-selling-draft.craft:50`: "… is inferred from its name, not shown in code". | 20 step `asks` with no bracket in 13 files: 2 are direct table reads, 4 are egress to external parties. 2 inferred hops. |
-| **G4** provenance | Evidence is a comment under the step: `// eb_email_sender.go:5`, `// pkg/siren/siren.go:63-115: a 423 for a suppressed address counts as delivered`. The hub cannot see it, so it cannot tell when the cited code moved. | 3,247 comment lines. 1,753 hold a `file:line` cite, 1,588 of them indented under a step. 2,328 cite tokens; 860 carry a directory; 91 name the repo. 797 comment lines start with a cite. 2 `VERIFIED` stamps remain. 349 of 370 files carry cites. |
+| **G4** provenance | Evidence is a comment under the step: `// eb_email_sender.go:5`, `// pkg/siren/siren.go:63-115: a 423 for a suppressed address counts as delivered`. The hub cannot see it, so it cannot tell when the cited code moved. | 3,247 comment lines. 1,753 hold a `file:line` cite, 1,588 of them indented under a step. 2,328 cite tokens; 860 carry a directory; 91 name the repo. 906–947 comment lines start with a cite (797 in the first count). 2 `VERIFIED` stamps remain. 349 of 370 files carry cites. |
 | **G6** cross-use-case links | A non-event hand-off is a comment: `// Follows web/site-session-preamble.craft (PHP session and active features)`, `// The payment runs through the web view the app opens (vas/seller-promote-an-advert.craft, …)`. | 549 comment lines name another `.craft` file (390 in headers, 159 in bodies). 17 `Follows`, 17 `Hands off to`, 9 `preamble`. 0 duplicate use-case titles across files. |
 | **G7** spine view | The hub groups use cases by `journey` tag. Craft cannot draw a spine. | 343 journey slugs; 126 have 2+ use cases; 38 span 2+ files. The largest, `seller-promotes-an-advert`, has 18 use cases in 9 files. 142 publish→listen pairings sit inside one journey (64 journeys), 286 cross journeys. About 69 multi-member journeys have no pairing inside them. |
 
@@ -1038,7 +1038,7 @@ source_comment = '//@' SP cite (',' SP cite)* (SP '--' SP text)? ;
 cite           = (repo SP)? path (':' ranges)?
                | ':' ranges ;                       (* the same path as the cite before *)
 repo           = /[a-z0-9][a-z0-9._-]*/ ;           (* no '/', no ':'; only when a path follows *)
-path           = /[^\s:,]+/ ;                       (* holds '/' or '.' *)
+path           = /[^\s:,()]+/ ;                     (* holds '/' or '.'; no '(' or ')', so prose like `x (a/b.go:3)` is no cite *)
 ranges         = range (',' range)* ;               (* no spaces: sqs.tf:3,26 *)
 range          = INT ('-' INT)? ;
 ```
@@ -1173,7 +1173,7 @@ whole workspace: an exact title match first; then a use case whose `formerly_tit
 |---|---|---|
 | `craft/syntax/missing-label` | error | A bare `includes`/`continues` ("needs a quoted use-case title"). |
 | `craft/sema/unresolved-use-case` (new) | warning | No use case has the title (or a former title). A warning, not an error, because `craft validate` on one file must not fail when the target lives in a file that was not loaded. |
-| `craft/sema/ambiguous-use-case` (new) | error | The title names use cases in two or more files. "Rename one of them; a link names one use case." |
+| `craft/sema/ambiguous-use-case` (new) | error | The title names two or more use cases (in one file or several, by title or former title). "Rename one of them; a link names one use case." |
 | `craft/lint/link-to-former-title` (new) | warning | The link resolved through `formerly_titled`. The LSP offers a quick fix that writes the current title. |
 | `craft/lint/continues-not-last` (new) | warning | A `continues` with another step after it in the same body (notes do not count). |
 | `craft/lint/self-link` (new) | warning | A link to its own use case. |
@@ -1490,12 +1490,13 @@ v2.25.0, minor.
   one is a warning and stays a comment).
 
 ### 19.3 Corpus migration (re-arch-central, after craft v2.25.0 and the hub bump)
-1. **G4.** A script rewrites the 797 comment lines that start with a cite into `//@ <cites> -- <rest>`
+1. **G4.** A script rewrites the 906–947 comment lines that start with a cite into `//@ <cites> -- <rest>`
    (the line does not grow: `// ` becomes `//@ `, and the separator replaces the punctuation after the
    cite). The 463 lines that end with a parenthesised cite are converted by hand, file by file, when the
    file is next edited. The 165 header cites stay plain comments (there is no step to attach to).
    DOMAIN-MAP "Comments → Evidence" becomes "`//@ [repo] path:lines -- text` under the step it proves".
-   The hub's first freshness report is the backlog.
+   The hub's first freshness report is the backlog. A trial conversion gave 0 `malformed-source`, 76
+   `detached-source` (55 in registries, 21 in file headers or surfaces) and 1,070 attached sources.
 2. **G6.** The 17 `Follows` and 9 `preamble` headers become `includes "…"` at the point the shared flow
    runs. The non-event hand-offs among the 17 `Hands off to` headers and the 159 in-body file references
    become `continues "…"`; the event ones need nothing. `check-conventions.py` L6 (a reference to a

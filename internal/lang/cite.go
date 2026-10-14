@@ -25,7 +25,7 @@ var repoRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 // an ordinary comment.
 func ParseSourceComment(comment string) (cites []Cite, text string, ok bool) {
 	body, found := strings.CutPrefix(comment, SourceCommentPrefix)
-	if !found {
+	if !found || !strings.HasPrefix(body, " ") {
 		return nil, "", false
 	}
 	head, note, _ := strings.Cut(body, " -- ")
@@ -55,7 +55,9 @@ func ParseSourceComment(comment string) (cites []Cite, text string, ok bool) {
 			return nil, "", false
 		case path == "":
 			path, repo = prevPath, prevRepo
-		case !strings.ContainsAny(path, "/."):
+		case !strings.ContainsAny(path, "/."), strings.ContainsAny(path, ",()"):
+			// A path holds '/' or '.'; ',' parts cites, and '(' or ')'
+			// is prose around a path, not a path.
 			return nil, "", false
 		}
 		prevRepo, prevPath = repo, path

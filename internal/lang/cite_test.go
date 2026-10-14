@@ -29,6 +29,13 @@ func TestParseSourceComment(t *testing.T) {
 		{"//@ a.go:0", nil, "", false},
 		{"//@ Repo a.go", nil, "", false},
 		{"// a.go:1", nil, "", false},
+		{"//@a/b.go:4", nil, "", false},
+		{"//@\ta/b.go:4", nil, "", false},
+		{"//@ a.go,b.go", nil, "", false},
+		{"//@ a.go,b.go:3", nil, "", false},
+		{"//@ service (notification/x.go:15-29).", nil, "", false},
+		{"//@ service (notification/x.go)", nil, "", false},
+		{"//@ notification/x(1).go", nil, "", false},
 	}
 	for _, c := range cases {
 		cites, text, ok := ParseSourceComment(c.in)

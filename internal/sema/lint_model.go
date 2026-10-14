@@ -343,7 +343,7 @@ func lintLinks(doc *model.CraftDoc) []model.Diagnostic {
 					fmt.Sprintf("no use case is titled %q in the loaded files; check the title, or load the file that defines it", l.Title))
 			case len(matches) > 1:
 				add(uc, l, "craft/sema/ambiguous-use-case", model.SeverityError,
-					fmt.Sprintf("%q names use cases in %d files; rename one of them: a link names one use case", l.Title, len(matches)))
+					fmt.Sprintf("%q names %s; rename one of them: a link names one use case", l.Title, ambiguousCount(matches)))
 			case former:
 				add(uc, l, "craft/lint/link-to-former-title", model.SeverityWarning,
 					fmt.Sprintf("%q is a former title of %q; link to its current title", l.Title, matches[0].Name))
@@ -368,6 +368,19 @@ func lintLinks(doc *model.CraftDoc) []model.Diagnostic {
 		}
 	}
 	return diags
+}
+
+// ambiguousCount says how many use cases a title names, and in how many
+// files when there are several: "2 use cases", "3 use cases in 2 files".
+func ambiguousCount(matches []model.UseCaseRef) string {
+	files := map[string]bool{}
+	for _, m := range matches {
+		files[m.SourceURI] = true
+	}
+	if len(files) < 2 {
+		return fmt.Sprintf("%d use cases", len(matches))
+	}
+	return fmt.Sprintf("%d use cases in %d files", len(matches), len(files))
 }
 
 // ── journeys ──────────────────────────────────────────────────────────────────
