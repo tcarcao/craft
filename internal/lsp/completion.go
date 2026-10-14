@@ -1,8 +1,10 @@
 package lsp
 
 import (
-	"github.com/tcarcao/craft/v2/internal/lang"
+	"regexp"
 	"strings"
+
+	"github.com/tcarcao/craft/v2/internal/lang"
 
 	"go.lsp.dev/protocol"
 
@@ -24,6 +26,8 @@ const (
 	ctxUseCaseAction
 	ctxUseCaseActionVerb // cursor after `asks` or `returns`: suggest domain/service names
 	ctxOpAnnotationVerb  // cursor at an operation annotation's head: suggest protocol verbs
+	ctxTriggerVerb       // cursor after `when <name> `: suggest listens/receives
+	ctxListensTail       // cursor after `when <name> listens <ref> `: suggest a schedule
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -202,6 +206,12 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 	case "actors":
 		return ctxActorsBlock
 	case "use_case":
+		if listensTailRe.MatchString(linePrefix) {
+			return ctxListensTail
+		}
+		if triggerVerbRe.MatchString(linePrefix) {
+			return ctxTriggerVerb
+		}
 		if isActionLine(linePrefix) {
 			if isAfterActionVerb(linePrefix) {
 				return ctxUseCaseActionVerb
@@ -215,6 +225,13 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 		return ctxUnknown
 	}
 }
+
+// triggerVerbRe matches a trigger line typed up to its verb slot, and
+// listensTailRe one typed up to the schedule tail of a `listens` trigger.
+var (
+	triggerVerbRe = regexp.MustCompile(`^\s*when\s+\S+\s+$`)
+	listensTailRe = regexp.MustCompile(`^\s*when\s+\S+\s+listens\s+\S+\s+$`)
+)
 
 // fieldBeforeCursor returns the field name if linePrefix looks like "  fieldname:  "
 // (single word followed by colon, optional trailing spaces). Returns "", false otherwise.
@@ -284,9 +301,13 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		lineStart := f.LineIndex.OffsetFromUTF16(cursorLine+1, 0)
 		cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine+1, cursorCol)
 		if strings.TrimSpace(f.LineIndex.Src()[lineStart:cursorOffset]) == "" {
-			list.Items = append(list.Items, blockKeywordCompletions()...)
+			list.Items = append(list.Items, blockKeywordCompletions(prevLineInPar(root, f.LineIndex, cursorLine))...)
 		}
 		return list
+	case ctxTriggerVerb:
+		return triggerVerbCompletions()
+	case ctxListensTail:
+		return listensScheduleCompletions()
 	case ctxUseCaseActionVerb:
 		return domainAndServiceSymbolCompletions(ws)
 	case ctxOpAnnotationVerb:
@@ -468,6 +489,28 @@ func whenKeywordCompletion() *protocol.CompletionList {
 			},
 		},
 	}
+}
+
+// triggerVerbCompletions are the two trigger verbs that follow `when <name> `
+// for a bounded context or service: `listens` (an event or store hand-off)
+// and `receives` (a callee-side trigger whose caller is not observed).
+func triggerVerbCompletions() *protocol.CompletionList {
+	return &protocol.CompletionList{Items: []protocol.CompletionItem{
+		{Label: "listens", Kind: protocol.CompletionItemKindKeyword, Detail: "react to an event or a store hand-off"},
+		{Label: "receives", Kind: protocol.CompletionItemKindKeyword, Detail: "callee-side trigger: the caller is not observed"},
+	}}
+}
+
+// listensScheduleCompletions are the polling schedules a `listens` trigger
+// takes after its event ref.
+func listensScheduleCompletions() *protocol.CompletionList {
+	snip := protocol.InsertTextFormatSnippet
+	return &protocol.CompletionList{Items: []protocol.CompletionItem{
+		{Label: "cron", Kind: protocol.CompletionItemKindKeyword, Detail: "poll on a cron schedule",
+			InsertText: `cron "${1:* * * * *}"`, InsertTextFormat: snip},
+		{Label: "every", Kind: protocol.CompletionItemKindKeyword, Detail: "poll at a fixed interval",
+			InsertText: `every "${1:5m}"`, InsertTextFormat: snip},
+	}}
 }
 
 func allSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {

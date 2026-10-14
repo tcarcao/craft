@@ -834,7 +834,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Detail:         "use_case",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
 			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
-			Children:       scenarioSymbols(uc, f.LineIndex),
+			Children:       append(findingSymbols(uc.Notes(), f.LineIndex), scenarioSymbols(uc, f.LineIndex)...),
 		})
 	}
 	for _, arch := range file.Archs() {
@@ -1595,6 +1595,16 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 
 	cursorLine := int(params.Position.Line) + 1 // convert to 1-based
 
+	// A keyword with nothing to resolve (`note`, `finding`, `receives`)
+	// explains itself; this runs before the line-based hovers, which would
+	// otherwise describe the trigger subject on a `receives` line.
+	cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))
+	if val, ok := keywordHover(syntax.Root(f.Green), cursorOffset); ok {
+		return &protocol.Hover{
+			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
+		}, nil
+	}
+
 	for _, a := range file.Actors() {
 		nameTok := a.Name()
 		if nameTok == nil {
@@ -2191,6 +2201,12 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwAlt:          "craft-flow-keyword",
 	syntax.SyntaxKindKwOpt:          "craft-flow-keyword",
 	syntax.SyntaxKindKwElse:         "craft-flow-keyword",
+	syntax.SyntaxKindKwPar:          "craft-flow-keyword",
+	syntax.SyntaxKindKwAnd:          "craft-flow-keyword",
+	syntax.SyntaxKindKwLoop:         "craft-flow-keyword",
+	syntax.SyntaxKindKwNote:         "craft-flow-keyword",
+	syntax.SyntaxKindKwFinding:      "craft-flow-keyword",
+	syntax.SyntaxKindKwReceives:     "craft-flow-keyword",
 	syntax.SyntaxKindKwActor:        "craft-actor-keyword",
 	syntax.SyntaxKindKwActors:       "craft-actors-keyword",
 	syntax.SyntaxKindKwDomain:       "craft-domain-keyword",
