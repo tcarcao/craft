@@ -88,6 +88,7 @@ use_case "Resolve a subscriber's billing cycle range" {
 | `craft/syntax/inconsistent-indent` | A line is left of its block's first body line but right of the header. | The line joins the innermost block whose header is left of it. |
 | `craft/syntax/orphan-else` | An `else` has no open `alt` at its column, or its block is an `opt`. | Parsed as the start of a new `alt` with that label. |
 | `craft/syntax/missing-label` | `alt`, `opt` or `else` stands alone on its line (the next token is a NEWLINE). Any other token after it means the line is an ordinary action whose subject is named `alt`/`opt`/`else`. | Treated as a header with an empty label. |
+| `craft/syntax/unexpected-token` (existing code) | An action line has a subject but no verb on the same line (`x` alone). | The action stops at its subject; the next line is parsed on its own. |
 | `craft/syntax/unexpected-token` (existing code) | Tokens follow a header's label on the same line (`alt "a" x does it`). | The extra tokens are wrapped in an error node inside the header; the body starts on the next line. |
 | `craft/syntax/scenario-without-when` | A `scenario "…"` line is not followed by `when`. | Name dropped. |
 
