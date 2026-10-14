@@ -264,7 +264,6 @@ const (
 	ParticipantDataStore      = lang.ParticipantDataStore
 )
 
-// TriggerType classifies the origin of a scenario trigger.
 // ScheduleKind is the form of a scheduled trigger (cron or every).
 type ScheduleKind = lang.ScheduleKind
 
@@ -273,6 +272,7 @@ const (
 	ScheduleEvery = lang.ScheduleEvery
 )
 
+// TriggerType classifies the origin of a scenario trigger.
 type TriggerType = lang.TriggerKind
 
 const (
