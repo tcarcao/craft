@@ -57,6 +57,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintAmbiguousUseCaseRefs(perFileTrees, ws, lis)...)
 	diags = append(diags, lintSingleBranchPar(perFileTrees, lis)...)
 	diags = append(diags, lintReceivesOnActor(perFileTrees, ws, lis)...)
+	diags = append(diags, lintStoreWithoutChange(perFileTrees, lis)...)
 	return diags
 }
 
@@ -706,6 +707,47 @@ func lintReceivesOnActor(perFileTrees map[string]syntax.SyntaxNode, ws Workspace
 						End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(name)},
 					},
 				})
+			}
+		}
+	}
+	return diags
+}
+
+// ── store-without-change ──────────────────────────────────────────────────────
+// Warning: a store ref (store.<name>[.<change>]) whose last segment is not a
+// change, in a `notifies` or a `listens` trigger.
+
+func lintStoreWithoutChange(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		check := func(ref string, line, col int) {
+			if _, change, ok := lang.ParseStoreRef(ref); !ok || change != "" {
+				return
+			}
+			start := colToLSP(col)
+			diags = append(diags, model.Diagnostic{
+				Code:      "craft/lint/store-without-change",
+				Message:   fmt.Sprintf("store ref `%s` names no change; end it with `.inserted`, `.updated` or `.deleted`", ref),
+				Severity:  model.SeverityWarning,
+				SourceURI: uri,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(line), Character: start},
+					End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(ref)},
+				},
+			})
+		}
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				if tr := sc.Trigger(); tr.Kind() == lang.TriggerDomainListen && sc.When() != nil {
+					line, _ := li.LineCol(sc.When().Offset())
+					check(tr.EventRef(), line, tr.EventCol(li))
+				}
+				for _, a := range sc.Actions() {
+					if a.Kind() == lang.ActionAsync {
+						check(a.ObjectRef(), a.Line(li), a.EventCol(li))
+					}
+				}
 			}
 		}
 	}

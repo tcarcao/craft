@@ -3,6 +3,8 @@
 // than spelling the strings itself. It imports nothing from this module.
 package lang
 
+import "strings"
+
 // ActionKind classifies a use-case action by its verb.
 type ActionKind string
 
@@ -73,6 +75,26 @@ const (
 	StoreUpdated  StoreChange = "updated"
 	StoreDeleted  StoreChange = "deleted"
 )
+
+// ParseStoreRef splits a store ref, store.<name>[.<change>]. The last segment
+// is the change when it is inserted, updated or deleted; every other segment
+// is the name. ok is false when ref is not a store ref or names no store.
+func ParseStoreRef(ref string) (name string, change StoreChange, ok bool) {
+	rest, found := strings.CutPrefix(ref, StoreTransport+".")
+	if !found || rest == "" {
+		return "", "", false
+	}
+	segs := strings.Split(rest, ".")
+	switch c := StoreChange(segs[len(segs)-1]); c {
+	case StoreInserted, StoreUpdated, StoreDeleted:
+		name = strings.Join(segs[:len(segs)-1], ".")
+		if name == "" {
+			return "", "", false
+		}
+		return name, c, true
+	}
+	return rest, "", true
+}
 
 // UnknownCaller is the surface `callers:` value for "no caller observed".
 const UnknownCaller = "unknown"

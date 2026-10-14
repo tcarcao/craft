@@ -55,6 +55,10 @@
             "ref": "store.sms_queue.inserted",
             "schedule": "* 10 * * 1-5",
             "scheduleKind": "cron",
+            "store": {
+              "name": "sms_queue",
+              "change": "inserted"
+            },
             "description": "when smsdispatch listens \"store.sms_queue.inserted\" cron \"* 10 * * 1-5\"",
             "subject": {
               "kind": "bounded_context",

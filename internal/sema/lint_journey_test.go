@@ -1,6 +1,10 @@
 package sema
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func lintCodes(t *testing.T, src, code string) int {
 	t.Helper()
@@ -53,5 +57,22 @@ func TestLint_SingleBranchParIgnoresNotes(t *testing.T) {
 	oneWithNote := "use_case \"U\" {\n  when O does\n    par \"lookups\"\n      x asks y for a\n      note \"cached\"\n}"
 	if n := lintCodes(t, oneWithNote, "craft/lint/single-branch-par"); n != 1 {
 		t.Errorf("one step and a note: %d warnings, want 1", n)
+	}
+}
+
+func TestLint_StoreWithoutChange(t *testing.T) {
+	src := "domain d {\n  a\n  b\n}\nuse_case \"U\" {\n  when O does\n    a notifies store.redis.leads.pending\n    a notifies store.leads.inserted\n  when b listens store.redis.leads.pending\n    b does it\n}"
+	if n := lintCodes(t, src, "craft/lint/store-without-change"); n != 2 {
+		t.Errorf("%d warnings, want 2 (the notifies and the listens of the change-less ref)", n)
+	}
+	var starts []string
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/lint/store-without-change" {
+			r := d.Range
+			starts = append(starts, fmt.Sprintf("%d:%d-%d", r.Start.Line, r.Start.Character, r.End.Character))
+		}
+	}
+	if got := strings.Join(starts, " "); got != "6:15-40 8:17-42" {
+		t.Errorf("ranges = %s, want 6:15-40 8:17-42 (the ref itself)", got)
 	}
 }

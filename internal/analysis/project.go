@@ -383,10 +383,22 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		Description:  description,
 		Column:       t.ActorCol(li),
 	}
+	if kind == lang.TriggerDomainListen {
+		out.Store = storeRef(ref)
+	}
 	if when := sc.When(); when != nil {
 		out.Line, _ = li.LineCol(when.Offset())
 	}
 	return out
+}
+
+// storeRef returns the store hand-off a bare ref names, or nil. A quoted
+// event is never a store ref: its ObjectRef / EventRef is "".
+func storeRef(ref string) *model.StoreRef {
+	if name, change, ok := lang.ParseStoreRef(ref); ok {
+		return &model.StoreRef{Name: name, Change: change}
+	}
+	return nil
 }
 
 // joinConnector puts a trigger's connector word back in front of its phrase.
@@ -443,6 +455,10 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 	if text := a.OpText(); text != "" {
 		operation = &model.Operation{Verb: a.OpVerb(), Payload: a.OpPayload(), Text: text}
 	}
+	var store *model.StoreRef
+	if kind == lang.ActionAsync {
+		store = storeRef(a.ObjectRef())
+	}
 	return model.Action{
 		ID:            id,
 		Type:          kind,
@@ -452,6 +468,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		Event:         event,
 		Ref:           a.ObjectRef(),
 		Operation:     operation,
+		Store:         store,
 		Connector:     connector,
 		Phrase:        phrase,
 		Description:   description,

@@ -931,3 +931,35 @@ use_case "Ship" {
 		t.Errorf("listens = %+v, want one with Schedule \"every 5m\"", listens)
 	}
 }
+
+func TestDerive_StoreHandOffsCarryTheStoreEndpoint(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Write" {
+    when Customer places an order
+        Ordering notifies store.orders_db.inserted
+        Ordering notifies store.carts.updated
+}
+use_case "Read" {
+    when Billing listens store.orders_db.inserted cron "*/5 * * * *"
+        Billing charges the order
+}
+`})
+	var pubs, listens []interaction.Interaction
+	for _, it := range its {
+		switch it.Kind {
+		case interaction.Publish:
+			pubs = append(pubs, it)
+		case interaction.Listen:
+			listens = append(listens, it)
+		}
+	}
+	if v := pubs[0].Via; v.Key != "orders_db" || v.Kind != model.ParticipantDataStore || v.Service != "ShopService" {
+		t.Errorf("resolved store Via = %+v", v)
+	}
+	if v := pubs[1].Via; v.Key != "store.carts" || v.Name != "carts" || v.Kind != model.ParticipantDataStore {
+		t.Errorf("unresolved store Via = %+v", v)
+	}
+	if len(listens) != 1 || listens[0].From.Name != "Ordering" || listens[0].Via.Key != "orders_db" || listens[0].Schedule != "cron */5 * * * *" {
+		t.Errorf("listen = %+v", listens)
+	}
+}

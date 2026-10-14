@@ -21,6 +21,16 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 		}
 		return &p
 	}
+	// A store hand-off keeps its participant only when the name is a
+	// declared data store.
+	resolveStore := func(s *model.StoreRef) {
+		if s == nil {
+			return
+		}
+		if p := resolve(s.Name); p != nil && p.Kind == model.ParticipantDataStore {
+			s.Participant = p
+		}
+	}
 
 	for i := range doc.UseCases {
 		for j := range doc.UseCases[i].Scenarios {
@@ -31,8 +41,10 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 			case lang.TriggerDomainListen, lang.TriggerReceive:
 				sc.Trigger.Subject = resolve(sc.Trigger.Context)
 			}
+			resolveStore(sc.Trigger.Store)
 			sc.EachAction(func(a *model.Action) {
 				a.From = resolve(a.Context)
+				resolveStore(a.Store)
 				if a.Type == lang.ActionSync || a.Type == lang.ActionReturn {
 					a.To = resolve(a.TargetContext)
 				}

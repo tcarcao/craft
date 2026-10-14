@@ -107,6 +107,9 @@ type Interaction struct {
 	// same way, at that branch's path, before the box. Each interaction owns
 	// its slice.
 	Branch []BranchRef
+	// Via is the store of a store hand-off (Publish and Listen); zero
+	// otherwise.
+	Via Endpoint
 	// Schedule is the polling cadence of a Listen from a scheduled listens
 	// trigger, as "cron <expr>" or "every <dur>"; "" otherwise.
 	Schedule string
@@ -232,6 +235,7 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			it.Site = triggerSite
 			it.Site.Length = utf16Len(t.Context)
 			it.Schedule = scheduleLabel(t)
+			it.Via = storeEndpoint(t.Store)
 			out = append(out, it)
 		}
 	case lang.TriggerReceive:
@@ -429,6 +433,7 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 			return
 		}
 		it.Kind, it.Event = Publish, a.Event
+		it.Via = storeEndpoint(a.Store)
 	case lang.ActionInternal:
 		it.Kind, it.To = Internal, it.From
 	case lang.ActionReturn:
@@ -496,6 +501,19 @@ func endpoint(written string, p *model.Participant) Endpoint {
 		return Endpoint{Key: written, Name: written}
 	}
 	return Endpoint{Key: p.ID, Name: p.ID, Kind: p.Kind, Service: p.Service}
+}
+
+// storeEndpoint is the data-store endpoint of a store hand-off: the declared
+// data store when the name resolves, else "store.<name>". Kind is always
+// data_store, so views know to draw a store.
+func storeEndpoint(s *model.StoreRef) Endpoint {
+	if s == nil {
+		return Endpoint{}
+	}
+	if p := s.Participant; p != nil {
+		return Endpoint{Key: p.ID, Name: p.ID, Kind: model.ParticipantDataStore, Service: p.Service}
+	}
+	return Endpoint{Key: lang.StoreTransport + "." + s.Name, Name: s.Name, Kind: model.ParticipantDataStore}
 }
 
 func isInsideSystem(p *model.Participant) bool {

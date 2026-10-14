@@ -1,0 +1,192 @@
+{
+  "services": [
+    {
+      "name": "messaging",
+      "contexts": [
+        "smsdispatch",
+        "invoicing"
+      ],
+      "dataStores": [
+        "sms_queue"
+      ],
+      "deployment": {},
+      "line": 12,
+      "contextIds": [
+        "billing/smsdispatch",
+        "billing/invoicing"
+      ]
+    }
+  ],
+  "useCases": [
+    {
+      "name": "Invoicing queues a payment reminder",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "schedule": "0 9 * * 1-5",
+            "scheduleKind": "cron",
+            "description": "when cron \"0 9 * * 1-5\"",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 19,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "invoicing",
+                "verb": "finds",
+                "connector": "the",
+                "phrase": "invoices due in three days",
+                "description": "invoicing finds the invoices due in three days",
+                "line": 20,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/invoicing",
+                  "service": "messaging"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "invoicing",
+                "event": "store.sms_queue.inserted",
+                "ref": "store.sms_queue.inserted",
+                "store": {
+                  "name": "sms_queue",
+                  "change": "inserted",
+                  "participant": {
+                    "kind": "data_store",
+                    "id": "sms_queue",
+                    "service": "messaging"
+                  }
+                },
+                "description": "invoicing notifies \"store.sms_queue.inserted\"",
+                "line": 21,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/invoicing",
+                  "service": "messaging"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 18
+    },
+    {
+      "name": "The queued reminder is sent",
+      "scenarios": [
+        {
+          "id": "scenario_4",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "smsdispatch",
+            "event": "store.sms_queue.inserted",
+            "ref": "store.sms_queue.inserted",
+            "schedule": "* 10 * * 1-5",
+            "scheduleKind": "cron",
+            "store": {
+              "name": "sms_queue",
+              "change": "inserted",
+              "participant": {
+                "kind": "data_store",
+                "id": "sms_queue",
+                "service": "messaging"
+              }
+            },
+            "description": "when smsdispatch listens \"store.sms_queue.inserted\" cron \"* 10 * * 1-5\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "billing/smsdispatch",
+              "service": "messaging"
+            },
+            "line": 25,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_5",
+                "type": "internal_action",
+                "context": "smsdispatch",
+                "verb": "claims",
+                "connector": "the",
+                "phrase": "unsent rows",
+                "description": "smsdispatch claims the unsent rows",
+                "line": 26,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/smsdispatch",
+                  "service": "messaging"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_6",
+                "type": "sync_action",
+                "context": "smsdispatch",
+                "targetContext": "Siren",
+                "ref": "Siren",
+                "operation": {
+                  "payload": "sendSmsNotificationEvent",
+                  "text": "sendSmsNotificationEvent"
+                },
+                "connector": "to",
+                "phrase": "send the SMS",
+                "description": "smsdispatch asks Siren to send the SMS",
+                "line": 27,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/smsdispatch",
+                  "service": "messaging"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "Siren"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 24
+    }
+  ],
+  "domains": [
+    {
+      "name": "billing",
+      "boundedContexts": [
+        "invoicing",
+        "smsdispatch"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 2
+    },
+    {
+      "name": "Siren",
+      "type": "system",
+      "line": 3
+    }
+  ]
+}

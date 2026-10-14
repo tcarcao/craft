@@ -1,0 +1,28 @@
+actors {
+    system CRON
+    system Siren
+}
+
+domain billing {
+    invoicing
+    smsdispatch
+}
+
+services {
+    messaging {
+        contexts: smsdispatch, invoicing
+        data-stores: sms_queue
+    }
+}
+
+use_case "Invoicing queues a payment reminder" {
+    when cron "0 9 * * 1-5"
+        invoicing finds the invoices due in three days
+        invoicing notifies store.sms_queue.inserted
+}
+
+use_case "The queued reminder is sent" {
+    when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+        smsdispatch claims the unsent rows
+        smsdispatch asks Siren to send the SMS  [sendSmsNotificationEvent]
+}
