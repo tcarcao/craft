@@ -709,3 +709,98 @@ func TestGenerateCmd_SemanticErrorStopsGeneration(t *testing.T) {
 		t.Errorf("expected diagram with --allow-errors: %v", err)
 	}
 }
+
+const surfaceCraft = `actor user Advisor
+
+domain obido {
+    advisorapp
+    concierge
+}
+
+surface concierge {
+    callers: Advisor
+    query the seeker list  [getUserList]
+}
+
+use_case "Advisor works a task" {
+    when Advisor opens the task list
+        advisorapp asks concierge for the seekers  [getUserList]
+}
+`
+
+func TestGenerateCmd_Surface(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "obido.craft")
+	if err := os.WriteFile(src, []byte(surfaceCraft), 0644); err != nil {
+		t.Fatal(err)
+	}
+	const row = "| `getUserList` | query | the seeker list | Advisor works a task |"
+	out := filepath.Join(tmp, "out")
+
+	t.Run("writes <base>-surface.md whatever the format", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "surface", "--format", "puml", "--output", out})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate --type surface: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(out, "obido-surface.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), row) {
+			t.Errorf("missing row:\n%s", data)
+		}
+	})
+
+	t.Run("refuses to overwrite without --force", func(t *testing.T) {
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "surface", "--output", out})
+		err := root.Execute()
+		if err == nil || !strings.Contains(err.Error(), "refusing to overwrite") {
+			t.Fatalf("err = %v", err)
+		}
+		root = newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "surface", "--output", out, "--force"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("--force: %v", err)
+		}
+	})
+
+	t.Run("stdout", func(t *testing.T) {
+		var buf bytes.Buffer
+		root := newRootCmd()
+		root.SetOut(&buf)
+		root.SetArgs([]string{"generate", src, "--type", "surface", "--stdout"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("generate --stdout: %v", err)
+		}
+		if !strings.HasPrefix(buf.String(), "# Surfaces\n") || !strings.Contains(buf.String(), row) {
+			t.Errorf("stdout:\n%s", buf.String())
+		}
+	})
+
+	t.Run("type all includes surface only when the model has one", func(t *testing.T) {
+		withDir, withoutDir := filepath.Join(tmp, "all-with"), filepath.Join(tmp, "all-without")
+		root := newRootCmd()
+		root.SetArgs([]string{"generate", src, "--type", "all", "--output", withDir})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(withDir, "obido-surface.md")); err != nil {
+			t.Errorf("no surface file with --type all: %v", err)
+		}
+
+		plain := filepath.Join(tmp, "plain.craft")
+		if err := os.WriteFile(plain, simpleCraft(), 0644); err != nil {
+			t.Fatal(err)
+		}
+		root = newRootCmd()
+		root.SetArgs([]string{"generate", plain, "--type", "all", "--output", withoutDir})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := filepath.Glob(filepath.Join(withoutDir, "*-surface.md")); len(got) != 0 {
+			t.Errorf("surface file without a surface: %v", got)
+		}
+	})
+}

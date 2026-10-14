@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/visualizer/markdown"
 	"github.com/tcarcao/craft/v2/internal/visualizer/mermaid"
 	"github.com/tcarcao/craft/v2/internal/visualizer/plantuml"
 	"github.com/tcarcao/craft/v2/internal/visualizer/view"
@@ -31,6 +32,7 @@ const (
 	ViewFlow         View = "flow"         // detailed domain diagram: numbered steps
 	ViewArchitecture View = "architecture" // contexts grouped by service, unlabeled edges
 	ViewSequence     View = "sequence"     // sequence diagram per use case
+	ViewSurface      View = "surface"      // operation table per surface (Markdown only)
 )
 
 // Backend is the diagram language.
@@ -108,6 +110,10 @@ func (r *Renderer) Render(doc *craft.CraftDoc, req Request) (Output, error) {
 		return Output{}, err
 	}
 	its := interaction.Derive(doc)
+	if req.View == ViewSurface {
+		md := markdown.Surfaces(view.BuildSurfaces(doc, its))
+		return Output{Data: []byte(md), ContentType: "text/markdown; charset=utf-8", Ext: "md"}, nil
+	}
 	shown := doc
 	if len(req.UseCases) > 0 {
 		var missing []string
@@ -157,6 +163,9 @@ var contentTypes = map[Format]string{
 }
 
 func validate(req Request) error {
+	if req.View == ViewSurface {
+		return validateSurface(req)
+	}
 	switch req.View {
 	case ViewC4, ViewFlow, ViewArchitecture, ViewSequence:
 	default:
@@ -188,6 +197,26 @@ func validate(req Request) error {
 			return fmt.Errorf("%w: a c4 diagram always shows every use case", ErrUnsupported)
 		}
 	} else if req.C4 != nil {
+		return fmt.Errorf("%w: C4 options (focus, boundaries, databases) only apply to the c4 view", ErrUnsupported)
+	}
+	return nil
+}
+
+// validateSurface checks a surface request: a Markdown table, from either
+// backend, over every use case.
+func validateSurface(req Request) error {
+	switch req.Backend {
+	case PlantUML, Mermaid:
+	default:
+		return fmt.Errorf("%w: unknown backend %q", ErrUnsupported, req.Backend)
+	}
+	if req.Format != FormatMarkdown {
+		return fmt.Errorf("%w: the surface view is a Markdown table; ask for markdown output", ErrUnsupported)
+	}
+	if len(req.UseCases) > 0 {
+		return fmt.Errorf("%w: the surface view always covers every use case", ErrUnsupported)
+	}
+	if req.C4 != nil {
 		return fmt.Errorf("%w: C4 options (focus, boundaries, databases) only apply to the c4 view", ErrUnsupported)
 	}
 	return nil

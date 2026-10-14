@@ -177,3 +177,69 @@ func kindPhrase(k lang.ParticipantKind) string {
 	}
 	return string(k)
 }
+
+// ── operation-not-in-surface ─────────────────────────────────────────────────
+// Warning: an `asks <target> … [op]` whose target has a surface that does not
+// list op. It is the op-name check of spec §8.2, done on the tree because the
+// range is the `[op]` bracket, which interactions do not carry.
+
+func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
+	type surfaceOps struct {
+		subject string
+		ops     map[string]bool
+	}
+	uris := sortedTreeURIs(perFileTrees)
+	surfaces := map[string]surfaceOps{} // resolved boundary ID → its first surface
+	for _, uri := range uris {
+		for _, s := range syntax.AsFile(perFileTrees[uri]).Surfaces() {
+			p, ambiguous := ResolveParticipant(ws, "", s.Subject())
+			if ambiguous || p.Kind == "" {
+				continue
+			}
+			if _, seen := surfaces[p.ID]; seen {
+				continue
+			}
+			ops := map[string]bool{}
+			for _, op := range s.Operations() {
+				if text := CollapseOperation(op.OpText()); text != "" {
+					ops[text] = true
+				}
+			}
+			surfaces[p.ID] = surfaceOps{subject: s.Subject(), ops: ops}
+		}
+	}
+	if len(surfaces) == 0 {
+		return nil
+	}
+
+	var diags []model.Diagnostic
+	for _, uri := range uris {
+		li := lis[uri]
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				for _, a := range sc.Actions() {
+					text := CollapseOperation(a.OpText())
+					if a.Kind() != lang.ActionSync || text == "" {
+						continue
+					}
+					p, ambiguous := ResolveParticipant(ws, "", a.TargetName())
+					if ambiguous || p.Kind == "" {
+						continue
+					}
+					s, ok := surfaces[p.ID]
+					if !ok || s.ops[text] {
+						continue
+					}
+					diags = append(diags, model.Diagnostic{
+						Code:      "craft/lint/operation-not-in-surface",
+						Message:   fmt.Sprintf("`[%s]` is not an operation of the `%s` surface; add it to the surface or fix the operation name", text, s.subject),
+						Severity:  model.SeverityWarning,
+						SourceURI: uri,
+						Range:     annotationRange(a.OpAnnotation(), li, true),
+					})
+				}
+			}
+		}
+	}
+	return diags
+}

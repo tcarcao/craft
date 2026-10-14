@@ -80,3 +80,21 @@ func TestLint_StoreWithoutChange(t *testing.T) {
 		t.Errorf("ranges = %s, want 6:15-40 8:17-42 (the ref itself)", got)
 	}
 }
+
+func TestLint_OperationNotInSurface(t *testing.T) {
+	src := "domain d {\n  app\n  concierge\n}\nsurface concierge {\n  query the list  [getUserList]\n}\nuse_case \"U\" {\n  when O does\n    app asks concierge for the list  [getUserList]\n    app asks concierge to book  [addMortgagesMeeting]\n    app asks app to think  [anything]\n}"
+	if n := lintCodes(t, src, "craft/lint/operation-not-in-surface"); n != 1 {
+		t.Errorf("%d warnings, want 1 (addMortgagesMeeting)", n)
+	}
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code != "craft/lint/operation-not-in-surface" {
+			continue
+		}
+		if r := d.Range; r.Start.Line != 10 || r.Start.Character != 32 || r.End.Character != 53 {
+			t.Errorf("range = %+v", r)
+		}
+		if !strings.Contains(d.Message, "`[addMortgagesMeeting]`") || !strings.Contains(d.Message, "`concierge` surface") {
+			t.Errorf("message = %q", d.Message)
+		}
+	}
+}

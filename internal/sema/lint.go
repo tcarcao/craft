@@ -58,6 +58,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintSingleBranchPar(perFileTrees, lis)...)
 	diags = append(diags, lintReceivesOnActor(perFileTrees, ws, lis)...)
 	diags = append(diags, lintStoreWithoutChange(perFileTrees, lis)...)
+	diags = append(diags, lintOperationNotInSurface(perFileTrees, ws, lis)...)
 	return diags
 }
 

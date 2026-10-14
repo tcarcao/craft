@@ -115,7 +115,7 @@ func generateCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&diagType, "type", "all", "diagram type: c4|domain|sequence|all")
+	cmd.Flags().StringVar(&diagType, "type", "all", "diagram type: c4|domain|sequence|surface|all")
 	cmd.Flags().StringVar(&mode, "mode", "detailed", "domain diagram mode: detailed|architecture")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "output directory (default: same as input file)")
 	cmd.Flags().StringVar(&boundaries, "boundaries", "boundaries", "C4 boundaries mode: boundaries|transparent")
@@ -144,7 +144,7 @@ func generateDiagrams(r *visualizer.Renderer, model *craft.CraftDoc, base, outDi
 		domainView = visualizer.ViewArchitecture
 	}
 
-	for _, t := range expandType(diagType) {
+	for _, t := range expandType(diagType, len(model.Surfaces) > 0) {
 		req := visualizer.Request{Backend: backend, Format: outFormat}
 		switch t {
 		case "c4":
@@ -161,6 +161,10 @@ func generateDiagrams(r *visualizer.Renderer, model *craft.CraftDoc, base, outDi
 			req.View, req.UseCases = domainView, useCaseFilter
 		case "sequence":
 			req.View, req.UseCases = visualizer.ViewSequence, useCaseFilter
+		case "surface":
+			// A table, not a diagram: Markdown whatever --format says, over
+			// every use case (--use-case and --split do not apply).
+			req.View, req.Format = visualizer.ViewSurface, visualizer.FormatMarkdown
 		default:
 			return fmt.Errorf("unknown diagram type %q", t)
 		}
@@ -276,8 +280,14 @@ func isWithin(path, dir string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func expandType(t string) []string {
+// expandType lists the diagram types of --type. `all` includes the surface
+// table only when the model declares a surface, so a model without one gets
+// the same files as before surfaces existed.
+func expandType(t string, hasSurfaces bool) []string {
 	if t == "all" {
+		if hasSurfaces {
+			return []string{"c4", "domain", "sequence", "surface"}
+		}
 		return []string{"c4", "domain", "sequence"}
 	}
 	return []string{strings.ToLower(t)}
