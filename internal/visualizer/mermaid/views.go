@@ -80,6 +80,8 @@ func Sequence(s view.Sequence) string {
 		}
 		fmt.Fprintf(&b, "    %s %s as %s\n", kind, al.declare(p.ID, p.Label), strings.ReplaceAll(p.Label, ";", ","))
 	}
+	// Declare External if any message is inbound. A MessageNone is never
+	// inbound, so the placeholders of empty branches never add it.
 	external := ""
 	for _, sec := range s.Sections {
 		for _, m := range sec.Messages {
@@ -136,7 +138,8 @@ func Sequence(s view.Sequence) string {
 	return b.String()
 }
 
-// writeBlockOps draws alt/opt block lines.
+// writeBlockOps draws alt/opt block lines. A close is a bare end: its
+// BlockKind and Label are informational only.
 func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 	for _, op := range ops {
 		label := strings.ReplaceAll(op.Label, ";", ",")
@@ -145,7 +148,7 @@ func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 			fmt.Fprintf(b, "    %s %s\n", op.BlockKind, label)
 		case view.BlockElse:
 			fmt.Fprintf(b, "    else %s\n", label)
-		default:
+		case view.BlockClose:
 			b.WriteString("    end\n")
 		}
 	}

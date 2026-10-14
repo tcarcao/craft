@@ -3,6 +3,8 @@ package visualizer
 import (
 	"strings"
 	"testing"
+
+	"github.com/tcarcao/craft/v2/internal/analysis"
 )
 
 // sequenceSource draws src as a sequence diagram in both backends.
@@ -385,4 +387,65 @@ func TestSequence_MermaidBlockLabelsAreSanitized(t *testing.T) {
 }
 `)
 	requireLine(t, "mermaid", mmd, "opt the card, is declined")
+}
+
+// Two use cases may share a name, even across files whose scenario and step
+// numbering collide. They are drawn in one section, each scenario with its own
+// messages in source order, and no branch reads as empty because the other use
+// case already drew its step.
+func TestSequence_DuplicateUseCaseNames(t *testing.T) {
+	const decl = `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+`
+	first := decl + `use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+        Ordering returns the confirmation
+}
+`
+	second := `use_case "Checkout" {
+    when Customer phones in an order
+        Ordering asks Billing to charge the card
+        alt "the card is accepted"
+            Billing returns the receipt
+        else "the card is declined"
+            Billing returns the refusal
+}
+`
+	want := `== Checkout ==
+
+Customer -> Ordering : places an order
+Ordering -> Billing : to charge the card
+Ordering --> Customer : returns the confirmation
+Customer -> Ordering : phones in an order
+Ordering -> Billing : to charge the card
+alt the card is accepted
+Billing --> Ordering : returns the receipt
+else the card is declined
+Billing --> Ordering : returns the refusal
+end
+
+@enduml`
+	for name, files := range map[string][]analysis.FileResult{
+		// Per-file counters: both scenarios are scenario_1.
+		"two files": {analysis.File("a.craft", first), analysis.File("b.craft", second)},
+		"one file":  {analysis.File("a.craft", first+second)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			doc := analysis.Workspace(files).Doc
+			p, _, err := renderSource(doc, ViewSequence, PlantUML)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The last section of a name draws every use case of that name
+			// (an earlier one stays empty, as before branches existed).
+			puml := string(p)
+			if !strings.HasSuffix(puml, want) {
+				t.Errorf("plantuml:\n--- got\n%s\n--- want suffix\n%s", puml, want)
+			}
+		})
+	}
 }

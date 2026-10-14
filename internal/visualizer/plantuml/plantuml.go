@@ -249,7 +249,8 @@ func Sequence(s view.Sequence) string {
 	return b.String()
 }
 
-// writeBlockOps draws alt/opt block lines.
+// writeBlockOps draws alt/opt block lines. A close is a bare end: its
+// BlockKind and Label are informational only.
 func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 	for _, op := range ops {
 		switch op.Kind {
@@ -257,7 +258,7 @@ func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 			fmt.Fprintf(b, "%s %s\n", op.BlockKind, op.Label)
 		case view.BlockElse:
 			fmt.Fprintf(b, "else %s\n", op.Label)
-		default:
+		case view.BlockClose:
 			b.WriteString("end\n")
 		}
 	}
