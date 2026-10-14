@@ -540,6 +540,161 @@ The model keeps step notes as `step.note` and use-case-level notes in `useCase.n
 
 `par`, `and`, `loop`, `note`, `finding` and `receives` stay valid names, like `alt` and `opt`: each is a keyword only in its own position.
 
+## Source Cites (2.25)
+
+A comment that starts with `//@` cites the code that proves the step above it:
+
+```craft
+use_case "nMF mails the seller about an add-on event" {
+    when nmf_monetization listens nmfbus.AddOnPurchased
+        //@ re-monetization-framework functions/eb_email_sender/eb_email_sender.go:5 -- one rule, eight detail-types
+        nmf_monetization picks the mail resolver from the event type alone
+        //@ eb_email_sender.go:5-40
+        nmf_monetization asks Siren to send the purchase mail  [POST /api/v1/event]
+        //@ pkg/siren/siren.go:63-115 -- a 423 for a suppressed address counts as delivered
+}
+```
+
+The form is `//@ [repo] path[:lines][, more cites] [-- text]`:
+
+- **repo** is optional (lowercase letters, digits, `.`, `_`, `-`). Without it, a tool resolves the repo from the step's service (`repo:`, else the service name). Craft records only what is written and never reads a repository.
+- **path** holds a `/` or a `.`; a bare file name is allowed.
+- **lines** are one or more ranges with no spaces: `:5`, `:5-40`, `:3,26`. `:<lines>` alone reuses the path of the cite before it on the line: `//@ a.go:3, :9-12`.
+- **text** after ` -- ` is free text for the reader, shared by every cite of the line.
+
+**Attachment.** A cite attaches to the nearest step line at or above it in the same use case: an action, a branch header (`alt`, `else`, `opt`, `par`, `and`, `loop`), a note, a link or the trigger. Plain `//` comments in between do not matter, and neither does indentation. A cite before the first scenario attaches to the use case. A cite outside every use case (a file header, between use cases) is `craft/lint/detached-source`; keep a file-header cite as a plain `//` comment.
+
+Cites are evidence, not behaviour: no diagram draws them. The model carries them as `sources` (`repo`, `path`, `start`, `end`, `text`, `line`) on the step they attach to; one line with three ranges gives three sources. In the editor, hover on a cited step lists its sources, and with `sourceRoots` configured each cite is a link into your checkout.
+
+A `//@` line that does not parse (`//@x`, a path with no `/` or `.`, `:9-5`) is `craft/syntax/malformed-source`, a warning, and stays an ordinary comment. `///` and `// @` are not cites.
+
+## Links: `includes` and `continues` (2.25)
+
+A link is a step that names another use case by its title:
+
+```craft
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        includes "Site session preamble"
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+}
+use_case "Seller promotes an advert" {
+    when Seller promotes an advert
+        frontendplatform asks graphql for the promotion offers  [promotionOffers]
+        continues "Seller pays at the checkout"
+}
+```
+
+- **`includes "<title>"`**: the target runs at this point (a shared prefix such as a session preamble, or a shared sub-flow), then this body goes on.
+- **`continues "<title>"`**: the flow goes on in the target, and this body ends. Use it for a hand-off with no event: a navigation, a redirect, a web view the app opens. A step after it in the same body is `craft/lint/continues-not-last`.
+- **An event hand-off needs no link.** `notifies E` and `listens E` already pair, and the [journey spine](#journeys-and-the-spine-view-2-25) orders by that pairing.
+
+A link obeys the offside rule, so it can sit in any branch. It is not an action: it gets no interaction, a scenario that opens with `includes` is still triggered into its first action, and a branch that holds only a link is not empty.
+
+The title resolves across every file loaded: an exact title first, then a use case whose `formerly_titled` tag lists it (values separated by `;`), so links survive a rename. Resolution diagnostics:
+
+| Code | Severity | When |
+|---|---|---|
+| `craft/syntax/missing-label` | error | a bare `includes` or `continues` |
+| `craft/sema/unresolved-use-case` | warning | no use case has the title or a former title; validate the whole folder before you trust it |
+| `craft/sema/ambiguous-use-case` | error | the title names two or more use cases |
+| `craft/lint/link-to-former-title` | warning | the link resolved through `formerly_titled`; the editor offers a quick fix |
+| `craft/lint/self-link` | warning | a link to its own use case |
+
+The sequence diagram draws a link as a `ref over` frame over the participants of the message before it; Mermaid has no `ref`, so it draws a note:
+
+```plantuml
+Seller -> frontendplatform : asks the assistant a question
+ref over Seller, frontendplatform : Site session preamble
+...
+frontendplatform -> graphql : for the promotion offers [promotionOffers]
+ref over frontendplatform, graphql : continues: Seller pays at the checkout
+```
+
+```mermaid
+Note over Seller,frontendplatform: ref: Site session preamble
+Note over frontendplatform,graphql: continues: Seller pays at the checkout
+```
+
+Flow, architecture and C4 diagrams do not draw links. In the editor, go to definition on a title opens the target, find references on a `use_case` title lists the links to it, and typing `includes "` offers every title of the workspace.
+
+## Journeys and the Spine View (2.25)
+
+A `journey` tag puts a use case in a journey (one slug per use case; a list is `craft/lint/journey-list`). `craft generate --journey <slug>` draws every member of the journey, across all the files passed, as one sequence diagram:
+
+```bash
+craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' --journey seller-promotes-an-advert
+```
+
+```craft
+// vas/nmf-books-the-draws.craft
+use_case "nMF books the draws of a scheduled VAS" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+    when nmf_monetization listens com.olx.realestate_vas.VasScheduled
+        nmf_monetization books one draw per day of the schedule
+}
+```
+
+```craft
+// vas/seller-promotes-an-advert.craft
+use_case "Seller promotes an advert" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+    when Seller promotes an advert
+        frontendplatform asks graphql to book the promotion  [scheduleVas]
+        graphql asks vasscheduler to book it  [createSchedule]
+        vasscheduler notifies com.olx.realestate_vas.VasScheduled
+        continues "Seller pays at the checkout"
+}
+
+use_case "Seller pays at the checkout" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+    when Seller pays at the checkout
+        frontendplatform asks graphql to pay  [payInvoice]
+}
+```
+
+```plantuml
+@startuml
+title Journey: seller-promotes-an-advert
+...
+== Seller promotes an advert ==
+
+Seller -> frontendplatform : promotes an advert
+frontendplatform -> graphql : to book the promotion [scheduleVas]
+graphql -> vasscheduler : to book it [createSchedule]
+vasscheduler ->> vasscheduler : notifies "com.olx.realestate_vas.VasScheduled"
+ref over vasscheduler : continues: Seller pays at the checkout
+
+== nMF books the draws of a scheduled VAS ==
+
+vasscheduler ->> nmf_monetization : com.olx.realestate_vas.VasScheduled
+nmf_monetization -> nmf_monetization : books one draw per day of the schedule
+
+== Seller pays at the checkout ==
+
+Seller -> frontendplatform : pays at the checkout
+frontendplatform -> graphql : to pay [payInvoice]
+@enduml
+```
+
+Each use case is a section. The participants are shared, so a listener whose publisher was drawn in an earlier section gets the event straight from it; a publisher outside the journey, or later in it, keeps the inbound `(from …)` arrow.
+
+**Order.** The spine is ordered by hand-offs between members: A comes before B when A publishes an event (or writes a store ref) that B's trigger listens to, or when A has `continues "B"`. `includes` does not order. Among members that are ready at the same time:
+
+1. a successor of the member placed last, so one chain is drawn whole before the next;
+2. then the **namesake**: the member whose title, slugified, is the slug; else one in a file named `<slug>.craft`; else one in a file named after one of its `formerly_journey` values;
+3. then the earliest file and line.
+
+Members with no hand-off to or from another member come after every connected one, the namesake first. Each gets a `craft/lint/journey-unconnected` hint: connect it with a `notifies`/`listens` pair or a `continues` link, or move it to its own journey. When the hand-offs form a cycle, the cycle is entered where the flow reaches it (a member that a placed member hands off to), else at the namesake, and `craft generate` notes it on stderr.
+
+`--journey a,b` draws one file per slug (`<base>-journey-<slug>.puml`), and `--journey all` every journey with two or more members. In the editor, hover on a `journey` value lists the members in spine order, go to definition jumps to the others, and a code lens counts them. Go code gets the same order from `pkg/craft.BuildJourney(doc, slug)`.
+
 ## Operation Annotations
 
 Any action (`asks`, `notifies`, `returns`, or an internal action) may end with a bracketed **operation annotation** describing the actual wire call it corresponds to:
@@ -664,7 +819,7 @@ tags {
 }
 ```
 
-The block goes before the first `when`. Keys are not interpreted by Craft, except `sites` and `envs` (below). A repeated key is last-write-wins and emits `craft/sema/duplicate-tag`.
+The block goes before the first `when`. Keys are not interpreted by Craft, except `sites` and `envs` (below), and, since 2.25, `journey` (the [spine](#journeys-and-the-spine-view-2-25) a use case belongs to), `formerly_titled` (earlier titles a link may still use) and `formerly_journey` (earlier slugs, used to find a journey's namesake). A repeated key is last-write-wins and emits `craft/sema/duplicate-tag`.
 
 **`sites` and `envs` (2.24).** These two keys say on which sites or environments the whole use case runs. The sequence diagram appends them to the section title, each part only when its tag is present, values in authored order:
 
@@ -723,6 +878,16 @@ Use-case actions and triggers can emit these:
 | `craft/lint/stream-without-caller` | warning | a `returns stream` answers no open request and names no reader. |
 | `craft/lint/egress-on-internal-step` | warning | an internal step or a return has an `ADDR` or `SQL` item. |
 | `craft/lint/unquoted-address` | warning | a `//` comment cut an `[ADDR …]` bracket. |
+| `craft/syntax/malformed-source` (2.25) | warning | a `//@` line that is not a cite; it stays a comment. |
+| `craft/lint/detached-source` (2.25) | warning | a `//@` cite outside every use case. |
+| `craft/syntax/missing-label` (2.25) | error | also a bare `includes` or `continues`. |
+| `craft/sema/unresolved-use-case` (2.25) | warning | a link title names no loaded use case. |
+| `craft/sema/ambiguous-use-case` (2.25) | error | a link title names two or more use cases. |
+| `craft/lint/link-to-former-title` (2.25) | warning | a link resolved through `formerly_titled`. |
+| `craft/lint/continues-not-last` (2.25) | warning | a step after a `continues` in the same body. |
+| `craft/lint/self-link` (2.25) | warning | a link to its own use case. |
+| `craft/lint/journey-list` (2.25) | warning | a `journey` tag with two or more values. |
+| `craft/lint/journey-unconnected` (2.25) | hint | a journey member with no hand-off to the rest of the journey. |
 
 ## Surfaces
 

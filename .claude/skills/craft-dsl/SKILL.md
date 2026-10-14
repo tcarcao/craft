@@ -98,6 +98,8 @@ This is the complete grammar. All generated `.craft` files must conform to it.
                        | "when" <identifier> <verb> <phrase>?
                        | "when" <event_ref>
 <action>             ::= <sync_action> | <async_action> | <internal_action> | <return_action>
+                       | <link_stmt>                                        // v2.25: a step, not an action
+<link_stmt>          ::= ("includes" | "continues") <string>               // a use-case title
 <sync_action>        ::= <bc_ref> "asks" <bc_ref> <phrase> <op_annotation>?
 <async_action>       ::= <bc_ref> "notifies" (<event_ref> | "one" "of" <event_list>) <op_annotation>?
 <internal_action>    ::= <bc_ref> <verb> <phrase> <op_annotation>?
@@ -119,6 +121,17 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 // empty annotation "[]" is a craft/syntax/empty-op-annotation error.
 // Items split at a comma followed by whitespace, outside braces and strings:
 // "[GET /p/{lat},{lng}]" is one item. An ADDR address containing " //" must be quoted.
+
+// --- Source cites (v2.25): a line comment that starts with //@ ---
+<source_comment>     ::= "//@" " " <cite> (", " <cite>)* (" -- " <text>)?
+<cite>               ::= (<repo> " ")? <path> (":" <ranges>)? | ":" <ranges>   // ":" alone reuses the previous path
+<repo>               ::= [a-z0-9][a-z0-9._-]*
+<path>               ::= [^\s:,()]+                    // must hold "/" or "."
+<ranges>             ::= <range> ("," <range>)*        // no spaces: sqs.tf:3,26
+<range>              ::= [0-9]+ ("-" [0-9]+)?
+// A //@ line attaches to the nearest step line at or above it in the same
+// use case (action, branch header, note, link or trigger); before the first
+// scenario, to the use case. Outside a use case it is detached (warning).
 
 // --- Terminals ---
 <connector>          ::= "a" | "an" | "the" | "as" | "to" | "from" | "in" | "on"
@@ -427,6 +440,12 @@ Formatting changes whitespace and nothing else. Since v2.17.0 this is structural
 | `craft/lint/stream-without-caller` | warning | a `returns stream` with no open request and no `to` target |
 | `craft/lint/egress-on-internal-step` | warning | `[ADDR …]`/`[SQL …]` on an internal step or a return; make it an `asks` |
 | `craft/lint/unquoted-address` | warning | a ` //` comment cut an `[ADDR …]` bracket; quote the address |
+| `craft/syntax/malformed-source` | warning | (v2.25) a `//@` line that is not a cite; it stays a plain comment |
+| `craft/lint/detached-source` | warning | (v2.25) a `//@` cite outside every use case |
+| `craft/syntax/missing-label` | error | also (v2.25) a bare `includes`/`continues` with no title |
+| `craft/sema/unresolved-use-case` / `ambiguous-use-case` | warning / error | (v2.25) a link title names no loaded use case / two or more |
+| `craft/lint/link-to-former-title` / `continues-not-last` / `self-link` | warning | (v2.25) a link through a `formerly_titled` value / a step after `continues` / a link to its own use case |
+| `craft/lint/journey-list` / `journey-unconnected` | warning / hint | (v2.25) a `journey` tag with two values / a journey member no hand-off connects |
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at exactly four sites: the `sync_action` subject and target, the `async_action` subject, or the `domain_listen` trigger context. Qualify it as `<domain>/<name>`. Does **not** fire for an internal action's subject or a `returns` subject/target |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (empty segment, or more than two segments) in any of: any action's subject, the `asks` target, the `returns` target, or the trigger context |
 
@@ -489,6 +508,27 @@ use_case "seshat records a Mercury domain event in the transaction ledger" {
 - **`[SQL <tables>]`** — direct use of another party's tables. **`[ADDR <address>]`** — egress to an address with no operation id; quote it when it contains ` //` (`[ADDR "//cdn.example.com/x"]`). Write both on an `asks` (on an internal step or a return they get `craft/lint/egress-on-internal-step`); declare an external target as a `system` actor.
 - **`[inferred …]`** — the hop was inferred from names or config, not read in code (drawn grey, "(inferred)"). `[inferred]` alone: hop inferred, operation unknown. Use it instead of "probably"/"NOT TRACED" comments.
 - **`sites:` / `envs:` tags** scope the whole use case and are printed in the sequence title. Use `opt`/`alt` when only some steps differ by site.
+
+**Evidence, links and journeys (v2.25).** Need craft ≥ 2.25.
+
+```craft
+use_case "Seller promotes an advert" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+    when Seller promotes an advert
+        includes "Site session preamble"
+        frontendplatform asks graphql to book the promotion  [scheduleVas]
+        //@ re-graphql src/vas/schedule.ts:40-72 -- the mutation forwards the seller's session
+        graphql asks vasscheduler to book it  [createSchedule]
+        vasscheduler notifies com.olx.realestate_vas.VasScheduled
+        continues "Seller pays at the checkout"
+}
+```
+
+- **`//@ [repo] path[:lines] [-- text]`** under a step cites the code that proves it. Put it on the line after the step it proves (it attaches to the nearest step line above it; plain comments in between do not matter). Several cites on one line: `//@ a.go:5-9, b.go:12`; `:<lines>` alone reuses the previous path. Free text goes after ` -- `. The repo is optional (resolved from the step's service). Use `//@` instead of `// see path:line` prose; keep file-header cites as plain `//` comments (a `//@` outside a use case is `craft/lint/detached-source`). A `//@` line that does not parse is `craft/syntax/malformed-source` (it stays a comment). Never invent paths or line numbers: cite only what you have read.
+- **`includes "<title>"`** — another use case runs here (a shared preamble or sub-flow), then this body goes on. **`continues "<title>"`** — the flow goes on in another use case and this body ends; nothing may follow it in the same body (`continues-not-last`). Both are steps that may sit in any branch. Use a link only for a hand-off with no event (a navigation, a redirect, a web view): an event hand-off is a `notifies`/`listens` pair and needs no link. The title must match a use case's title exactly (or one of its `formerly_titled: A; B` values, which gives `link-to-former-title`). An unknown title is `craft/sema/unresolved-use-case` (a warning: validate every file together); a title shared by two use cases is `craft/sema/ambiguous-use-case`.
+- **`journey: <slug>`** puts the use case in a journey (one slug; a list is `journey-list`). `craft generate <files…> --journey <slug>` draws every member as one sequence (the spine), ordered by hand-offs: event and store pairs and `continues` links; a chain stays together, the use case named after the slug leads among equals, unconnected members come last. A member with no hand-off to the others gets a `craft/lint/journey-unconnected` hint: add the `notifies`/`listens` pair or a `continues` link, or move it to its own journey.
 
 ### Deprecated: Quoted Event Strings
 
@@ -582,7 +622,7 @@ This flows from "who and what exists" to "how it's built" to "what happens."
 After generating or editing a `.craft` file, the user can run `craft` to validate and inspect it:
 
 - `craft validate <file>` — parse and lint; reports errors and warnings, exits 1 on errors
-- `craft generate <file>` — produce diagram files (PlantUML by default; `--format mermaid` or `--format mermaid-md` for Mermaid output, `--split` for one file per use case, `--use-case` to filter)
+- `craft generate <file>` — produce diagram files (PlantUML by default; `--format mermaid` or `--format mermaid-md` for Mermaid output, `--split` for one file per use case, `--use-case` to filter, `--journey <slug>|all` for one spine sequence per journey)
 - `craft inspect <file>` — dump the parsed model as structured text or JSON
 
 Glob patterns work for file arguments: `craft validate docs/**/*.craft`

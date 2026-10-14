@@ -178,6 +178,44 @@ actors {
 
 A use case's `sites` and `envs` tags appear in its sequence title: `== Rebuild a market's daily statistics [sites: imovirtualpt, otodompl] [envs: production] ==`.
 
+## Source cites, links and journey spines (2.25)
+
+A `//@` comment under a step cites the code that proves it: an optional repo, a path, optional line ranges, and free text after ` -- `. A cite attaches to the nearest step line above it; cites are never drawn, and the LSP shows them on hover (and as links into your checkouts with `initializationOptions.sourceRoots`):
+
+```craft
+use_case "nMF mails the seller about an add-on event" {
+    when nmf_monetization listens nmfbus.AddOnPurchased
+        //@ re-monetization-framework functions/eb_email_sender/eb_email_sender.go:5 -- one rule, eight detail-types
+        nmf_monetization picks the mail resolver from the event type alone
+        //@ eb_email_sender.go:5-40
+        nmf_monetization asks Siren to send the purchase mail  [POST /api/v1/event]
+        //@ pkg/siren/siren.go:63-115 -- a 423 for a suppressed address counts as delivered
+}
+```
+
+`includes "<title>"` runs another use case at that point and goes on; `continues "<title>"` hands the flow to another use case and ends the body. Use them for hand-offs without an event (a redirect, a web view); an event hand-off is already a `notifies`/`listens` pair. The sequence view draws a link as a `ref over` frame:
+
+```craft
+use_case "Seller promotes an advert" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+    when Seller promotes an advert
+        includes "Site session preamble"
+        frontendplatform asks graphql for the promotion offers  [promotionOffers]
+        continues "Seller pays at the checkout"
+}
+```
+
+Use cases that share a `journey` tag form a journey. `craft generate --journey` draws its spine: one sequence diagram, titled `Journey: <slug>`, with a section per use case in hand-off order (event and store pairs and `continues` links; a chain is kept together, the use case the journey is named after leads among equals, and unconnected use cases come last). A publisher drawn in an earlier section delivers its event directly:
+
+```bash
+craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' --journey seller-promotes-an-advert
+craft generate 'docs/**/*.craft' --journey all --format mermaid --output out/   # every journey with 2+ members
+```
+
+`craft validate` gives a `journey-unconnected` hint for a member that nothing connects to the rest of its journey. `pkg/craft.BuildJourney` returns the same order to Go callers, and the server answers `POST /journeys` and `POST /preview/journey`.
+
 ## Surfaces
 
 A `surface` lists the operations a boundary offers, as queries (no side effect) and commands (state change):

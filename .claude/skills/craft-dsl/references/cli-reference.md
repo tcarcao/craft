@@ -33,7 +33,7 @@ craft validate docs/payments.craft --format json
 craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 ```
 
-Every diagnostic code, with its severity and meaning, is listed in [`docs/DIAGNOSTICS.md`](https://github.com/tcarcao/craft/blob/main/docs/DIAGNOSTICS.md). Version 2.24 adds `craft/sema/store-ref-in-event-list` (error) and the warnings `craft/lint/duplicate-scenario-body`, `duplicate-event-in-list`, `duplicate-operation-in-list`, `one-of-single-event`, `stream-without-caller`, `egress-on-internal-step` and `unquoted-address`. `duplicate-scenario-body` reads the resolved model, so pass every file the use case depends on.
+Every diagnostic code, with its severity and meaning, is listed in [`docs/DIAGNOSTICS.md`](https://github.com/tcarcao/craft/blob/main/docs/DIAGNOSTICS.md). Version 2.24 adds `craft/sema/store-ref-in-event-list` (error) and the warnings `craft/lint/duplicate-scenario-body`, `duplicate-event-in-list`, `duplicate-operation-in-list`, `one-of-single-event`, `stream-without-caller`, `egress-on-internal-step` and `unquoted-address`. `duplicate-scenario-body` reads the resolved model, so pass every file the use case depends on. Version 2.25 adds `craft/syntax/malformed-source` and `craft/lint/detached-source` (`//@` cites, warnings), `craft/sema/unresolved-use-case` (warning) and `craft/sema/ambiguous-use-case` (error) for link titles, the warnings `craft/lint/link-to-former-title`, `continues-not-last`, `self-link` and `journey-list`, and the hint `craft/lint/journey-unconnected`. Links resolve over every file passed, so validate a folder, not one file.
 
 **vNext diagnostic codes.** `craft validate` checks *local well-formedness only* — node-slug shape, `context_map` endpoint/pattern shape, and deprecated syntax. Cross-repo/cross-context resolution against real code is a hub concern, not `craft`'s.
 
@@ -79,12 +79,15 @@ Parses the file(s) and writes diagram files. Default output is PlantUML (`.puml`
 | `--split` | false | Emit one file per use case *(detailed-domain and sequence only)* |
 | `--stdout` | false | Write to stdout instead of files (single diagram only; mutually exclusive with `--output`, `--split`, `--type all`) |
 | `--force` | false | Allow overwriting existing `.md` files (`--format=mermaid-md`, or `--type surface`) |
+| `--journey` | (none) | Comma-separated journey slugs, or `all` (every journey with 2+ members): one spine sequence per slug, `<base>-journey-<slug>.<ext>`. Implies `--type sequence`; not with `--use-case` or `--split`; `--stdout` takes one slug *(v2.25)* |
 | `--boundaries` | `boundaries` | *(C4 only)* Boundaries rendering: `boundaries` or `transparent` |
 | `--no-databases` | false | *(C4 only)* Hide data-store containers from the C4 diagram |
 | `--focus` | (none) | *(C4 only)* Comma-separated service names to focus on; unfocused services render as external |
 | `--focus-context` | (none) | *(C4 only)* Comma-separated bounded context names to focus on |
 
 **Use case slug rules.** When passing `--use-case`, values can be either the exact use case name (quote if it contains spaces) or its slug — kebab-case, lowercase, non-alphanumeric collapsed to `-`. Example: `"One-time VAS — fulfillment through provider apply"` → `one-time-vas-fulfillment-through-provider-apply`. Slug is also the filename suffix used in `--split` mode.
+
+**Journey spines (v2.25).** `--journey <slug>` draws every use case whose `journey` tag is the slug, across all inputs, as one sequence titled `Journey: <slug>`, a `== title ==` section per use case. Order: a topological sort over the hand-offs between members (A publishes an event or store ref that B's trigger listens to, or A `continues "B"`; `includes` does not order). Among ready members: a successor of the one placed last (chains stay together), then the namesake (title slugified = slug; else a file `<slug>.craft`; else a file named after a `formerly_journey` value), then file and line. Unconnected members come last, namesake first. A cycle is entered where a placed member hands off into it (else at the namesake), with a note on stderr. A publisher drawn in an earlier section delivers its event directly. An unknown slug lists the three closest.
 
 **Format details.**
 - `puml` — PlantUML source. Render with PlantUML server, `plantuml.jar`, or a CI image like `plantuml/plantuml-server:jetty`.
@@ -113,6 +116,10 @@ craft generate docs/payments.craft --type domain --split -o diagrams/
 craft generate docs/payments.craft --type all --format mermaid -o diagrams/
 craft generate docs/payments.craft --type sequence --format mermaid-md -o docs/
 craft generate docs/**/*.craft --type surface -o docs/   # one model → docs-surface.md
+
+# Journey spines:
+craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' --journey seller-promotes-an-advert
+craft generate 'docs/**/*.craft' --journey all --format mermaid -o diagrams/
 
 # Pipe to clipboard for PR / chat:
 craft generate docs/payments.craft --type sequence --format mermaid --stdout | pbcopy
@@ -166,7 +173,7 @@ craft fmt <files...> [flags]
 
 Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies a 4-space indent by default, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations and trailing `//` comments, each aligned across its own contiguous run (default scope `block`: a run ends at a blank line, a `{`, a `}`, or a comment-only line).
 
-Comments stay on the line the author put them, including a trailing comment at the end of an action line, though its column may shift to align with others in the same block. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved, and its continuation hangs at block indent plus `continuation_indent` (default 4) rather than resetting to block depth. A wrapped `listens` list hangs its items 8 columns past `when`, and a wrapped `notifies one of` list 4 columns past the step's subject; the formatter never reorders list items. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+Comments stay on the line the author put them, including a trailing comment at the end of an action line, though its column may shift to align with others in the same block. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved, and its continuation hangs at block indent plus `continuation_indent` (default 4) rather than resetting to block depth. A wrapped `listens` list hangs its items 8 columns past `when`, and a wrapped `notifies one of` list 4 columns past the step's subject; the formatter never reorders list items. A `//@` cite is a comment: it stays under its step, at that step's body column, and its text is never rewritten. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
 
 Indent width, continuation indent, and comment alignment scope are configurable per file via the nearest ancestor `.craftfmt` (TOML), or overridden per invocation with the flags below; a flag overrides only the field it names, and only when actually passed.
 
@@ -235,7 +242,7 @@ craft check docs/payments.craft --lsp-json
 craft check docs/payments.craft --lsp-json | jq '.diagnostics'
 ```
 
-Since 2.24 the model carries optional keys for the new constructs, each present only when used: `events` on a trigger (a `listens` list) and on an action (`notifies one of`), `operations` on an action (an operation list), `stream` and `answers` on a `returns stream`, and `inferred` on an `[inferred …]` hop. `event`, `ref` and `operation` keep their 2.23 values, so a file that uses none of the new constructs gives the same JSON as before.
+Since 2.24 the model carries optional keys for the new constructs, each present only when used: `events` on a trigger (a `listens` list) and on an action (`notifies one of`), `operations` on an action (an operation list), `stream` and `answers` on a `returns stream`, and `inferred` on an `[inferred …]` hop. `event`, `ref` and `operation` keep their 2.23 values, so a file that uses none of the new constructs gives the same JSON as before. Since 2.25: `sources` (`repo`, `path`, `start`, `end`, `text`, `line`) on use cases, triggers, actions, branches, notes and links, and `link` on a step (`id`, `kind`, `title`, `target`); a step is exactly one of `action`, `block`, `note` or `link`.
 
 ---
 
@@ -257,6 +264,8 @@ Starts the Craft Language Server Protocol server on stdin/stdout (JSON-RPC 2.0).
 craft lsp                                        # spawned by VS Code extension
 craft lsp --log-file /tmp/craft-lsp-debug.log    # enable file logging for debugging
 ```
+
+v2.25 language features: hover on a `//@` line (its cites and the step it attaches to) and on a cited step (its sources); hover, definition and references for link titles; title completion after `includes "`/`continues "` (`"` is a trigger character); a quick fix for `link-to-former-title`; hover (members in spine order), definition (the other members) and a code lens ("N use cases in this journey") on a `journey` tag; and document links from each cite into a local checkout when the client sends `initializationOptions.sourceRoots` (`{"<repo>": "<dir>", "*": "<dir holding every repo>"}`).
 
 ---
 

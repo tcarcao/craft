@@ -68,6 +68,18 @@ _Avoid_: probable call, guess
 A call that leaves through an address with no operation id (`[ADDR …]`), or a direct use of another party's tables (`[SQL …]`).
 _Avoid_: outbound call (for an ordinary `asks`)
 
+**Source cite**:
+A `//@ [repo] path[:lines] -- text` comment under a step: the code that proves the step. It attaches to the nearest step line above it (or to the use case, before the first scenario) and is never drawn. Craft records what is written; it never reads a repository.
+_Avoid_: reference, link (a link names another use case), evidence comment
+
+**Link**:
+A step that names another use case by its title: `includes "…"` (the target runs here, then this body goes on) or `continues "…"` (the flow goes on in the target and this body ends). For a hand-off without an event; an event hand-off is a `notifies`/`listens` pair and needs no link.
+_Avoid_: call, jump, reference
+
+**Journey (spine)**:
+The use cases that share a `journey` tag value, ordered by their hand-offs (event and store pairs, and `continues` links) into one sequence diagram with a section per use case (`craft generate --journey <slug>`).
+_Avoid_: flow (the flow view is something else), epic, process
+
 ### Analysis
 
 **Model**:

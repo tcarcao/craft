@@ -211,13 +211,14 @@ use_case      = 'use_case' STRING '{' NL* use_case_body '}' NL* ;
 use_case_body = tags_block? (note_stmt NL+)* scenario* ;
 scenario      = scenario_name? trigger step* ;   (* trigger includes 'when' and its NL+ *)
 scenario_name = 'scenario' STRING NL+ ;
-step          = action | block | note_stmt NL+ ;
+step          = action | block | note_stmt NL+ | link_stmt NL+ ;
 block         = alt_block | opt_block | par_block | loop_block ;
 alt_block     = 'alt' STRING NL+ body ('else' STRING NL+ body)* ;
 opt_block     = 'opt' STRING NL+ body ;
 par_block     = 'par' STRING NL+ body ('and' STRING NL+ body)* ;   (* no `and`: each body step is a branch *)
 loop_block    = 'loop' STRING NL+ body ;
 note_stmt     = ('note' | 'finding') STRING ;
+link_stmt     = ('includes' | 'continues') STRING ;   (* 2.25 *)
 body          = step+ ;        (* offside rule: every line deeper than its header's column *)
 
 trigger      = 'when' domain_listen                NL+
@@ -294,12 +295,42 @@ tags_block    = 'tags' '{' NL* (identifier ':' tag_value NL+)* '}' NL+ ;
 
 **Quote an address that starts with `//`.** A `//` opens a comment only after whitespace, so `[ADDR https://s3.example.com/x]` parses whole. `[ADDR //cdn.example.com/x]` does not: the comment cuts the bracket, and `craft/lint/unquoted-address` reports it. Write `[ADDR "//cdn.example.com/x"]`; quoting is always allowed.
 
+**Links (2.25).** `includes "<title>"` and `continues "<title>"` are steps that name another use case by its title. `includes` says the target runs at this point (a shared prefix such as a session preamble, or a shared sub-flow) and this body then goes on. `continues` says the flow goes on in the target and this body ends: use it for a hand-off that has no event (a navigation, a redirect, a web view). An event hand-off needs no link: `notifies E` and `listens E` already pair. A link obeys the offside rule, so it may stand in any branch. Like a note, it is not an action: it gets no interaction, it does not open a scenario's first action (`model.FirstStepIndex` skips it), a branch whose only step is a link is not empty, and `single-branch-par` ignores it. The model keeps it in `Step.Link` (`Link{ID, Kind, Title, Target, Sources, Line, Column}`, IDs `link_<n>` from the per-file counter). The title resolves over the whole workspace: an exact title first, then a use case whose `formerly_titled` tag lists it (`Target` is nil when nothing matches). A bare `includes`/`continues` is `craft/syntax/missing-label`; an unknown title is `craft/sema/unresolved-use-case` (a warning, because the target may live in a file that was not loaded); a title that names two use cases is `craft/sema/ambiguous-use-case`; see also `link-to-former-title`, `continues-not-last` and `self-link` in `docs/DIAGNOSTICS.md`. The sequence view draws a link as a `ref over` frame (PlantUML) or a `Note over … : ref: <title>` / `continues: <title>` (Mermaid); flow, architecture and C4 do not draw it.
+
+```craft
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        includes "Site session preamble"
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+}
+use_case "Seller promotes an advert" {
+    when Seller promotes an advert
+        frontendplatform asks graphql for the promotion offers  [promotionOffers]
+        continues "Seller pays at the checkout"
+}
+```
+
+**Source cites (2.25).** A line comment that starts with `//@` is a source cite: evidence in code for the step above it. See §10 for its form and attachment rule. Cites are not drawn in any view.
+
 **Trigger disambiguation rule:** after `when`, the parser must look ahead to decide between the three trigger alternatives:
 1. If the next token is a STRING → `'when' quoted_event NL+` (event-on-its-own).
 2. Else if `identifier 'listens' STRING` matches → domain listener.
 3. Else → external-trigger (actor verb connector? phrase?).
 
 The second alternative shadows the first identifier in external-trigger when followed by `listens`. In the same slot, `receives` selects `receive_trigger` (2.23). This is a **contextual** disambiguation; neither `listens` nor `receives` is a reserved word (see §11). `when X receives …` used to be an external trigger with actor `X` and verb `receives`.
+
+### 8.1 Recognised tag keys (2.24, 2.25)
+
+A `tags { }` block holds free `key: value` pairs; most keys mean nothing to craft (the corpus's tag table is DOMAIN-MAP's). These keys have a meaning:
+
+| Key | Since | Meaning |
+|---|---|---|
+| `sites`, `envs` | 2.24 | The scope of a use case. Printed after the title in sequence and spine section titles (`== Title [sites: a, b] [envs: production] ==`). |
+| `journey` | 2.25 | The spine the use case belongs to: one slug. `craft generate --journey <slug>` draws every use case with that slug, in spine order. Two or more values are `craft/lint/journey-list`; the first is used. |
+| `formerly_titled` | 2.25 | Earlier titles of the use case, `;`-separated. A link whose title matches one resolves to this use case (`craft/lint/link-to-former-title`). |
+| `formerly_journey` | 2.25 | Earlier journey slugs, `;`-separated. The spine reads it only to find the journey's namesake (a member in a file named after one of these slugs). |
+
+Every other key is free text.
 
 ### 8.2 Surfaces (2.23)
 
@@ -366,13 +397,40 @@ NEWLINE     = '\r'? '\n' ;
 
 WS          = [ \t]+       (* skipped *) ;
 COMMENT     = '//' ~[\r\n]* (* skipped *) ;
+DOC_COMMENT = '///' ~[\r\n]* (* trivia *) ;
+(* 2.25: a COMMENT whose first three characters are //@ is a source comment; it stays a COMMENT token *)
 ```
+
+**Source comments (2.25).** A `//@` line is still a line comment to the parser (trivia, so it never changes the tree's shape), but its text is read as one or more source cites:
+
+```ebnf
+source_comment = '//@' SP cite (', ' cite)* (SP '--' SP text)? ;
+cite           = (repo SP)? path (':' ranges)?
+               | ':' ranges ;                       (* the same repo and path as the cite before *)
+repo           = /[a-z0-9][a-z0-9._-]*/ ;           (* no '/', no ':'; only when a path follows *)
+path           = /[^\s:,()]+/ ;                     (* holds '/' or '.'; no '(' or ')', so prose like `x (a/b.go:3)` is no cite *)
+ranges         = range (',' range)* ;               (* no spaces: sqs.tf:3,26 *)
+range          = INT ('-' INT)? ;                   (* 1-based; the end is not before the start *)
+```
+
+```craft
+when nmf_monetization listens nmfbus.AddOnPurchased
+    //@ re-monetization-framework functions/eb_email_sender/eb_email_sender.go:5 -- one rule, eight detail-types
+    nmf_monetization picks the mail resolver from the event type alone
+    //@ eb_email_sender.go:5-40, pkg/siren/siren.go:63-115
+```
+
+- **Attachment.** A cite attaches to the nearest step line at or above it in the same use case: an action, a block-branch header (`alt`/`else`/`opt`/`par`/`and`/`loop`; a fan-out `par`'s cites go to its first branch), a note, a link or the trigger. Plain comments in between do not matter: only line numbers are compared, so indentation is not significant. A cite before the first scenario attaches to a use-case-level note above it, else to the use case. A cite outside every use-case body (a file header, between use cases) is detached (`craft/lint/detached-source`).
+- **Model.** Each cite becomes a `Source{Repo, Path, Start, End, Text, Line}` on the `Sources` of its `Action`, `Trigger`, `Branch`, `Note`, `Link` or `UseCase`. One line with three ranges of one path gives three `Source`s; `Text` (after ` -- `) is shared by the cites of its line; `Start`/`End` are 0 when no line is cited. The repo is optional: craft records only what is written and never reads a repository.
+- **Malformed.** A `//@` line that does not match (no space after `//@`, a path with no `/` or `.`, a bad range, a range whose end is before its start) is `craft/syntax/malformed-source`, a warning, and stays an ordinary comment.
+- `///` is a doc comment and `// @` a plain comment; neither is a cite.
 
 Notes:
 - `IDENTIFIER` may start with a digit (e.g. `3rd_party_api` is valid). This is a v1 quirk preserved by the hand-written lexer; grammar v2 may reconsider.
 - `IDENTIFIER` admits `.` and `-` in non-leading positions (e.g. `auth.v2`, `user-service`).
 - `STRING` does not support escape sequences and does not cross newlines.
 - Line comments only; there is no block-comment form.
+- A `//` opens a comment only at the start of a line or after whitespace, so `https://…` inside a bracket is not cut.
 
 ---
 
@@ -434,6 +492,15 @@ The 2.24 words:
 | `scheduler`, `tool`, `infra` | never keywords: the actor-type slot accepts any identifier (Q5) | an identifier |
 
 Three of these change the meaning of input that parsed before, with no known uses: `X returns stream …` was a return whose phrase starts with "stream"; `[inferred …]` was an operation whose payload starts with "inferred"; `[ADDR …]` and `[SQL …]` were operations with an empty verb and the word in the payload. `notifies one of a.B, c.D` used to parse as the event `one` plus a second, internal step `of a.B , c.D`. The `listens` list was a syntax error.
+
+The 2.25 forms:
+
+| Form | Is special only when | Otherwise |
+|---|---|---|
+| `//@` | a line comment whose first three characters are `//@` | (it was a plain comment) |
+| `includes`, `continues` | at the start of a step line and followed by a STRING, or alone on the line (`missing-label`) | an identifier (subject, verb, phrase word) |
+
+`//@` changes the meaning of input that parsed before, with no known uses; a malformed `//@` line is only a warning and stays a comment, so no file that parsed starts to fail. The link words were a syntax error before (a STRING can never be a verb), so `includes ships the order` and `continues to run` stay actions.
 
 ### 11.2 Connector words (part of `phrase_word`)
 
