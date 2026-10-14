@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/tcarcao/craft/v2/internal/model"
 )
 
 func lintCodes(t *testing.T, src, code string) int {
@@ -203,5 +205,32 @@ func TestLint_UnusedActorTreatsNewKindsLikeSystem(t *testing.T) {
 		if n := lintCodes(t, used, "craft/lint/unused-actor"); n != 0 {
 			t.Errorf("%s used: %d", kind, n)
 		}
+	}
+}
+
+func TestLint_DuplicateEventInList(t *testing.T) {
+	dup := "use_case \"U\" {\n  when s listens a.A, b.B, a.A\n    s does it\n}"
+	if n := lintCodes(t, dup, "craft/lint/duplicate-event-in-list"); n != 1 {
+		t.Errorf("dup: %d", n)
+	}
+	if n := lintCodes(t, "use_case \"U\" {\n  when s listens a.A, b.B\n    s does it\n}", "craft/lint/duplicate-event-in-list"); n != 0 {
+		t.Errorf("clean: %d", n)
+	}
+}
+
+func TestLint_PerItemEventLints(t *testing.T) {
+	src := "use_case \"P\" {\n  when O does\n    p notifies a.Charged\n}\nuse_case \"U\" {\n  when s listens a.Charged,\n      a.Refund\n    s does it\n}"
+	diags := analyzeSingleFileForTest(t, src)
+	var past []model.Diagnostic
+	for _, d := range diags {
+		if d.Code == "craft/lint/event-not-past-tense" {
+			past = append(past, d)
+		}
+		if d.Code == "craft/lint/dead-event" {
+			t.Errorf("a.Charged is consumed by the list: %v", d)
+		}
+	}
+	if len(past) != 1 || past[0].Range.Start.Line != 6 || past[0].Range.Start.Character != 6 {
+		t.Errorf("past-tense = %v (want one, on the continuation line)", past)
 	}
 }

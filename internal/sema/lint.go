@@ -60,6 +60,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintStoreWithoutChange(perFileTrees, lis)...)
 	diags = append(diags, lintOperationNotInSurface(perFileTrees, ws, lis)...)
 	diags = append(diags, lintRepeatedRequests(perFileTrees, ws, lis)...)
+	diags = append(diags, lintDuplicateEventInList(perFileTrees, lis)...)
 	return diags
 }
 
@@ -92,10 +93,13 @@ func lintDeadEvents(perFileTrees map[string]syntax.SyntaxNode, lis map[string]gr
 		for _, uc := range file.UseCases() {
 			for _, sc := range uc.Scenarios() {
 				trigger := sc.Trigger()
-				if trigger.Kind() == lang.TriggerEvent || trigger.Kind() == lang.TriggerDomainListen {
+				if trigger.Kind() == lang.TriggerEvent {
 					if ev := trigger.EventValue(); ev != "" {
 						consumed[ev] = true
 					}
+				}
+				for _, it := range trigger.EventItems() {
+					consumed[it.Value] = true
 				}
 				for _, action := range sc.Actions() {
 					if action.Kind() == lang.ActionAsync {
@@ -232,8 +236,14 @@ func lintEventPastTense(perFileTrees map[string]syntax.SyntaxNode, lis map[strin
 				if whenTok != nil {
 					triggerLine, _ = li.LineCol(whenTok.Offset())
 				}
-				if k := trigger.Kind(); k == lang.TriggerEvent || k == lang.TriggerDomainListen {
+				if trigger.Kind() == lang.TriggerEvent {
 					check(trigger.EventValue(), uri, triggerLine, trigger.EventCol(li), trigger.EventIsString())
+				}
+				// Each item of a listens list, on its own line: a
+				// continuation item reports where it is written.
+				for _, it := range trigger.EventItems() {
+					line, col := li.LineCol16(it.Offset)
+					check(it.Value, uri, line, col, it.IsString)
 				}
 				for _, action := range sc.Actions() {
 					if action.Kind() == lang.ActionAsync {
@@ -760,9 +770,11 @@ func lintStoreWithoutChange(perFileTrees map[string]syntax.SyntaxNode, lis map[s
 		}
 		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
 			for _, sc := range uc.Scenarios() {
-				if tr := sc.Trigger(); tr.Kind() == lang.TriggerDomainListen && sc.When() != nil {
-					line, _ := li.LineCol(sc.When().Offset())
-					check(tr.EventRef(), line, tr.EventCol(li))
+				if sc.When() != nil {
+					for _, it := range sc.Trigger().EventItems() {
+						line, col := li.LineCol16(it.Offset)
+						check(it.Ref, line, col)
+					}
 				}
 				for _, a := range sc.Actions() {
 					if a.Kind() == lang.ActionAsync {
@@ -846,6 +858,44 @@ func lintRepeatedRequests(perFileTrees map[string]syntax.SyntaxNode, ws Workspac
 		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
 			for _, sc := range uc.Scenarios() {
 				visit(sc.Steps())
+			}
+		}
+	}
+	return diags
+}
+
+// ── duplicate-event-in-list ───────────────────────────────────────────────────
+// Warning: the same item (exact text) twice in one event list. The range is
+// the second one.
+
+func lintDuplicateEventInList(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		check := func(items []syntax.EventItem) {
+			seen := map[string]bool{}
+			for _, it := range items {
+				if !seen[it.Value] {
+					seen[it.Value] = true
+					continue
+				}
+				line, col := li.LineCol16(it.Offset)
+				start := colToLSP(col)
+				diags = append(diags, model.Diagnostic{
+					Code:      "craft/lint/duplicate-event-in-list",
+					Message:   fmt.Sprintf("event %q is already in this list", it.Value),
+					Severity:  model.SeverityWarning,
+					SourceURI: uri,
+					Range: model.Range{
+						Start: model.Position{Line: lineToLSP(line), Character: start},
+						End:   model.Position{Line: lineToLSP(line), Character: start + eventTokenLen(it.Value, it.IsString)},
+					},
+				})
+			}
+		}
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				check(sc.Trigger().EventItems())
 			}
 		}
 	}

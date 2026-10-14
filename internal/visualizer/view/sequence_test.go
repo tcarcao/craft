@@ -106,6 +106,9 @@ use_case "Checkout" {
             and "b"
                 opt "o"
                     Billing asks Ordering to twelfth
+    scenario "roster"
+    when Billing listens shop.Paid, shop.Refunded
+        Billing records it
 }
 `
 	doc := analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc

@@ -30,7 +30,8 @@ const (
 	Response Kind = "response"
 	// Publish: a `notifies`; To is zero and Event names the event.
 	Publish Kind = "publish"
-	// Listen: an event delivered from one publisher to one listener.
+	// Listen: an event delivered from one publisher to one listener: one
+	// per event of the trigger's list and per publisher of that event.
 	Listen Kind = "listen"
 	// Internal: a participant acting on its own; From == To.
 	Internal Kind = "internal"
@@ -221,22 +222,24 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			reached = ""
 		}
 	case lang.TriggerDomainListen:
-		if t.Context == "" || t.Event == "" {
+		if t.Context == "" || len(t.EventList()) == 0 {
 			break
 		}
 		listener := endpoint(t.Context, t.Subject)
-		sources := publishers[t.Event]
-		if len(sources) == 0 {
-			sources = []Endpoint{External}
-		}
-		for _, src := range sources {
-			it := base
-			it.Kind, it.From, it.To, it.Event, it.Label = Listen, src, listener, t.Event, t.Event
-			it.Site = triggerSite
-			it.Site.Length = utf16Len(t.Context)
-			it.Schedule = scheduleLabel(t)
-			it.Via = storeEndpoint(t.Store)
-			out = append(out, it)
+		for _, ev := range t.EventList() {
+			sources := publishers[ev]
+			if len(sources) == 0 {
+				sources = []Endpoint{External}
+			}
+			for _, src := range sources {
+				it := base
+				it.Kind, it.From, it.To, it.Event, it.Label = Listen, src, listener, ev, ev
+				it.Site = triggerSite
+				it.Site.Length = utf16Len(t.Context)
+				it.Schedule = scheduleLabel(t)
+				it.Via = storeEndpoint(t.Store)
+				out = append(out, it)
+			}
 		}
 	case lang.TriggerReceive:
 		if t.Context == "" {

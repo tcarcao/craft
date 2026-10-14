@@ -2,6 +2,7 @@ package interaction_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -961,5 +962,29 @@ use_case "Read" {
 	}
 	if len(listens) != 1 || listens[0].From.Name != "Ordering" || listens[0].Via.Key != "orders_db" || listens[0].Schedule != "cron */5 * * * *" {
 		t.Errorf("listen = %+v", listens)
+	}
+}
+
+func TestDerive_ListensListGivesOneListenPerItemPerPublisher(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Pay" {
+    when Customer pays
+        Billing notifies sns.paid
+        Shipping notifies sns.paid
+}
+use_case "Ledger" {
+    when Ordering listens sns.paid, sns.refunded every "5m"
+        Ordering writes a row
+}
+`})
+	var got []string
+	for _, it := range its {
+		if it.Kind == interaction.Listen {
+			got = append(got, it.From.Name+"->"+it.To.Name+" "+it.Event+" "+it.Schedule)
+		}
+	}
+	want := []string{"Billing->Ordering sns.paid every 5m", "Shipping->Ordering sns.paid every 5m", "External->Ordering sns.refunded every 5m"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
 	}
 }

@@ -174,7 +174,8 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 		for i, sc := range uc.Scenarios {
 			l := scenarioLayout{
 				b: &b, idx: idx, bySteps: byScenario[scenarioKey{ui, sc.ID}],
-				start: len(b.seq.Sections[idx].Messages),
+				start:  len(b.seq.Sections[idx].Messages),
+				roster: len(sc.Trigger.Events) > 0,
 			}
 			if len(uc.Scenarios) > 1 {
 				l.title = scenarioTitle(i, sc)
@@ -238,6 +239,65 @@ func (a *inboundArrow) label() string {
 		names = append(names[:maxNamedPublishers], fmt.Sprintf("+%d more", len(a.publishers)-maxNamedPublishers))
 	}
 	return a.head + " (from " + strings.Join(names, ", ") + ")" + a.suffix
+}
+
+// capList joins items with ", ", capped at maxNamedPublishers with
+// " (+N more)" for the rest (spec §4.5).
+func capList(items []string) string {
+	if len(items) <= maxNamedPublishers {
+		return strings.Join(items, ", ")
+	}
+	return strings.Join(items[:maxNamedPublishers], ", ") + fmt.Sprintf(" (+%d more)", len(items)-maxNamedPublishers)
+}
+
+// addRoster draws the listens of a trigger with an event list (spec §4.5):
+// each publisher already on stage delivers its items on one arrow; every
+// other item arrives on one inbound arrow, labelled with those items, the
+// publishers they come from (by the rule of inboundArrow.label) and the
+// schedule. A single-event trigger never comes here, so it keeps its
+// per-event inbound arrow (inboundKey).
+func (b *sequenceBuilder) addRoster(idx int, listens []interaction.Interaction, title string) {
+	ns, onStage := b.ns, b.onStage[idx]
+	var listener interaction.Endpoint
+	var schedule string
+	direct := map[string][]string{} // on-stage publisher key → items, list order
+	var directOrder []interaction.Endpoint
+	inbound := &inboundArrow{}
+	var inboundItems []string
+	for _, it := range listens {
+		listener, schedule = it.To, it.Schedule
+		if it.From != interaction.External && onStage[it.From.Key] {
+			if _, seen := direct[it.From.Key]; !seen {
+				directOrder = append(directOrder, it.From)
+			}
+			if !slices.Contains(direct[it.From.Key], it.Event) {
+				direct[it.From.Key] = append(direct[it.From.Key], it.Event)
+			}
+			continue
+		}
+		if !slices.Contains(inboundItems, it.Event) {
+			inboundItems = append(inboundItems, it.Event)
+		}
+		inbound.addPublisher(it.From)
+	}
+	suffix := ""
+	if schedule != "" {
+		suffix = ", " + schedule
+	}
+	sec := &b.seq.Sections[idx]
+	to := ns.add(listener)
+	for _, pub := range directOrder {
+		from := ns.add(pub)
+		b.appear(from)
+		sec.Messages = append(sec.Messages, Message{From: from, To: to, Kind: MessageAsync,
+			Label: capList(direct[pub.Key]) + suffix, Scenario: title})
+	}
+	if len(inboundItems) > 0 {
+		inbound.head, inbound.suffix = capList(inboundItems), suffix
+		sec.Messages = append(sec.Messages, Message{To: to, Kind: MessageInbound, Label: inbound.label(), Scenario: title})
+	}
+	b.appear(to)
+	onStage[to] = true
 }
 
 // inboundKey identifies the one arrow a listening scenario draws for an event.
@@ -379,6 +439,9 @@ type scenarioLayout struct {
 	// opensBlock is true when the scenario's first step that is not a note
 	// is an alt or opt, and its trigger is not a receives. Its triggers are then not drawn up front (see emit).
 	opensBlock bool
+	// roster is true when the trigger listens to a list of events: its
+	// listens are drawn together by addRoster.
+	roster bool
 }
 
 // emit draws the interactions of the step-th action (0: the trigger and
@@ -391,11 +454,19 @@ type scenarioLayout struct {
 // path where the opt is skipped) is skipped here too and drawn by
 // emitSkipTrigger just before the first action after the block.
 func (l *scenarioLayout) emit(step int) {
+	var roster []interaction.Interaction
 	for _, it := range l.bySteps[step] {
 		if step == 0 && it.Kind == interaction.Trigger && (it.Branch != nil || l.opensBlock) {
 			continue
 		}
+		if step == 0 && l.roster && it.Kind == interaction.Listen {
+			roster = append(roster, it)
+			continue
+		}
 		l.b.add(l.idx, it, l.title)
+	}
+	if len(roster) > 0 {
+		l.b.addRoster(l.idx, roster, l.title)
 	}
 }
 

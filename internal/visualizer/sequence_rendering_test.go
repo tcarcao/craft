@@ -1234,3 +1234,53 @@ func TestFlowAndC4_ActorKinds(t *testing.T) {
 	}
 	requireLine(t, "c4", string(c4), `System_Ext(Ticker, "Ticker", "Scheduler")`)
 }
+
+const rosterSrc = `actors {
+    user Partner
+}
+domain partner {
+    cooker
+    seshat
+}
+use_case "Mercury cooks an advert" {
+    when Partner posts an advert
+        cooker cooks the advert for its target site
+        cooker notifies sns.mercury-cooked
+}
+use_case "seshat records a Mercury domain event in the transaction ledger" {
+    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed,
+            sns.mercury-message-received, sns.mercury-cooked
+        seshat writes one row per event
+}
+`
+
+func TestSequence_ListensListDrawsOneInboundArrow(t *testing.T) {
+	puml, mmd := sequenceSource(t, rosterSrc)
+	label := "sns.mercury-advert-state-changed, sns.mercury-vas-state-changed, sns.mercury-message-received (+1 more) (from cooker)"
+	requireLine(t, "plantuml", puml, "[-> seshat : "+label)
+	requireLine(t, "mermaid", mmd, "External->>seshat: "+label)
+	if n := strings.Count(puml, "[-> seshat"); n != 1 {
+		t.Errorf("%d inbound arrows, want 1", n)
+	}
+}
+
+func TestSequence_ListensListOnStagePublisherDeliversItsItems(t *testing.T) {
+	puml, _ := sequenceSource(t, `domain d {
+    a
+    b
+}
+use_case "U" {
+    when a listens x.Started
+        a notifies x.Done
+        b notifies x.Failed
+    scenario "after"
+    when b listens x.Done, x.Failed, x.Other
+        b records it
+}
+`)
+	// Both scenarios share one section, so a and b are on stage when the
+	// roster is drawn.
+	requireLine(t, "plantuml", puml, "a ->> b : x.Done")
+	requireLine(t, "plantuml", puml, "b ->> b : x.Failed")
+	requireLine(t, "plantuml", puml, "[-> b : x.Other")
+}
