@@ -6,6 +6,10 @@
 // semantic versioning: existing exported names, struct fields, and JSON tags
 // will not change or be removed within a major version; additions are allowed
 // in minor releases. Requires Go 1.25 or newer to import.
+//
+// One exception: v2.21.0 changes Scenario.Actions from a field to a method and
+// the JSON key "actions" to "steps" (see CHANGELOG). All known consumers are
+// internal.
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"

@@ -7,7 +7,7 @@
 ### Breaking
 - **`Scenario.Actions` is now a method.** A scenario's body is a tree: `Scenario.Steps []Step`, where a `Step` is an `Action` or a `Block`. `Scenario.Actions()` returns the flat list in source order. Migration: `sc.Actions` becomes `sc.Actions()`. To update actions in place, use `EachAction`, because `Actions()` returns copies.
 - **JSON: `actions` is now `steps`.** Each entry is `{"action": …}` or `{"block": …}`. Goldens and any stored `craft check` output must be regenerated.
-- **A subject-only action line is a syntax error.** `x` alone on a line used to parse as an action without a verb. It now reports `craft/syntax/unexpected-token`.
+- **A subject-only action line is a syntax error.** An action whose verb is on the next line (e.g. `a` followed by `asks b to do it` on the next line) used to parse silently by taking the next line's first word as its verb; it is now a syntax error (`craft/syntax/unexpected-token`), and the next line parses on its own.
 - **The document outline gains a scenario level.** Every use case now shows its scenarios as children, with branches nested below them.
 
 ### Added
@@ -20,7 +20,7 @@
 - **Model and `pkg/craft` types**: `Step`, `Block`, `Branch`, `BlockKind` (`alt`, `opt`), `Scenario.Name`, `Scenario.Actions()`, `EachAction`.
 
 ### Fixed
-- **Sequence diagrams no longer mix up use cases with the same name declared in different files.** Interactions are matched to use cases by use-case index.
+- **Sequence diagrams no longer mix the steps of same-named use cases declared in different files.** Interactions are matched to use cases by use-case index. Such use cases are still drawn into one section (the last of that name), as before.
 
 ### Changed — diagrams
 - **Sequence diagrams draw native `alt` / `else` / `opt` / `end` blocks** (PlantUML and Mermaid) inside the scenario frame. A branch with no drawable message keeps its header.

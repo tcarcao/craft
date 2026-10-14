@@ -143,7 +143,7 @@ type Branch struct {
 func (s Scenario) Actions() []Action
 ```
 
-- **ID counter.** IDs keep one counter per use case across actions and blocks, in source order. A file
+- **ID counter.** IDs keep one counter per source file, shared with scenarios and actions, in source order. A file
   with no blocks gets the same action IDs as today.
 - **Kinds.** `BlockKind` constants live in `internal/lang` (ruling 19 of `diagram-pipeline-deepening.md`:
   the fixed vocabulary has one owner).
@@ -203,8 +203,8 @@ The context-map lints are unchanged; they read interactions, and every branch's 
 dependencies.
 
 ### 6.6 LSP
-- **Document symbols.** A scenario with a name shows its name. `alt` and `opt` branches are child symbols
-  labelled with their branch label.
+- **Document symbols.** A scenario with a name shows its name. Scenarios always appear as outline children
+  of their use case. Each block is one symbol, named `<kind>: <label> | <label>`, and blocks nest by depth.
 - **Folding ranges** for blocks.
 - **Hover** on a header shows the block kind and branch count.
 - **Completion** offers snippets for `alt "…"`, `else "…"`, `opt "…"` and `scenario "…"` inside a use-case body.

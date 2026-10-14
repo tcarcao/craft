@@ -96,8 +96,8 @@ type Interaction struct {
 // BranchRef locates an interaction inside one branch of a block.
 type BranchRef struct {
 	// Block is the model.Block.ID. It is unique within the block's source
-	// file, so within a scenario consumers compare it to detect a change of
-	// block.
+	// file, hence also within a scenario; consumers compare it to detect a
+	// change of block.
 	Block string
 	Kind  lang.BlockKind
 	Label string

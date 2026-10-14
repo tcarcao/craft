@@ -68,8 +68,9 @@ const (
 
 // BranchRef locates a message inside one branch of a block.
 type BranchRef struct {
-	// Block identifies the block. It is unique within a scenario, which is
-	// all BlockOps compares it across.
+	// Block identifies the block (model.Block.ID). It is unique within the
+	// source file, hence also within a scenario, which is all BlockOps
+	// compares it across.
 	Block string
 	Kind  BlockKind
 	Label string
