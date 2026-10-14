@@ -1,0 +1,18 @@
+actor system CRON
+
+domain billing {
+    billing
+}
+
+use_case "Retry a charge" {
+    when CRON fires the retry schedule
+        alt "first attempt"
+            alt "the card is valid"
+                opt "a discount applies"
+                    billing applies the discount
+                billing charges the card
+            else "the card expired"
+                billing flags the expired card
+        else "later attempt"
+            billing gives up
+}

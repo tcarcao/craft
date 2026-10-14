@@ -1,0 +1,15 @@
+actor system CRON
+
+domain billing {
+    billing
+}
+
+use_case "Charge a subscriber" {
+    when CRON fires the nightly charge
+        alt "the card is valid"
+            billing charges the card
+        else "the card expired"
+            billing flags the expired card
+        else "the card is missing"
+            billing requests a new card
+}

@@ -1,0 +1,171 @@
+{
+  "useCases": [
+    {
+      "name": "Retry a charge",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "fires",
+            "connector": "the",
+            "phrase": "retry schedule",
+            "description": "when CRON fires the retry schedule",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 8,
+            "column": 10
+          },
+          "steps": [
+            {
+              "block": {
+                "id": "block_2",
+                "kind": "alt",
+                "line": 9,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "first attempt",
+                    "line": 9,
+                    "steps": [
+                      {
+                        "block": {
+                          "id": "block_3",
+                          "kind": "alt",
+                          "line": 10,
+                          "column": 13,
+                          "branches": [
+                            {
+                              "label": "the card is valid",
+                              "line": 10,
+                              "steps": [
+                                {
+                                  "block": {
+                                    "id": "block_4",
+                                    "kind": "opt",
+                                    "line": 11,
+                                    "column": 17,
+                                    "branches": [
+                                      {
+                                        "label": "a discount applies",
+                                        "line": 11,
+                                        "steps": [
+                                          {
+                                            "action": {
+                                              "id": "action_5",
+                                              "type": "internal_action",
+                                              "context": "billing",
+                                              "verb": "applies",
+                                              "connector": "the",
+                                              "phrase": "discount",
+                                              "description": "billing applies the discount",
+                                              "line": 12,
+                                              "column": 21,
+                                              "from": {
+                                                "kind": "bounded_context",
+                                                "id": "billing/billing"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "action": {
+                                    "id": "action_6",
+                                    "type": "internal_action",
+                                    "context": "billing",
+                                    "verb": "charges",
+                                    "connector": "the",
+                                    "phrase": "card",
+                                    "description": "billing charges the card",
+                                    "line": 13,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "billing/billing"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "label": "the card expired",
+                              "line": 14,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_7",
+                                    "type": "internal_action",
+                                    "context": "billing",
+                                    "verb": "flags",
+                                    "connector": "the",
+                                    "phrase": "expired card",
+                                    "description": "billing flags the expired card",
+                                    "line": 15,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "billing/billing"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "later attempt",
+                    "line": 16,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_8",
+                          "type": "internal_action",
+                          "context": "billing",
+                          "verb": "gives",
+                          "phrase": "up",
+                          "description": "billing gives up",
+                          "line": 17,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "billing/billing"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 7
+    }
+  ],
+  "domains": [
+    {
+      "name": "billing",
+      "boundedContexts": [
+        "billing"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}

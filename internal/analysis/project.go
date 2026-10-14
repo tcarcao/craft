@@ -176,18 +176,48 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 				Trigger: projectTrigger(sc, li),
 				Steps:   []model.Step{},
 			}
-			for _, action := range sc.Actions() {
-				if action.IsIncomplete() {
-					counter += 2
-					continue
-				}
-				counter++
-				a := projectAction(action, fmt.Sprintf("action_%d", counter), li)
-				outSc.Steps = append(outSc.Steps, model.Step{Action: &a})
-			}
+			outSc.Steps = projectSteps(sc.Steps(), &counter, li)
 			outUC.Scenarios = append(outUC.Scenarios, outSc)
 		}
 		out = append(out, outUC)
+	}
+	return out
+}
+
+// projectSteps projects syntax steps in source order. Blocks take a number
+// from the same counter as actions (block_N), so IDs stay in source order.
+func projectSteps(steps []syntax.StepDecl, counter *int, li green.LineIndex) []model.Step {
+	out := []model.Step{}
+	for _, st := range steps {
+		if a, ok := st.Action(); ok {
+			if a.IsIncomplete() {
+				*counter += 2
+				continue
+			}
+			*counter++
+			act := projectAction(a, fmt.Sprintf("action_%d", *counter), li)
+			out = append(out, model.Step{Action: &act})
+			continue
+		}
+		blk, ok := st.Block()
+		if !ok {
+			continue
+		}
+		*counter++
+		mb := &model.Block{ID: fmt.Sprintf("block_%d", *counter), Kind: blk.Kind(), Branches: []model.Branch{}}
+		for i, br := range blk.Branches() {
+			mbr := model.Branch{Label: br.Label()}
+			if tok := br.HeaderToken(); tok != nil {
+				line, col := li.LineCol16(tok.Offset())
+				mbr.Line = line
+				if i == 0 {
+					mb.Line, mb.Column = line, col
+				}
+			}
+			mbr.Steps = projectSteps(br.Steps(), counter, li)
+			mb.Branches = append(mb.Branches, mbr)
+		}
+		out = append(out, model.Step{Block: mb})
 	}
 	return out
 }

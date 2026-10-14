@@ -1,0 +1,94 @@
+{
+  "useCases": [
+    {
+      "name": "Send a receipt",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "fires",
+            "connector": "the",
+            "phrase": "nightly receipts",
+            "description": "when CRON fires the nightly receipts",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 8,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "billing",
+                "verb": "builds",
+                "connector": "the",
+                "phrase": "receipt",
+                "description": "billing builds the receipt",
+                "line": 9,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "billing/billing"
+                }
+              }
+            },
+            {
+              "block": {
+                "id": "block_3",
+                "kind": "opt",
+                "line": 10,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "the subscriber opted in to email",
+                    "line": 10,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "internal_action",
+                          "context": "billing",
+                          "verb": "emails",
+                          "connector": "the",
+                          "phrase": "receipt",
+                          "description": "billing emails the receipt",
+                          "line": 11,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "billing/billing"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 7
+    }
+  ],
+  "domains": [
+    {
+      "name": "billing",
+      "boundedContexts": [
+        "billing"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}

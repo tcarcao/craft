@@ -1,0 +1,203 @@
+{
+  "useCases": [
+    {
+      "name": "Resolve a subscriber's billing cycle range",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "name": "daily snapshot",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "fires",
+            "connector": "the",
+            "phrase": "daily snapshot schedule",
+            "description": "when CRON fires the daily snapshot schedule",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 13,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "subscriptionplan",
+                "targetContext": "nmf_monetization",
+                "ref": "nmf_monetization",
+                "operation": {
+                  "payload": "getUserBillingCycleRange",
+                  "text": "getUserBillingCycleRange"
+                },
+                "connector": "for",
+                "phrase": "the billing cycle range",
+                "description": "subscriptionplan asks nmf_monetization for the billing cycle range",
+                "line": 14,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "subscriptionplan/subscriptionplan"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "nmf_monetization/nmf_monetization"
+                }
+              }
+            },
+            {
+              "block": {
+                "id": "block_3",
+                "kind": "alt",
+                "line": 15,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "nMF has a cycle for the timestamp",
+                    "line": 15,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "return_action",
+                          "context": "subscriptionplan",
+                          "connector": "the",
+                          "phrase": "cycle start, end and last day",
+                          "description": "subscriptionplan returns cycle start, end and last day",
+                          "line": 16,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "subscriptionplan/subscriptionplan"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "nMF answers 404",
+                    "line": 17,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_5",
+                          "type": "internal_action",
+                          "context": "subscriptionplan",
+                          "verb": "answers",
+                          "phrase": "not-found without retrying",
+                          "description": "subscriptionplan answers not-found without retrying",
+                          "line": 18,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "subscriptionplan/subscriptionplan"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "nMF is unhealthy",
+                    "line": 19,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_6",
+                          "type": "internal_action",
+                          "context": "subscriptionplan",
+                          "verb": "retries",
+                          "phrase": "once after 100 ms",
+                          "description": "subscriptionplan retries once after 100 ms",
+                          "line": 20,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "subscriptionplan/subscriptionplan"
+                          }
+                        }
+                      },
+                      {
+                        "block": {
+                          "id": "block_7",
+                          "kind": "opt",
+                          "line": 21,
+                          "column": 13,
+                          "branches": [
+                            {
+                              "label": "the retry also fails",
+                              "line": 21,
+                              "steps": [
+                                {
+                                  "action": {
+                                    "id": "action_8",
+                                    "type": "internal_action",
+                                    "context": "subscriptionplan",
+                                    "verb": "answers",
+                                    "connector": "a",
+                                    "phrase": "server error",
+                                    "description": "subscriptionplan answers a server error",
+                                    "line": 22,
+                                    "column": 17,
+                                    "from": {
+                                      "kind": "bounded_context",
+                                      "id": "subscriptionplan/subscriptionplan"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "action": {
+                "id": "action_9",
+                "type": "internal_action",
+                "context": "subscriptionplan",
+                "verb": "logs",
+                "connector": "the",
+                "phrase": "run",
+                "description": "subscriptionplan logs the run",
+                "line": 23,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "subscriptionplan/subscriptionplan"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 11
+    }
+  ],
+  "domains": [
+    {
+      "name": "subscriptionplan",
+      "boundedContexts": [
+        "subscriptionplan"
+      ]
+    },
+    {
+      "name": "nmf_monetization",
+      "boundedContexts": [
+        "nmf_monetization"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}

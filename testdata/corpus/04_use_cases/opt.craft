@@ -1,0 +1,12 @@
+actor system CRON
+
+domain billing {
+    billing
+}
+
+use_case "Send a receipt" {
+    when CRON fires the nightly receipts
+        billing builds the receipt
+        opt "the subscriber opted in to email"
+            billing emails the receipt
+}

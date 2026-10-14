@@ -1,0 +1,123 @@
+{
+  "useCases": [
+    {
+      "name": "Charge a subscriber",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "verb": "fires",
+            "connector": "the",
+            "phrase": "nightly charge",
+            "description": "when CRON fires the nightly charge",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 8,
+            "column": 7
+          },
+          "steps": [
+            {
+              "block": {
+                "id": "block_2",
+                "kind": "alt",
+                "line": 9,
+                "column": 3,
+                "branches": [
+                  {
+                    "label": "the card is valid",
+                    "line": 9,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_3",
+                          "type": "internal_action",
+                          "context": "billing",
+                          "verb": "charges",
+                          "connector": "the",
+                          "phrase": "card",
+                          "description": "billing charges the card",
+                          "line": 10,
+                          "column": 4,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "billing/billing"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "the card expired",
+                    "line": 11,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "internal_action",
+                          "context": "billing",
+                          "verb": "flags",
+                          "connector": "the",
+                          "phrase": "expired card",
+                          "description": "billing flags the expired card",
+                          "line": 12,
+                          "column": 4,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "billing/billing"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "label": "the card is missing",
+                    "line": 13,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_5",
+                          "type": "internal_action",
+                          "context": "billing",
+                          "verb": "requests",
+                          "connector": "a",
+                          "phrase": "new card",
+                          "description": "billing requests a new card",
+                          "line": 14,
+                          "column": 4,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "billing/billing"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 7
+    }
+  ],
+  "domains": [
+    {
+      "name": "billing",
+      "boundedContexts": [
+        "billing"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}

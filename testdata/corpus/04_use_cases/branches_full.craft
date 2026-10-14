@@ -1,0 +1,24 @@
+actor system CRON
+
+domain subscriptionplan {
+    subscriptionplan
+}
+
+domain nmf_monetization {
+    nmf_monetization
+}
+
+use_case "Resolve a subscriber's billing cycle range" {
+    scenario "daily snapshot"
+    when CRON fires the daily snapshot schedule
+        subscriptionplan asks nmf_monetization for the billing cycle range  [getUserBillingCycleRange]
+        alt "nMF has a cycle for the timestamp"
+            subscriptionplan returns the cycle start, end and last day
+        else "nMF answers 404"
+            subscriptionplan answers not-found without retrying
+        else "nMF is unhealthy"
+            subscriptionplan retries once after 100 ms
+            opt "the retry also fails"
+                subscriptionplan answers a server error
+        subscriptionplan logs the run
+}
