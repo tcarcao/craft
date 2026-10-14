@@ -180,7 +180,8 @@ func kindPhrase(k lang.ParticipantKind) string {
 
 // ── operation-not-in-surface ─────────────────────────────────────────────────
 // Warning: an `asks <target> … [op]` whose target has a surface that does not
-// list op. It is the op-name check of spec §8.2, done on the tree because the
+// list op. A context without a surface of its own is covered by the surface of
+// the service that deploys it (model.SurfaceBoundary). It is the op-name check of spec §8.2, done on the tree because the
 // range is the `[op]` bracket, which interactions do not carry.
 
 func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex) []model.Diagnostic {
@@ -226,8 +227,12 @@ func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 					if ambiguous || p.Kind == "" {
 						continue
 					}
-					s, ok := surfaces[p.ID]
-					if !ok || s.ops[text] {
+					boundary, ok := model.SurfaceBoundary(p, func(id string) bool { _, has := surfaces[id]; return has })
+					if !ok {
+						continue
+					}
+					s := surfaces[boundary]
+					if s.ops[text] {
 						continue
 					}
 					diags = append(diags, model.Diagnostic{

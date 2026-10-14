@@ -489,3 +489,13 @@ func TestStoreRefHoverDefinitionCompletion(t *testing.T) {
 		t.Errorf("missing sms_queue after `notifies store.`: %v", labelList(items))
 	}
 }
+
+func TestSurfaceHover_ServiceSurfaceCoversItsContexts(t *testing.T) {
+	src := "domain obido {\n    advisorapp\n    concierge\n}\nservices {\n    obidozoe {\n        contexts: concierge\n    }\n}\n" +
+		"surface obidozoe {\n    query the seeker list  [getUserList]\n}\n" +
+		"use_case \"U\" {\n    when Advisor opens the list\n        advisorapp asks concierge for the seekers  [getUserList]\n}\n"
+	c, _ := newBranchClient(t, src)
+	if got, want := hoverText(c, 14, 54), "query: the seeker list"; got != want {
+		t.Errorf("bracket hover = %q, want %q", got, want)
+	}
+}

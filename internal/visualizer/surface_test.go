@@ -105,3 +105,57 @@ use_case "A first" {
 		t.Errorf("empty header facts written:\n%s", got)
 	}
 }
+
+// A surface on a service covers requests to the service's contexts that have
+// no surface of their own (spec §8.4): the corpus writes the surface on the
+// deployable and the asks on its contexts.
+func TestSurface_ServiceSurfaceCoversItsContexts(t *testing.T) {
+	src := `domain obido {
+    advisorapp
+    concierge
+    ledger
+}
+services {
+    obidozoe {
+        contexts: concierge, ledger
+    }
+}
+surface obidozoe {
+    query the seeker list  [getUserList]
+    query the balances  [getBalances]
+}
+surface ledger {
+    query the balances  [getBalances]
+}
+use_case "Advisor works a task" {
+    when Advisor opens the task list
+        advisorapp asks concierge for the seekers  [getUserList]
+        advisorapp asks ledger for the balances  [getBalances]
+}
+`
+	out, err := New(nil).Render(resolvedDoc(t, src), Request{View: ViewSurface, Backend: Mermaid, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out.Data)
+	for _, want := range []string{
+		"| `getUserList` | query | the seeker list | Advisor works a task |\n",
+		"## obidozoe\n\n| Operation | Kind | What it offers | Used by |\n|---|---|---|---|\n| `getUserList` | query | the seeker list | Advisor works a task |\n| `getBalances` | query | the balances | — |\n",
+		"## ledger\n\n| Operation | Kind | What it offers | Used by |\n|---|---|---|---|\n| `getBalances` | query | the balances | Advisor works a task |\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestSurface_OrdersSubjectsCaseInsensitively(t *testing.T) {
+	src := "domain d {\n    Zeta\n    alpha\n}\nsurface Zeta {\n    query z  [z]\n}\nsurface alpha {\n    query a  [a]\n}\n"
+	out, err := New(nil).Render(resolvedDoc(t, src), Request{View: ViewSurface, Backend: Mermaid, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(out.Data); strings.Index(got, "## alpha") > strings.Index(got, "## Zeta") {
+		t.Errorf("tables not ordered case-insensitively:\n%s", got)
+	}
+}

@@ -36,7 +36,10 @@ const unobservedSuffix = " (unobserved caller)"
 // BuildSurfaces computes coverage (spec §8.4): an entry is used by every use
 // case with a Request to the surface's boundary whose operation text equals the
 // entry's (whitespace collapsed); a receives trigger on the boundary with that
-// operation counts as "<use case> (unobserved caller)".
+// operation counts as "<use case> (unobserved caller)". A surface on a service
+// also covers requests to the service's contexts that have no surface of
+// their own (model.SurfaceBoundary). Tables are ordered by subject, ignoring
+// case.
 func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces {
 	type usageKey struct{ boundary, op string }
 	used := map[usageKey]map[string]bool{}
@@ -46,11 +49,22 @@ func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces 
 		}
 		used[k][name] = true
 	}
+	hasSurface := map[string]bool{}
+	for _, s := range doc.Surfaces {
+		if s.Participant != nil {
+			hasSurface[s.Participant.ID] = true
+		}
+	}
 	for _, it := range its {
 		if it.Operation == nil {
 			continue
 		}
-		k := usageKey{it.To.Key, collapse(it.Operation.Text)}
+		boundary, ok := model.SurfaceBoundary(model.Participant{Kind: it.To.Kind, ID: it.To.Key, Service: it.To.Service},
+			func(id string) bool { return hasSurface[id] })
+		if !ok {
+			continue
+		}
+		k := usageKey{boundary, collapse(it.Operation.Text)}
 		switch {
 		case it.Kind == interaction.Request:
 			add(k, it.UseCase)
@@ -82,7 +96,12 @@ func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces 
 		}
 		v.Tables = append(v.Tables, t)
 	}
-	slices.SortStableFunc(v.Tables, func(a, b SurfaceTable) int { return strings.Compare(a.Subject, b.Subject) })
+	slices.SortStableFunc(v.Tables, func(a, b SurfaceTable) int {
+		if c := strings.Compare(strings.ToLower(a.Subject), strings.ToLower(b.Subject)); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Subject, b.Subject)
+	})
 	return v
 }
 

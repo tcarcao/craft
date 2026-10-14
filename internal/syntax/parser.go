@@ -358,7 +358,7 @@ func (p *Parser) parseDomainStatement() []model.Diagnostic {
 	d := p.parseBoundedContextList()
 	diags = append(diags, d...)
 
-	if p.atEOF() {
+	if p.peek().Type != lexer.TokenRBrace {
 		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  "unclosed domain block (missing `}`)",
@@ -392,10 +392,10 @@ func (p *Parser) parseDomainsBlock() []model.Diagnostic {
 	}
 	p.consumeAs(SyntaxKindLBrace)
 
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atColumnOneDecl() {
 		// Attach trivia inside block.
 		p.attachTrivia()
-		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace || p.atColumnOneDecl() {
 			break
 		}
 
@@ -421,7 +421,7 @@ func (p *Parser) parseDomainsBlock() []model.Diagnostic {
 		d := p.parseBoundedContextList()
 		diags = append(diags, d...)
 
-		if p.atEOF() {
+		if p.peek().Type != lexer.TokenRBrace {
 			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/unclosed-block",
 				Message:  "unclosed domain block (missing `}`)",
@@ -460,10 +460,10 @@ func (p *Parser) parseBoundedContextList() []model.Diagnostic {
 	seen := make(map[string]bool)
 	var diags []model.Diagnostic
 
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atColumnOneDecl() {
 		// Attach trivia inside the context list.
 		p.attachTrivia()
-		if p.atEOF() || p.peek().Type == lexer.TokenRBrace {
+		if p.atEOF() || p.peek().Type == lexer.TokenRBrace || p.atColumnOneDecl() {
 			break
 		}
 
@@ -848,7 +848,7 @@ func (p *Parser) parseUseCaseBlock() []model.Diagnostic {
 	}
 	p.consumeAs(SyntaxKindLBrace)
 
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atColumnOneDecl() {
 		tok := p.peek()
 
 		// `when` is a contextual keyword that lexes as TokenIdent.
@@ -866,7 +866,7 @@ func (p *Parser) parseUseCaseBlock() []model.Diagnostic {
 		}
 	}
 
-	if p.atEOF() {
+	if p.peek().Type != lexer.TokenRBrace {
 		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/unclosed-block",
 			Message:  fmt.Sprintf("unclosed use_case block for %q (missing `}`)", name),
@@ -1254,6 +1254,9 @@ func (p *Parser) sweepRestOfLine(line int, expected string) []model.Diagnostic {
 // atStep reports whether the next token can start a step of the current
 // scenario: anything but `when`, a `scenario "…"` line, `}` or EOF.
 func (p *Parser) atStep() bool {
+	if p.atColumnOneDecl() {
+		return false // the enclosing use case is unclosed
+	}
 	tok := p.peek()
 	switch tok.Type {
 	case lexer.TokenEOF, lexer.TokenRBrace:
@@ -2209,6 +2212,39 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 		lexer.TokenKwUseCase, lexer.TokenKwArch, lexer.TokenKwExposure,
 		lexer.TokenKwContextMap, lexer.TokenKwGlossary:
 		return true
+	}
+	return false
+}
+
+// atColumnOneDecl reports whether the next token starts a top-level
+// declaration at column 1: a surface, or a top-level keyword. A block body
+// that meets one before its `}` is unclosed, and the parse resumes there
+// instead of swallowing the declaration. A keyword that can also name a
+// bounded context (`service`, `domain`, …) counts only when a `{` follows on
+// its line, so an unindented context list keeps parsing; an indented line is
+// never a declaration, so `surface asks …` in a scenario stays an action.
+func (p *Parser) atColumnOneDecl() bool {
+	tok := p.peek()
+	if tok.Column != 1 || !p.peekAtLineStart() {
+		return false
+	}
+	if p.atSurfaceDecl() {
+		return true
+	}
+	if !isTopLevelKeyword(tok.Type) {
+		return false
+	}
+	if !isDomainNameToken(tok.Type) {
+		return true
+	}
+	for i := 1; i <= 2; i++ {
+		n := p.peekAt(i)
+		if n.Line != tok.Line {
+			return false
+		}
+		if n.Type == lexer.TokenLBrace {
+			return true
+		}
 	}
 	return false
 }
@@ -3371,6 +3407,14 @@ func (p *Parser) parseSurfaceOperation() []model.Diagnostic {
 	}
 	start := p.opAnnotationStart(kwTok.Line)
 	p.collectPhrase(kwTok.Line, start)
+	if start == 0 {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/missing-phrase",
+			Message:  fmt.Sprintf("a `%s` line says what the operation offers before its bracket, e.g. `%s the seeker list  [getUserList]`", kwTok.Value, kwTok.Value),
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+	}
 	if start >= 0 {
 		diags = append(diags, p.parseOpAnnotation()...)
 	} else {

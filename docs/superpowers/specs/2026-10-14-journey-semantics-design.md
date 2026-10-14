@@ -670,13 +670,14 @@ and would mix "who may reach it" with "what it offers". The new block is keyed b
 | Code | Severity | When |
 |---|---|---|
 | `craft/syntax/missing-operation` (new) | error | A `query`/`command` line has no trailing `[op]`. The line is dropped from the model. |
+| `craft/syntax/missing-phrase` (new) | error | A `query`/`command` line has its `[op]` but nothing before it that says what the operation offers (`query [getUserList]`). |
 | `craft/syntax/unexpected-token` | error | Any other line in a surface body. Recovery: skip to the next line. |
-| `craft/syntax/unclosed-block` | error | The surface has no `}`. |
+| `craft/syntax/unclosed-block` | error | The surface has no `}`. A use case or a domain without its `}` also stops at a declaration that starts at column 1 (`surface <name> {` or a top-level keyword), so it does not swallow the next surface; an indented `surface asks …` stays an action. |
 | `craft/sema/unresolved-reference` | error | The surface subject, or a `callers:` entry other than `unknown`, does not resolve. |
 | `craft/sema/invalid-surface-subject` (new) | error | The subject resolves to a domain or a data store. A surface belongs to a bounded context, a service or an actor (an external system). |
 | `craft/sema/duplicate-name` | error in one file, warning across files | A second `surface` for the same resolved subject. The first one in sorted file order wins, as for services (ruling 6). |
 | `craft/sema/duplicate-operation` (new) | error | The same operation text appears twice in one surface (compared with whitespace collapsed). |
-| `craft/lint/operation-not-in-surface` (new) | warning | An `asks <target> … [op]` whose target has a surface that does not list `op`. This is the op-name validation of need 6. It would have caught the removed `addMortgagesMeeting` route. Implemented next to `LintCommunication`, which already receives the `Request` interactions. |
+| `craft/lint/operation-not-in-surface` (new) | warning | An `asks <target> … [op]` whose target is covered by a surface (§8.4) that does not list `op`. This is the op-name validation of need 6. It would have caught the removed `addMortgagesMeeting` route. Implemented next to `LintCommunication`, which already receives the `Request` interactions. |
 
 ### 8.3 Model
 ```go
@@ -706,9 +707,18 @@ type SurfaceOperation struct {
 A surface is never a sequence or a spine member. Need 7 asks for a table. **Coverage is computed** (need
 2): an entry is "used by" every use case that has a `Request` interaction whose `To` is the surface's
 resolved participant and whose operation text equals the entry's (whitespace collapsed). A `receives`
-trigger on that boundary with the same operation counts as `<use case> (unobserved caller)`. A surface
-can therefore list every operation of a boundary, and the residue is visible as entries that no use case
-uses. R3a's rule "never repeat an operation used by a journey" is retired.
+trigger on that boundary with the same operation counts as `<use case> (unobserved caller)`.
+
+**A surface on a service covers its contexts.** The corpus writes the surface on the deployable
+(`surface obidozoe`) and the `asks` on its contexts (`advisorapp asks concierge …`). A request to a
+bounded context that has no surface of its own is therefore matched against the surface of the service
+that deploys it (`contexts:`). A context with its own surface is matched only against that one. The same
+rule decides which surface `operation-not-in-surface` and the LSP (hover, definition, completion) use.
+
+**A surface is the full inventory of a boundary's operations.** It lists every operation, whether or not
+a journey uses it, and the residue is visible as entries that no use case uses. R3a's rule "an operation
+used by a journey is never repeated in the surface" is retired. There is no completeness flag: a surface
+does not claim to be complete, and Craft does not check that it is.
 
 `craft generate --type surface` writes `<base>-surface.md` (Markdown with any `--format`, because it is
 a table and not a diagram). `--stdout` works as for the other types. Overwriting an existing `.md` needs
@@ -731,9 +741,9 @@ Spec: `obidozoe/docs/openapi.yaml`
 |---|---|---|---|
 | `getUserList` | query | the seeker list, unpaged, newest first, filtered by a typed status | Advisor works a task |
 | `getUserLogs` | query | the seeker audit trail | — |
-| `deleteAccount` | command | delete a seeker's account | Seeker removes their concierge account |
+| `deleteAccount` | command | delete a seeker's account | Seeker removes their concierge account (unobserved caller) |
 ```
-Surfaces are ordered by subject, and rows by source order. "Used by" lists use-case names, sorted and
+Surfaces are ordered by subject (ignoring case), and rows by source order. "Used by" lists use-case names, sorted and
 deduplicated. `|` in text is escaped as `\|`. The renderer lives in `internal/visualizer/view/surface.go`
 (view data) plus `internal/visualizer/markdown/surface.go` (writer), with
 `visualizer.ViewSurface` / `visualizer.FormatMarkdown`. The flow, architecture, sequence and C4 views

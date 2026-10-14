@@ -101,15 +101,20 @@ func surfaceSubjectHover(file syntax.File, li green.LineIndex, cursorLine int) (
 	return "", false
 }
 
-// surfaceOf finds the surface that covers requests to target: the first, in
-// sorted URI order, whose subject resolves to the same participant (the
-// model keeps the first surface of a boundary, see sema.resolveSurfaces).
+// surfaceOf finds the surface that covers requests to target
+// (model.SurfaceBoundary): of each boundary, the first surface in sorted URI
+// order, as the model keeps it (see sema.resolveSurfaces).
 func surfaceOf(ws *workspace.Workspace, target string) (syntax.SurfaceDecl, *workspace.File, bool) {
 	syms := ws.WorkspaceSymbols()
 	p, ambiguous := sema.ResolveParticipant(syms, "", target)
 	if ambiguous || p.Kind == "" {
 		return syntax.SurfaceDecl{}, nil, false
 	}
+	type located struct {
+		decl syntax.SurfaceDecl
+		file *workspace.File
+	}
+	first := map[string]located{}
 	files := ws.AllFiles()
 	sort.Slice(files, func(i, j int) bool { return files[i].URI < files[j].URI })
 	for _, f := range files {
@@ -117,12 +122,20 @@ func surfaceOf(ws *workspace.Workspace, target string) (syntax.SurfaceDecl, *wor
 			continue
 		}
 		for _, s := range syntax.AsFile(syntax.Root(f.Green)).Surfaces() {
-			if sp, amb := sema.ResolveParticipant(syms, "", s.Subject()); !amb && sp.Kind != "" && sp.ID == p.ID {
-				return s, f, true
+			sp, amb := sema.ResolveParticipant(syms, "", s.Subject())
+			if amb || sp.Kind == "" {
+				continue
+			}
+			if _, seen := first[sp.ID]; !seen {
+				first[sp.ID] = located{s, f}
 			}
 		}
 	}
-	return syntax.SurfaceDecl{}, nil, false
+	id, ok := model.SurfaceBoundary(p, func(id string) bool { _, has := first[id]; return has })
+	if !ok {
+		return syntax.SurfaceDecl{}, nil, false
+	}
+	return first[id].decl, first[id].file, true
 }
 
 // surfaceOpFor returns the operation of target's surface whose `[op]` is op.

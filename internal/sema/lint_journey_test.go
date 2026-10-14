@@ -143,3 +143,20 @@ use_case "Autocomplete" {
 		t.Errorf("%d warnings, want 1 (only the mobile line of the first scenario)", n)
 	}
 }
+
+func TestLint_OperationNotInSurface_ServiceSurfaceCoversItsContexts(t *testing.T) {
+	src := "domain d {\n  app\n  concierge\n  ledger\n}\nservices {\n  obidozoe {\n    contexts: concierge, ledger\n  }\n}\n" +
+		"surface obidozoe {\n  query the list  [getUserList]\n}\nsurface ledger {\n  query the balances  [getBalances]\n}\n" +
+		"use_case \"U\" {\n  when O does\n    app asks concierge for the list  [getUserList]\n    app asks concierge to book  [addMortgagesMeeting]\n    app asks ledger for the list  [getUserList]\n    app asks obidozoe for the list  [getUserList]\n}"
+	var got []string
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/lint/operation-not-in-surface" {
+			got = append(got, fmt.Sprintf("%d %s", d.Range.Start.Line, d.Message))
+		}
+	}
+	// concierge has no surface, so obidozoe's covers it; ledger has its own.
+	if len(got) != 2 || !strings.Contains(got[0], "[addMortgagesMeeting]") || !strings.Contains(got[0], "`obidozoe` surface") ||
+		!strings.Contains(got[1], "[getUserList]") || !strings.Contains(got[1], "`ledger` surface") {
+		t.Errorf("warnings = %q", got)
+	}
+}

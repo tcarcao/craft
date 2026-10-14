@@ -242,6 +242,24 @@ type Surface struct {
 	Line        int                `json:"line,omitempty"`
 }
 
+// SurfaceBoundary returns the ID of the surface that covers requests to p:
+// p's own surface when it has one, otherwise, for a bounded context, the
+// surface of the service that deploys it (spec §8.4). hasSurface reports
+// whether a surface exists for a resolved boundary ID. ok is false when no
+// surface covers p.
+func SurfaceBoundary(p Participant, hasSurface func(id string) bool) (id string, ok bool) {
+	if p.ID == "" {
+		return "", false
+	}
+	if hasSurface(p.ID) {
+		return p.ID, true
+	}
+	if p.Kind == ParticipantBoundedContext && p.Service != "" && hasSurface(p.Service) {
+		return p.Service, true
+	}
+	return "", false
+}
+
 // SurfaceOperation is one `query`/`command` line of a surface.
 type SurfaceOperation struct {
 	Kind      SurfaceOpKind `json:"kind"` // "query" | "command"
