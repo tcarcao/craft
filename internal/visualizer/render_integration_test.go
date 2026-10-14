@@ -741,3 +741,50 @@ func assertMermaidRenders(t *testing.T, src string) {
 		t.Fatal("mmdc produced empty SVG")
 	}
 }
+
+// TestJourneySpine_Renders proves both renderers accept the v2.25 sequence
+// constructs: `ref over` frames (PlantUML), link notes (Mermaid), the
+// spine's `title` line and the Mermaid front-matter title.
+func TestJourneySpine_Renders(t *testing.T) {
+	var rs []analysis.FileResult
+	for _, name := range []string{"vas/nmf-books-the-draws.craft", "vas/seller-promotes-an-advert.craft"} {
+		src, err := os.ReadFile("testdata/journey-spine/" + name)
+		if err != nil {
+			t.Fatalf("read fixture: %v", err)
+		}
+		rs = append(rs, analysis.File(name, string(src)))
+	}
+	rs = append(rs, analysis.File("links.craft", `use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        includes "Site session preamble"
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+        alt "the answer is refused"
+            continues "Seller pays at the checkout"
+}
+`))
+	doc := analysis.Workspace(rs).Doc
+	render := func(t *testing.T, backend visualizer.Backend, journey string) string {
+		out, err := visualizer.New(nil).Render(doc, visualizer.Request{View: visualizer.ViewSequence, Backend: backend, Format: visualizer.FormatSource, Journey: journey})
+		if err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		return string(out.Data)
+	}
+	t.Run("mermaid spine", func(t *testing.T) {
+		assertMermaidRenders(t, render(t, visualizer.Mermaid, "seller-promotes-an-advert"))
+	})
+	t.Run("mermaid links", func(t *testing.T) {
+		assertMermaidRenders(t, render(t, visualizer.Mermaid, ""))
+	})
+	endpoint := plantUMLEndpoint(t)
+	t.Run("plantuml spine", func(t *testing.T) {
+		assertRendersClean(t, endpoint, render(t, visualizer.PlantUML, "seller-promotes-an-advert"))
+	})
+	t.Run("plantuml links", func(t *testing.T) {
+		puml := render(t, visualizer.PlantUML, "")
+		if !strings.Contains(puml, "ref over") {
+			t.Fatalf("no ref frame:\n%s", puml)
+		}
+		assertRendersClean(t, endpoint, puml)
+	})
+}
