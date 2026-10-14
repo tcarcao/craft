@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/malformed-source",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 7,
+        "character": 8
+      },
+      "end": {
+        "line": 7,
+        "character": 43
+      }
+    }
+  }
+]

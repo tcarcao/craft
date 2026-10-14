@@ -300,6 +300,21 @@ func TestLexer_DocComment(t *testing.T) {
 			wantTypes: []lexer.TokenType{lexer.TokenLineComment, lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
 		},
 		{
+			name:      "source cite is a line comment",
+			src:       "//@ a.go:1\nactor user Alice",
+			wantTypes: []lexer.TokenType{lexer.TokenLineComment, lexer.TokenKwActor, lexer.TokenKwUser, lexer.TokenIdent, lexer.TokenEOF},
+		},
+		{
+			name:      "plain line comment beside a cite",
+			src:       "// a\n//@ a.go:1",
+			wantTypes: []lexer.TokenType{lexer.TokenLineComment, lexer.TokenLineComment, lexer.TokenEOF},
+		},
+		{
+			name:      "doc comment is not a cite",
+			src:       "/// a",
+			wantTypes: []lexer.TokenType{lexer.TokenDocComment, lexer.TokenEOF},
+		},
+		{
 			name:      "doc comment at EOF no newline",
 			src:       "/// doc at eof",
 			wantTypes: []lexer.TokenType{lexer.TokenDocComment, lexer.TokenEOF},

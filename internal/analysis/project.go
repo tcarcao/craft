@@ -2,6 +2,8 @@ package analysis
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
@@ -189,6 +191,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 			outSc.Steps = projectSteps(sc.Steps(), &counter, li)
 			outUC.Scenarios = append(outUC.Scenarios, outSc)
 		}
+		attachSources(&outUC, sourceLines(uc, li))
 		out = append(out, outUC)
 	}
 	return out
@@ -632,4 +635,103 @@ func projectSurfaces(file syntax.File, li green.LineIndex, sourceURI string) []m
 		out = append(out, ms)
 	}
 	return out
+}
+
+// sourceLine is one well-formed `//@` line of a use-case body.
+type sourceLine struct {
+	line    int
+	sources []model.Source
+}
+
+// sourceLines returns the well-formed `//@` lines inside uc's braces, in
+// source order. A malformed line is skipped (sema reports it as
+// craft/syntax/malformed-source); a cite above `use_case` is outside the body
+// and is detached (craft/lint/detached-source).
+func sourceLines(uc syntax.UseCaseDecl, li green.LineIndex) []sourceLine {
+	start, end, ok := uc.BodySpan()
+	if !ok {
+		return nil
+	}
+	var lines []sourceLine
+	for _, tok := range syntax.SourceComments(uc.Node()) {
+		if tok.Offset() < start || tok.Offset() >= end {
+			continue
+		}
+		cites, text, ok := lang.ParseSourceComment(tok.Text())
+		if !ok {
+			continue
+		}
+		line, _ := li.LineCol(tok.Offset())
+		sl := sourceLine{line: line}
+		for _, c := range cites {
+			sl.sources = append(sl.sources, model.Source{Repo: c.Repo, Path: c.Path, Start: c.Start, End: c.End, Text: text, Line: line})
+		}
+		lines = append(lines, sl)
+	}
+	return lines
+}
+
+// sourceAnchor is a line a //@ cite may attach to, and where its sources go.
+type sourceAnchor struct {
+	line    int
+	sources *[]model.Source
+}
+
+// attachSources attaches each //@ line to the nearest step line at or above
+// it: an action, a branch header, a note, a link or the trigger; before the
+// first scenario, a use-case-level note or the use case itself (spec §14.1).
+// Plain comments in between do not matter: only lines are compared.
+func attachSources(uc *model.UseCase, lines []sourceLine) {
+	if len(lines) == 0 {
+		return
+	}
+	anchors := []sourceAnchor{{line: uc.Line, sources: &uc.Sources}}
+	for i := range uc.Notes {
+		anchors = append(anchors, sourceAnchor{uc.Notes[i].Line, &uc.Notes[i].Sources})
+	}
+	var walk func(steps []model.Step)
+	walk = func(steps []model.Step) {
+		for _, st := range steps {
+			switch {
+			case st.Action != nil:
+				anchors = append(anchors, sourceAnchor{st.Action.Line, &st.Action.Sources})
+			case st.Note != nil:
+				anchors = append(anchors, sourceAnchor{st.Note.Line, &st.Note.Sources})
+			case st.Link != nil:
+				anchors = append(anchors, sourceAnchor{st.Link.Line, &st.Link.Sources})
+			case st.Block != nil:
+				b := st.Block
+				if b.Split && len(b.Branches) > 0 {
+					// One header for every fan-out branch: its cites go to the first.
+					anchors = append(anchors, sourceAnchor{b.Line, &b.Branches[0].Sources})
+				}
+				for i := range b.Branches {
+					if !b.Split {
+						anchors = append(anchors, sourceAnchor{b.Branches[i].Line, &b.Branches[i].Sources})
+					}
+					walk(b.Branches[i].Steps)
+				}
+			}
+		}
+	}
+	for i := range uc.Scenarios {
+		sc := &uc.Scenarios[i]
+		anchors = append(anchors, sourceAnchor{sc.Trigger.Line, &sc.Trigger.Sources})
+		walk(sc.Steps)
+	}
+	// An anchor without a position (line 0, recovered input) takes no cite.
+	anchors = slices.DeleteFunc(anchors, func(a sourceAnchor) bool { return a.line == 0 })
+	sort.SliceStable(anchors, func(i, j int) bool { return anchors[i].line < anchors[j].line })
+	for _, sl := range lines {
+		var target *[]model.Source
+		for _, a := range anchors {
+			if a.line > sl.line {
+				break
+			}
+			target = a.sources
+		}
+		if target != nil {
+			*target = append(*target, sl.sources...)
+		}
+	}
 }

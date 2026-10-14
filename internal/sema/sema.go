@@ -617,6 +617,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	diags = append(diags, validateServiceAnchors(uri, file, lineIdx, hasLI)...)
 	diags = append(diags, validateUseCaseTags(uri, file, lineIdx, hasLI)...)
 	diags = append(diags, validateSchedules(uri, file, lineIdx, hasLI)...)
+	diags = append(diags, validateSources(uri, tree, file, lineIdx, hasLI)...)
 	diags = append(diags, validateEventLists(uri, file, lineIdx, hasLI)...)
 
 	syms.Surfaces = collectSurfaces(uri, file, lineIdx, hasLI)

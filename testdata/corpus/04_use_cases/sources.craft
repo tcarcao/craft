@@ -1,0 +1,22 @@
+actors {
+    system Siren
+}
+
+domain nmf {
+    nmf_monetization
+}
+
+use_case "nMF mails the seller about an add-on event" {
+    //@ uc/top.go:1
+
+    when nmf_monetization listens nmfbus.AddOnPurchased
+        //@ re-monetization-framework functions/eb_email_sender/eb_email_sender.go:5 -- one rule, eight detail-types
+        nmf_monetization picks the mail resolver from the event type alone
+        // a plain comment does not break the attachment
+        //@ eb_email_sender.go:5-40
+        alt "suppressed"
+            nmf_monetization asks Siren to send the purchase mail  [POST /api/v1/event]
+            //@ pkg/siren/siren.go:63-115 -- a 423 counts as delivered
+            note "no retry"
+            //@ notes.md:3
+}

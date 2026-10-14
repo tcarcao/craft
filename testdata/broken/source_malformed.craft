@@ -1,0 +1,9 @@
+domain web {
+    frontendplatform
+}
+
+use_case "U" {
+    when frontendplatform listens sns.session-opened
+        frontendplatform renders the page
+        //@ pkg/render.go:40-12 -- reversed
+}

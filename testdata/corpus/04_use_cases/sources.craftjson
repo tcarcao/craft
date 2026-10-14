@@ -1,0 +1,155 @@
+{
+  "useCases": [
+    {
+      "name": "nMF mails the seller about an add-on event",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "nmf_monetization",
+            "event": "nmfbus.AddOnPurchased",
+            "ref": "nmfbus.AddOnPurchased",
+            "description": "when nmf_monetization listens \"nmfbus.AddOnPurchased\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "nmf/nmf_monetization"
+            },
+            "line": 12,
+            "column": 10,
+            "sources": [
+              {
+                "repo": "re-monetization-framework",
+                "path": "functions/eb_email_sender/eb_email_sender.go",
+                "start": 5,
+                "end": 5,
+                "text": "one rule, eight detail-types",
+                "line": 13
+              }
+            ]
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "nmf_monetization",
+                "verb": "picks",
+                "connector": "the",
+                "phrase": "mail resolver from the event type alone",
+                "description": "nmf_monetization picks the mail resolver from the event type alone",
+                "line": 14,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "nmf/nmf_monetization"
+                },
+                "sources": [
+                  {
+                    "path": "eb_email_sender.go",
+                    "start": 5,
+                    "end": 40,
+                    "line": 16
+                  }
+                ]
+              }
+            },
+            {
+              "block": {
+                "id": "block_3",
+                "kind": "alt",
+                "line": 17,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "suppressed",
+                    "line": 17,
+                    "steps": [
+                      {
+                        "action": {
+                          "id": "action_4",
+                          "type": "sync_action",
+                          "context": "nmf_monetization",
+                          "targetContext": "Siren",
+                          "ref": "Siren",
+                          "operation": {
+                            "verb": "POST",
+                            "payload": "/api/v1/event",
+                            "text": "POST /api/v1/event"
+                          },
+                          "connector": "to",
+                          "phrase": "send the purchase mail",
+                          "description": "nmf_monetization asks Siren to send the purchase mail",
+                          "line": 18,
+                          "column": 13,
+                          "from": {
+                            "kind": "bounded_context",
+                            "id": "nmf/nmf_monetization"
+                          },
+                          "to": {
+                            "kind": "actor",
+                            "id": "Siren"
+                          },
+                          "sources": [
+                            {
+                              "path": "pkg/siren/siren.go",
+                              "start": 63,
+                              "end": 115,
+                              "text": "a 423 counts as delivered",
+                              "line": 19
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "note": {
+                          "id": "note_5",
+                          "kind": "note",
+                          "text": "no retry",
+                          "line": 20,
+                          "column": 13,
+                          "sources": [
+                            {
+                              "path": "notes.md",
+                              "start": 3,
+                              "end": 3,
+                              "line": 21
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 9,
+      "sources": [
+        {
+          "path": "uc/top.go",
+          "start": 1,
+          "end": 1,
+          "line": 10
+        }
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "name": "nmf",
+      "boundedContexts": [
+        "nmf_monetization"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Siren",
+      "type": "system",
+      "line": 2
+    }
+  ]
+}

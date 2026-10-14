@@ -1,0 +1,4 @@
+//@ pkg/topology.go:1
+domain web {
+    frontendplatform
+}
