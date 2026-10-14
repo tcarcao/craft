@@ -1169,17 +1169,17 @@ func (p *Parser) peekAtLineStart() bool {
 }
 
 // isHeader reports whether the next tokens are a block header: the contextual
-// keyword `alt`, `opt` or `else` at the start of a line, followed by a string
-// label or by nothing else on its line (a missing label). Any other token
-// after the keyword makes the line an ordinary action whose subject is named
-// alt/opt/else, so those words stay valid names.
+// keyword `alt`, `opt`, `else`, `par`, `and` or `loop` at the start of a line,
+// followed by a string label or by nothing else on its line (a missing
+// label). Any other token after the keyword makes the line an ordinary action
+// whose subject is named after the keyword, so those words stay valid names.
 func (p *Parser) isHeader() (string, bool) {
 	tok := p.peek()
 	if tok.Type != lexer.TokenIdent {
 		return "", false
 	}
 	switch tok.Value {
-	case "alt", "opt", "else":
+	case "alt", "opt", "else", "par", "and", "loop":
 	default:
 		return "", false
 	}
@@ -1291,8 +1291,8 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 			switch {
 			case bodyCol == 0:
 				bodyCol = col
-			case col < bodyCol && kw != "else":
-				// A mis-indented else is reported only as an orphan below.
+			case col < bodyCol && kw != "else" && kw != "and":
+				// A mis-indented else/and is reported only as an orphan below.
 				diags = append(diags, model.Diagnostic{
 					Code:     "craft/syntax/inconsistent-indent",
 					Message:  "this line is indented less than the steps above it but more than its block header; align it with one of them",
@@ -1310,13 +1310,23 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 			}
 			continue
 		}
-		if kw == "else" {
+		switch kw {
+		case "else":
 			// No alt at this column is open (an else at an open alt's column
-			// is taken by parseBlock's loop before control gets back here),
-			// or the open block is an opt.
+			// is taken by parseBlock before control gets back here), or the
+			// open block is an opt, par or loop.
 			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/orphan-else",
-				Message:  "`else` must sit at the same column as an `alt` above it (an `opt` has no else)",
+				Message:  "`else` continues an `alt` at the same column; a `par` continues with `and`",
+				Severity: model.SeverityError,
+				Range:    tokenRange(tok),
+			})
+		case "and":
+			// No par at this column is open, or the open block is an alt,
+			// opt or loop.
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/orphan-and",
+				Message:  "`and` continues a `par` at the same column; an `alt` continues with `else`",
 				Severity: model.SeverityError,
 				Range:    tokenRange(tok),
 			})
@@ -1326,29 +1336,37 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 	return diags
 }
 
-// parseBlock parses an alt or opt block whose first header is at visual
-// column col. kw is the first header's keyword; an orphan `else` is parsed as
-// the first branch of a new alt. An alt (or an orphan else) takes every
-// following `else` header at exactly col as a further branch; an opt has one
+// parseBlock parses an alt, opt, par or loop block whose first header is at
+// visual column col. kw is the first header's keyword; an orphan `else` is
+// parsed as the first branch of a new alt, an orphan `and` as the first branch
+// of a new par. An alt takes every following `else` header at exactly col as a
+// further branch, a par every following `and`; an opt and a loop have one
 // branch.
 func (p *Parser) parseBlock(kw string, col int) []model.Diagnostic {
 	p.builder.StartNode(SyntaxKindBlock)
 	diags := p.parseBranch(kw, col)
-	if kw != "opt" {
+	cont := ""
+	switch kw {
+	case "alt", "else":
+		cont = "else"
+	case "par", "and":
+		cont = "and"
+	}
+	if cont != "" {
 		for {
 			next, ok := p.isHeader()
-			// isHeader implies the else starts its line.
-			if !ok || next != "else" || p.peekVisualColumn() != col {
+			// isHeader implies the continuation header starts its line.
+			if !ok || next != cont || p.peekVisualColumn() != col {
 				break
 			}
-			diags = append(diags, p.parseBranch("else", col)...)
+			diags = append(diags, p.parseBranch(cont, col)...)
 		}
 	}
 	p.builder.FinishNode()
 	return diags
 }
 
-// parseBranch parses one `alt|opt|else "<label>"` header and its body, the
+// parseBranch parses one `alt|opt|else|par|and|loop "<label>"` header and its body, the
 // lines right of the header's column col.
 func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
 	var diags []model.Diagnostic
@@ -1361,6 +1379,12 @@ func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
 		kind = SyntaxKindKwOpt
 	case "else":
 		kind = SyntaxKindKwElse
+	case "par":
+		kind = SyntaxKindKwPar
+	case "and":
+		kind = SyntaxKindKwAnd
+	case "loop":
+		kind = SyntaxKindKwLoop
 	}
 	kwTok := p.consumeAs(kind)
 
@@ -1369,7 +1393,7 @@ func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
 	} else {
 		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/missing-label",
-			Message:  "`alt`/`opt`/`else` needs a quoted label, e.g. `alt \"payment fails\"`",
+			Message:  fmt.Sprintf("`%s` needs a quoted label, e.g. `%s \"payment fails\"`", kw, kw),
 			Severity: model.SeverityError,
 			Range:    tokenRange(kwTok),
 		})

@@ -1,0 +1,7 @@
+use_case "U" {
+    when Ops starts it
+        par "a"
+            x does a
+        else "b"
+            x does b
+}

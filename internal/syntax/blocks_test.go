@@ -491,3 +491,90 @@ func TestBlocks_LabelOnNextLine(t *testing.T) {
 	}
 	checkLossless(t, src)
 }
+
+const parSrc = `use_case "U" {
+    when Seeker opens an advert
+        fp asks graphql for the advert
+        par "field resolvers"
+            graphql asks atlas for a
+            graphql asks atlas for b
+        par "the advert"
+            graphql asks adcore for the advert
+            graphql asks atlas for the owner
+        and "the statistics"
+            graphql asks dapi for stats
+        loop "for each image"
+            graphql asks media to sign
+            alt "signing fails"
+                graphql logs it
+}
+`
+
+func TestBlocks_ParAndLoop(t *testing.T) {
+	got, diags := outlineAll(t, parSrc)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	want := `when
+  action fp
+  par
+    branch field resolvers
+      action graphql
+      action graphql
+  par
+    branch the advert
+      action graphql
+      action graphql
+    branch the statistics
+      action graphql
+  loop
+    branch for each image
+      action graphql
+      alt
+        branch signing fails
+          action graphql
+`
+	if got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+	g, _, _ := syntax.Parse(parSrc)
+	steps := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0].Steps()
+	fan, _ := steps[1].Block()
+	explicit, _ := steps[2].Block()
+	loop, _ := steps[3].Block()
+	if !fan.IsFanOut() || explicit.IsFanOut() || loop.IsFanOut() {
+		t.Errorf("IsFanOut: fan=%v explicit=%v loop=%v", fan.IsFanOut(), explicit.IsFanOut(), loop.IsFanOut())
+	}
+}
+
+func TestBlocks_ParKeywordsStayNames(t *testing.T) {
+	src := "use_case \"U\" {\n  when Ops does it\n    par asks loop to run\n    and records something\n    loop does it\n}"
+	got, diags := outlineAll(t, src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if got != "when\n  action par\n  action and\n  action loop\n" {
+		t.Errorf("tree:\n%s", got)
+	}
+}
+
+func TestBlocks_ParDiagnostics(t *testing.T) {
+	cases := []struct{ code, src string }{
+		{"craft/syntax/orphan-and", "use_case \"U\" {\n  when O does\n    x does it\n    and \"b\"\n      x does more\n}"},
+		{"craft/syntax/orphan-and", "use_case \"U\" {\n  when O does\n    alt \"a\"\n      x does it\n    and \"b\"\n      x does more\n}"},
+		{"craft/syntax/orphan-else", "use_case \"U\" {\n  when O does\n    par \"a\"\n      x does it\n    else \"b\"\n      x does more\n}"},
+		{"craft/syntax/orphan-else", "use_case \"U\" {\n  when O does\n    loop \"a\"\n      x does it\n    else \"b\"\n      x does more\n}"},
+		{"craft/syntax/missing-label", "use_case \"U\" {\n  when O does\n    loop\n      x does it\n}"},
+		{"craft/syntax/empty-branch", "use_case \"U\" {\n  when O does\n    par \"a\"\n    x does it\n}"},
+	}
+	for _, c := range cases {
+		_, _, diags := syntax.Parse(c.src)
+		found := false
+		for _, d := range diags {
+			found = found || d.Code == c.code
+		}
+		if !found {
+			t.Errorf("%s not reported for:\n%s\ngot %v", c.code, c.src, diags)
+		}
+	}
+}

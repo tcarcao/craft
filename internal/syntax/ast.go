@@ -1529,16 +1529,33 @@ func (n NoteDecl) Node() SyntaxNode { return n.node }
 
 // BlockDecl is a typed view over a SyntaxKindBlock node: an alt (one or more
 // branches, the first headed by `alt`, or by an orphan `else` recovered as an
-// alt) or an opt (one branch).
+// alt), a par (one or more branches, the first headed by `par` or by an orphan
+// `and`), or an opt or loop (one branch).
 type BlockDecl struct{ node SyntaxNode }
 
-// Kind returns lang.BlockOpt when the first branch is headed by `opt`, and
-// lang.BlockAlt otherwise.
+// Kind returns the block's kind from its first header: opt, par (also an
+// orphan `and`), loop, else alt (also an orphan `else`).
 func (b BlockDecl) Kind() lang.BlockKind {
-	if brs := b.Branches(); len(brs) > 0 && brs[0].Keyword() == "opt" {
+	brs := b.Branches()
+	if len(brs) == 0 {
+		return lang.BlockAlt
+	}
+	switch brs[0].Keyword() {
+	case "opt":
 		return lang.BlockOpt
+	case "par", "and":
+		return lang.BlockPar
+	case "loop":
+		return lang.BlockLoop
 	}
 	return lang.BlockAlt
+}
+
+// IsFanOut reports whether the block is a par written without `and`: each
+// step of its body runs as its own concurrent branch (spec §4.1 rule 2).
+func (b BlockDecl) IsFanOut() bool {
+	brs := b.Branches()
+	return len(brs) == 1 && brs[0].Keyword() == "par"
 }
 
 // Branches returns the block's branches in source order.
@@ -1557,24 +1574,35 @@ func (b BlockDecl) Node() SyntaxNode { return b.node }
 // followed by the branch's steps.
 type BranchDecl struct{ node SyntaxNode }
 
-// HeaderToken returns the branch's keyword token (KwAlt, KwOpt or KwElse).
+// HeaderToken returns the branch's keyword token (KwAlt, KwOpt, KwElse,
+// KwPar, KwAnd or KwLoop).
 func (b BranchDecl) HeaderToken() *SyntaxToken {
 	h := b.node.ChildNode(SyntaxKindBranchHeader)
 	if h == nil {
 		return nil
 	}
-	return h.ChildToken(SyntaxKindKwAlt, SyntaxKindKwOpt, SyntaxKindKwElse)
+	return h.ChildToken(SyntaxKindKwAlt, SyntaxKindKwOpt, SyntaxKindKwElse,
+		SyntaxKindKwPar, SyntaxKindKwAnd, SyntaxKindKwLoop)
 }
 
-// Keyword returns "alt", "opt" or "else".
+// Keyword returns "alt", "opt", "else", "par", "and" or "loop"; "" when the
+// header token is missing.
 func (b BranchDecl) Keyword() string {
-	switch t := b.HeaderToken(); {
-	case t == nil:
+	t := b.HeaderToken()
+	if t == nil {
 		return ""
-	case t.Kind() == SyntaxKindKwOpt:
+	}
+	switch t.Kind() {
+	case SyntaxKindKwOpt:
 		return "opt"
-	case t.Kind() == SyntaxKindKwElse:
+	case SyntaxKindKwElse:
 		return "else"
+	case SyntaxKindKwPar:
+		return "par"
+	case SyntaxKindKwAnd:
+		return "and"
+	case SyntaxKindKwLoop:
+		return "loop"
 	default:
 		return "alt"
 	}

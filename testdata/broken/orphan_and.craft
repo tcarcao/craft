@@ -1,0 +1,6 @@
+use_case "U" {
+    when Ops starts it
+        x does a
+        and "b"
+            x does b
+}
