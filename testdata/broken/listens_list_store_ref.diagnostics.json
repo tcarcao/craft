@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/store-ref-in-event-list",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 5,
+        "character": 39
+      },
+      "end": {
+        "line": 5,
+        "character": 58
+      }
+    }
+  }
+]

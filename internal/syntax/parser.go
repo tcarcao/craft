@@ -1497,15 +1497,16 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 
 	if verb == "listens" {
 		p.consumeAs(SyntaxKindKwListens)
-		// domain_listen: when <domain> listens "<event>" | <ref>
-		eventTok := p.peek()
-		if eventTok.Type == lexer.TokenString {
-			p.consumeAs(SyntaxKindString)
-		} else if eventTok.Type == lexer.TokenIdent {
-			p.parseRef()
+		// domain_listen: when <domain> listens event_item (',' NL* event_item)*
+		last := verbTok
+		if t := p.peek(); t.Line == verbTok.Line && (t.Type == lexer.TokenString || t.Type == lexer.TokenIdent) {
+			var d []model.Diagnostic
+			last, d = p.parseEventList()
+			diags = append(diags, d...)
 		}
-		// Optional polling cadence: `listens <ref> cron "…"` / `every "…"`.
-		if t := p.peek(); t.Line == verbTok.Line && t.Type == lexer.TokenIdent && (t.Value == "cron" || t.Value == "every") {
+		// Optional polling cadence after the last item:
+		// `listens <ref> cron "…"` / `every "…"`.
+		if t := p.peek(); t.Line == last.Line && t.Type == lexer.TokenIdent && (t.Value == "cron" || t.Value == "every") {
 			if s := p.peekAt(1); s.Type == lexer.TokenString && s.Line == t.Line {
 				kind := SyntaxKindKwCron
 				if t.Value == "every" {
@@ -3150,6 +3151,89 @@ func (p *Parser) refShapedAhead() bool {
 		return false
 	}
 	return next.Line == first.Line && adjacentTokens(first, next)
+}
+
+// refEndAhead returns the lookahead index just past the ref-shaped run that
+// starts at offset: contiguous ident, number, '/' and colon tokens on one
+// line, the run parseRef would consume.
+func (p *Parser) refEndAhead(offset int) int {
+	first := p.peekAt(offset)
+	i := offset
+	prev := first
+	for {
+		t := p.peekAt(i)
+		ok := t.Type == lexer.TokenIdent || t.Type == lexer.TokenNumber || isAnyKeywordAsIdent(t.Type) ||
+			(t.Type == lexer.TokenError && t.Value == "/") || t.Type == lexer.TokenColon
+		if !ok || t.Line != first.Line || (i > offset && !adjacentTokens(prev, t)) {
+			return i
+		}
+		prev = t
+		i++
+	}
+}
+
+// eventItemAhead reports whether the token at offset starts an event item of
+// a list: a string, or a ref whose run is followed by a comma, the end of
+// its line, `}`, EOF, an operation bracket or a `cron`/`every` schedule.
+// Anything else is a step line (`seshat writes the row`), which the list
+// must not swallow.
+func (p *Parser) eventItemAhead(offset int) bool {
+	t := p.peekAt(offset)
+	switch {
+	case t.Type == lexer.TokenString:
+		return true
+	case t.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(t.Type):
+		return false
+	}
+	end := p.refEndAhead(offset)
+	next := p.peekAt(end)
+	switch {
+	case next.Type == lexer.TokenEOF, next.Type == lexer.TokenRBrace, next.Line != t.Line,
+		next.Type == lexer.TokenComma, next.Type == lexer.TokenLBracket:
+		return true
+	case next.Type == lexer.TokenIdent && (next.Value == "cron" || next.Value == "every"):
+		return p.peekAt(end+1).Type == lexer.TokenString
+	}
+	return false
+}
+
+// parseEventItem consumes one event item: a quoted string or a ref.
+func (p *Parser) parseEventItem() {
+	switch t := p.peek(); {
+	case t.Type == lexer.TokenString:
+		p.consumeAs(SyntaxKindString)
+	case t.Type == lexer.TokenIdent:
+		p.parseRef()
+	default:
+		p.consumeAs(SyntaxKindIdent)
+	}
+}
+
+// parseEventList parses `event_item (',' NL* event_item)*` (spec §4.1). The
+// items are wrapped in a SyntaxKindEventList only when a comma is seen, so a
+// single item keeps the v2.23 tree. A comma with no item after it is
+// reported on the comma; the next line then parses as a step. It returns the
+// last token consumed, whose line is where a trailing schedule or bracket
+// must sit.
+func (p *Parser) parseEventList() (lexer.Token, []model.Diagnostic) {
+	var diags []model.Diagnostic
+	cp := p.builder.Checkpoint()
+	p.parseEventItem()
+	commas := 0
+	for p.peek().Type == lexer.TokenComma {
+		comma := p.consumeAs(SyntaxKindComma)
+		commas++
+		if !p.eventItemAhead(0) {
+			diags = append(diags, p.diagUnexpected(comma, "an event after `,`"))
+			break
+		}
+		p.parseEventItem()
+	}
+	if commas > 0 {
+		p.builder.StartNodeAt(cp, SyntaxKindEventList)
+		p.builder.FinishNode()
+	}
+	return p.lastConsumed(), diags
 }
 
 // parseNameSlot consumes one name slot: a qualified or kind-prefixed ref via

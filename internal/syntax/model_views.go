@@ -117,9 +117,10 @@ func (t TriggerDecl) ExternalVerbText() string {
 
 // EventRef returns the event slot's ref text when a domain-listen trigger's
 // event is written as a typed ref, and "" for the quoted `listens "X"` form.
+// For a list it is the first item's.
 func (t TriggerDecl) EventRef() string {
-	if elems := significantElements(t.node); len(elems) >= 3 {
-		return refIfWrapped(elems[2])
+	if items := t.EventItems(); len(items) > 0 {
+		return items[0].Ref
 	}
 	return ""
 }

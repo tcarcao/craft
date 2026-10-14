@@ -1,0 +1,8 @@
+domain leads {
+    poller
+}
+
+use_case "Lead changes are polled" {
+    when poller listens sqs.LeadRequested, sqs.LeadUpdated every "5m"
+        poller imports the lead
+}

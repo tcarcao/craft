@@ -1,0 +1,8 @@
+domain ledger {
+    seshat
+}
+
+use_case "U" {
+    when seshat listens sns.a-changed,
+        seshat writes the row
+}

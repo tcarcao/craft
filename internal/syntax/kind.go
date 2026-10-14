@@ -139,6 +139,12 @@ const (
 	SyntaxKindKwQuery    // `query` surface line
 	SyntaxKindKwCommand  // `command` surface line
 
+	// Journey-semantics-2 contextual keywords (v2.24.0, spec §3.1).
+	SyntaxKindKwOne      // `one` of `notifies one of`
+	SyntaxKindKwOf       // `of` of `notifies one of`
+	SyntaxKindKwStream   // `stream` directly after `returns`
+	SyntaxKindKwInferred // `inferred` at the head of an operation bracket
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -204,4 +210,8 @@ const (
 	SyntaxKindSurfaceField
 	// SyntaxKindSurfaceOperation wraps a `query|command <phrase> [op]` line.
 	SyntaxKindSurfaceOperation
+
+	// SyntaxKindEventList wraps the items and commas of a `listens` or
+	// `notifies one of` list. It exists only when the slot holds a comma.
+	SyntaxKindEventList
 )

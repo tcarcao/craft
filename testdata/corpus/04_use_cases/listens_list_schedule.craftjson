@@ -1,0 +1,59 @@
+{
+  "useCases": [
+    {
+      "name": "Lead changes are polled",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "poller",
+            "event": "sqs.LeadRequested",
+            "ref": "sqs.LeadRequested",
+            "events": [
+              "sqs.LeadRequested",
+              "sqs.LeadUpdated"
+            ],
+            "schedule": "5m",
+            "scheduleKind": "every",
+            "description": "when poller listens \"sqs.LeadRequested\", \"sqs.LeadUpdated\" every \"5m\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "leads/poller"
+            },
+            "line": 6,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "poller",
+                "verb": "imports",
+                "connector": "the",
+                "phrase": "lead",
+                "description": "poller imports the lead",
+                "line": 7,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "leads/poller"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 5
+    }
+  ],
+  "domains": [
+    {
+      "name": "leads",
+      "boundedContexts": [
+        "poller"
+      ]
+    }
+  ]
+}

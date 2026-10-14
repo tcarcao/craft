@@ -1757,13 +1757,55 @@ func (t TriggerDecl) EventValue() string {
 			return stringAwareText(tokens[0])
 		}
 	case lang.TriggerDomainListen:
-		elems := significantElements(t.node)
-		if len(elems) >= 3 {
-			return refAwareText(elems[2])
+		if items := t.EventItems(); len(items) > 0 {
+			return items[0].Value
 		}
 	}
 	return ""
 }
+
+// EventItem is one item of an event slot: a `listens` trigger's events or a
+// `notifies` action's.
+type EventItem struct {
+	Value    string         // unquoted string, or the ref text
+	Ref      string         // the ref text when written as a ref; "" for a string
+	IsString bool           // written as a quoted string
+	Offset   green.TextSize // offset of the item's first token
+}
+
+// eventItemsOf reads an event slot element: one item, or an EventList node.
+func eventItemsOf(el SyntaxElement) []EventItem {
+	if n, ok := el.(SyntaxNode); ok && n.Kind() == SyntaxKindEventList {
+		var out []EventItem
+		for _, c := range significantElements(n) {
+			if c.Kind() == SyntaxKindComma {
+				continue
+			}
+			out = append(out, eventItemsOf(c)...)
+		}
+		return out
+	}
+	value := refAwareText(el)
+	if value == "" {
+		return nil
+	}
+	return []EventItem{{Value: value, Ref: refIfWrapped(el), IsString: el.Kind() == SyntaxKindString, Offset: refAwareOffset(el)}}
+}
+
+// EventItems returns the events of a domain-listen trigger in source order:
+// one for a single event, every item of a list.
+func (t TriggerDecl) EventItems() []EventItem {
+	if t.Kind() != lang.TriggerDomainListen {
+		return nil
+	}
+	if elems := significantElements(t.node); len(elems) >= 3 {
+		return eventItemsOf(elems[2])
+	}
+	return nil
+}
+
+// Node returns the trigger's syntax node.
+func (t TriggerDecl) Node() SyntaxNode { return t.node }
 
 // rawTextFrom returns the exact raw source substring of this trigger from
 // leaf-token index start, stopping before any trailing operation annotation
@@ -1861,9 +1903,8 @@ func (t TriggerDecl) EventCol(li green.LineIndex) int {
 			return col
 		}
 	case lang.TriggerDomainListen:
-		elems := significantElements(t.node)
-		if len(elems) >= 3 {
-			_, col := li.LineCol16(refAwareOffset(elems[2]))
+		if items := t.EventItems(); len(items) > 0 {
+			_, col := li.LineCol16(items[0].Offset)
 			return col
 		}
 	}
@@ -1877,8 +1918,8 @@ func (t TriggerDecl) EventIsString() bool {
 		tokens := t.node.Tokens()
 		return len(tokens) > 0 && tokens[0].Kind() == SyntaxKindString
 	case lang.TriggerDomainListen:
-		elems := significantElements(t.node)
-		return len(elems) >= 3 && elems[2].Kind() == SyntaxKindString
+		items := t.EventItems()
+		return len(items) > 0 && items[0].IsString
 	}
 	return false
 }

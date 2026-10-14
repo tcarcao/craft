@@ -1,0 +1,9 @@
+domain partner {
+    cooker
+    seshat
+}
+
+use_case "seshat records a Mercury domain event in the transaction ledger" {
+    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed, "mercury message received"
+        seshat writes one row per event
+}

@@ -320,6 +320,7 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 	kind := t.Kind()
 	var actor, context, event, verb, connector, phrase, ref string
 	var op *model.Operation
+	var events []string
 	schedKind, schedule, scheduled := t.Schedule()
 	switch kind {
 	case lang.TriggerEvent:
@@ -328,6 +329,11 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		context = t.ContextName()
 		event = t.EventValue()
 		ref = t.EventRef()
+		if items := t.EventItems(); len(items) > 1 {
+			for _, it := range items {
+				events = append(events, it.Value)
+			}
+		}
 		if k, e, ok := t.ListenSchedule(); ok {
 			schedKind, schedule = k, e
 		}
@@ -357,7 +363,15 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 	case kind == lang.TriggerEvent:
 		description = fmt.Sprintf("when %q", event)
 	case kind == lang.TriggerDomainListen:
-		description = fmt.Sprintf("when %s listens %q", context, event)
+		list := events
+		if list == nil {
+			list = []string{event}
+		}
+		quoted := make([]string, len(list))
+		for i, ev := range list {
+			quoted[i] = fmt.Sprintf("%q", ev)
+		}
+		description = fmt.Sprintf("when %s listens %s", context, strings.Join(quoted, ", "))
 		if schedKind != "" {
 			description += fmt.Sprintf(` %s "%s"`, schedKind, schedule)
 		}
@@ -379,13 +393,15 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		Context:      context,
 		Event:        event,
 		Ref:          ref,
+		Events:       events,
 		Schedule:     schedule,
 		ScheduleKind: schedKind,
 		Operation:    op,
 		Description:  description,
 		Column:       t.ActorCol(li),
 	}
-	if kind == lang.TriggerDomainListen {
+	if kind == lang.TriggerDomainListen && len(events) == 0 {
+		// A list never carries a store (spec §4.1 rule 4).
 		out.Store = storeRef(ref)
 	}
 	if when := sc.When(); when != nil {

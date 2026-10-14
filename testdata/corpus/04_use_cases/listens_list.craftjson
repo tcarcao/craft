@@ -1,0 +1,58 @@
+{
+  "useCases": [
+    {
+      "name": "seshat records a Mercury domain event in the transaction ledger",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "domain_listen",
+            "context": "seshat",
+            "event": "sns.mercury-advert-state-changed",
+            "ref": "sns.mercury-advert-state-changed",
+            "events": [
+              "sns.mercury-advert-state-changed",
+              "sns.mercury-vas-state-changed",
+              "mercury message received"
+            ],
+            "description": "when seshat listens \"sns.mercury-advert-state-changed\", \"sns.mercury-vas-state-changed\", \"mercury message received\"",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "partner/seshat"
+            },
+            "line": 7,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "seshat",
+                "verb": "writes",
+                "phrase": "one row per event",
+                "description": "seshat writes one row per event",
+                "line": 8,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "partner/seshat"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 6
+    }
+  ],
+  "domains": [
+    {
+      "name": "partner",
+      "boundedContexts": [
+        "cooker",
+        "seshat"
+      ]
+    }
+  ]
+}

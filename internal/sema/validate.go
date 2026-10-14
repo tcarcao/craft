@@ -953,3 +953,40 @@ func validateSchedules(uri string, file syntax.File, li green.LineIndex, hasLI b
 	}
 	return diags
 }
+
+// validateEventLists reports a store ref inside a listens list of two or
+// more items (spec §4.3): a store hand-off names one store.
+func validateEventLists(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
+	var diags []model.Diagnostic
+	check := func(items []syntax.EventItem) {
+		if len(items) < 2 {
+			return
+		}
+		for _, it := range items {
+			if _, _, ok := lang.ParseStoreRef(it.Ref); !ok {
+				continue
+			}
+			var r model.Range
+			if hasLI {
+				line, col := li.LineCol16(it.Offset)
+				r = model.Range{
+					Start: model.Position{Line: lineToLSP(line), Character: colToLSP(col)},
+					End:   model.Position{Line: lineToLSP(line), Character: colToLSP(col) + lspLen(it.Ref)},
+				}
+			}
+			diags = append(diags, model.Diagnostic{
+				Code:      "craft/sema/store-ref-in-event-list",
+				Message:   "a store hand-off names one store; write one scenario per store",
+				Severity:  model.SeverityError,
+				SourceURI: uri,
+				Range:     r,
+			})
+		}
+	}
+	for _, uc := range file.UseCases() {
+		for _, sc := range uc.Scenarios() {
+			check(sc.Trigger().EventItems())
+		}
+	}
+	return diags
+}
