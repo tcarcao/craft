@@ -1117,32 +1117,55 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 // the next multiple of tabWidth.
 const tabWidth = 4
 
-// visualColumn returns tok's 1-based column on its line with tabs expanded to
-// the next multiple of tabWidth. It is used only by the offside rule of block
-// bodies; tok.Column (runes) stays the column for everything else.
+// visualColumn returns the 1-based column the offside rule uses for tok, the
+// next significant token, with tabs expanded to the next multiple of
+// tabWidth. When only trivia precedes tok on its line, that is the line's
+// indentation: comments are trivia, so `/* c */ else "b"` sits where the line
+// starts, not where `else` does. Otherwise it is tok's own column. It is used
+// only by the offside rule of block bodies; tok.Column (runes) stays the
+// column for everything else.
 func (p *Parser) visualColumn(tok lexer.Token) int {
 	if tok.Type == lexer.TokenEOF || tok.Offset < 0 || tok.Offset > len(p.src) {
 		return tok.Column
 	}
 	lineStart := strings.LastIndexByte(p.src[:tok.Offset], '\n') + 1
+	lineStartsWithTok := p.atLineStart(tok)
 	col := 0
 	for _, r := range p.src[lineStart:tok.Offset] {
-		if r == '\t' {
+		switch r {
+		case '\t':
 			col = (col/tabWidth + 1) * tabWidth
-		} else {
+		case ' ':
+			col++
+		default:
+			if lineStartsWithTok {
+				return col + 1 // the leading comment's column
+			}
 			col++
 		}
 	}
 	return col + 1
 }
 
-// atLineStart reports whether only spaces and tabs precede tok on its line.
+// atLineStart reports whether tok, the next significant token, is the first
+// significant token on its line: only whitespace and comments (trivia) precede
+// it there, so `/* c */ alt "b"` still starts with `alt`.
 func (p *Parser) atLineStart(tok lexer.Token) bool {
 	if tok.Offset < 0 || tok.Offset > len(p.src) {
 		return false
 	}
-	lineStart := strings.LastIndexByte(p.src[:tok.Offset], '\n') + 1
-	return strings.Trim(p.src[lineStart:tok.Offset], " \t") == ""
+	for j := p.pos - 1; j >= 0; j-- {
+		prev := p.tokens[j]
+		switch prev.Type {
+		case lexer.TokenLineComment, lexer.TokenBlockComment, lexer.TokenDocComment:
+			continue
+		}
+		if prev.End < 0 || prev.End > tok.Offset {
+			return false
+		}
+		return strings.Contains(p.src[prev.End:tok.Offset], "\n")
+	}
+	return true
 }
 
 // isHeader reports whether the next tokens are a block header: the contextual
@@ -1206,7 +1229,8 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 		if minCol > 0 {
 			if bodyCol == 0 {
 				bodyCol = col
-			} else if col < bodyCol && p.atLineStart(tok) {
+			} else if kw, _ := p.isHeader(); col < bodyCol && kw != "else" && p.atLineStart(tok) {
+				// A mis-indented else is reported only as an orphan below.
 				diags = append(diags, model.Diagnostic{
 					Code:     "craft/syntax/inconsistent-indent",
 					Message:  "this line is indented less than the steps above it but more than its block header; align it with one of them",
@@ -1444,6 +1468,19 @@ func (p *Parser) parseAction() []model.Diagnostic {
 	diags = append(diags, p.parseNameSlot("an action subject")...)
 
 	verbTok := p.peek()
+	if verbTok.Type == lexer.TokenEOF || verbTok.Type == lexer.TokenRBrace || verbTok.Line != actionLine {
+		// Subject-only line. The verb must be on the action's own line: taking
+		// the next line's first token as the verb would swallow that line,
+		// and across a block boundary that line belongs to another block.
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unexpected-token",
+			Message:  fmt.Sprintf("action %q has no verb: write `%s <verb> …` on one line", subjectTok.Value, subjectTok.Value),
+			Severity: model.SeverityError,
+			Range:    tokenRange(subjectTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
 	if verbTok.Type != lexer.TokenIdent && !isAnyKeywordAsIdent(verbTok.Type) {
 		// No verb — treat as minimal internal action.
 		p.builder.FinishNode()

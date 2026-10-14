@@ -328,3 +328,49 @@ func TestBlocks_TrailingTokensAfterLabel(t *testing.T) {
 	}
 	checkLossless(t, src)
 }
+
+// An action's verb must be on the action's own line: a subject-only line
+// does not borrow the next line's first token as its verb, so a block body
+// cannot swallow the line after it.
+func TestBlocks_VerbMustBeOnActionLine(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    alt \"c\"\n      x\n    y does z\n}"
+	got, diags := outlineAll(t, src)
+	if c := strings.Join(codes(diags), ","); c != "craft/syntax/unexpected-token" {
+		t.Fatalf("diags = %s", c)
+	}
+	r := diags[0].Range
+	if r.Start.Line != 3 || r.Start.Character != 6 || r.End.Character != 7 {
+		t.Errorf("range = %+v, want line 3 chars 6-7 (the subject)", r)
+	}
+	if want := "when\n  alt\n    branch c\n      action x\n  action y\n"; got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+	checkLossless(t, src)
+}
+
+// A block comment before the keyword is trivia: the line is still a header.
+func TestBlocks_BlockCommentBeforeHeader(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    alt \"a\"\n      x does it\n    /* c */ else \"b\"\n      y does it\n    /* d */ opt \"e\"\n      z does it\n}"
+	got, diags := outlineAll(t, src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	want := "when\n  alt\n    branch a\n      action x\n    branch b\n      action y\n  opt\n    branch e\n      action z\n"
+	if got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+	checkLossless(t, src)
+}
+
+// An else that is both mis-indented and orphaned reports only orphan-else.
+func TestBlocks_MisindentedOrphanElseReportsOnlyOrphan(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    alt \"a\"\n        x does it\n      else \"b\"\n        y does it\n}"
+	got, diags := outlineAll(t, src)
+	if c := strings.Join(codes(diags), ","); c != "craft/syntax/orphan-else" {
+		t.Fatalf("diags = %s, want only orphan-else", c)
+	}
+	want := "when\n  alt\n    branch a\n      action x\n      alt\n        branch b\n          action y\n"
+	if got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+}
