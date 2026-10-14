@@ -210,8 +210,11 @@ func Sequence(s view.Sequence) string {
 	for _, sec := range s.Sections {
 		fmt.Fprintf(&b, "== %s ==\n\n", sec.Title)
 		group := ""
+		var path []view.BranchRef
 		for _, m := range sec.Messages {
 			if m.Scenario != group {
+				writeBlockOps(&b, view.BlockOps(path, nil))
+				path = nil
 				if group != "" {
 					b.WriteString("end\n")
 				}
@@ -220,7 +223,10 @@ func Sequence(s view.Sequence) string {
 				}
 				group = m.Scenario
 			}
+			writeBlockOps(&b, view.BlockOps(path, m.Branch))
+			path = m.Branch
 			switch m.Kind {
+			case view.MessageNone:
 			case view.MessageInbound:
 				fmt.Fprintf(&b, "[-> %s : %s\n", al.of(m.To), m.Label)
 			case view.MessageNote:
@@ -233,6 +239,7 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "%s -> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
 			}
 		}
+		writeBlockOps(&b, view.BlockOps(path, nil))
 		if group != "" {
 			b.WriteString("end\n")
 		}
@@ -240,4 +247,18 @@ func Sequence(s view.Sequence) string {
 	}
 	b.WriteString("@enduml")
 	return b.String()
+}
+
+// writeBlockOps draws alt/opt block lines.
+func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
+	for _, op := range ops {
+		switch op.Kind {
+		case view.BlockOpen:
+			fmt.Fprintf(b, "%s %s\n", op.BlockKind, op.Label)
+		case view.BlockElse:
+			fmt.Fprintf(b, "else %s\n", op.Label)
+		default:
+			b.WriteString("end\n")
+		}
+	}
 }

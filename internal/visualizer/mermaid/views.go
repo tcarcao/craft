@@ -97,8 +97,11 @@ func Sequence(s view.Sequence) string {
 			fmt.Fprintf(&b, "    Note over %s: %s\n", al.of(s.Participants[0].ID), sec.Title)
 		}
 		group := ""
+		var path []view.BranchRef
 		for _, m := range sec.Messages {
 			if m.Scenario != group {
+				writeBlockOps(&b, view.BlockOps(path, nil))
+				path = nil
 				if group != "" {
 					b.WriteString("    end\n")
 				}
@@ -108,8 +111,11 @@ func Sequence(s view.Sequence) string {
 				}
 				group = m.Scenario
 			}
+			writeBlockOps(&b, view.BlockOps(path, m.Branch))
+			path = m.Branch
 			label := strings.ReplaceAll(m.Label, ";", ",")
 			switch m.Kind {
+			case view.MessageNone:
 			case view.MessageInbound:
 				fmt.Fprintf(&b, "    %s->>%s: %s\n", external, al.of(m.To), label)
 			case view.MessageNote:
@@ -122,11 +128,27 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "    %s->>%s: %s\n", al.of(m.From), al.of(m.To), label)
 			}
 		}
+		writeBlockOps(&b, view.BlockOps(path, nil))
 		if group != "" {
 			b.WriteString("    end\n")
 		}
 	}
 	return b.String()
+}
+
+// writeBlockOps draws alt/opt block lines.
+func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
+	for _, op := range ops {
+		label := strings.ReplaceAll(op.Label, ";", ",")
+		switch op.Kind {
+		case view.BlockOpen:
+			fmt.Fprintf(b, "    %s %s\n", op.BlockKind, label)
+		case view.BlockElse:
+			fmt.Fprintf(b, "    else %s\n", label)
+		default:
+			b.WriteString("    end\n")
+		}
+	}
 }
 
 // spanAll is the participant range a note across the whole diagram covers.
