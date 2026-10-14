@@ -32,7 +32,7 @@ CustomerNotification -> CustomerNotification : sends confirmation to both accoun
 Customer -> AccountManagement : checks balance
 AccountManagement -> BalanceTracking : to get current balance
 BalanceTracking -> BalanceTracking : calculates available balance
-AccountManagement --> AccountManagement : returns balance information
+AccountManagement --> Customer : returns balance information
 
 == Suspicious Activity Detection ==
 

@@ -2,13 +2,10 @@ flowchart LR
     BankGateway["BankGateway"]
     EmailService["EmailService"]
     PaymentService["PaymentService"]
-    User["User"]
     UserService["UserService"]
     PaymentService_events[("PaymentService events")]
     BankGateway --> PaymentService
     EmailService --> UserService
     PaymentService --> BankGateway
-    PaymentService --> User
     PaymentService --> PaymentService_events
     UserService --> EmailService
-    UserService --> User

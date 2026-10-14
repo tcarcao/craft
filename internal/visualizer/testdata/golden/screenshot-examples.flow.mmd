@@ -45,7 +45,7 @@ flowchart LR
     OrderManagement -- "17. to save draft" --> order_db
     Inventory -- "18. reserves stock" --> Inventory
     Pricing -- "19. applies discounts" --> Pricing
-    OrderManagement -. "20. returns cart summary" .-> OrderManagement
+    OrderManagement -. "20. returns cart summary" .-> Business_User
     Business_User -- "21. confirms Purchase" --> OrderManagement
     OrderManagement -- "22. validates order" --> OrderManagement
     Payment -- "23. processes payment" --> Payment
@@ -76,7 +76,7 @@ flowchart LR
     OrderManagement -- "48. to retrieve order" --> order_db
     Payment -- "49. retrieves payment history" --> Payment
     Shipping -- "50. retrieves shipment status" --> Shipping
-    OrderManagement -. "51. returns complete order view" .-> OrderManagement
+    OrderManagement -. "51. returns complete order view" .-> Customer_Support
     Customer_Support -- "52. updates Order" --> OrderManagement
     OrderManagement -- "53. validates changes" --> OrderManagement
     OrderManagement -- "54. to update order" --> order_db

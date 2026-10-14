@@ -239,3 +239,22 @@ use_case "Checkout" {
 		t.Errorf("trigger label = %q, want %q", got, want)
 	}
 }
+
+// A return answers the most recent call made TO the returner. When the
+// returner's own call was never answered explicitly, the return still goes to
+// whoever called the returner — never back to the returner itself.
+func TestDerive_ReturnGoesToWhoeverCalledTheReturner(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places order
+        Ordering asks Billing to charge the card
+        Ordering returns the confirmation
+}
+`})
+	want := `0 trigger Customer->Ordering [places order]
+1 request Ordering->Billing [to charge the card]
+2 response Ordering->Customer [returns the confirmation]`
+	if got := summary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

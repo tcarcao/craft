@@ -32,7 +32,6 @@ skinparam rectangle {
 frame "BankGateway" as BankGateway
 frame "EmailService" as EmailService
 frame "PaymentService" as PaymentService
-frame "User" as User
 frame "UserService" as UserService
 
 ' Domain queues
@@ -42,9 +41,7 @@ queue "PaymentService events" as PaymentService_events
 BankGateway --> PaymentService
 EmailService --> UserService
 PaymentService --> BankGateway
-PaymentService --> User
 PaymentService --> PaymentService_events
 UserService --> EmailService
-UserService --> User
 
 @enduml

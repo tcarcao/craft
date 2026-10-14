@@ -113,8 +113,9 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 	triggerSite := Site{URI: uc.SourceURI, Line: t.Line, Column: t.Column}
 
 	// The call stack answers "who does an untargeted return go back to". It
-	// starts with the actor that triggered the scenario.
-	var callStack []Endpoint
+	// starts with the actor that triggered the scenario, calling the subject of
+	// the first action.
+	var callStack []frame
 
 	switch t.Type {
 	case lang.TriggerExternal:
@@ -124,11 +125,11 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 			break
 		}
 		actor := endpoint(t.Actor, t.Subject)
-		callStack = append(callStack, actor)
 		if len(sc.Actions) > 0 && sc.Actions[0].Context != "" {
 			first := sc.Actions[0]
 			it := base
 			it.Kind, it.From, it.To = Trigger, actor, endpoint(first.Context, first.From)
+			callStack = append(callStack, frame{caller: actor, callee: it.To})
 			it.Label = strings.Join(strings.Fields(t.Verb+" "+t.Connector+" "+t.Phrase), " ")
 			it.Site = triggerSite
 			it.Site.Length = utf16Len(t.Actor)
@@ -168,7 +169,7 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 				continue
 			}
 			it.Kind, it.To = Request, endpoint(a.TargetContext, a.To)
-			callStack = append(callStack, it.From)
+			callStack = append(callStack, frame{caller: it.From, callee: it.To})
 		case lang.ActionAsync:
 			if a.Event == "" {
 				continue
@@ -181,11 +182,8 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 			switch {
 			case a.TargetContext != "":
 				it.To, it.Targeted = endpoint(a.TargetContext, a.To), true
-			case len(callStack) > 0:
-				it.To = callStack[len(callStack)-1]
-				callStack = callStack[:len(callStack)-1]
 			default:
-				it.To = External
+				it.To, callStack = answer(callStack, it.From)
 			}
 		default:
 			continue
@@ -193,6 +191,28 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 		out = append(out, it)
 	}
 	return out
+}
+
+// frame is one outstanding call: caller asked callee and has not been
+// answered yet.
+type frame struct{ caller, callee Endpoint }
+
+// answer resolves an untargeted return by returner. It answers the most recent
+// call made TO the returner, which also settles every call opened after it.
+// A returner nobody called answers the latest caller other than itself, and
+// with no such caller the answer leaves the model (External).
+func answer(stack []frame, returner Endpoint) (Endpoint, []frame) {
+	for i := len(stack) - 1; i >= 0; i-- {
+		if stack[i].callee.Key == returner.Key {
+			return stack[i].caller, stack[:i]
+		}
+	}
+	for i := len(stack) - 1; i >= 0; i-- {
+		if stack[i].caller.Key != returner.Key {
+			return stack[i].caller, stack[:i]
+		}
+	}
+	return External, nil
 }
 
 // label is the action's text as diagrams show it.

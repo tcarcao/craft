@@ -29,14 +29,12 @@ skinparam rectangle {
 }
 
 ' Ungrouped subdomains
-frame "Admin" as Admin
 frame "BankGateway" as BankGateway
 frame "CacheService" as CacheService
 frame "DatabaseService" as DatabaseService
 frame "NotificationService" as NotificationService
 frame "PaymentService" as PaymentService
 frame "ReportService" as ReportService
-frame "User" as User
 
 ' Subdomain connections
 BankGateway --> PaymentService
@@ -46,8 +44,6 @@ DatabaseService --> ReportService
 NotificationService --> PaymentService
 PaymentService --> BankGateway
 PaymentService --> NotificationService
-PaymentService --> User
-ReportService --> Admin
 ReportService --> DatabaseService
 
 @enduml

@@ -26,7 +26,7 @@ flowchart LR
     Customer -- "14. checks balance" --> AccountManagement
     AccountManagement -- "15. to get current balance" --> BalanceTracking
     BalanceTracking -- "16. calculates available balance" --> BalanceTracking
-    AccountManagement -. "17. returns balance information" .-> AccountManagement
+    AccountManagement -. "17. returns balance information" .-> Customer
     TransactionValidation -- "18. detects suspicious pattern" --> TransactionValidation
     TransactionValidation -- "19. to freeze account" --> AccountManagement
     AccountManagement -- "20. applies security hold" --> AccountManagement

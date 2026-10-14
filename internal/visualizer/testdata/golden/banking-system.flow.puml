@@ -58,7 +58,7 @@ CustomerNotification -> CustomerNotification : 13. sends confirmation to both ac
 Customer --> AccountManagement : 14. checks balance
 AccountManagement ->> BalanceTracking : 15. to get current balance
 BalanceTracking -> BalanceTracking : 16. calculates available balance
-AccountManagement --> AccountManagement : 17. returns balance information
+AccountManagement --> Customer : 17. returns balance information
 TransactionValidation --> TransactionValidation : 18. detects suspicious pattern
 TransactionValidation ->> AccountManagement : 19. to freeze account
 AccountManagement -> AccountManagement : 20. applies security hold

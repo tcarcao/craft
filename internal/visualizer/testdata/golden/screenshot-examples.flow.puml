@@ -77,7 +77,7 @@ OrderManagement -> OrderManagement : 16. creates draft order
 OrderManagement ->> order_db : 17. to save draft
 Inventory -> Inventory : 18. reserves stock
 Pricing -> Pricing : 19. applies discounts
-OrderManagement --> OrderManagement : 20. returns cart summary
+OrderManagement --> Business_User : 20. returns cart summary
 Business_User --> OrderManagement : 21. confirms Purchase
 OrderManagement -> OrderManagement : 22. validates order
 Payment -> Payment : 23. processes payment
@@ -108,7 +108,7 @@ OrderManagement -> OrderManagement : 47. fetches order details
 OrderManagement ->> order_db : 48. to retrieve order
 Payment -> Payment : 49. retrieves payment history
 Shipping -> Shipping : 50. retrieves shipment status
-OrderManagement --> OrderManagement : 51. returns complete order view
+OrderManagement --> Customer_Support : 51. returns complete order view
 Customer_Support --> OrderManagement : 52. updates Order
 OrderManagement -> OrderManagement : 53. validates changes
 OrderManagement ->> order_db : 54. to update order

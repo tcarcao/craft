@@ -84,8 +84,23 @@ type Edge struct{ From, To string }
 func BuildArchitecture(doc *model.CraftDoc, its []interaction.Interaction) Architecture {
 	ns := newNodeSet(doc)
 	services := map[string]string{} // context node ID → owning service
+	// An undeclared name that only ever triggers scenarios, and never acts in
+	// one, is someone outside the system: an answer sent back to it is not an
+	// edge between contexts.
+	triggering, acting := map[string]bool{}, map[string]bool{}
+	for _, it := range its {
+		switch it.Kind {
+		case interaction.Trigger:
+			triggering[it.From.Key] = true
+		case interaction.Request, interaction.Response, interaction.Internal, interaction.Publish:
+			acting[it.From.Key] = true
+		}
+	}
+	outsider := func(e interaction.Endpoint) bool {
+		return e.Kind == "" && (isDeclaredActor(doc, e.Key) || triggering[e.Key] && !acting[e.Key])
+	}
 	inside := func(e interaction.Endpoint) bool {
-		return e != interaction.External && e.Kind != model.ParticipantActor && !(e.Kind == "" && isDeclaredActor(doc, e.Key))
+		return e != interaction.External && e.Kind != model.ParticipantActor && !outsider(e)
 	}
 	addContext := func(e interaction.Endpoint) string {
 		id := ns.add(e)

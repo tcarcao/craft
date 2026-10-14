@@ -24,7 +24,7 @@ sequenceDiagram
     Customer->>AccountManagement: checks balance
     AccountManagement->>BalanceTracking: to get current balance
     BalanceTracking->>BalanceTracking: calculates available balance
-    AccountManagement-->>AccountManagement: returns balance information
+    AccountManagement-->>Customer: returns balance information
     Note over Customer,CRON: Suspicious Activity Detection
     TransactionValidation->>TransactionValidation: detects suspicious pattern
     TransactionValidation->>AccountManagement: to freeze account

@@ -29,8 +29,6 @@ skinparam rectangle {
 }
 
 ' Ungrouped subdomains
-frame "Customer" as Customer
-frame "Offering" as Offering
 frame "Order" as Order
 frame "OrderFulfilment" as OrderFulfilment
 frame "OrderManagement" as OrderManagement
@@ -52,8 +50,6 @@ queue "VASMgmt events" as VASMgmt_events
 queue "Wallet events" as Wallet_events
 
 ' Subdomain connections
-Offering --> Customer
-Order --> Customer
 OrderFulfilment --> OrderManagement
 OrderFulfilment --> Subscription
 OrderFulfilment --> VASMgmt

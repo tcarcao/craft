@@ -1,6 +1,4 @@
 flowchart LR
-    Customer["Customer"]
-    Offering["Offering"]
     Order["Order"]
     OrderFulfilment["OrderFulfilment"]
     OrderManagement["OrderManagement"]
@@ -18,8 +16,6 @@ flowchart LR
     Susbscription_events[("Susbscription events")]
     VASMgmt_events[("VASMgmt events")]
     Wallet_events[("Wallet events")]
-    Offering --> Customer
-    Order --> Customer
     OrderFulfilment --> OrderManagement
     OrderFulfilment --> Subscription
     OrderFulfilment --> VASMgmt
