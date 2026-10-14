@@ -4,7 +4,7 @@
 
 ### Added
 - **Scheduled triggers carry their schedule.** `model.Trigger` gains `Schedule` (the unquoted expression) and `ScheduleKind` (`cron` or `every`, also exported from `pkg/craft`), serialised as `schedule` and `scheduleKind`.
-- **`craft/sema/invalid-schedule`** (error): a `when cron` expression without 5 or 6 fields of `[0-9*/,\-?LW#A-Za-z]`, or a `when every` interval that is not a positive duration (`time.ParseDuration`, or `<n>d`). The range is the string token.
+- **`craft/sema/invalid-schedule`** (error): a `when cron` expression that is neither 5 or 6 fields of `[0-9*/,\-?LW#A-Za-z]` nor one of `@yearly`, `@annually`, `@monthly`, `@weekly`, `@daily`, `@midnight`, `@hourly` (`@every` is rejected), or a `when every` interval that is not a positive duration (`time.ParseDuration`, or `<n>d`). The range is the string token.
 
 ### Changed
 - **Scheduled triggers project as actor `CRON`.** `when cron "0 7 * * 1-5"` was `actor: "cron"`, `verb: "\"0 7 * * 1-5\""`. It is now `actor: "CRON"`, `verb: ""`, `schedule`, `scheduleKind`, and `description: when cron "0 7 * * 1-5"`. `CRON` resolves like any actor in a trigger.

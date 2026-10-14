@@ -40,7 +40,7 @@ Each entry lists:
 | `craft/sema/sema-panic` | error | Unexpected panic recovered in the sema tier; analysis results may be incomplete | `internal sema error: <panic value>` | S4 |
 | `craft/sema/unresolved-reference` | error | A service's `contexts:` list names a bounded context or domain that doesn't exist in any workspace file | `service "UserService" references context "UnknownBC" which is not declared in any domain` | S5 |
 | `craft/sema/invalid-exposure-target` | error | An exposure field references an identifier of the wrong kind: `to:` must name actors; `through:` must name services; `contexts:` must name domains, bounded contexts, or services | `exposure "default": \`to:\` target "Payments" is a domain, not an actor` | S8 |
-| `craft/sema/invalid-schedule` | error | The string of a `when cron "…"` trigger is not 5 or 6 space-separated cron fields, or the string of a `when every "…"` trigger is not a positive duration (`5m`, `1h30m`, or `<n>d` for days). The range is the string | `cron expression must have 5 or 6 fields like "0 7 * * 1-5", got "0 7 * *"` | 2.22 |
+| `craft/sema/invalid-schedule` | error | The string of a `when cron "…"` trigger is not 5 or 6 space-separated cron fields or one of the macros `@yearly`/`@annually`/`@monthly`/`@weekly`/`@daily`/`@midnight`/`@hourly` (`@every` is rejected: use `when every`), or the string of a `when every "…"` trigger is not a positive duration (`5m`, `1h30m`, or `<n>d` for days). The range is the string | `cron expression must have 5 or 6 fields like "0 7 * * 1-5" (or a macro such as @daily), got "0 7 * *"` | 2.22 |
 
 ---
 

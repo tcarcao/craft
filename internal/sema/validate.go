@@ -858,6 +858,13 @@ func duplicateTagBlockDiag(uri, ucName string, tb syntax.TagsBlock, li green.Lin
 
 // ── invalid-schedule ──────────────────────────────────────────────────────────
 
+// cronMacros are the descriptors accepted in place of the fields. `@every` is
+// deliberately absent: an interval is the `every` form.
+var cronMacros = map[string]bool{
+	"@yearly": true, "@annually": true, "@monthly": true, "@weekly": true,
+	"@daily": true, "@midnight": true, "@hourly": true,
+}
+
 var cronFieldRe = regexp.MustCompile(`^[0-9*/,\-?LW#A-Za-z]+$`)
 
 // scheduleError returns why a scheduled trigger's expression is malformed, or
@@ -866,9 +873,18 @@ var cronFieldRe = regexp.MustCompile(`^[0-9*/,\-?LW#A-Za-z]+$`)
 func scheduleError(kind lang.ScheduleKind, expr string) string {
 	switch kind {
 	case lang.ScheduleCron:
+		if strings.HasPrefix(expr, "@") {
+			if cronMacros[expr] {
+				return ""
+			}
+			if strings.HasPrefix(expr, "@every") {
+				return fmt.Sprintf("cron macro %q is not accepted; @every is not accepted; use when every \"5m\" for an interval", expr)
+			}
+			return fmt.Sprintf("unknown cron macro %q; use @yearly, @annually, @monthly, @weekly, @daily, @midnight or @hourly, or 5 or 6 fields like \"0 7 * * 1-5\"", expr)
+		}
 		fields := strings.Fields(expr)
 		if len(fields) < 5 || len(fields) > 6 {
-			return fmt.Sprintf("cron expression must have 5 or 6 fields like \"0 7 * * 1-5\", got %q", expr)
+			return fmt.Sprintf("cron expression must have 5 or 6 fields like \"0 7 * * 1-5\" (or a macro such as @daily), got %q", expr)
 		}
 		for _, f := range fields {
 			if !cronFieldRe.MatchString(f) {

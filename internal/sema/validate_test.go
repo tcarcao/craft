@@ -323,6 +323,7 @@ func scheduleDiags(t *testing.T, trigger string) []model.Diagnostic {
 func TestValidate_Schedule_Valid(t *testing.T) {
 	for _, tr := range []string{
 		`cron "0 7 * * 1-5"`, `cron "0 0 7 * * 1-5"`, `cron "*/5 * * * *"`, `cron "0 0 ? * MON#2"`, `cron "0 12 L * *"`,
+		`cron "@daily"`, `cron "@yearly"`, `cron "@annually"`, `cron "@monthly"`, `cron "@weekly"`, `cron "@midnight"`, `cron "@hourly"`,
 		`every "5m"`, `every "1h30m"`, `every "2d"`, `every "90s"`,
 	} {
 		assertNoDiag(t, scheduleDiags(t, tr), "invalid-schedule")
@@ -331,7 +332,7 @@ func TestValidate_Schedule_Valid(t *testing.T) {
 
 func TestValidate_Schedule_Invalid(t *testing.T) {
 	for _, tr := range []string{
-		`cron "0 7 * *"`, `cron "0 0 0 7 * * 1"`, `cron "0 7 * * $"`, `cron ""`,
+		`cron "0 7 * *"`, `cron "0 0 0 7 * * 1"`, `cron "0 7 * * $"`, `cron ""`, `cron "@every"`, `cron "@every 5m"`, `cron "@reboot"`, `cron "@daily *"`,
 		`every "soon"`, `every "0s"`, `every "-5m"`, `every "0d"`, `every "xd"`, `every ""`,
 	} {
 		d := scheduleDiags(t, tr)
@@ -344,6 +345,8 @@ func TestValidate_Schedule_MessageNamesTheForm(t *testing.T) {
 	for _, c := range []struct{ tr, want string }{
 		{`cron "0 7 * *"`, `cron expression must have 5 or 6 fields like "0 7 * * 1-5"`},
 		{`every "soon"`, `like "5m"`},
+		{`cron "@every 5m"`, `@every is not accepted; use when every "5m"`},
+		{`cron "@reboot"`, `@daily`},
 	} {
 		var msg string
 		for _, d := range scheduleDiags(t, c.tr) {
