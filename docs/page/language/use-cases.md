@@ -209,6 +209,21 @@ A bounded context belongs to one service. Listing it in two services' `contexts:
 A scenario is a straight line of steps. Two constructs let it say more: `alt` and `opt` blocks inside a scenario, and an optional `scenario "name"` line before `when`.
 
 ```craft
+actors {
+    service CRON
+}
+
+services {
+    billing {
+        contexts: subscriptions
+    }
+}
+
+domain subscriptions {
+    plan
+    nmf_monetization
+}
+
 use_case "Resolve a subscriber's billing cycle range" {
     scenario "daily snapshot"
     when CRON fires the daily snapshot schedule
@@ -233,11 +248,11 @@ Blocks use the offside rule: a header (`alt`, `else`, `opt`) owns every followin
 - **`opt`** for a step, or a few steps, that run only under a condition. It has no `else`.
 - **`scenario "name"`** for different ways into the use case: the same use case started by a cron job and by a user. Each way in is its own `when`.
 
-Do not restart a flow from its trigger to describe an outcome. Use `alt`, and the steps that led to the branch point stay in the diagram.
+Do not restart a flow from its trigger to describe an outcome. Use `alt` instead; the steps before the branch point stay in the diagram.
 
 ### In diagrams
 
-A sequence diagram draws native blocks. The use case above renders as:
+A sequence diagram draws native blocks. The use case above renders as (skinparam lines omitted):
 
 ```plantuml
 @startuml

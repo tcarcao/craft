@@ -16,8 +16,11 @@
 - **Syntax diagnostics**: `craft/syntax/empty-branch`, `inconsistent-indent`, `orphan-else`, `missing-label` and `scenario-without-when`, plus `unexpected-token` for tokens after a label and for a verbless action line.
 - **`craft/lint/indistinguishable-scenarios`** (warning): two scenarios with the same trigger text where one has no name.
 - **Language server**: scenario and block outline, folding per block, hover on a header (`alt block: N branches`), and completion snippets for `scenario`, `alt`, `else` and `opt`.
-- **`Interaction.Branch []BranchRef`** gives the path of blocks around an interaction, and `UseCaseIndex` its use case. Each branch of an `alt` starts from the call stack at the `alt`; after a block the stack is restored.
+- **`Interaction.Branch []BranchRef`** (internal, `internal/interaction`, not `pkg/craft` API) gives the path of blocks around an interaction, and `UseCaseIndex` (also internal) its use case. Each branch of an `alt` starts from the call stack at the `alt`; after a block the stack is restored.
 - **Model and `pkg/craft` types**: `Step`, `Block`, `Branch`, `BlockKind` (`alt`, `opt`), `Scenario.Name`, `Scenario.Actions()`, `EachAction`.
+
+### Fixed
+- **Sequence diagrams no longer mix up use cases with the same name declared in different files.** Interactions are matched to use cases by use-case index.
 
 ### Changed — diagrams
 - **Sequence diagrams draw native `alt` / `else` / `opt` / `end` blocks** (PlantUML and Mermaid) inside the scenario frame. A branch with no drawable message keeps its header.

@@ -16,7 +16,7 @@ Each entry lists:
 
 | Code | Severity | Meaning | Example message | Origin |
 |------|----------|---------|-----------------|--------|
-| `craft/syntax/unexpected-token` | error | Token found where a different token was expected | `unexpected "domain", expected actor type (user/system/service)` | S3 |
+| `craft/syntax/unexpected-token` | error | Token found where a different token was expected, including a verbless action line and tokens after an `alt`/`opt`/`else` label | `unexpected "domain", expected actor type (user/system/service)`; `action "x" has no verb: write \`x <verb> …\` on one line`; `unexpected "…", expected end of line after the block label` | S3 |
 | `craft/syntax/unclosed-block` | error | A `{` was never closed before EOF | `unclosed actors block (missing \`}\`)` | S3 |
 | `craft/syntax/not-yet-implemented` | warning | A construct is recognised by the grammar but not yet supported by parser v2. The tool is behind; the file is fine | `a trailing [operation] annotation is not recognised on a line whose phrase contains braces` | S3 |
 | `craft/syntax/skipped-construct` | error | A token could not be placed at all, and the region top-level recovery discarded because of it is absent from the model | `unexpected "when" at top level: lines 6-8 were skipped and are not part of the model` | 2.17.2 |
