@@ -13,6 +13,7 @@ import (
 // the result is non-empty.
 func TestProtocolVerbs(t *testing.T) {
 	want := []string{
+		craft.OpVerbAddr,
 		craft.OpVerbDELETE,
 		craft.OpVerbGET,
 		craft.OpVerbGRPC,
@@ -22,6 +23,7 @@ func TestProtocolVerbs(t *testing.T) {
 		craft.OpVerbPOST,
 		craft.OpVerbPUT,
 		craft.OpVerbQUERY,
+		craft.OpVerbSQL,
 		craft.OpVerbTOPIC,
 	}
 	if got := craft.ProtocolVerbs(); !reflect.DeepEqual(got, want) {

@@ -90,6 +90,7 @@ const (
 var protocolVerbs = map[string]bool{
 	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
 	"HEAD": true, "OPTIONS": true, "GRPC": true, "TOPIC": true, "QUERY": true,
+	OpVerbAddr: true, OpVerbSQL: true,
 }
 
 // ProtocolVerbs returns the protocol verbs in sorted order.

@@ -1,14 +1,16 @@
 package lang
 
 import (
+	"slices"
 	"sort"
 	"testing"
 )
 
 func TestProtocolVerbsAreSorted(t *testing.T) {
 	got := ProtocolVerbs()
-	if len(got) != 10 || !sort.StringsAreSorted(got) {
-		t.Errorf("ProtocolVerbs() = %v; want the 10 verbs, sorted", got)
+	want := []string{"ADDR", "DELETE", "GET", "GRPC", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "QUERY", "SQL", "TOPIC"}
+	if !slices.Equal(got, want) || !sort.StringsAreSorted(got) {
+		t.Errorf("ProtocolVerbs() = %v; want %v", got, want)
 	}
 }
 

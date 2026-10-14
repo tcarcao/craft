@@ -1,0 +1,99 @@
+{
+  "useCases": [
+    {
+      "name": "Seller resumes a selling draft",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "resumes",
+            "connector": "a",
+            "phrase": "selling draft",
+            "description": "when Seller resumes a selling draft",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 12,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "mobile",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "agenticSellingStart",
+                  "text": "agenticSellingStart"
+                },
+                "connector": "to",
+                "phrase": "open a selling chat session",
+                "description": "mobile asks graphql to open a selling chat session",
+                "line": 13,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/mobile"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "graphql",
+                "targetContext": "ShaperAgent",
+                "ref": "ShaperAgent",
+                "connector": "to",
+                "phrase": "initiate the chat",
+                "inferred": true,
+                "description": "graphql asks ShaperAgent to initiate the chat",
+                "line": 14,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "ShaperAgent"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 11
+    }
+  ],
+  "domains": [
+    {
+      "name": "seller",
+      "boundedContexts": [
+        "mobile",
+        "graphql"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "ShaperAgent",
+      "type": "system",
+      "line": 3
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+actors {
+    system ObjectStore
+}
+
+domain obido {
+    obidoanalytics
+}
+
+use_case "U" {
+    when obidoanalytics listens sns.market-refreshed
+        obidoanalytics asks ObjectStore to take the snapshot  [ADDR]
+}

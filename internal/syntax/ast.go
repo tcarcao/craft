@@ -2280,9 +2280,15 @@ func opAnnotationOffset(n SyntaxNode) green.TextSize {
 // `[POST /v1/charges]` annotations, downgrade typed event refs to the
 // deprecated quoted-string form, and move a returns target into the phrase.
 // The label now exists only where it is consumed, in projection.go.
+//
+// An `inferred` bracket head is kept: `[inferred POST /x]`, `[inferred]`.
 func (a ActionDecl) SourceText() string {
 	body := a.SourceTextWithoutOp()
-	if op := a.OpText(); op != "" {
+	op := a.OpText()
+	if a.IsInferred() {
+		op = strings.TrimSpace(lang.OpInferred + " " + op)
+	}
+	if op != "" {
 		return body + " [" + op + "]"
 	}
 	return body
@@ -2376,6 +2382,17 @@ func (a ActionDecl) OpVerb() string { return opVerbOf(a.node) }
 // `[op1/op2/op3]`. Returns "" when the action has no annotation.
 func (a ActionDecl) OpPayload() string { return opPayloadOf(a.node) }
 
+// IsInferred reports whether the action's bracket opens with `inferred`: the
+// hop was inferred from names, configuration or convention (spec §9.1). The
+// marker is not part of OpText.
+func (a ActionDecl) IsInferred() bool { return opInferredOf(a.node) }
+
+// opInferredOf reports whether n's operation annotation has an `inferred` head.
+func opInferredOf(n SyntaxNode) bool {
+	op := opAnnotationOf(n)
+	return op != nil && op.ChildToken(SyntaxKindKwInferred) != nil
+}
+
 // opAnnotationOf returns n's operation annotation child node, or nil. Actions
 // and receive triggers share these op views.
 func opAnnotationOf(n SyntaxNode) *SyntaxNode { return n.ChildNode(SyntaxKindOpAnnotation) }
@@ -2387,7 +2404,8 @@ func opTextOf(n SyntaxNode) string {
 	}
 	var sb strings.Builder
 	for _, tok := range op.AllTokens() {
-		if tok.Kind() == SyntaxKindLBracket || tok.Kind() == SyntaxKindRBracket {
+		// The `inferred` head is a marker on the action, not operation text.
+		if k := tok.Kind(); k == SyntaxKindLBracket || k == SyntaxKindRBracket || k == SyntaxKindKwInferred {
 			continue
 		}
 		sb.WriteString(tok.Text())

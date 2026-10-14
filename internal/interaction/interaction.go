@@ -95,7 +95,10 @@ type Interaction struct {
 	// OneOf is set on each Publish of a `notifies one of`: one of the
 	// action's events is published per run, chosen at run time.
 	OneOf bool
-	Site  Site
+	// Inferred is copied from the action: the hop was inferred, not read in
+	// code.
+	Inferred bool
+	Site     Site
 	// Targeted is true for a Response written with an explicit `to` target,
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
@@ -442,6 +445,7 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 	it.Label = label(a)
 	it.Operation = a.Operation
 	it.Operations = a.Operations
+	it.Inferred = a.Inferred
 	it.Site = Site{URI: w.uri, Line: a.Line, Column: a.Column, Length: utf16Len(a.Context)}
 	switch a.Type {
 	case lang.ActionSync:

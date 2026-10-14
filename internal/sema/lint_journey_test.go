@@ -276,3 +276,28 @@ func TestLint_OneOfItemsAreEachPublished(t *testing.T) {
 		t.Errorf("dead = %v", dead)
 	}
 }
+
+func TestLint_EgressOnInternalStep(t *testing.T) {
+	bad := "use_case \"U\" {\n  when O does\n    o reads the tables  [SQL investment]\n    o returns the rows  [ADDR api.example.com]\n}"
+	good := "use_case \"U\" {\n  when O does\n    o asks front for the tables  [SQL investment]\n}"
+	if n := lintCodes(t, bad, "craft/lint/egress-on-internal-step"); n != 2 {
+		t.Errorf("bad: %d", n)
+	}
+	if n := lintCodes(t, good, "craft/lint/egress-on-internal-step"); n != 0 {
+		t.Errorf("good: %d", n)
+	}
+}
+
+func TestLint_UnquotedAddress(t *testing.T) {
+	cut := "use_case \"U\" {\n  when O does\n    o asks s to take it  [ADDR //cdn.example.com/x]\n}"
+	whole := "use_case \"U\" {\n  when O does\n    o asks s to take it  [ADDR https://cdn.example.com/x]\n}"
+	quoted := "use_case \"U\" {\n  when O does\n    o asks s to take it  [ADDR \"//cdn.example.com/x\"]\n}"
+	if n := lintCodes(t, cut, "craft/lint/unquoted-address"); n != 1 {
+		t.Errorf("cut: %d", n)
+	}
+	for _, src := range []string{whole, quoted} {
+		if n := lintCodes(t, src, "craft/lint/unquoted-address"); n != 0 {
+			t.Errorf("%d:\n%s", n, src)
+		}
+	}
+}

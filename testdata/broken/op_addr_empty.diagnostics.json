@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/empty-op-annotation",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 10,
+        "character": 62
+      },
+      "end": {
+        "line": 10,
+        "character": 68
+      }
+    }
+  }
+]

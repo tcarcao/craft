@@ -1,0 +1,76 @@
+{
+  "useCases": [
+    {
+      "name": "obido analytics refreshes the market structure",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "schedule": "0 18 * * *",
+            "scheduleKind": "cron",
+            "description": "when cron \"0 18 * * *\"",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 12,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "obidoanalytics",
+                "targetContext": "front",
+                "ref": "front",
+                "operation": {
+                  "verb": "SQL",
+                  "payload": "investment flat city region developer",
+                  "text": "SQL investment flat city region developer"
+                },
+                "connector": "for",
+                "phrase": "the city, region and developer graph",
+                "description": "obidoanalytics asks front for the city, region and developer graph",
+                "line": 13,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "obido/obidoanalytics"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "obido/front"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 11
+    }
+  ],
+  "domains": [
+    {
+      "name": "obido",
+      "boundedContexts": [
+        "obidoanalytics",
+        "front"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 2
+    },
+    {
+      "name": "ObjectStore",
+      "type": "system",
+      "line": 3
+    }
+  ]
+}

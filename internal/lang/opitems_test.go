@@ -48,3 +48,15 @@ func TestParseOperationItem(t *testing.T) {
 		}
 	}
 }
+
+func TestParseOperationItem_Egress(t *testing.T) {
+	for _, c := range []struct{ in, verb, payload string }{
+		{`ADDR "https://a.b/c"`, "ADDR", "https://a.b/c"},
+		{"ADDR api.example.com", "ADDR", "api.example.com"},
+		{"SQL investment flat", "SQL", "investment flat"},
+	} {
+		if v, p := ParseOperationItem(c.in); v != c.verb || p != c.payload {
+			t.Errorf("%q: got (%q, %q)", c.in, v, p)
+		}
+	}
+}

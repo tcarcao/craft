@@ -1636,7 +1636,7 @@ func (p *Parser) parseAction() []model.Diagnostic {
 		start := p.opAnnotationStart(actionLine)
 		p.collectPhrase(actionLine, start)
 		if start >= 0 {
-			diags = append(diags, p.parseOpAnnotation()...)
+			diags = append(diags, p.parseActionOpAnnotation()...)
 		}
 		p.builder.FinishNode()
 		return diags
@@ -1689,7 +1689,7 @@ func (p *Parser) parseAsksAction(line int) []model.Diagnostic {
 	start := p.opAnnotationStart(line)
 	p.collectPhrase(line, start)
 	if start >= 0 {
-		diags = append(diags, p.parseOpAnnotation()...)
+		diags = append(diags, p.parseActionOpAnnotation()...)
 	}
 	return diags
 }
@@ -1755,7 +1755,7 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 		start = p.opAnnotationStart(line)
 	}
 	if start == 0 {
-		diags = append(diags, p.parseOpAnnotation()...)
+		diags = append(diags, p.parseActionOpAnnotation()...)
 	}
 	return diags
 }
@@ -1793,7 +1793,7 @@ func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 	start := p.opAnnotationStart(line)
 	p.collectPhrase(line, start)
 	if start >= 0 {
-		diags = append(diags, p.parseOpAnnotation()...)
+		diags = append(diags, p.parseActionOpAnnotation()...)
 	}
 	return diags
 }
@@ -1864,13 +1864,32 @@ scan:
 // emitted as SyntaxKindOpVerb, and everything up to the closing `]` is swept in
 // verbatim as payload. An unrecognised head word is just the first payload
 // token, which is what keeps `[op1/op2/op3]` and `[legacy-txn-44]` legal.
-func (p *Parser) parseOpAnnotation() []model.Diagnostic {
+//
+// This form serves a receives trigger and a surface line, where `inferred` is
+// an ordinary payload word (spec §9.2).
+func (p *Parser) parseOpAnnotation() []model.Diagnostic { return p.parseOpAnnotationWith(false) }
+
+// parseActionOpAnnotation parses an action's bracket, where `inferred` may
+// head it: `[inferred POST /x]`, or `[inferred]` alone (spec §9.1).
+func (p *Parser) parseActionOpAnnotation() []model.Diagnostic { return p.parseOpAnnotationWith(true) }
+
+// parseOpAnnotationWith is parseOpAnnotation; allowInferred lets `inferred`
+// head the bracket. It is the head only when whitespace or `]` follows it, so
+// `[inferred, x]` keeps it as the payload of a list item.
+func (p *Parser) parseOpAnnotationWith(allowInferred bool) []model.Diagnostic {
 	var diags []model.Diagnostic
 	p.builder.StartNode(SyntaxKindOpAnnotation)
 	lbTok := p.consumeAs(SyntaxKindLBracket)
 
-	if rbTok := p.peek(); rbTok.Type == lexer.TokenRBracket {
+	bodyStart := lbTok.End
+	if t, next := p.peek(), p.peekAt(1); allowInferred && t.Type == lexer.TokenIdent && t.Value == lang.OpInferred &&
+		(next.Type == lexer.TokenRBracket || next.Offset > t.End) {
+		bodyStart = p.consumeAs(SyntaxKindKwInferred).End
+	}
+
+	if rbTok := p.peek(); rbTok.Type == lexer.TokenRBracket && bodyStart == lbTok.End {
 		// Empty `[]` annotation: the body is missing, not empty-but-valid.
+		// `[inferred]` is legal: the hop is inferred, its operation unknown.
 		diags = append(diags, p.diagEmptyOpAnnotation(lbTok, rbTok))
 	}
 
@@ -1895,16 +1914,8 @@ func (p *Parser) parseOpAnnotation() []model.Diagnostic {
 	if rbTok := p.peek(); rbTok.Type == lexer.TokenRBracket {
 		rbLine = rbTok.Line
 		p.consumeAs(SyntaxKindRBracket)
-		// An operation list (`[a, b]`, spec §8.1) must not hold an empty item.
-		if rbTok.Offset > lbTok.End {
-			if items := lang.SplitOperationItems(p.src[lbTok.End:rbTok.Offset]); len(items) > 1 {
-				for _, it := range items {
-					if it.Text == "" {
-						diags = append(diags, p.diagEmptyOpAnnotationItem(lbTok, rbTok))
-						break
-					}
-				}
-			}
+		if rbTok.Offset > bodyStart {
+			diags = append(diags, p.checkOpItems(lbTok, rbTok, p.src[bodyStart:rbTok.Offset])...)
 		}
 	} else {
 		// Defensive: opAnnotationStart guarantees the `]` exists.
@@ -2557,11 +2568,28 @@ func (p *Parser) diagEmptyOpAnnotation(lb, rb lexer.Token) model.Diagnostic {
 	}
 }
 
+// checkOpItems reports, once per bracket, an empty item of a list or an
+// ADDR/SQL item with nothing after the verb (spec §8.4, §9.3). body is the
+// bracket text after any `inferred` head.
+func (p *Parser) checkOpItems(lb, rb lexer.Token, body string) []model.Diagnostic {
+	items := lang.SplitOperationItems(body)
+	for _, it := range items {
+		if it.Text == "" && len(items) > 1 {
+			return []model.Diagnostic{p.diagEmptyOpAnnotationItem(lb, rb)}
+		}
+		if verb, payload := lang.ParseOperationItem(it.Text); (verb == lang.OpVerbAddr || verb == lang.OpVerbSQL) && payload == "" {
+			return []model.Diagnostic{p.diagEmptyOpAnnotationItem(lb, rb)}
+		}
+	}
+	return nil
+}
+
 // diagEmptyOpAnnotationItem reports an empty item of an operation list
-// (`[a, , b]`, `[a, ]`), over the whole bracket.
+// (`[a, , b]`, `[a, ]`), or an ADDR/SQL item with nothing after its verb,
+// over the whole bracket.
 func (p *Parser) diagEmptyOpAnnotationItem(lb, rb lexer.Token) model.Diagnostic {
 	d := p.diagEmptyOpAnnotation(lb, rb)
-	d.Message = "an operation bracket item is empty; write each item, e.g. [CreateApiKey, CreateUsagePlanKey]"
+	d.Message = "an operation bracket item is empty; write each item, e.g. [CreateApiKey, CreateUsagePlanKey], or [ADDR \"https://…\"] / [SQL <table>]"
 	return d
 }
 

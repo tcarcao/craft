@@ -1049,3 +1049,26 @@ use_case "Ship" {
 		t.Errorf("publishes = %v", pubs)
 	}
 }
+
+func TestDerive_InferredIsCopiedOntoTheInteraction(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge  [inferred charge]
+        Ordering asks Billing to refund  [refund]
+}
+`})
+	var reqs []string
+	for _, it := range its {
+		if it.Kind == interaction.Request {
+			text := ""
+			if it.Operation != nil {
+				text = it.Operation.Text
+			}
+			reqs = append(reqs, fmt.Sprintf("%s %v", text, it.Inferred))
+		}
+	}
+	if want := []string{"charge true", "refund false"}; !slices.Equal(reqs, want) {
+		t.Errorf("requests = %v", reqs)
+	}
+}

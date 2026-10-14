@@ -487,6 +487,10 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 	var operation *model.Operation
 	if text := a.OpText(); text != "" {
 		operation = &model.Operation{Verb: a.OpVerb(), Payload: a.OpPayload(), Text: text}
+		if operation.Verb == lang.OpVerbAddr {
+			// Payload holds the address without quotes (spec §9.2).
+			operation.Payload = lang.UnquoteAddress(operation.Payload)
+		}
 	}
 	// A bracket of two or more items is also kept item by item (spec §8.2);
 	// Operation keeps the whole body.
@@ -514,6 +518,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		Ref:           a.ObjectRef(),
 		Operation:     operation,
 		Operations:    operations,
+		Inferred:      a.IsInferred(),
 		Store:         store,
 		Connector:     connector,
 		Phrase:        phrase,

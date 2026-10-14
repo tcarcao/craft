@@ -1,0 +1,15 @@
+actors {
+    user Seller
+    system ShaperAgent
+}
+
+domain seller {
+    mobile
+    graphql
+}
+
+use_case "Seller resumes a selling draft" {
+    when Seller resumes a selling draft
+        mobile asks graphql to open a selling chat session  [agenticSellingStart]
+        graphql asks ShaperAgent to initiate the chat       [inferred]
+}

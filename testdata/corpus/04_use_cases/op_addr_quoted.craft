@@ -1,0 +1,14 @@
+actors {
+    system CRON
+    system ObjectStore
+}
+
+domain obido {
+    obidoanalytics
+    front
+}
+
+use_case "obido analytics refreshes the market structure" {
+    when cron "0 18 * * *"
+        obidoanalytics asks ObjectStore to take the refreshed snapshot  [ADDR "SNAPSHOT_DESTINATION"]
+}

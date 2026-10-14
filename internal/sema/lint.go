@@ -62,6 +62,8 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintRepeatedRequests(perFileTrees, ws, lis)...)
 	diags = append(diags, lintDuplicateEventInList(perFileTrees, lis)...)
 	diags = append(diags, lintOneOfSingleEvent(perFileTrees, lis)...)
+	diags = append(diags, lintEgressOnInternalStep(perFileTrees, lis)...)
+	diags = append(diags, lintUnquotedAddress(perFileTrees, lis)...)
 	return diags
 }
 
@@ -935,6 +937,87 @@ func lintOneOfSingleEvent(perFileTrees map[string]syntax.SyntaxNode, lis map[str
 						Range: model.Range{
 							Start: model.Position{Line: lineToLSP(line), Character: colToLSP(start)},
 							End:   model.Position{Line: lineToLSP(line), Character: colToLSP(end)},
+						},
+					})
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── egress-on-internal-step ───────────────────────────────────────────────────
+// Warning: an internal or return action whose bracket has an ADDR or SQL
+// item. Both name a call to another party, so the step should be an asks
+// (spec §9.3).
+
+func lintEgressOnInternalStep(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li, hasLI := lis[uri]
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				for _, a := range sc.Actions() {
+					if k := a.Kind(); k != lang.ActionInternal && k != lang.ActionReturn {
+						continue
+					}
+					for _, it := range lang.SplitOperationItems(a.OpText()) {
+						if verb, _ := lang.ParseOperationItem(it.Text); verb == lang.OpVerbAddr || verb == lang.OpVerbSQL {
+							diags = append(diags, model.Diagnostic{
+								Code:      "craft/lint/egress-on-internal-step",
+								Message:   fmt.Sprintf("`[%s …]` names a call to another party; write `%s asks <target> … [%s …]`, declaring the target as a `system` actor if it is outside the estate", verb, a.SubjectName(), verb),
+								Severity:  model.SeverityWarning,
+								SourceURI: uri,
+								Range:     annotationRange(a.OpAnnotation(), li, hasLI),
+							})
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── unquoted-address ──────────────────────────────────────────────────────────
+// Warning: an action whose phrase ends in `[ADDR` because a `//` after a
+// space opened a comment and cut the bracket (spec §9.3; plan correction 2).
+
+func lintUnquotedAddress(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li, hasLI := lis[uri]
+		if !hasLI {
+			continue // the check reads the comment, which only the source holds
+		}
+		src := li.Src()
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				for _, a := range sc.Actions() {
+					if a.OpAnnotation() != nil || !strings.HasSuffix(strings.TrimSpace(a.PhraseText()), "[ADDR") {
+						continue
+					}
+					line := a.Line(li)
+					start := int(li.OffsetFromUTF16(line, 0))
+					end := strings.IndexByte(src[start:], '\n')
+					if end < 0 {
+						end = len(src) - start
+					}
+					text := src[start : start+end]
+					at := strings.LastIndex(text, "[ADDR")
+					if at < 0 || !strings.Contains(text[at:], "//") {
+						continue
+					}
+					col := lspLen(text[:at])
+					diags = append(diags, model.Diagnostic{
+						Code:      "craft/lint/unquoted-address",
+						Message:   "the address was cut by a `//` comment; quote it: `[ADDR \"//…\"]`",
+						Severity:  model.SeverityWarning,
+						SourceURI: uri,
+						Range: model.Range{
+							Start: model.Position{Line: lineToLSP(line), Character: col},
+							End:   model.Position{Line: lineToLSP(line), Character: col + len("[ADDR")},
 						},
 					})
 				}
