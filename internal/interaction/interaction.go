@@ -102,6 +102,8 @@ type Interaction struct {
 	// Targeted is true for a Response written with an explicit `to` target,
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
+	// Stream is set on a Response from a `returns stream`.
+	Stream bool
 	// Branch is the path from the outermost block inward to the branch the
 	// action sits in; nil outside blocks. Listen always has a nil Branch, and
 	// so does the trigger of a `receives` scenario. Any other Trigger has one
@@ -142,7 +144,21 @@ type BranchRef struct {
 // Derive lists every interaction of doc in source order: use case, scenario,
 // step. A listener's interactions come after its trigger, one per publisher of
 // the event, publishers in source order.
-func Derive(doc *model.CraftDoc) []Interaction {
+func Derive(doc *model.CraftDoc) []Interaction { return derive(doc, nil) }
+
+// AnsweredRequests maps every `returns stream` action of doc to the ID of
+// the request it answers (see model.Action.Answers), by the same call-stack
+// walk Derive uses; "" when it answers the trigger's actor, the unobserved
+// caller or nobody. The keys are the doc's own *Action pointers.
+func AnsweredRequests(doc *model.CraftDoc) map[*model.Action]string {
+	answers := map[*model.Action]string{}
+	derive(doc, answers)
+	return answers
+}
+
+// derive is Derive; a non-nil answers also collects, per streaming return,
+// the request it answers.
+func derive(doc *model.CraftDoc, answers map[*model.Action]string) []Interaction {
 	publishers := map[string][]Endpoint{}
 	for _, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
@@ -162,14 +178,14 @@ func Derive(doc *model.CraftDoc) []Interaction {
 	var out []Interaction
 	for i, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
-			out = append(out, deriveScenario(uc, i, sc, publishers)...)
+			out = append(out, deriveScenario(uc, i, sc, publishers, answers)...)
 		}
 	}
 	nameEndpoints(out)
 	return out
 }
 
-func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers map[string][]Endpoint) []Interaction {
+func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers map[string][]Endpoint, answers map[*model.Action]string) []Interaction {
 	var out []Interaction
 	actions := sc.Actions()
 	base := Interaction{UseCase: uc.Name, UseCaseIndex: ucIndex, Scenario: sc.ID}
@@ -281,7 +297,7 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 		out = append(out, it)
 	}
 
-	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, trigger: trigger, reached: reached, out: out}
+	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, trigger: trigger, reached: reached, out: out, answers: answers}
 	w.walk(sc.Steps, nil, trigger != nil)
 	return w.out
 }
@@ -319,6 +335,11 @@ type walker struct {
 	reached string
 	step    int
 	out     []Interaction
+	// answers, when non-nil, collects the request each streaming return
+	// answers (AnsweredRequests); answered is that request for the action
+	// just derived.
+	answers  map[*model.Action]string
+	answered string
 }
 
 // walk visits steps that sit at path. opening is true when the steps are where
@@ -360,6 +381,9 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 			// order. TestSequenceStepsMatchInteractionSteps guards the pairing.
 			w.step++
 			w.action(*st.Action, path)
+			if w.answers != nil && st.Action.Stream {
+				w.answers[st.Action] = w.answered
+			}
 		}
 	}
 	return triggered
@@ -453,7 +477,7 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 			return
 		}
 		it.Kind, it.To = Request, endpoint(a.TargetContext, a.To)
-		w.callStack = append(w.callStack, frame{caller: it.From, callee: it.To})
+		w.callStack = append(w.callStack, frame{caller: it.From, callee: it.To, request: a.ID})
 	case lang.ActionAsync:
 		// One Publish per event; a `notifies one of` publishes each of its
 		// events at the same step (spec §8.5). A repeated item
@@ -475,12 +499,15 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 	case lang.ActionInternal:
 		it.Kind, it.To = Internal, it.From
 	case lang.ActionReturn:
-		it.Kind = Response
+		it.Kind, it.Stream = Response, a.Stream
 		switch {
 		case a.TargetContext != "":
 			it.To, it.Targeted = endpoint(a.TargetContext, a.To), true
+			w.answered = openRequest(w.callStack, it.To, it.From)
 		default:
-			it.To, w.callStack = answer(w.callStack, it.From)
+			var settled frame
+			it.To, w.callStack, settled = answer(w.callStack, it.From)
+			w.answered = settled.request
 		}
 	default:
 		return
@@ -490,24 +517,40 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 
 // frame is one outstanding call: caller asked callee and has not been
 // answered yet.
-type frame struct{ caller, callee Endpoint }
+type frame struct {
+	caller, callee Endpoint
+	request        string // the asks action's ID; "" for a trigger frame
+}
 
 // answer resolves an untargeted return by returner. It answers the most recent
 // call made TO the returner, which also settles every call opened after it.
 // A returner nobody called answers the latest caller other than itself, and
-// with no such caller the answer leaves the model (External).
-func answer(stack []frame, returner Endpoint) (Endpoint, []frame) {
+// with no such caller the answer leaves the model (External). It also
+// returns the frame it settled (zero for External).
+func answer(stack []frame, returner Endpoint) (Endpoint, []frame, frame) {
 	for i := len(stack) - 1; i >= 0; i-- {
 		if stack[i].callee.Key == returner.Key {
-			return stack[i].caller, stack[:i]
+			return stack[i].caller, stack[:i], stack[i]
 		}
 	}
 	for i := len(stack) - 1; i >= 0; i-- {
 		if stack[i].caller.Key != returner.Key {
-			return stack[i].caller, stack[:i]
+			return stack[i].caller, stack[:i], stack[i]
 		}
 	}
-	return External, nil
+	return External, nil, frame{}
+}
+
+// openRequest returns the request ID of the most recent open call from
+// caller to callee, without settling it; "" when there is none (plan
+// correction 12: a targeted stream answers that call).
+func openRequest(stack []frame, caller, callee Endpoint) string {
+	for i := len(stack) - 1; i >= 0; i-- {
+		if stack[i].caller.Key == caller.Key && stack[i].callee.Key == callee.Key {
+			return stack[i].request
+		}
+	}
+	return ""
 }
 
 // label is the action's text as diagrams show it.
@@ -529,6 +572,9 @@ func label(a model.Action) string {
 		}
 		return withConnector(a.Phrase)
 	case lang.ActionReturn:
+		if a.Stream {
+			return strings.TrimSpace("streams " + withConnector(a.Phrase))
+		}
 		return strings.TrimSpace("returns " + withConnector(a.Phrase))
 	}
 	return ""

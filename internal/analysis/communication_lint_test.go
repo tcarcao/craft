@@ -282,3 +282,24 @@ use_case "Test" {
 		t.Fatalf("expected 0 craft/lint/unclassified-communication, got %d: %+v", n, diags)
 	}
 }
+
+func TestStreamWithoutCaller(t *testing.T) {
+	head := "domain shop {\n  Ordering\n  Billing\n  Shipping\n}\n"
+	bad := head + "use_case \"Label\" {\n  when Shipping listens shop.Paid\n    Shipping returns stream the label\n}\n"
+	diags := lintModel(bad)
+	if n := countCode(diags, "craft/lint/stream-without-caller"); n != 1 {
+		t.Fatalf("bad: %d: %+v", n, diags)
+	}
+	for _, d := range diags {
+		if d.Code == "craft/lint/stream-without-caller" && (d.Range.Start.Line != 7 || d.Range.Start.Character != 4) {
+			t.Errorf("range = %+v; want the return's subject", d.Range)
+		}
+	}
+	good := head + "use_case \"Chat\" {\n  when Customer asks\n    Ordering asks Billing to stream it\n    Billing returns stream the answer\n}\n"
+	targeted := head + "use_case \"Label\" {\n  when Shipping listens shop.Paid\n    Shipping returns stream to Ordering the label\n}\n"
+	for _, src := range []string{good, targeted} {
+		if n := countCode(lintModel(src), "craft/lint/stream-without-caller"); n != 0 {
+			t.Errorf("%d:\n%s", n, src)
+		}
+	}
+}

@@ -449,9 +449,17 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 	case lang.ActionAsync:
 		description = fmt.Sprintf("%s notifies %q", subject, event)
 	case lang.ActionReturn:
-		if target != "" {
+		switch {
+		case a.IsStream():
+			// `returns stream` keeps its connector word (spec §7.2):
+			// "AiAssistant returns stream the reply as …".
+			description = strings.TrimSpace(subject + " returns stream " + joinConnector(connector, phrase))
+			if target != "" {
+				description += " to " + target
+			}
+		case target != "":
 			description = fmt.Sprintf("%s returns %s to %s", subject, phrase, target)
-		} else {
+		default:
 			description = fmt.Sprintf("%s returns %s", subject, phrase)
 		}
 	default: // internal_action
@@ -519,6 +527,7 @@ func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Act
 		Operation:     operation,
 		Operations:    operations,
 		Inferred:      a.IsInferred(),
+		Stream:        a.IsStream(),
 		Store:         store,
 		Connector:     connector,
 		Phrase:        phrase,

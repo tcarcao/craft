@@ -2030,8 +2030,8 @@ func (a ActionDecl) Line(li green.LineIndex) int {
 // Task 4 (e.g. bc:re/billing), the return_action target since Task 6b.
 //
 // The return_action target is the element right after `to`, which is always
-// element 2 because parseReturnsAction only emits SyntaxKindKwTo there;
-// a later `to` inside the phrase is an ordinary ident.
+// element 2 (3 after `stream`) because parseReturnsAction only emits
+// SyntaxKindKwTo there; a later `to` inside the phrase is an ordinary ident.
 func (a ActionDecl) targetElement() SyntaxElement {
 	elems := significantElements(a.node)
 	i := -1
@@ -2039,8 +2039,8 @@ func (a ActionDecl) targetElement() SyntaxElement {
 	case lang.ActionSync:
 		i = 2
 	case lang.ActionReturn:
-		if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwTo {
-			i = 3
+		if b := returnBase(elems); len(elems) > b && elems[b].Kind() == SyntaxKindKwTo {
+			i = b + 1
 		}
 	}
 	if i < 0 || i >= len(elems) {
@@ -2050,6 +2050,20 @@ func (a ActionDecl) targetElement() SyntaxElement {
 		return nil
 	}
 	return elems[i]
+}
+
+// returnBase is the element index right after `returns` (and `stream`) of a
+// return action: where `to <target>` or the phrase begins.
+func returnBase(elems []SyntaxElement) int {
+	if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwStream {
+		return 3
+	}
+	return 2
+}
+
+// IsStream reports whether the action is `returns stream …` (spec §7.1).
+func (a ActionDecl) IsStream() bool {
+	return a.Kind() == lang.ActionReturn && returnBase(significantElements(a.node)) == 3
 }
 
 // TargetName returns the target context for sync_action and return_action,
@@ -2202,10 +2216,11 @@ func slotEndIndex(a ActionDecl) int {
 	case lang.ActionSync:
 		return tokenIndexAt(elems, 3) // subject, asks, target
 	case lang.ActionReturn:
-		if len(elems) > 2 && elems[2].Kind() == SyntaxKindKwTo {
-			return tokenIndexAt(elems, 4) // subject, returns, to, target
+		b := returnBase(elems) // subject, returns[, stream]
+		if len(elems) > b && elems[b].Kind() == SyntaxKindKwTo {
+			return tokenIndexAt(elems, b+2) // … to, target
 		}
-		return tokenIndexAt(elems, 2) // subject, returns
+		return tokenIndexAt(elems, b)
 	default: // internal_action, async_action
 		return tokenIndexAt(elems, 2) // subject, verb
 	}
@@ -2318,6 +2333,9 @@ func (a ActionDecl) SourceTextWithoutOp() string {
 		appendSpaced(&sb, a.rawTextFrom(slotEndIndex(a)))
 	case lang.ActionReturn:
 		sb.WriteString(" returns")
+		if a.IsStream() {
+			sb.WriteString(" stream")
+		}
 		if target := a.TargetName(); target != "" {
 			sb.WriteString(" to ")
 			sb.WriteString(target)

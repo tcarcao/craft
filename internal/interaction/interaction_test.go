@@ -1090,3 +1090,56 @@ use_case "Outbox" {
 		t.Errorf("publishes = %v", pubs)
 	}
 }
+
+func TestDerive_StreamAnswersTheRequestThatOpenedIt(t *testing.T) {
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("a.craft", structure+`
+use_case "Chat" {
+    when Customer asks a question
+        Ordering asks Billing to stream the answer  [streamAnswer]
+        Billing returns stream the answer
+        Ordering returns stream to Customer each token
+        Shipping returns stream nothing
+}
+`)}).Doc
+	acts := doc.UseCases[0].Scenarios[0].Actions()
+	if !acts[1].Stream || acts[1].Answers != acts[0].ID {
+		t.Errorf("Billing's stream answers %q, want %q", acts[1].Answers, acts[0].ID)
+	}
+	if acts[2].Answers != "" || acts[3].Answers != "" {
+		t.Errorf("answers = %q, %q", acts[2].Answers, acts[3].Answers)
+	}
+	if acts[1].Description != "Billing returns stream the answer" || acts[2].Description != "Ordering returns stream each token to Customer" {
+		t.Errorf("descriptions = %q, %q", acts[1].Description, acts[2].Description)
+	}
+	n := 0
+	for _, it := range interaction.Derive(doc) {
+		if it.Kind == interaction.Response {
+			n++
+			if !it.Stream || !strings.HasPrefix(it.Label, "streams ") {
+				t.Errorf("response = %+v", it)
+			}
+		}
+	}
+	if n != 3 {
+		t.Errorf("%d responses", n)
+	}
+}
+
+func TestDerive_TargetedStreamAnswersTheOpenRequestFromItsTarget(t *testing.T) {
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("a.craft", structure+`
+use_case "Chat" {
+    when Customer asks a question
+        Ordering asks Billing to stream the answer  [streamAnswer]
+        Billing asks Shipping for a label
+        Billing returns stream to Ordering the answer
+        Billing returns the rest
+}
+`)}).Doc
+	acts := doc.UseCases[0].Scenarios[0].Actions()
+	if acts[2].Answers != acts[0].ID {
+		t.Errorf("targeted stream answers %q, want %q", acts[2].Answers, acts[0].ID)
+	}
+	if acts[3].Answers != "" || acts[3].Stream {
+		t.Errorf("a plain return gains no Answers: %+v", acts[3])
+	}
+}

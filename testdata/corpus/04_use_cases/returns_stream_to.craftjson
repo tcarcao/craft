@@ -1,0 +1,86 @@
+{
+  "useCases": [
+    {
+      "name": "Seller watches the assistant answer",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "frontendplatform",
+            "verb": "opens",
+            "connector": "the",
+            "phrase": "assistant",
+            "description": "when frontendplatform opens the assistant",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "seller/frontendplatform"
+            },
+            "line": 7,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "assistantStream",
+                  "text": "assistantStream"
+                },
+                "connector": "to",
+                "phrase": "stream it",
+                "description": "frontendplatform asks graphql to stream it",
+                "line": 8,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "return_action",
+                "context": "graphql",
+                "targetContext": "frontendplatform",
+                "phrase": "each event",
+                "stream": true,
+                "answers": "action_2",
+                "description": "graphql returns stream each event to frontendplatform",
+                "line": 9,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 6
+    }
+  ],
+  "domains": [
+    {
+      "name": "seller",
+      "boundedContexts": [
+        "frontendplatform",
+        "graphql"
+      ]
+    }
+  ]
+}

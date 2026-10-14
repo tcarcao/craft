@@ -1,0 +1,154 @@
+{
+  "useCases": [
+    {
+      "name": "Seller asks the assistant a question",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "asks",
+            "connector": "the",
+            "phrase": "assistant a question",
+            "description": "when Seller asks the assistant a question",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 12,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "assistantStream",
+                  "text": "assistantStream"
+                },
+                "connector": "to",
+                "phrase": "stream the answer",
+                "description": "frontendplatform asks graphql to stream the answer",
+                "line": 13,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "graphql",
+                "targetContext": "AiAssistant",
+                "ref": "AiAssistant",
+                "operation": {
+                  "verb": "POST",
+                  "payload": "/api/v1/assistant/chat_streaming",
+                  "text": "POST /api/v1/assistant/chat_streaming"
+                },
+                "connector": "to",
+                "phrase": "stream the reply",
+                "description": "graphql asks AiAssistant to stream the reply",
+                "line": 14,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "AiAssistant"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_4",
+                "type": "return_action",
+                "context": "AiAssistant",
+                "connector": "the",
+                "phrase": "reply as META, TOKEN and DONE events",
+                "stream": true,
+                "answers": "action_3",
+                "description": "AiAssistant returns stream the reply as META, TOKEN and DONE events",
+                "line": 15,
+                "column": 9,
+                "from": {
+                  "kind": "actor",
+                  "id": "AiAssistant"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_5",
+                "type": "return_action",
+                "context": "graphql",
+                "phrase": "each event to the client",
+                "stream": true,
+                "answers": "action_2",
+                "description": "graphql returns stream each event to the client",
+                "line": 16,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/graphql"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_6",
+                "type": "internal_action",
+                "context": "frontendplatform",
+                "verb": "appends",
+                "phrase": "every TOKEN delta to the message",
+                "description": "frontendplatform appends every TOKEN delta to the message",
+                "line": 17,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "seller/frontendplatform"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 11
+    }
+  ],
+  "domains": [
+    {
+      "name": "seller",
+      "boundedContexts": [
+        "frontendplatform",
+        "graphql"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "AiAssistant",
+      "type": "system",
+      "line": 3
+    }
+  ]
+}

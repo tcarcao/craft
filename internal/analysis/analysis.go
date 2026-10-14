@@ -109,6 +109,11 @@ func Workspace(files []FileResult) Result {
 		lintDiags := sema.LintWorkspace(perFileTrees, ws, perFileLIs)
 		res.Symbols, res.Resolution = ws, rm
 		resolveParticipants(res.Doc, ws)
+		// A stream records the request it answers (model.Action.Answers),
+		// from the same call-stack walk the interactions use.
+		for a, id := range interaction.AnsweredRequests(res.Doc) {
+			a.Answers = id
+		}
 		commDiags := sema.LintCommunication(perFileTrees, ws, perFileLIs, interaction.Derive(res.Doc))
 		modelDiags := sema.LintModel(res.Doc, perFileTrees, perFileLIs)
 

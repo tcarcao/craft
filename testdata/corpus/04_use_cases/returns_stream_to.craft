@@ -1,0 +1,10 @@
+domain seller {
+    frontendplatform
+    graphql
+}
+
+use_case "Seller watches the assistant answer" {
+    when frontendplatform opens the assistant
+        frontendplatform asks graphql to stream it  [assistantStream]
+        graphql returns stream to frontendplatform each event
+}

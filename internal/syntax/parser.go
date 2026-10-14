@@ -1807,8 +1807,14 @@ func (p *Parser) eventItemStartAhead(offset int) bool {
 // The target names a bounded context, so it takes the same qualified
 // `<domain>/<name>` form as the asks target and the action subject, and
 // rejects a `kind:` prefix for the same reason.
+//
+// `stream` directly after `returns` marks a streamed reply (spec §7.1):
+// `returns stream [to <target>] …`. Anywhere else it is a phrase word.
 func (p *Parser) parseReturnsAction(line int) []model.Diagnostic {
 	var diags []model.Diagnostic
+	if t := p.peek(); t.Type == lexer.TokenIdent && t.Value == "stream" && t.Line == line {
+		p.consumeAs(SyntaxKindKwStream)
+	}
 	// Check for optional `to <target>`
 	if p.peek().Type == lexer.TokenIdent && p.peek().Value == "to" {
 		p.consumeAs(SyntaxKindKwTo)

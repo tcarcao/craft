@@ -492,7 +492,8 @@ func ambiguousUseCaseRefDiag(uri, ref string, line, col int) model.Diagnostic {
 //   - relationship-direction-inverted / relationship-bidirectional: traffic
 //     against, or in both directions of, an asymmetric pattern;
 //   - unclassified-communication: a communicating pair with no context_map
-//     edge at all.
+//     edge at all;
+//   - stream-without-caller: a `returns stream` that answers nobody.
 func LintCommunication(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbols, lis map[string]green.LineIndex, its []interaction.Interaction) []model.Diagnostic {
 	deps := dependenciesFrom(its)
 
@@ -635,6 +636,32 @@ func LintCommunication(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSy
 		})
 	}
 
+	diags = append(diags, lintStreamWithoutCaller(its)...)
+	return diags
+}
+
+// ── stream-without-caller ─────────────────────────────────────────────────────
+// Warning: a `returns stream` with no caller on the stack and no `to`
+// target: the stream answers nobody in the model (spec §7.3).
+
+func lintStreamWithoutCaller(its []interaction.Interaction) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, it := range its {
+		if it.Kind != interaction.Response || !it.Stream || it.Targeted || it.To != interaction.External {
+			continue
+		}
+		start := colToLSP(it.Site.Column)
+		diags = append(diags, model.Diagnostic{
+			Code:      "craft/lint/stream-without-caller",
+			Message:   "a stream answers the request that opened it; write the `asks` that opens the stream before it, or name the reader with `returns stream to <reader>`",
+			Severity:  model.SeverityWarning,
+			SourceURI: it.Site.URI,
+			Range: model.Range{
+				Start: model.Position{Line: lineToLSP(it.Site.Line), Character: start},
+				End:   model.Position{Line: lineToLSP(it.Site.Line), Character: start + it.Site.Length},
+			},
+		})
+	}
 	return diags
 }
 

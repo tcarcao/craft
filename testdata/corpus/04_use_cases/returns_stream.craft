@@ -1,0 +1,18 @@
+actors {
+    user Seller
+    system AiAssistant
+}
+
+domain seller {
+    frontendplatform
+    graphql
+}
+
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+        graphql asks AiAssistant to stream the reply        [POST /api/v1/assistant/chat_streaming]
+        AiAssistant returns stream the reply as META, TOKEN and DONE events
+        graphql returns stream each event to the client
+        frontendplatform appends every TOKEN delta to the message
+}
