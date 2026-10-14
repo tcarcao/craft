@@ -1426,6 +1426,9 @@ func (s ScenarioDecl) Actions() []ActionDecl {
 // Steps returns the scenario's top-level steps in source order.
 func (s ScenarioDecl) Steps() []StepDecl { return steps(s.node) }
 
+// Node returns the underlying syntax node.
+func (s ScenarioDecl) Node() SyntaxNode { return s.node }
+
 // flattenActions appends every action in sts, descending into blocks, to out.
 func flattenActions(sts []StepDecl, out []ActionDecl) []ActionDecl {
 	for _, st := range sts {

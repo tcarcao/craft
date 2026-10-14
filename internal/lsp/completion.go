@@ -280,7 +280,13 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 	case ctxActorsBlock:
 		return actorTypeCompletions()
 	case ctxUseCaseTop:
-		return whenKeywordCompletion()
+		list := whenKeywordCompletion()
+		lineStart := f.LineIndex.OffsetFromUTF16(cursorLine+1, 0)
+		cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine+1, cursorCol)
+		if strings.TrimSpace(f.LineIndex.Src()[lineStart:cursorOffset]) == "" {
+			list.Items = append(list.Items, blockKeywordCompletions()...)
+		}
+		return list
 	case ctxUseCaseActionVerb:
 		return domainAndServiceSymbolCompletions(ws)
 	case ctxOpAnnotationVerb:

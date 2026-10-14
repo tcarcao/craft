@@ -834,6 +834,7 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			Detail:         "use_case",
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: startLine}},
 			Range:          protocol.Range{Start: protocol.Position{Line: startLine}, End: protocol.Position{Line: endLine}},
+			Children:       scenarioSymbols(uc, f.LineIndex),
 		})
 	}
 	for _, arch := range file.Archs() {
@@ -1380,6 +1381,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 			EndLine:   uint32(ucEnd - 1),
 			Kind:      protocol.RegionFoldingRange,
 		})
+		ranges = append(ranges, blockFoldingRanges(uc, li)...)
 	}
 	for _, exp := range file.Exposures() {
 		expStart := exp.Line(li)
@@ -1672,6 +1674,12 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 		}
 		return &protocol.Hover{
 			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: detail},
+		}, nil
+	}
+
+	if val, ok := blockHover(file, f.LineIndex, cursorLine); ok {
+		return &protocol.Hover{
+			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 		}, nil
 	}
 
