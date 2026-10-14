@@ -828,3 +828,127 @@ func TestModelBaseName_MixedRelativeAndAbsolute(t *testing.T) {
 		t.Errorf("no shared directory below the root: modelBaseName = %q, want %q", got, "model")
 	}
 }
+
+func journeyFiles(t *testing.T) (string, []string) {
+	t.Helper()
+	tmp := t.TempDir()
+	var paths []string
+	for _, name := range []string{"nmf-books-the-draws.craft", "seller-promotes-an-advert.craft"} {
+		src, err := os.ReadFile(filepath.Join("..", "..", "internal", "visualizer", "testdata", "journey-spine", "vas", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := filepath.Join(tmp, name)
+		if err := os.WriteFile(p, src, 0644); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	return tmp, paths
+}
+
+func TestGenerateCmd_Journey(t *testing.T) {
+	tmp, files := journeyFiles(t)
+	root := newRootCmd()
+	root.SetArgs(append(append([]string{"generate"}, files...), "--journey", "seller-promotes-an-advert", "--output", tmp))
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, filepath.Base(tmp)+"-journey-seller-promotes-an-advert.puml"))
+	if err != nil || !strings.Contains(string(data), "title Journey: seller-promotes-an-advert") {
+		t.Fatalf("output: %v\n%s", err, data)
+	}
+	if got, _ := filepath.Glob(filepath.Join(tmp, "*.puml")); len(got) != 1 {
+		t.Errorf("--journey wrote %v, want only the spine", got)
+	}
+}
+
+func TestGenerateCmd_JourneyMermaidMarkdownAndList(t *testing.T) {
+	tmp, files := journeyFiles(t)
+	solo := filepath.Join(tmp, "solo.craft")
+	if err := os.WriteFile(solo, []byte("use_case \"Solo\" {\n    tags {\n        journey: solo-journey\n    }\n    when S does\n        x does it\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	files = append(files, solo)
+	root := newRootCmd()
+	root.SetArgs(append(append([]string{"generate"}, files...), "--journey", "seller-promotes-an-advert,solo-journey", "--format", "mermaid-md", "--output", tmp))
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, slug := range []string{"seller-promotes-an-advert", "solo-journey"} {
+		data, err := os.ReadFile(filepath.Join(tmp, filepath.Base(tmp)+"-journey-"+slug+".md"))
+		if err != nil || !strings.HasPrefix(string(data), "# Journey: "+slug+"\n") {
+			t.Errorf("%s: %v\n%s", slug, err, data)
+		}
+	}
+}
+
+func TestGenerateCmd_JourneyAll(t *testing.T) {
+	tmp, files := journeyFiles(t)
+	solo := filepath.Join(tmp, "solo.craft")
+	if err := os.WriteFile(solo, []byte("use_case \"Solo\" {\n    tags {\n        journey: solo-journey\n    }\n    when S does\n        x does it\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	root := newRootCmd()
+	root.SetArgs(append(append([]string{"generate"}, append(files, solo)...), "--journey", "all", "--output", tmp))
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := filepath.Glob(filepath.Join(tmp, "*.puml"))
+	if len(got) != 1 || !strings.HasSuffix(got[0], "-journey-seller-promotes-an-advert.puml") {
+		t.Errorf("--journey all wrote %v, want only the journey with two or more members", got)
+	}
+}
+
+func TestGenerateCmd_JourneyStdout(t *testing.T) {
+	tmp, files := journeyFiles(t)
+	var buf bytes.Buffer
+	root := newRootCmd()
+	root.SetOut(&buf)
+	root.SetArgs(append(append([]string{"generate"}, files...), "--journey", "seller-promotes-an-advert", "--stdout"))
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(buf.String(), "@startuml\ntitle Journey: seller-promotes-an-advert\n") {
+		t.Errorf("stdout:\n%s", buf.String())
+	}
+	if got, _ := filepath.Glob(filepath.Join(tmp, "*.puml")); len(got) != 0 {
+		t.Errorf("--stdout wrote files %v", got)
+	}
+}
+
+func TestGenerateCmd_JourneyErrors(t *testing.T) {
+	_, files := journeyFiles(t)
+	for _, extra := range [][]string{
+		{"--journey", "seller-promotes-an-adver"}, // unknown: lists the closest
+		{"--journey", "seller-promotes-an-advert", "--type", "c4"},
+		{"--journey", "seller-promotes-an-advert", "--split"},
+		{"--journey", "seller-promotes-an-advert", "--use-case", "x"},
+		{"--journey", "a,b", "--stdout"},
+		{"--journey", "all", "--stdout"},
+	} {
+		root := newRootCmd()
+		root.SetArgs(append(append([]string{"generate"}, files...), extra...))
+		err := root.Execute()
+		if err == nil {
+			t.Errorf("%v: expected an error", extra)
+		}
+		if extra[1] == "seller-promotes-an-adver" && err != nil && !strings.Contains(err.Error(), "seller-promotes-an-advert") {
+			t.Errorf("unknown slug error lacks the closest slug: %v", err)
+		}
+	}
+	root := newRootCmd()
+	root.SetArgs(append(append([]string{"generate"}, files...), "--journey", "seller-promotes-an-advert", "--type", "sequence", "--stdout"))
+	root.SetOut(&bytes.Buffer{})
+	if err := root.Execute(); err != nil {
+		t.Errorf("--type sequence is allowed: %v", err)
+	}
+}
+
+func TestClosestSlugs(t *testing.T) {
+	got := closestSlugs([]string{"zeta", "seller-pays", "seller-promotes-an-advert", "seller-promotes"}, "seller-promotes-an-adver", 3)
+	want := []string{"seller-promotes-an-advert", "seller-promotes", "seller-pays"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("closestSlugs = %v, want %v", got, want)
+	}
+}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,6 +35,7 @@ func generateCmd() *cobra.Command {
 	var stdout bool
 	var force bool
 	var allowErrors bool
+	var journeys []string
 
 	cmd := &cobra.Command{
 		Use:   "generate [files...]",
@@ -56,6 +59,20 @@ func generateCmd() *cobra.Command {
 				return fmt.Errorf("--format must be one of puml|mermaid|mermaid-md, got %q", format)
 			}
 
+			if len(journeys) > 0 {
+				switch {
+				case cmd.Flags().Changed("type") && strings.ToLower(diagType) != "sequence":
+					return fmt.Errorf("`--journey` draws a sequence; drop `--type` or use `--type sequence`")
+				case split:
+					return fmt.Errorf("`--journey` cannot be combined with --split")
+				case len(useCaseFilter) > 0:
+					return fmt.Errorf("`--journey` cannot be combined with --use-case: it draws its own members")
+				case stdout && (len(journeys) != 1 || journeys[0] == "all"):
+					return fmt.Errorf("--stdout requires a single journey")
+				}
+				// The checks below are about --type; a journey is one sequence.
+				diagType = "sequence"
+			}
 			if stdout {
 				if outputDir != "" {
 					return fmt.Errorf("--stdout and --output are mutually exclusive")
@@ -105,13 +122,17 @@ func generateCmd() *cobra.Command {
 				}
 			}
 
+			r := visualizer.New(visualizer.ExecPlantUML{})
+			if len(journeys) > 0 {
+				return generateJourneys(r, doc, journeys, modelBaseName(files), outDir, format, stdout, cmd.OutOrStdout(), force)
+			}
 			opts := c4Options{
 				boundaries:    boundaries,
 				showDatabases: !noDatabases,
 				focusServices: focusServices,
 				focusContexts: focusContexts,
 			}
-			return generateDiagrams(visualizer.New(visualizer.ExecPlantUML{}), doc, modelBaseName(files), outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, cmd.OutOrStdout(), force)
+			return generateDiagrams(r, doc, modelBaseName(files), outDir, diagType, mode, opts, useCaseFilter, split, format, stdout, cmd.OutOrStdout(), force)
 		},
 	}
 
@@ -127,8 +148,106 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "puml", "output format: puml|mermaid|mermaid-md")
 	cmd.Flags().BoolVar(&stdout, "stdout", false, "write to stdout instead of files (single diagram only)")
 	cmd.Flags().BoolVar(&force, "force", false, "allow overwriting existing .md files when --format=mermaid-md")
+	cmd.Flags().StringSliceVar(&journeys, "journey", nil, "journey slugs to draw as one sequence each (comma-separated), or all")
 	cmd.Flags().BoolVar(&allowErrors, "allow-errors", false, "draw diagrams even when the model has error diagnostics")
 	return cmd
+}
+
+// generateJourneys writes one spine sequence per journey slug; "all" stands
+// for every journey with two or more members.
+func generateJourneys(r *visualizer.Renderer, model *craft.CraftDoc, journeys []string, base, outDir, format string, stdout bool, stdoutW io.Writer, force bool) error {
+	backend, outFormat := visualizer.PlantUML, visualizer.FormatSource
+	switch format {
+	case "mermaid":
+		backend = visualizer.Mermaid
+	case "mermaid-md":
+		backend, outFormat = visualizer.Mermaid, visualizer.FormatMarkdown
+	}
+	all := craft.JourneySlugs(model)
+	var slugs []string
+	for _, slug := range journeys {
+		if slug != "all" {
+			slugs = append(slugs, slug)
+			continue
+		}
+		for _, s := range all {
+			if len(craft.BuildJourney(model, s).Members) >= 2 {
+				slugs = append(slugs, s)
+			}
+		}
+	}
+	if len(slugs) == 0 {
+		fmt.Fprintln(os.Stderr, "note: no journey has two or more members; nothing to draw")
+		return nil
+	}
+	// Every slug is checked before any file is written.
+	spines := make([]craft.Journey, len(slugs))
+	for i, slug := range slugs {
+		spines[i] = craft.BuildJourney(model, slug)
+		if len(spines[i].Members) > 0 {
+			continue
+		}
+		closest := closestSlugs(all, slug, 3)
+		if len(closest) == 0 {
+			return fmt.Errorf("unknown journey %q; no use case has a journey tag", slug)
+		}
+		return fmt.Errorf("unknown journey %q; closest: %s", slug, strings.Join(closest, ", "))
+	}
+	for i, slug := range slugs {
+		if spines[i].Cycle {
+			fmt.Fprintf(os.Stderr, "note: journey %s has a hand-off cycle; its members are ordered by source position\n", slug)
+		}
+		out, err := r.Render(model, visualizer.Request{View: visualizer.ViewSequence, Backend: backend, Format: outFormat, Journey: slug})
+		if err != nil {
+			return fmt.Errorf("journey %s: %w", slug, err)
+		}
+		if stdout {
+			if _, err := stdoutW.Write(out.Data); err != nil {
+				return err
+			}
+			continue
+		}
+		name := base + "-journey-" + strings.ReplaceAll(slug, "/", "-") + "." + out.Ext
+		if err := writeOutput(filepath.Join(outDir, name), out.Data, force); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// closestSlugs returns the n slugs nearest to want by edit distance, ties
+// broken alphabetically.
+func closestSlugs(slugs []string, want string, n int) []string {
+	dist := make(map[string]int, len(slugs))
+	for _, s := range slugs {
+		dist[s] = levenshtein(s, want)
+	}
+	sorted := slices.Clone(slugs)
+	slices.SortFunc(sorted, func(a, b string) int {
+		return cmp.Or(cmp.Compare(dist[a], dist[b]), cmp.Compare(a, b))
+	})
+	return sorted[:min(n, len(sorted))]
+}
+
+// levenshtein is the edit distance between a and b, in bytes.
+func levenshtein(a, b string) int {
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
 }
 
 func generateDiagrams(r *visualizer.Renderer, model *craft.CraftDoc, base, outDir, diagType, mode string, opts c4Options, useCaseFilter []string, split bool, format string, stdout bool, stdoutW io.Writer, force bool) error {
