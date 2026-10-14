@@ -39,6 +39,29 @@ func (t TriggerDecl) ScheduleToken() *SyntaxToken {
 	return t.node.ChildToken(SyntaxKindString)
 }
 
+// ScheduleKeyword returns the `cron` / `every` keyword token of a scheduled
+// trigger, or nil for any other trigger.
+func (t TriggerDecl) ScheduleKeyword() *SyntaxToken {
+	if _, ok := t.scheduleKind(); !ok {
+		return nil
+	}
+	toks := t.node.Tokens()
+	if len(toks) == 0 {
+		return nil
+	}
+	return &toks[0]
+}
+
+// RefName is the participant the trigger's subject slot refers to: the actor
+// name of an external trigger, or the scheduler actor (CRON) for a scheduled
+// one, whose `cron` / `every` keyword stands in for it. "" otherwise.
+func (t TriggerDecl) RefName() string {
+	if _, ok := t.scheduleKind(); ok {
+		return lang.SchedulerActor
+	}
+	return t.ActorName()
+}
+
 // scheduleKind reads the keyword in the subject slot.
 func (t TriggerDecl) scheduleKind() (lang.ScheduleKind, bool) {
 	elems := significantElements(t.node)

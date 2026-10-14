@@ -1633,6 +1633,11 @@ func (t TriggerDecl) ActorName() string {
 func (t TriggerDecl) ActorCol(li green.LineIndex) int {
 	el := t.subjectElement()
 	if el == nil {
+		// A scheduled trigger's subject slot holds the cron / every keyword.
+		if kw := t.ScheduleKeyword(); kw != nil {
+			_, col := li.LineCol16(kw.Offset())
+			return col
+		}
 		return 0
 	}
 	_, col := li.LineCol16(refAwareOffset(el))

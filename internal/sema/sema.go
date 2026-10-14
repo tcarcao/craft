@@ -144,6 +144,13 @@ type UseCaseRef struct {
 	Line int
 	// Column is the 1-based column of the reference token.
 	Column int
+	// Length is the reference's width in UTF-16 units when it differs from
+	// the name's: the `cron` / `every` keyword stands for the CRON actor. 0
+	// means the width of Name.
+	Length int
+	// Keyword is true when the written token is not the name (the `cron` /
+	// `every` keyword for CRON), so a rename must not rewrite it.
+	Keyword bool
 }
 
 // Symbols is the output of the symbol-collection pass for a single file.
@@ -504,6 +511,20 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 					Column: col,
 				})
 			}
+			if kw := trigger.ScheduleKeyword(); kw != nil {
+				// A scheduled trigger runs as CRON, written as its keyword.
+				col := 0
+				if hasLI {
+					col = trigger.ActorCol(lineIdx)
+				}
+				syms.UseCaseRefs = append(syms.UseCaseRefs, UseCaseRef{
+					Name:    lang.SchedulerActor,
+					Line:    triggerLine,
+					Column:  col,
+					Length:  lspLen(kw.Text()),
+					Keyword: true,
+				})
+			}
 			if ctx := trigger.ContextName(); ctx != "" {
 				col := 0
 				if hasLI {
@@ -783,7 +804,7 @@ func AnalyzeWorkspace(perFile map[string]Symbols, ws WorkspaceSymbols) (Resoluti
 				SourceURI: uri,
 				Range: model.Range{
 					Start: model.Position{Line: lineToLSP(ref.Line), Character: startChar},
-					End:   model.Position{Line: lineToLSP(ref.Line), Character: startChar + lspLen(ref.Name)},
+					End:   model.Position{Line: lineToLSP(ref.Line), Character: startChar + refWidth(ref)},
 				},
 			})
 		}
@@ -961,4 +982,12 @@ func ResolveUseCaseRef(rm ResolutionMap, uri, name string, line int) (UseCaseRef
 	key := useCaseRefKey{URI: uri, Line: line, Name: name}
 	target, ok := rm.UseCaseRefs[key]
 	return target, ok
+}
+
+// refWidth is the UTF-16 width of the token a reference was written as.
+func refWidth(ref UseCaseRef) int {
+	if ref.Length > 0 {
+		return ref.Length
+	}
+	return lspLen(ref.Name)
 }

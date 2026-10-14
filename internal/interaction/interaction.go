@@ -158,6 +158,9 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 		it.Label = triggerLabel(t)
 		it.Site = triggerSite
 		it.Site.Length = utf16Len(t.Actor)
+		if t.ScheduleKind != "" {
+			it.Site.Length = utf16Len(string(t.ScheduleKind)) // the keyword stands for CRON
+		}
 		if len(actions) > 0 && actions[0].Context != "" {
 			first := endpoint(actions[0].Context, actions[0].From)
 			callStack = append(callStack, frame{caller: actor, callee: first})

@@ -420,7 +420,7 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 			}
 			if triggerLine == cursorLine {
 				trigger := sc.Trigger()
-				if loc, ok := resolveUseCaseRefToLocation(rm, uri, trigger.ActorName(), triggerLine); ok {
+				if loc, ok := resolveUseCaseRefToLocation(rm, uri, trigger.RefName(), triggerLine); ok {
 					return []protocol.Location{loc}, nil
 				}
 				if loc, ok := resolveUseCaseRefToLocation(rm, uri, trigger.ContextName(), triggerLine); ok {
@@ -1711,7 +1711,7 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 				triggerLine, _ = f.LineIndex.LineCol(whenTok.Offset())
 			}
 			if triggerLine == cursorLine {
-				name := trigger.ActorName()
+				name := trigger.RefName()
 				if name == "" {
 					name = trigger.ContextName()
 				}
@@ -1875,8 +1875,8 @@ func (s *Server) Rename(_ context.Context, params *protocol.RenameParams) (*prot
 	// Reference sites: use-case refs from all files.
 	for _, wf := range s.ws.AllFiles() {
 		for _, ref := range wf.Symbols.UseCaseRefs {
-			if ref.Name != oldName {
-				continue
+			if ref.Name != oldName || ref.Keyword {
+				continue // the `cron` keyword is not the actor's name
 			}
 			target, ok := sema.ResolveUseCaseRef(rm, wf.URI, ref.Name, ref.Line)
 			if !ok {
@@ -2531,20 +2531,25 @@ func (s *Server) semanticIdentTokens(f *workspace.File, uri string) []semanticTo
 			if whenTok != nil {
 				triggerLine, _ = li.LineCol(whenTok.Offset())
 			}
-			triggerName := trigger.ActorName()
+			triggerName := trigger.RefName()
 			if triggerName == "" {
 				triggerName = trigger.ContextName()
 			}
 			if triggerName != "" && triggerLine > 0 {
 				if tt, ok := useCaseRefTokenType(rm, uri, triggerName, triggerLine); ok {
 					col := uint32(0)
+					length := green.UTF16Len(triggerName)
 					if subj := trigger.Subject(); subj != nil {
 						col = li.UTF16Col(subj.Offset())
+					} else if kw := trigger.ScheduleKeyword(); kw != nil {
+						// `cron` / `every` stands for the CRON actor.
+						col = li.UTF16Col(kw.Offset())
+						length = green.UTF16Len(kw.Text())
 					}
 					tokens = append(tokens, semanticToken{
 						line:      lspLine(triggerLine),
 						startChar: col,
-						length:    green.UTF16Len(triggerName),
+						length:    length,
 						tokenType: tt,
 					})
 				}

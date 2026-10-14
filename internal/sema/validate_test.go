@@ -370,3 +370,36 @@ func TestValidate_Schedule_RangeIsTheStringToken(t *testing.T) {
 	}
 	t.Fatal("no diagnostic")
 }
+
+func unresolvedDiags(t *testing.T, src string) []model.Diagnostic {
+	t.Helper()
+	g, li, _ := syntax.Parse(src)
+	uri := "file:///a.craft"
+	syms, _ := sema.AnalyzeFile(uri, syntax.Root(g), li)
+	perFile := map[string]sema.Symbols{uri: syms}
+	ws, _ := sema.MergeWorkspaceSymbols(perFile)
+	_, diags := sema.AnalyzeWorkspace(perFile, ws)
+	return diags
+}
+
+func TestSchedule_UndeclaredCRONWarns(t *testing.T) {
+	src := "domain ops {\n  Reports\n}\nuse_case \"U\" {\n  when every \"5m\"\n    Reports polls\n}\n"
+	var found *model.Diagnostic
+	for _, d := range unresolvedDiags(t, src) {
+		if d.Code == "craft/sema/unresolved-reference" {
+			found = &d
+		}
+	}
+	if found == nil || !strings.Contains(found.Message, `"CRON"`) {
+		t.Fatalf("want an unresolved-reference warning for CRON, got %+v", found)
+	}
+	r := found.Range
+	if r.Start.Line != 4 || r.Start.Character != 7 || r.End.Character != 12 {
+		t.Errorf("range = %+v, want the `every` keyword (line 4, 7..12)", r)
+	}
+}
+
+func TestSchedule_DeclaredCRONDoesNotWarn(t *testing.T) {
+	src := "actor system CRON\ndomain ops {\n  Reports\n}\nuse_case \"U\" {\n  when cron \"0 7 * * *\"\n    Reports polls\n}\n"
+	assertNoDiag(t, unresolvedDiags(t, src), "unresolved-reference")
+}
