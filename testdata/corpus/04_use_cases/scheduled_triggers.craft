@@ -1,0 +1,16 @@
+actor system CRON
+
+domain reporting {
+    Reports
+    Feeds
+}
+
+use_case "Scheduled Jobs" {
+    when cron "0 7 * * 1-5"
+        Reports builds the daily digest
+        Reports asks Feeds to fetch yesterday's figures
+
+    scenario "poll"
+    when every "5m"
+        Feeds polls the upstream feed
+}

@@ -154,7 +154,7 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			it := base
 			it.Kind, it.From, it.To = Trigger, actor, endpoint(first.Context, first.From)
 			callStack = append(callStack, frame{caller: actor, callee: it.To})
-			it.Label = strings.Join(strings.Fields(t.Verb+" "+t.Connector+" "+t.Phrase), " ")
+			it.Label = triggerLabel(t)
 			it.Site = triggerSite
 			it.Site.Length = utf16Len(t.Actor)
 			out = append(out, it)
@@ -180,6 +180,15 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, out: out}
 	w.walk(sc.Steps, nil)
 	return w.out
+}
+
+// triggerLabel is the text on a trigger arrow: the schedule for a scheduled
+// trigger (`cron 0 7 * * 1-5`, `every 5m`), else what the actor does.
+func triggerLabel(t model.Trigger) string {
+	if t.ScheduleKind != "" {
+		return strings.TrimSpace(string(t.ScheduleKind) + " " + t.Schedule)
+	}
+	return strings.Join(strings.Fields(t.Verb+" "+t.Connector+" "+t.Phrase), " ")
 }
 
 // walker visits a scenario's steps depth-first, in source order, numbering

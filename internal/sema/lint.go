@@ -148,7 +148,10 @@ func lintUnusedActors(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSym
 				trigger := sc.Trigger()
 				switch trigger.Kind() {
 				case lang.TriggerExternal:
-					if actor := trigger.ActorName(); actor != "" {
+					if _, _, ok := trigger.Schedule(); ok {
+						// A scheduled trigger runs as the scheduler actor.
+						used[lang.SchedulerActor] = true
+					} else if actor := trigger.ActorName(); actor != "" {
 						used[actor] = true
 					}
 				case lang.TriggerDomainListen:

@@ -1,0 +1,117 @@
+{
+  "useCases": [
+    {
+      "name": "Scheduled Jobs",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "schedule": "0 7 * * 1-5",
+            "scheduleKind": "cron",
+            "description": "when cron \"0 7 * * 1-5\"",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 9
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "Reports",
+                "verb": "builds",
+                "connector": "the",
+                "phrase": "daily digest",
+                "description": "Reports builds the daily digest",
+                "line": 10,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "reporting/Reports"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "Reports",
+                "targetContext": "Feeds",
+                "ref": "Feeds",
+                "connector": "to",
+                "phrase": "fetch yesterday's figures",
+                "description": "Reports asks Feeds to fetch yesterday's figures",
+                "line": 11,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "reporting/Reports"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "reporting/Feeds"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "scenario_4",
+          "name": "poll",
+          "trigger": {
+            "type": "external",
+            "actor": "CRON",
+            "schedule": "5m",
+            "scheduleKind": "every",
+            "description": "when every \"5m\"",
+            "subject": {
+              "kind": "actor",
+              "id": "CRON"
+            },
+            "line": 14
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_5",
+                "type": "internal_action",
+                "context": "Feeds",
+                "verb": "polls",
+                "connector": "the",
+                "phrase": "upstream feed",
+                "description": "Feeds polls the upstream feed",
+                "line": 15,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "reporting/Feeds"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 8
+    }
+  ],
+  "domains": [
+    {
+      "name": "reporting",
+      "boundedContexts": [
+        "Reports",
+        "Feeds"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "CRON",
+      "type": "system",
+      "line": 1
+    }
+  ]
+}

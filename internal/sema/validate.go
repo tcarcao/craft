@@ -11,7 +11,10 @@ package sema
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tcarcao/craft/v2/internal/green"
 	"github.com/tcarcao/craft/v2/internal/lang"
@@ -851,4 +854,81 @@ func duplicateTagBlockDiag(uri, ucName string, tb syntax.TagsBlock, li green.Lin
 			End:   model.Position{Line: lineToLSP(line), Character: startChar + lspLen("tags")},
 		},
 	}
+}
+
+// ── invalid-schedule ──────────────────────────────────────────────────────────
+
+var cronFieldRe = regexp.MustCompile(`^[0-9*/,\-?LW#A-Za-z]+$`)
+
+// scheduleError returns why a scheduled trigger's expression is malformed, or
+// "" when it is well-formed. craft checks shape only, not whether a field's
+// value is in range.
+func scheduleError(kind lang.ScheduleKind, expr string) string {
+	switch kind {
+	case lang.ScheduleCron:
+		fields := strings.Fields(expr)
+		if len(fields) < 5 || len(fields) > 6 {
+			return fmt.Sprintf("cron expression must have 5 or 6 fields like \"0 7 * * 1-5\", got %q", expr)
+		}
+		for _, f := range fields {
+			if !cronFieldRe.MatchString(f) {
+				return fmt.Sprintf("cron field %q has characters outside 0-9 * / , - ? L W # and letters; expected a form like \"0 7 * * 1-5\"", f)
+			}
+		}
+	case lang.ScheduleEvery:
+		if !positiveDuration(expr) {
+			return fmt.Sprintf("every interval must be a positive duration like \"5m\", \"1h30m\" or \"2d\", got %q", expr)
+		}
+	}
+	return ""
+}
+
+// positiveDuration accepts a positive time.ParseDuration value, or `<n>d` for
+// whole days.
+func positiveDuration(s string) bool {
+	if n, ok := strings.CutSuffix(s, "d"); ok {
+		days, err := strconv.Atoi(n)
+		return err == nil && days > 0
+	}
+	d, err := time.ParseDuration(s)
+	return err == nil && d > 0
+}
+
+// validateSchedules flags a `when cron "…"` / `when every "…"` trigger whose
+// expression is not well-formed. The range is the string token.
+func validateSchedules(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uc := range file.UseCases() {
+		for _, sc := range uc.Scenarios() {
+			trigger := sc.Trigger()
+			kind, expr, ok := trigger.Schedule()
+			if !ok {
+				continue
+			}
+			tok := trigger.ScheduleToken()
+			if tok == nil {
+				continue // the parser already reported the missing string
+			}
+			msg := scheduleError(kind, expr)
+			if msg == "" {
+				continue
+			}
+			line, col := 0, 0
+			if hasLI {
+				line, col = li.LineCol16(tok.Offset())
+			}
+			start := colToLSP(col)
+			diags = append(diags, model.Diagnostic{
+				Code:      "craft/sema/invalid-schedule",
+				Message:   msg,
+				Severity:  model.SeverityError,
+				SourceURI: uri,
+				Range: model.Range{
+					Start: model.Position{Line: lineToLSP(line), Character: start},
+					End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(tok.Text())},
+				},
+			})
+		}
+	}
+	return diags
 }

@@ -1,0 +1,8 @@
+use_case "Bad Schedule" {
+    when cron "0 7 * *"
+        Reports builds the digest
+
+    scenario "poll"
+    when every "soon"
+        Feeds polls the feed
+}

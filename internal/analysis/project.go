@@ -236,6 +236,7 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 	t := sc.Trigger()
 	kind := t.Kind()
 	var actor, context, event, verb, connector, phrase, ref string
+	schedKind, schedule, scheduled := t.Schedule()
 	switch kind {
 	case lang.TriggerEvent:
 		event = t.EventValue()
@@ -244,32 +245,42 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		event = t.EventValue()
 		ref = t.EventRef()
 	default: // external
+		if scheduled {
+			// A schedule runs as the conventional scheduler actor and has no
+			// verb or phrase.
+			actor = lang.SchedulerActor
+			break
+		}
 		actor = t.ExternalSubjectText()
 		verb = t.ExternalVerbText()
 		connector = t.Connector()
 		phrase = t.PhraseText()
 	}
 	var description string
-	switch kind {
-	case lang.TriggerEvent:
+	switch {
+	case scheduled:
+		description = fmt.Sprintf(`when %s "%s"`, schedKind, schedule)
+	case kind == lang.TriggerEvent:
 		description = fmt.Sprintf("when %q", event)
-	case lang.TriggerDomainListen:
+	case kind == lang.TriggerDomainListen:
 		description = fmt.Sprintf("when %s listens %q", context, event)
 	default:
 		// No trimming: an empty phrase leaves a trailing space, as it always has.
 		description = fmt.Sprintf("when %s %s %s", actor, verb, joinConnector(connector, phrase))
 	}
 	out := model.Trigger{
-		Type:        kind,
-		Actor:       actor,
-		Verb:        verb,
-		Connector:   connector,
-		Phrase:      phrase,
-		Context:     context,
-		Event:       event,
-		Ref:         ref,
-		Description: description,
-		Column:      t.ActorCol(li),
+		Type:         kind,
+		Actor:        actor,
+		Verb:         verb,
+		Connector:    connector,
+		Phrase:       phrase,
+		Context:      context,
+		Event:        event,
+		Ref:          ref,
+		Schedule:     schedule,
+		ScheduleKind: schedKind,
+		Description:  description,
+		Column:       t.ActorCol(li),
 	}
 	if when := sc.When(); when != nil {
 		out.Line, _ = li.LineCol(when.Offset())

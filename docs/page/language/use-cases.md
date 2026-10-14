@@ -103,6 +103,27 @@ when CRON executes hourly sync
 when CRON [phrase]
 ```
 
+### Scheduled Triggers
+
+A trigger can carry its schedule: `when cron "<expression>"` for a cron expression, `when every "<interval>"` for a fixed interval.
+
+```craft
+actor system CRON
+
+use_case "Weekday Digest" {
+    when cron "0 7 * * 1-5"
+        Reports builds the daily digest
+
+    scenario "poll"
+    when every "5m"
+        Feeds polls the upstream feed
+}
+```
+
+A scheduled trigger runs as the actor `CRON`. Declare `actor system CRON` and it is resolved and counts as used; leave it out and you get the usual undeclared-participant warning. The model keeps the expression in `trigger.schedule` and its form in `trigger.scheduleKind` (`cron` or `every`). Sequence diagrams draw the arrow from `CRON` with the label `cron 0 7 * * 1-5` or `every 5m`.
+
+A cron expression has 5 or 6 space-separated fields. An interval is a positive duration such as `5m` or `1h30m`, or whole days such as `2d`. Anything else is `craft/sema/invalid-schedule`.
+
 ## Actions
 
 Actions describe what domains do. There are four types:

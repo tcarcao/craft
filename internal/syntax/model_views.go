@@ -17,6 +17,43 @@ func (t TriggerDecl) ExternalSubjectText() string {
 	return refAwareText(elems[0])
 }
 
+// Schedule reports whether the trigger is a scheduled one (`when cron "…"` or
+// `when every "…"`) and, if so, its kind and the unquoted expression. The
+// expression is "" when the string is missing.
+func (t TriggerDecl) Schedule() (kind lang.ScheduleKind, expr string, ok bool) {
+	if kind, ok = t.scheduleKind(); !ok {
+		return "", "", false
+	}
+	if s := t.ScheduleToken(); s != nil {
+		expr = stringAwareText(*s)
+	}
+	return kind, expr, true
+}
+
+// ScheduleToken returns the quoted expression token of a scheduled trigger,
+// or nil for any other trigger or when the string is missing.
+func (t TriggerDecl) ScheduleToken() *SyntaxToken {
+	if _, ok := t.scheduleKind(); !ok {
+		return nil
+	}
+	return t.node.ChildToken(SyntaxKindString)
+}
+
+// scheduleKind reads the keyword in the subject slot.
+func (t TriggerDecl) scheduleKind() (lang.ScheduleKind, bool) {
+	elems := significantElements(t.node)
+	if len(elems) == 0 {
+		return "", false
+	}
+	switch elems[0].Kind() {
+	case SyntaxKindKwCron:
+		return lang.ScheduleCron, true
+	case SyntaxKindKwEvery:
+		return lang.ScheduleEvery, true
+	}
+	return "", false
+}
+
 // ExternalVerbText returns the verb of an external trigger: the token right
 // after the subject, whose index depends on the subject's token span.
 func (t TriggerDecl) ExternalVerbText() string {

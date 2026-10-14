@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Scheduled triggers carry their schedule.** `model.Trigger` gains `Schedule` (the unquoted expression) and `ScheduleKind` (`cron` or `every`, also exported from `pkg/craft`), serialised as `schedule` and `scheduleKind`.
+- **`craft/sema/invalid-schedule`** (error): a `when cron` expression without 5 or 6 fields of `[0-9*/,\-?LW#A-Za-z]`, or a `when every` interval that is not a positive duration (`time.ParseDuration`, or `<n>d`). The range is the string token.
+
+### Changed
+- **Scheduled triggers project as actor `CRON`.** `when cron "0 7 * * 1-5"` was `actor: "cron"`, `verb: "\"0 7 * * 1-5\""`. It is now `actor: "CRON"`, `verb: ""`, `schedule`, `scheduleKind`, and `description: when cron "0 7 * * 1-5"`. `CRON` resolves like any actor in a trigger.
+- **Sequence diagrams** draw a scheduled trigger from `CRON` with the label `cron 0 7 * * 1-5` or `every 5m`, not from an invented `cron` participant.
+- **`craft/lint/unused-actor`** no longer reports a declared `CRON` actor when a scheduled trigger exists.
+
 ## [2.21.0] — 2026-10-14
 
 **Why a minor version.** This release is v2.21.0 inside `/v2` even though it is source-breaking: `Scenario.Actions` stops being a field. We chose not to cut `/v3` because every consumer of `pkg/craft` is internal and moves in the same release window. If you consume `pkg/craft` from outside, read **Breaking** first.

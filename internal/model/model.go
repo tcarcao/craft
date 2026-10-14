@@ -224,8 +224,13 @@ type Trigger struct {
 	// as a ref rather than a quoted string. Empty for the legacy
 	// `listens "X"` form and for non-domain_listen triggers — Event still
 	// carries the value either way, for existing consumers.
-	Ref         string `json:"ref,omitempty"`
-	Description string `json:"description"`
+	Ref string `json:"ref,omitempty"`
+	// Schedule is the expression of a `when cron "…"` or `when every "…"`
+	// trigger, unquoted.
+	Schedule string `json:"schedule,omitempty"`
+	// ScheduleKind is "cron" or "every" for a scheduled trigger, "" otherwise.
+	ScheduleKind ScheduleKind `json:"scheduleKind,omitempty"`
+	Description  string       `json:"description"`
 	// Subject is what the trigger's actor (external) or context (domain
 	// listen) resolves to across the whole model. Nil when it does not
 	// resolve, and for event triggers.
@@ -260,6 +265,14 @@ const (
 )
 
 // TriggerType classifies the origin of a scenario trigger.
+// ScheduleKind is the form of a scheduled trigger (cron or every).
+type ScheduleKind = lang.ScheduleKind
+
+const (
+	ScheduleCron  = lang.ScheduleCron
+	ScheduleEvery = lang.ScheduleEvery
+)
+
 type TriggerType = lang.TriggerKind
 
 const (

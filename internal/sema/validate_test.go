@@ -6,6 +6,7 @@ import (
 
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/sema"
+	"github.com/tcarcao/craft/v2/internal/syntax"
 )
 
 // diagRuleName returns the short rule name of a diagnostic code (the part
@@ -310,4 +311,62 @@ func TestValidate_WellFormedQualifiedRef_NoMalformedSlug(t *testing.T) {
 			t.Errorf("well-formed ref reported as malformed: %+v", d)
 		}
 	}
+}
+
+func scheduleDiags(t *testing.T, trigger string) []model.Diagnostic {
+	t.Helper()
+	src := "use_case \"U\" {\n  when " + trigger + "\n    a does b\n}\n"
+	_, diags := sema.AnalyzeFile("file:///a.craft", parseTreeFor(src))
+	return diags
+}
+
+func TestValidate_Schedule_Valid(t *testing.T) {
+	for _, tr := range []string{
+		`cron "0 7 * * 1-5"`, `cron "0 0 7 * * 1-5"`, `cron "*/5 * * * *"`, `cron "0 0 ? * MON#2"`, `cron "0 12 L * *"`,
+		`every "5m"`, `every "1h30m"`, `every "2d"`, `every "90s"`,
+	} {
+		assertNoDiag(t, scheduleDiags(t, tr), "invalid-schedule")
+	}
+}
+
+func TestValidate_Schedule_Invalid(t *testing.T) {
+	for _, tr := range []string{
+		`cron "0 7 * *"`, `cron "0 0 0 7 * * 1"`, `cron "0 7 * * $"`, `cron ""`,
+		`every "soon"`, `every "0s"`, `every "-5m"`, `every "0d"`, `every "xd"`, `every ""`,
+	} {
+		d := scheduleDiags(t, tr)
+		assertHasDiag(t, d, "invalid-schedule")
+		assertSeverity(t, d, "invalid-schedule", model.SeverityError)
+	}
+}
+
+func TestValidate_Schedule_MessageNamesTheForm(t *testing.T) {
+	for _, c := range []struct{ tr, want string }{
+		{`cron "0 7 * *"`, `cron expression must have 5 or 6 fields like "0 7 * * 1-5"`},
+		{`every "soon"`, `like "5m"`},
+	} {
+		var msg string
+		for _, d := range scheduleDiags(t, c.tr) {
+			if d.Code == "craft/sema/invalid-schedule" {
+				msg = d.Message
+			}
+		}
+		if !strings.Contains(msg, c.want) {
+			t.Errorf("%s: message %q lacks %q", c.tr, msg, c.want)
+		}
+	}
+}
+
+func TestValidate_Schedule_RangeIsTheStringToken(t *testing.T) {
+	g, li, _ := syntax.Parse("use_case \"U\" {\n  when cron \"0 7\"\n    a does b\n}\n")
+	_, d := sema.AnalyzeFile("file:///a.craft", syntax.Root(g), li)
+	for _, x := range d {
+		if x.Code == "craft/sema/invalid-schedule" {
+			if x.Range.Start.Line != 1 || x.Range.Start.Character != 12 || x.Range.End.Character != 17 {
+				t.Errorf("range = %+v", x.Range)
+			}
+			return
+		}
+	}
+	t.Fatal("no diagnostic")
 }

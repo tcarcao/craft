@@ -22,6 +22,19 @@ const (
 	TriggerDomainListen TriggerKind = "domain_listen" // when Ctx listens "E"
 )
 
+// ScheduleKind is the form of a scheduled trigger: `when cron "…"` or
+// `when every "…"`.
+type ScheduleKind string
+
+const (
+	ScheduleCron  ScheduleKind = "cron"  // when cron "0 7 * * 1-5"
+	ScheduleEvery ScheduleKind = "every" // when every "5m"
+)
+
+// SchedulerActor is the conventional name of the actor a scheduled trigger
+// runs as.
+const SchedulerActor = "CRON"
+
 // BlockKind is the kind of a branch block inside a scenario.
 type BlockKind string
 

@@ -499,3 +499,26 @@ use_case "Refund" {
 		}
 	}
 }
+
+// A scheduled trigger is drawn from the CRON actor, labelled with its schedule.
+func TestDerive_ScheduledTriggerIsDrawnFromCRON(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `actor system CRON
+use_case "Digest" {
+    when cron "0 7 * * 1-5"
+        Ordering builds the digest
+    scenario "poll"
+    when every "5m"
+        Billing polls the feed
+}
+`})
+	var got []string
+	for _, it := range its {
+		if it.Kind == interaction.Trigger {
+			got = append(got, it.From.Name+"->"+it.To.Name+" ["+it.Label+"]")
+		}
+	}
+	want := "CRON->Ordering [cron 0 7 * * 1-5]|CRON->Billing [every 5m]"
+	if strings.Join(got, "|") != want {
+		t.Errorf("triggers = %q, want %q", strings.Join(got, "|"), want)
+	}
+}

@@ -2,6 +2,7 @@ package sema
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/model"
@@ -329,5 +330,18 @@ domain ops {
 				}
 			}
 		})
+	}
+}
+
+func TestUnusedActor_CronCountsAsScheduledTriggerUse(t *testing.T) {
+	src := "actor system CRON\nactor system Other\nuse_case \"U\" {\n  when cron \"0 7 * * *\"\n    a does b\n}\n"
+	var unused []string
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		if d.Code == "craft/lint/unused-actor" {
+			unused = append(unused, d.Message)
+		}
+	}
+	if len(unused) != 1 || !strings.Contains(unused[0], "Other") {
+		t.Errorf("unused = %v, want only Other", unused)
 	}
 }

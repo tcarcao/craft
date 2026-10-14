@@ -29,6 +29,7 @@ type (
 	Scenario           = model.Scenario
 	Trigger            = model.Trigger
 	TriggerType        = model.TriggerType
+	ScheduleKind       = model.ScheduleKind
 	Action             = model.Action
 	Step               = model.Step
 	Block              = model.Block
