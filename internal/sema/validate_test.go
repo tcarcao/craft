@@ -333,7 +333,7 @@ func TestValidate_Schedule_Valid(t *testing.T) {
 func TestValidate_Schedule_Invalid(t *testing.T) {
 	for _, tr := range []string{
 		`cron "0 7 * *"`, `cron "0 0 0 7 * * 1"`, `cron "0 7 * * $"`, `cron ""`, `cron "@every"`, `cron "@every 5m"`, `cron "@reboot"`, `cron "@daily *"`,
-		`every "soon"`, `every "0s"`, `every "-5m"`, `every "0d"`, `every "xd"`, `every ""`,
+		`every "soon"`, `every "0s"`, `every "-5m"`, `every "0d"`, `every "xd"`, `every ""`, `every "+2d"`, `every "-2d"`,
 	} {
 		d := scheduleDiags(t, tr)
 		assertHasDiag(t, d, "invalid-schedule")

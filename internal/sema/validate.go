@@ -903,6 +903,10 @@ func scheduleError(kind lang.ScheduleKind, expr string) string {
 // whole days.
 func positiveDuration(s string) bool {
 	if n, ok := strings.CutSuffix(s, "d"); ok {
+		// Digits only: Atoi would accept a leading sign.
+		if n == "" || strings.Trim(n, "0123456789") != "" {
+			return false
+		}
 		days, err := strconv.Atoi(n)
 		return err == nil && days > 0
 	}
