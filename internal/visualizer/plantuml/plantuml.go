@@ -213,6 +213,8 @@ func Sequence(s view.Sequence) string {
 			switch m.Kind {
 			case view.MessageInbound:
 				fmt.Fprintf(&b, "[-> %s : %s\n", al.of(m.To), m.Label)
+			case view.MessageNote:
+				fmt.Fprintf(&b, "note over %s : %s\n", al.of(m.From), m.Label)
 			case view.MessageReply:
 				fmt.Fprintf(&b, "%s --> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
 			case view.MessageAsync:

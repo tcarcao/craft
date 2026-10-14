@@ -10,5 +10,5 @@ sequenceDiagram
     Wallet-)Wallet: notifies "VAS Reservation Canceled"
     VASScheduling->>VASScheduling: cancels the VAS schedule
     Note over Business_User,VASMgmt: Scheduled VAS Applied
-    VASMgmt->>VASMgmt: identifies a scheduled VAS to apply
+    Note over VASMgmt: identifies a scheduled VAS to apply
     VASMgmt->>VASMgmt: applies a VAS and stores details until when its valid

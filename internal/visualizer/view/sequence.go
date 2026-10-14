@@ -28,6 +28,7 @@ const (
 	MessageSelf    MessageKind = "self"    // internal action
 	MessageAsync   MessageKind = "async"   // publish: drawn on the publisher's own lifeline
 	MessageInbound MessageKind = "inbound" // an event arriving from outside the section
+	MessageNote    MessageKind = "note"    // what an actor does, drawn over its own lifeline
 )
 
 // Message is one arrow. From is empty for an inbound message.
@@ -73,6 +74,11 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 		switch it.Kind {
 		case interaction.Trigger:
 			msg.From, msg.To, msg.Kind = ns.addActor(it.From), ns.add(it.To), MessageCall
+			if it.From.Key == it.To.Key {
+				// The actor takes the first step itself: the trigger is what
+				// it does, not a call it makes to itself.
+				msg.Kind = MessageNote
+			}
 		case interaction.Request:
 			msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageCall
 		case interaction.Response:

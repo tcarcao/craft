@@ -83,11 +83,11 @@ sequenceDiagram
     VASMgmt-)Subscription: VAS scheduled with subscription included
     Subscription->>Subscription: creates a VAS Subscription with the details
     Note over Customer,Susbscription: Scheduled VAS Applied
-    VASMgmt->>VASMgmt: identifies a scheduled VAS to apply
+    Note over VASMgmt: identifies a scheduled VAS to apply
     VASMgmt->>VASMgmt: applies a VAS and stores details until when its valid
     VASMgmt-)VASMgmt: notifies "VAS Applied"
     Note over Customer,Susbscription: VAS Renewal Flow
-    VASMgmt->>VASMgmt: identifies a VAS expired
+    Note over VASMgmt: identifies a VAS expired
     VASMgmt->>VASMgmt: marks the VAS as expired
     VASMgmt-)VASMgmt: notifies "VAS expired"
     VASMgmt-)Subscription: VAS expired

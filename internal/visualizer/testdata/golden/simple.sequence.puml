@@ -102,13 +102,13 @@ Subscription -> Subscription : creates a VAS Subscription with the details
 
 == Scheduled VAS Applied ==
 
-VASMgmt -> VASMgmt : identifies a scheduled VAS to apply
+note over VASMgmt : identifies a scheduled VAS to apply
 VASMgmt -> VASMgmt : applies a VAS and stores details until when its valid
 VASMgmt ->> VASMgmt : notifies "VAS Applied"
 
 == VAS Renewal Flow ==
 
-VASMgmt -> VASMgmt : identifies a VAS expired
+note over VASMgmt : identifies a VAS expired
 VASMgmt -> VASMgmt : marks the VAS as expired
 VASMgmt ->> VASMgmt : notifies "VAS expired"
 VASMgmt ->> Subscription : VAS expired

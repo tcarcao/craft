@@ -18,7 +18,7 @@ VASScheduling -> VASScheduling : cancels the VAS schedule
 
 == Scheduled VAS Applied ==
 
-VASMgmt -> VASMgmt : identifies a scheduled VAS to apply
+note over VASMgmt : identifies a scheduled VAS to apply
 VASMgmt -> VASMgmt : applies a VAS and stores details until when its valid
 
 @enduml

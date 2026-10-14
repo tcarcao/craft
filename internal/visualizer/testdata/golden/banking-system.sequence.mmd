@@ -26,7 +26,7 @@ sequenceDiagram
     BalanceTracking->>BalanceTracking: calculates available balance
     AccountManagement-->>Customer: returns balance information
     Note over Customer,CRON: Suspicious Activity Detection
-    TransactionValidation->>TransactionValidation: detects suspicious pattern
+    Note over TransactionValidation: detects suspicious pattern
     TransactionValidation->>AccountManagement: to freeze account
     AccountManagement->>AccountManagement: applies security hold
     TransactionValidation-)TransactionValidation: notifies "Account Frozen"
