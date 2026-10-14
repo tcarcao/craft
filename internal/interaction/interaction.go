@@ -217,16 +217,26 @@ type walker struct {
 }
 
 // walk visits steps that sit at path. opening is true when the steps are where
-// the scenario opens: the first step of the scenario, or of a branch of a
-// block that opens it. Each branch the trigger reaches gets its own trigger.
-func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) {
+// the scenario opens: the body of the scenario, or of a branch of a block that
+// opens it. Each such body gets one trigger, to its first step that can take
+// one: the action itself, or an inner block's branches. When an opening block
+// reaches no action (every branch empty), the body's first action in source
+// order takes the trigger instead. walk reports whether it emitted a trigger.
+func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (triggered bool) {
+	pending := opening
 	for i, st := range steps {
 		switch {
 		case st.Block != nil:
-			w.walkBlock(st.Block, path, opening && i == 0)
+			if pending && i == 0 {
+				if w.walkBlock(st.Block, path, true) {
+					pending, triggered = false, true
+				}
+			} else {
+				w.walkBlock(st.Block, path, false)
+			}
 		case st.Action != nil:
-			if opening && i == 0 {
-				w.branchTrigger(*st.Action, path)
+			if pending && w.branchTrigger(*st.Action, path) {
+				pending, triggered = false, true
 			}
 			// Keep in step with scenarioLayout.walk in
 			// visualizer/view/sequence.go: both number actions in the same
@@ -235,34 +245,39 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) {
 			w.action(*st.Action, path)
 		}
 	}
+	return triggered
 }
 
 // branchTrigger draws the scenario's trigger into the branch at path, to a,
 // that branch's first action. The branch's call stack starts with it alone.
-func (w *walker) branchTrigger(a model.Action, path []BranchRef) {
+func (w *walker) branchTrigger(a model.Action, path []BranchRef) bool {
 	if w.trigger == nil || a.Context == "" {
-		return
+		return false
 	}
 	it := *w.trigger
 	it.To = endpoint(a.Context, a.From)
 	it.Branch = slices.Clone(path)
 	w.callStack = []frame{{caller: it.From, callee: it.To}}
 	w.out = append(w.out, it)
+	return true
 }
 
 // walkBlock visits each branch of b. Every branch of an alt starts from the
 // call stack as it was at the alt; an opt body continues from it. After the
 // block the stack is restored to its state at the block's start, because which
-// branch ran is unknown.
-func (w *walker) walkBlock(b *model.Block, path []BranchRef, opening bool) {
+// branch ran is unknown. It reports whether any branch got a trigger.
+func (w *walker) walkBlock(b *model.Block, path []BranchRef, opening bool) (triggered bool) {
 	saved := slices.Clone(w.callStack)
 	for i, br := range b.Branches {
 		if b.Kind == lang.BlockAlt || i == 0 {
 			w.callStack = slices.Clone(saved)
 		}
-		w.walk(br.Steps, append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}), opening)
+		if w.walk(br.Steps, append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}), opening) {
+			triggered = true
+		}
 	}
 	w.callStack = saved
+	return triggered
 }
 
 // action derives the interaction of the w.step-th action, if it has one.

@@ -607,3 +607,25 @@ use_case "Digest" {
 		t.Errorf("triggers = %q, want %q", strings.Join(got, "|"), want)
 	}
 }
+
+// A branch that opens with a block whose own branches are all empty still gets
+// a trigger: it goes to the branch's first action in source order.
+func TestDerive_TriggerFallsBackToTheBranchsFirstAction(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        alt "online"
+            opt "nothing"
+            Ordering charges the card
+        else "by phone"
+            Shipping books a courier
+}
+`})
+	want := `0 trigger Customer->Ordering {alt:online#0}
+1 internal Ordering->Ordering {alt:online#0}
+0 trigger Customer->Shipping {alt:by phone#1}
+2 internal Shipping->Shipping {alt:by phone#1}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
