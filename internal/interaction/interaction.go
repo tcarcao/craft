@@ -161,13 +161,23 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 		if t.ScheduleKind != "" {
 			it.Site.Length = utf16Len(string(t.ScheduleKind)) // the keyword stands for CRON
 		}
+		if len(sc.Steps) > 0 && sc.Steps[0].Block != nil {
+			// Opening with a block: each branch that has a target gets the
+			// trigger (walker.branchTrigger checks per branch). The stack
+			// keeps the frame of the first action with a subject, for what
+			// follows the block.
+			trigger = &it
+			for _, a := range actions {
+				if a.Context != "" {
+					callStack = append(callStack, frame{caller: actor, callee: endpoint(a.Context, a.From)})
+					break
+				}
+			}
+			break
+		}
 		if len(actions) > 0 && actions[0].Context != "" {
 			first := endpoint(actions[0].Context, actions[0].From)
 			callStack = append(callStack, frame{caller: actor, callee: first})
-			if len(sc.Steps) > 0 && sc.Steps[0].Block != nil {
-				trigger = &it
-				break
-			}
 			it.To = first
 			out = append(out, it)
 		}

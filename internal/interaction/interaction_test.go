@@ -629,3 +629,24 @@ use_case "Checkout" {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// The trigger is drawn into any branch that has a target, even when the
+// scenario's first action in source order has no context to call.
+func TestDerive_TriggerIgnoresABranchWithoutAContext(t *testing.T) {
+	act := func(ctx string) model.Step {
+		return model.Step{Action: &model.Action{Type: model.ActionTypeInternal, Context: ctx, Verb: "does"}}
+	}
+	doc := &model.CraftDoc{UseCases: []model.UseCase{{Name: "U", Scenarios: []model.Scenario{{
+		ID:      "s1",
+		Trigger: model.Trigger{Type: model.TriggerTypeExternal, Actor: "Customer"},
+		Steps: []model.Step{{Block: &model.Block{ID: "b1", Kind: model.BlockAlt, Branches: []model.Branch{
+			{Label: "first", Steps: []model.Step{act("")}},
+			{Label: "second", Steps: []model.Step{act("Ordering")}},
+		}}}},
+	}}}}}
+	want := `0 trigger Customer->Ordering {alt:second#1}
+2 internal Ordering->Ordering {alt:second#1}`
+	if got := branchSummary(interaction.Derive(doc)); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
