@@ -46,6 +46,12 @@ func TestBuild(t *testing.T) {
 		{"store", map[string]string{"a.craft": uc("Read", "j", "  when r listens store.q.inserted\n    r does it\n") + uc("Write", "j", "  when S does\n    w notifies store.q.inserted\n")}, []string{"Write", "Read"}, false},
 		{"roster member", map[string]string{"a.craft": uc("L", "j", "  when l listens e.X, e.A\n    l does it\n") + uc("P", "j", "  when S does\n    p notifies e.A\n")}, []string{"P", "L"}, false},
 		{"cycle", map[string]string{"a.craft": uc("A", "j", "  when a listens e.B\n    a notifies e.A\n") + uc("B", "j", "  when b listens e.A\n    b notifies e.B\n")}, []string{"A", "B"}, true},
+		// A cycle is entered where a placed member hands off into it, not
+		// at the cycle's first member in the file (billing-cycle-rollover).
+		{"cycle entered from a placed member", map[string]string{"a.craft": uc("Open", "j", "  when S opens\n    o notifies e.End\n") +
+			uc("Moves", "j", "  when m listens e.Ended\n    m does it\n") +
+			uc("Turn", "j", "  when t listens e.End\n    t notifies e.Ended\n") +
+			uc("Rearm", "j", "  when r listens e.Ended\n    r notifies e.End\n")}, []string{"Open", "Turn", "Moves", "Rearm"}, true},
 		{"other journeys ignored", map[string]string{"a.craft": uc("A", "j", "  when S does\n    a does it\n") + uc("Z", "k", "  when S does\n    z does it\n")}, []string{"A"}, false},
 	}
 	for _, c := range cases {

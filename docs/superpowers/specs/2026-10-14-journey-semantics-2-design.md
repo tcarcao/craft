@@ -1284,8 +1284,10 @@ craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' -
   - `continues`: A has a `continues` link to B.
   An `includes` link adds no edge: the included flow is shown in place by its `ref` frame.
 - **Order:** a topological sort of the members over the edges (Kahn). When several members are ready,
-  the one with the smallest (source file, line) comes first. When none is ready (a cycle), the remaining
-  member with the smallest (source file, line) comes next and the result records `Cycle: true`; the CLI
+  the one with the smallest (source file, line) comes first. When none is ready (a cycle), the member
+  with the smallest (source file, line) among those a placed member hands off to comes next (among all
+  remaining members when no placed member reaches one), so the cycle is entered where the flow reaches it,
+  and the result records `Cycle: true`; the CLI
   prints `note: journey <slug> has a hand-off cycle; its members are ordered by source position` to
   stderr. The order is deterministic.
 

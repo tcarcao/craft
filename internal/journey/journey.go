@@ -39,9 +39,10 @@ func Slugs(doc *model.CraftDoc) []string {
 
 // Build returns the spine of slug: every member, the edges between members,
 // and a topological order over the edges (Kahn). Among ready members the one
-// with the smallest (source file, line) goes first; when none is ready (a
-// cycle) the remaining one with the smallest (source file, line) does, and
-// Cycle is set.
+// with the smallest (source file, line) goes first. When none is ready (a
+// cycle), the cycle is entered at the smallest (source file, line) of the
+// members a placed member hands off to (of all remaining members when there
+// is none), and Cycle is set.
 func Build(doc *model.CraftDoc, slug string) model.Journey {
 	j := model.Journey{Slug: slug}
 	if doc == nil || slug == "" {
@@ -169,8 +170,10 @@ func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 }
 
 // topoOrder orders members (indices into members) by Kahn's algorithm over
-// edges, ties broken by (source file, line); it reports whether it had to
-// break a cycle.
+// edges, ties broken by (source file, line). When no member is ready (a
+// cycle), it places the first by (source file, line) of the members a placed
+// member hands off to, or of all the rest when there is none, and reports
+// the cycle.
 func topoOrder(doc *model.CraftDoc, members []int, edges []model.JourneyEdge) (order []int, cycle bool) {
 	n := len(members)
 	indeg := make([]int, n)
@@ -193,26 +196,38 @@ func topoOrder(doc *model.CraftDoc, members []int, edges []model.JourneyEdge) (o
 		}
 		return x < y
 	}
+	// rank orders the unplaced members: ready ones first; then, to break a
+	// cycle, ones a placed member hands off to, so the cycle is entered
+	// where the flow reaches it; then the rest.
+	reached := make([]bool, n)
+	rank := func(m int) int {
+		switch {
+		case indeg[m] == 0:
+			return 0
+		case reached[m]:
+			return 1
+		}
+		return 2
+	}
 	placed := make([]bool, n)
 	for len(order) < n {
-		next, ready := -1, false
+		next := -1
 		for m := range n {
 			if placed[m] {
 				continue
 			}
-			r := indeg[m] == 0
-			switch {
-			case next < 0, r && !ready, r == ready && before(m, next):
-				next, ready = m, r
+			if next < 0 || rank(m) < rank(next) || rank(m) == rank(next) && before(m, next) {
+				next = m
 			}
 		}
-		if !ready {
+		if indeg[next] > 0 {
 			cycle = true
 		}
 		placed[next] = true
 		order = append(order, next)
 		for _, s := range succ[next] {
 			indeg[s]--
+			reached[s] = true
 		}
 	}
 	return order, cycle
