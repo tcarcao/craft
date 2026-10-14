@@ -156,7 +156,7 @@ scenarios with the same list are therefore indistinguishable, and two with diffe
 | `craft/sema/store-ref-in-event-list` (new) | error | A `store.` ref in a list of 2+ items. "A store hand-off names one store; write one scenario per store." |
 | `craft/lint/duplicate-event-in-list` (new) | warning | The same item twice in one list (exact text). Range: the second one. |
 | `craft/lint/dead-event`, `craft/lint/event-not-past-tense` | warning | Unchanged rules, now applied to each item; the range is the item. |
-| `craft/lint/duplicate-scenario-body` (new, §5.2) | warning | Two scenarios of one use case with identical bodies. When both triggers are `listens` by the same subject, with no store ref and the same schedule, the message says "fold them into one trigger: `when <subject> listens <a>, <b>`" (each item once); otherwise it names what differs (§5.2). |
+| `craft/lint/duplicate-scenario-body` (new, §5.2) | warning | Scenarios of one use case with identical bodies, reported once per group at its first scenario. When the triggers are `listens` by the same subject, with no store ref and the same schedule, the message says "fold them into one trigger: `when <subject> listens <a>, <b>, <c>`" (every item of the group once); otherwise it names what differs (§5.2). |
 | `craft/syntax/unexpected-token` | error | A comma with no item after it (the list ends at a comma followed by a step line or `}`). |
 
 ### 4.4 Interaction semantics
@@ -267,23 +267,30 @@ The gap was that a tag is invisible in the diagram and that nothing checks its v
 both.
 
 ### 5.2 Sema / lint
-`craft/lint/duplicate-scenario-body` (new, warning). Two scenarios of one use case whose step trees are
+`craft/lint/duplicate-scenario-body` (new, warning). Scenarios of one use case whose step trees are
 equal: the same shape, every action equal on `Type`, `Context`, `Verb`, `TargetContext`, `Event`,
 `Connector`, `Phrase` and `Operation.Text`, every block equal on kind and labels. Notes and links are
-ignored. The body must hold at least one action. The range is the second scenario's trigger.
-- Both triggers `listens` by the same subject, neither with a store ref, both with the same schedule →
-  the G10 message (§4.3), each item once, the shared schedule kept
-  (`when s listens a.A, b.B cron "…"`).
-- Otherwise, when the triggers differ in initiator, schedule, `receives` operation or a store ref →
-  "the two scenarios run the same steps but start <what differs>, so one trigger cannot replace them;
+ignored. The body must hold at least one action. The scenarios are grouped by body, and each group of
+two or more is reported **once, at the group head**: the first scenario with that body, whose trigger a
+fold rewrites. The message starts "this scenario and the scenario(s) at line(s) <the other members> run
+the same steps". Within the group, `listens` triggers by the same subject, with no store ref and the
+same schedule, form one fold set; every other trigger is a set of its own.
+- One set holds the whole group → the G10 message (§4.3) with every item of the group once, the shared
+  schedule kept: "fold them into one trigger: `when s listens a.A, b.B, c.C cron "…"`".
+- Some sets hold two or more triggers, but not the whole group → one "fold the scenarios at lines <…>
+  into one trigger: `…`" per such set, then what tells the sets apart (as below, "the rest start …,
+  so one trigger cannot replace them all").
+- No set holds two triggers, and the triggers differ in initiator, schedule, `receives` operation or a
+  store ref → "… run the same steps but start <what differs>, so one trigger cannot replace them;
   check that the steps really are the same, and if they differ, write the difference as an `alt`".
-- Otherwise → "the two scenarios run the same steps; if they differ only by site, market or
-  environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the
-  difference as an `alt`".
+  What differs is named between the head's set and the first other set that differs from it.
+- Otherwise → "… run the same steps; if they differ only by site, market or environment, write one
+  scenario with a `sites`/`envs` tag; if the steps really differ, write the difference as an `alt`".
 
-Today's corpus: 13 warnings: 11 `listens` folds in 6 use cases (they fold into G10 lists), one pair of
-initiators running one body (`nmf-billing-cycle-rollover:19`) and one pair of `receives` operations
-(`revise-an-active-poa-adjustment:31`).
+Today's corpus: 8 warnings: 6 `listens` fold groups in 5 use cases (17 scenarios; they fold into G10
+lists), one pair of initiators running one body (`nmf-billing-cycle-rollover:11`, with line 19) and
+one pair of `receives` operations (`revise-an-active-poa-adjustment:11`, with line 31). A pairwise
+lint gave 13 warnings for the same 17 scenarios.
 
 Craft does not validate tag **values**. The site and environment codes are deployment configuration
 that craft cannot see; the hub can (§5.5).
@@ -920,7 +927,7 @@ Cross-cutting:
 - **Fuzz:** `FuzzParseUseCaseBody` seeds with every example of Part I; `FuzzFormatBranches` seeds with
   multi-line lists.
 - **Dogfood:** `craft validate` on re-arch-central stays at 0 errors before migration. The only new
-  warnings are `duplicate-scenario-body` (11) and `unused-actor` changes (none expected). The ledger
+  warnings are `duplicate-scenario-body` (8: 6 fold groups in 5 use cases, 2 others) and `unused-actor` changes (none expected). The ledger
   file, rewritten with a list, and `seller-tooling/ai-assistant-chat.craft`, rewritten with
   `returns stream`, are rendered as the acceptance examples.
 
@@ -944,7 +951,7 @@ v2.24.0, minor. CHANGELOG:
      DOMAIN-MAP tag table.
    - `billing/nmf-monetization-events-become-warehouse-facts.craft`: the 22 detail types become the
      list, and the comment that lists them goes.
-   - The 6 use cases flagged by `duplicate-scenario-body` fold their scenarios into lists. The two
+   - The 5 use cases flagged with a fold by `duplicate-scenario-body` fold their scenarios into lists. The two
      `vas/ad-lifecycle-vas-cascade.craft` use cases each get a four-item list, and both `OR-TRIGGER`
      comments are removed (in `vas/seller-is-mailed-about-addon-events.craft` the eight mails differ, so
      the scenarios stay and the comment becomes a `note`).

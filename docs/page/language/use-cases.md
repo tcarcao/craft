@@ -126,7 +126,7 @@ Each item pairs with its publishers on its own. In a sequence diagram, a publish
 
 Flow and architecture views draw one queue edge per item, and C4 one `Event_Queue` delivery per item.
 
-Two scenarios of one use case that run the same steps get `craft/lint/duplicate-scenario-body`. When both are `listens` triggers of the same subject (no store ref, same schedule), the message gives the folded trigger: `fold them into one trigger: \`when seshat listens sns.a, sns.b\``. When they start differently (another initiator, schedule, `receives` operation or a store hand-off), it names the difference instead.
+Scenarios of one use case that run the same steps get `craft/lint/duplicate-scenario-body`, once per group of same-body scenarios, at the first of them. When they are `listens` triggers of the same subject (no store ref, same schedule), the message gives one folded trigger with every item of the group: `fold them into one trigger: \`when seshat listens sns.a, sns.b, sns.c\``. When they start differently (another initiator, schedule, `receives` operation or a store hand-off), it names the difference instead.
 
 ### Store Hand-offs
 

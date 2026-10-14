@@ -131,7 +131,7 @@ use_case "seshat records a Mercury domain event in the transaction ledger" {
 }
 ```
 
-The sequence diagram draws one inbound arrow for the list (`sns.mercury-advert-state-changed, … (+1 more) (from cooker)`). Two scenarios of one use case with the same steps get `craft/lint/duplicate-scenario-body`, which gives the folded trigger.
+The sequence diagram draws one inbound arrow for the list (`sns.mercury-advert-state-changed, … (+1 more) (from cooker)`). Scenarios of one use case with the same steps get `craft/lint/duplicate-scenario-body`, which gives one folded trigger for the whole group.
 
 A step that publishes one event chosen at run time names the set with `notifies one of`:
 

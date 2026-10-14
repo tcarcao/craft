@@ -6,6 +6,7 @@ package sema
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
@@ -29,64 +30,156 @@ func LintModel(doc *model.CraftDoc, perFileTrees map[string]syntax.SyntaxNode, l
 }
 
 // ── duplicate-scenario-body ───────────────────────────────────────────────────
-// Warning: two scenarios of one use case whose step trees are equal (spec
-// §5.2). Notes (and, from v2.25, links) are ignored; the body must hold an
-// action. The range is the second scenario's trigger subject. A scenario is
-// reported once, against the first earlier scenario it repeats.
+// Warning: scenarios of one use case whose step trees are equal (spec §5.2).
+// Notes (and, from v2.25, links) are ignored; the body must hold an action.
+// The scenarios are grouped by body, and each group of two or more is
+// reported once, at the group head: the first scenario with that body, whose
+// trigger a fold rewrites. The message names the lines of the other members.
 
 func lintDuplicateScenarioBodies(doc *model.CraftDoc) []model.Diagnostic {
 	var diags []model.Diagnostic
 	for _, uc := range doc.UseCases {
-		for j := 1; j < len(uc.Scenarios); j++ {
-			b := uc.Scenarios[j]
-			if len(b.Actions()) == 0 {
+		for _, group := range scenarioBodyGroups(uc.Scenarios) {
+			if len(group) < 2 {
 				continue
 			}
-			for i := 0; i < j; i++ {
-				a := uc.Scenarios[i]
-				if !stepsEqual(a.Steps, b.Steps) {
-					continue
-				}
-				diags = append(diags, model.Diagnostic{
-					Code:      "craft/lint/duplicate-scenario-body",
-					Message:   duplicateBodyMessage(a.Trigger, b.Trigger),
-					Severity:  model.SeverityWarning,
-					SourceURI: uc.SourceURI,
-					Range:     triggerRange(b.Trigger),
-				})
-				break
+			triggers := make([]model.Trigger, len(group))
+			for k, i := range group {
+				triggers[k] = uc.Scenarios[i].Trigger
 			}
+			diags = append(diags, model.Diagnostic{
+				Code:      "craft/lint/duplicate-scenario-body",
+				Message:   duplicateBodyMessage(triggers),
+				Severity:  model.SeverityWarning,
+				SourceURI: uc.SourceURI,
+				Range:     triggerRange(triggers[0]),
+			})
 		}
 	}
 	return diags
 }
 
-// duplicateBodyMessage says how to fix two scenarios with one body. It
-// suggests a fold only when one `listens` trigger can replace both: the same
-// subject, no store ref (a store hand-off names one store, so it cannot join
-// a list) and the same schedule. Otherwise it names what differs between the
-// triggers; with nothing to name, the scenarios may differ by site or
-// environment.
-func duplicateBodyMessage(a, b model.Trigger) string {
-	const same = "the two scenarios run the same steps"
-	if a.Type == lang.TriggerDomainListen && b.Type == lang.TriggerDomainListen && a.Context == b.Context &&
-		a.Store == nil && b.Store == nil && a.ScheduleKind == b.ScheduleKind && a.Schedule == b.Schedule {
-		var items []string
-		for _, ev := range append(refOrEvents(a), refOrEvents(b)...) {
+// scenarioBodyGroups returns the indexes of the scenarios that hold an
+// action, grouped by equal body. Groups are in the order of their heads and
+// members in source order.
+func scenarioBodyGroups(scenarios []model.Scenario) [][]int {
+	var groups [][]int
+next:
+	for j, sc := range scenarios {
+		if len(sc.Actions()) == 0 {
+			continue
+		}
+		for g, group := range groups {
+			if stepsEqual(scenarios[group[0]].Steps, sc.Steps) {
+				groups[g] = append(group, j)
+				continue next
+			}
+		}
+		groups = append(groups, []int{j})
+	}
+	return groups
+}
+
+// duplicateBodyMessage says how to fix a group of scenarios with one body;
+// triggers[0] is the group head, where the warning sits. Triggers fold into
+// one `listens` trigger when they have the same subject, no store ref (a
+// store hand-off names one store, so it cannot join a list) and the same
+// schedule. The message gives each such fold, with every item of the
+// folded triggers once. When the triggers do not all fold into one, it names
+// what tells the remaining triggers apart; with nothing to name, the
+// scenarios may differ by site or environment.
+func duplicateBodyMessage(triggers []model.Trigger) string {
+	var lines []string
+	for _, t := range triggers[1:] {
+		lines = append(lines, strconv.Itoa(t.Line))
+	}
+	same := "this scenario and the scenario at line " + lines[0] + " run the same steps"
+	if len(lines) > 1 {
+		same = "this scenario and the scenarios at lines " + andList(lines) + " run the same steps"
+	}
+
+	classes := foldClasses(triggers)
+	if len(classes) == 1 {
+		return fmt.Sprintf("%s; fold them into one trigger: `%s`", same, foldedTrigger(classes[0]))
+	}
+	var folds []string
+	for _, class := range classes {
+		if len(class) < 2 {
+			continue
+		}
+		var at []string
+		for _, t := range class {
+			at = append(at, strconv.Itoa(t.Line))
+		}
+		folds = append(folds, fmt.Sprintf("fold the scenarios at lines %s into one trigger: `%s`", andList(at), foldedTrigger(class)))
+	}
+	diff := ""
+	for _, class := range classes[1:] {
+		if diff = triggerDifference(classes[0][0], class[0]); diff != "" {
+			break
+		}
+	}
+	if len(folds) == 0 {
+		if diff != "" {
+			return fmt.Sprintf("%s but start %s, so one trigger cannot replace them; check that the steps really are the same, and if they differ, write the difference as an `alt`", same, diff)
+		}
+		return same + "; if they differ only by site, market or environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the difference as an `alt`"
+	}
+	msg := same + "; " + strings.Join(folds, "; ")
+	if diff != "" {
+		return fmt.Sprintf("%s; the rest start %s, so one trigger cannot replace them all; check that the steps really are the same, and if they differ, write the difference as an `alt`", msg, diff)
+	}
+	return msg + "; if the rest differ only by site, market or environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the difference as an `alt`"
+}
+
+// foldClasses splits a group's triggers into the sets that one trigger can
+// replace: `listens` triggers with the same subject, no store ref and the
+// same schedule share a set; every other trigger is a set of its own. Sets
+// are in the order of their first member.
+func foldClasses(triggers []model.Trigger) [][]model.Trigger {
+	var classes [][]model.Trigger
+	foldable := func(t model.Trigger) bool { return t.Type == lang.TriggerDomainListen && t.Store == nil }
+next:
+	for _, t := range triggers {
+		if foldable(t) {
+			for c, class := range classes {
+				h := class[0]
+				if foldable(h) && h.Context == t.Context && h.ScheduleKind == t.ScheduleKind && h.Schedule == t.Schedule {
+					classes[c] = append(class, t)
+					continue next
+				}
+			}
+		}
+		classes = append(classes, []model.Trigger{t})
+	}
+	return classes
+}
+
+// foldedTrigger writes one `listens` trigger for a fold class: every item
+// of its triggers once, in source order, and the shared schedule.
+func foldedTrigger(class []model.Trigger) string {
+	var items []string
+	for _, t := range class {
+		for _, ev := range refOrEvents(t) {
 			if !slices.Contains(items, ev) {
 				items = append(items, ev)
 			}
 		}
-		fold := fmt.Sprintf("when %s listens %s", a.Context, strings.Join(items, ", "))
-		if a.ScheduleKind != "" {
-			fold += fmt.Sprintf(" %s %q", a.ScheduleKind, a.Schedule)
-		}
-		return fmt.Sprintf("%s; fold them into one trigger: `%s`", same, fold)
 	}
-	if diff := triggerDifference(a, b); diff != "" {
-		return fmt.Sprintf("%s but start %s, so one trigger cannot replace them; check that the steps really are the same, and if they differ, write the difference as an `alt`", same, diff)
+	h := class[0]
+	fold := fmt.Sprintf("when %s listens %s", h.Context, strings.Join(items, ", "))
+	if h.ScheduleKind != "" {
+		fold += fmt.Sprintf(" %s %q", h.ScheduleKind, h.Schedule)
 	}
-	return same + "; if they differ only by site, market or environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the difference as an `alt`"
+	return fold
+}
+
+// andList joins "a", "b", "c" as "a, b and c".
+func andList(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 // triggerDifference names what tells two triggers apart, for

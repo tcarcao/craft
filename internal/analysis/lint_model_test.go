@@ -42,8 +42,8 @@ func TestLintModel_DuplicateScenarioBody(t *testing.T) {
 			if fold := strings.Contains(got[0].Message, "when s listens a.A, b.B"); fold != c.fold {
 				t.Errorf("%s: message %q", c.name, got[0].Message)
 			}
-			if got[0].Range.Start.Line == 5 {
-				t.Errorf("%s: must point at the second scenario", c.name)
+			if got[0].Range.Start.Line != 5 {
+				t.Errorf("%s: must point at the group head (line 6), got LSP line %d", c.name, got[0].Range.Start.Line)
 			}
 		}
 	}
@@ -77,6 +77,66 @@ func TestLintModel_DuplicateScenarioBodyMessage(t *testing.T) {
 		}
 		if strings.Contains(got[0].Message, "sites") {
 			t.Errorf("%s: names sites/envs: %q", c.name, got[0].Message)
+		}
+	}
+}
+
+// TestLintModel_DuplicateScenarioBodyGroups pins the grouping: scenarios
+// with one body form a group, reported once at the group head, and the
+// message names the other members' lines and folds every foldable trigger
+// of the group into one list, each item once.
+func TestLintModel_DuplicateScenarioBodyGroups(t *testing.T) {
+	const x = "    s asks t to do it  [x]\n"
+	const y = "    s asks t to do more  [y]\n"
+	cases := []struct {
+		name, body string
+		want       int
+		has        []string
+		hasNot     []string
+	}{
+		{"four listens, one list",
+			"  when s listens a.A\n" + x + "  when s listens b.B\n" + x + "  when s listens c.C\n" + x + "  when s listens d.D\n" + x,
+			1, []string{"the scenarios at lines 8, 10 and 12", "fold them into one trigger: `when s listens a.A, b.B, c.C, d.D`"}, []string{"a.A, b.B`", "sites"}},
+		{"two scenarios, one line",
+			"  when s listens a.A\n" + x + "  when s listens b.B\n" + x,
+			1, []string{"the scenario at line 8 run", "`when s listens a.A, b.B`"}, nil},
+		{"items once across the group",
+			"  when s listens a.A, b.B\n" + x + "  when s listens b.B\n" + x + "  when s listens c.C, a.A\n" + x,
+			1, []string{"`when s listens a.A, b.B, c.C`"}, nil},
+		{"two groups interleaved",
+			"  when s listens a.A\n" + x + "  when s listens b.B\n" + y + "  when s listens c.C\n" + x + "  when s listens d.D\n" + y,
+			2, nil, nil},
+		{"foldable part of a mixed group",
+			"  when s listens a.A\n" + x + "  when O starts it\n" + x + "  when s listens b.B\n" + x + "  when s listens c.C\n" + x,
+			1, []string{"fold the scenarios at lines 6, 10 and 12 into one trigger: `when s listens a.A, b.B, c.C`", "different initiators (`s` and `O`)"}, []string{"sites"}},
+		{"schedule splits the fold",
+			"  when s listens a.A cron \"0 1 * * *\"\n" + x + "  when s listens b.B\n" + x + "  when s listens c.C cron \"0 1 * * *\"\n" + x,
+			1, []string{"fold the scenarios at lines 6 and 10 into one trigger: `when s listens a.A, c.C cron \"0 1 * * *\"`", "different schedules"}, nil},
+		{"no fold, three initiators",
+			"  when O starts it\n" + x + "  when P starts it\n" + x + "  when Q starts it\n" + x,
+			1, []string{"the scenarios at lines 8 and 10", "different initiators (`O` and `P`)"}, []string{"fold"}},
+	}
+	for _, c := range cases {
+		got := modelDiags(t, dupHead+c.body+"}\n", "craft/lint/duplicate-scenario-body")
+		if len(got) != c.want {
+			t.Errorf("%s: %d warnings, want %d: %v", c.name, len(got), c.want, got)
+			continue
+		}
+		if c.want != 1 {
+			continue
+		}
+		if got[0].Range.Start.Line != 5 {
+			t.Errorf("%s: must point at the group head, got LSP line %d", c.name, got[0].Range.Start.Line)
+		}
+		for _, h := range c.has {
+			if !strings.Contains(got[0].Message, h) {
+				t.Errorf("%s: message %q lacks %q", c.name, got[0].Message, h)
+			}
+		}
+		for _, h := range c.hasNot {
+			if strings.Contains(got[0].Message, h) {
+				t.Errorf("%s: message %q has %q", c.name, got[0].Message, h)
+			}
 		}
 	}
 }
