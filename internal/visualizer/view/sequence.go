@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
 
@@ -58,21 +59,13 @@ type Message struct {
 	Branch []BranchRef
 }
 
-// BlockKind is the kind of an alt/opt block.
-type BlockKind string
-
-const (
-	BlockAlt BlockKind = "alt"
-	BlockOpt BlockKind = "opt"
-)
-
 // BranchRef locates a message inside one branch of a block.
 type BranchRef struct {
 	// Block identifies the block (model.Block.ID). It is unique within the
 	// source file, hence also within a scenario, which is all BlockOps
 	// compares it across.
 	Block string
-	Kind  BlockKind
+	Kind  lang.BlockKind
 	Label string
 	Index int // 0-based branch index within the block
 }
@@ -91,7 +84,7 @@ const (
 // only, since both backends close every block with a bare end.
 type BlockOp struct {
 	Kind      BlockOpKind
-	BlockKind BlockKind
+	BlockKind lang.BlockKind
 	Label     string
 }
 
@@ -273,11 +266,14 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 	for _, st := range steps {
 		switch {
 		case st.Action != nil:
+			// Keep in step with interaction's walker (walk in
+			// interaction.go): both number actions in the same order.
+			// TestSequenceStepsMatchInteractionSteps guards the pairing.
 			l.step++
 			l.emit(l.step)
 		case st.Block != nil:
 			for i, br := range st.Block.Branches {
-				inner := append(slices.Clone(path), BranchRef{Block: st.Block.ID, Kind: BlockKind(st.Block.Kind), Label: br.Label, Index: i})
+				inner := append(slices.Clone(path), BranchRef{Block: st.Block.ID, Kind: st.Block.Kind, Label: br.Label, Index: i})
 				before := len(sec.Messages)
 				l.walk(br.Steps, inner)
 				if len(sec.Messages) == before {
@@ -304,7 +300,7 @@ func branchPath(refs []interaction.BranchRef) []BranchRef {
 	}
 	out := make([]BranchRef, len(refs))
 	for i, r := range refs {
-		out[i] = BranchRef{Block: r.Block, Kind: BlockKind(r.Kind), Label: r.Label, Index: r.Index}
+		out[i] = BranchRef{Block: r.Block, Kind: r.Kind, Label: r.Label, Index: r.Index}
 	}
 	return out
 }

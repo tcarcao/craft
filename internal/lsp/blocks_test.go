@@ -274,8 +274,8 @@ func TestBranchCompletion(t *testing.T) {
 		for _, it := range list.Items {
 			if it.Label == label {
 				found = true
-				if !strings.HasPrefix(it.InsertText, text) {
-					t.Errorf("%s insert = %q, want prefix %q", label, it.InsertText, text)
+				if it.InsertText != text {
+					t.Errorf("%s insert = %q, want %q", label, it.InsertText, text)
 				}
 				if it.InsertTextFormat != 2 {
 					t.Errorf("%s insertTextFormat = %v, want 2 (snippet)", label, it.InsertTextFormat)

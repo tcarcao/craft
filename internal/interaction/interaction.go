@@ -199,6 +199,9 @@ func (w *walker) walk(steps []model.Step, path []BranchRef) {
 		case st.Block != nil:
 			w.walkBlock(st.Block, path)
 		case st.Action != nil:
+			// Keep in step with scenarioLayout.walk in
+			// visualizer/view/sequence.go: both number actions in the same
+			// order. TestSequenceStepsMatchInteractionSteps guards the pairing.
 			w.step++
 			w.action(*st.Action, path)
 		}

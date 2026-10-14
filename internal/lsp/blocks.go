@@ -171,8 +171,8 @@ func blockKeywordCompletions() []protocol.CompletionItem {
 	}
 	return []protocol.CompletionItem{
 		mk("scenario", "name the scenario that follows", `scenario "${1:name}"`),
-		mk("alt", "alternative branches: exactly one runs", "alt \"${1:condition}\"\n\t${2:Context} ${3:returns} ${4:result}"),
-		mk("opt", "optional branch: runs only under its condition", "opt \"${1:condition}\"\n\t${2:Context} ${3:returns} ${4:result}"),
-		mk("else", "next branch of the enclosing alt", "else \"${1:condition}\"\n\t${2:Context} ${3:returns} ${4:result}"),
+		mk("alt", "alternative branches: exactly one runs", `alt "${1:condition}"`),
+		mk("opt", "optional branch: runs only under its condition", `opt "${1:condition}"`),
+		mk("else", "next branch of the enclosing alt", `else "${1:condition}"`),
 	}
 }

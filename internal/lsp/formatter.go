@@ -256,12 +256,15 @@ func squashWhitespace(s string) string {
 // warning.
 func bailsFormatting(d craft.Diagnostic) bool {
 	return d.Severity == craft.SeverityError || d.Code == "craft/syntax/not-yet-implemented" ||
-		blockStructureCodes[d.Code]
+		refusingSyntaxCodes[d.Code]
 }
 
-// blockStructureCodes are the spec §3.2 diagnostics for alt/opt/else blocks
-// and scenario names. See bailsFormatting.
-var blockStructureCodes = map[string]bool{
+// refusingSyntaxCodes are the syntax diagnostics that make the formatter
+// refuse a file: the spec §3.2 ones for alt/opt/else blocks and scenario names,
+// plus craft/syntax/unexpected-token. That code is general, but it is also what
+// a verbless action line and text after a block label report, and formatting
+// either could move a line between blocks. See bailsFormatting.
+var refusingSyntaxCodes = map[string]bool{
 	"craft/syntax/empty-branch":          true,
 	"craft/syntax/inconsistent-indent":   true,
 	"craft/syntax/orphan-else":           true,
