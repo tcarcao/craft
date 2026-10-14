@@ -878,7 +878,7 @@ func scheduleError(kind lang.ScheduleKind, expr string) string {
 				return ""
 			}
 			if strings.HasPrefix(expr, "@every") {
-				return fmt.Sprintf("cron macro %q is not accepted; @every is not accepted; use when every \"5m\" for an interval", expr)
+				return fmt.Sprintf("@every is not accepted (%q); use when every \"5m\" for an interval", expr)
 			}
 			return fmt.Sprintf("unknown cron macro %q; use @yearly, @annually, @monthly, @weekly, @daily, @midnight or @hourly, or 5 or 6 fields like \"0 7 * * 1-5\"", expr)
 		}

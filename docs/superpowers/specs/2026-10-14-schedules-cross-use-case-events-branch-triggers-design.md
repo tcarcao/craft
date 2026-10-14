@@ -1,8 +1,8 @@
 # Schedules, cross-use-case events and triggers into branches — Design Spec
 
-**Date:** 2026-10-15
+**Date:** 2026-10-14
 **Owner:** Tiago Carção
-**Status:** Approved (scope agreed after the re-arch-central journey pilots)
+**Status:** Implemented (v2.22.0)
 **Release:** v2.22.0 (additive; no breaking change)
 **Drives:** the three craft gaps found while piloting the conventions v2 rewrite of re-arch-central
 journeys (`docs/journey-assessment/pilots/` there): G14 (schedules), the sequence view's handling of
@@ -30,6 +30,7 @@ reported unused, and nothing validates the expression.
   like any actor written in a trigger, so a model that declares `actor system CRON` sees it used, and
   one that doesn't gets the usual undeclared-participant warning.
 - **Labels:** the trigger arrow is drawn from `CRON` with the label `cron 0 7 * * 1-5` or `every 5m`.
+- **Validation (sema)** also accepts the cron macros `@yearly`, `@annually`, `@monthly`, `@weekly`, `@daily`, `@midnight` and `@hourly`, and rejects `@every` (use `when every`). The `cron`/`every` keyword carries a reference to `CRON`, for the undeclared warning, hover and definition.
 - **Validation (sema):**
   - `craft/sema/invalid-schedule` (error) when a cron expression doesn't have 5 or 6 space-separated
     fields of `[0-9*/,\-?LW#A-Za-z]`;

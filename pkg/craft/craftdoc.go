@@ -57,6 +57,9 @@ const (
 	BlockAlt = model.BlockAlt
 	BlockOpt = model.BlockOpt
 
+	ScheduleCron  = model.ScheduleCron
+	ScheduleEvery = model.ScheduleEvery
+
 	ActionTypeSync     = model.ActionTypeSync
 	ActionTypeAsync    = model.ActionTypeAsync
 	ActionTypeInternal = model.ActionTypeInternal

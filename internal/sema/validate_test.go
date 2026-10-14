@@ -345,7 +345,7 @@ func TestValidate_Schedule_MessageNamesTheForm(t *testing.T) {
 	for _, c := range []struct{ tr, want string }{
 		{`cron "0 7 * *"`, `cron expression must have 5 or 6 fields like "0 7 * * 1-5"`},
 		{`every "soon"`, `like "5m"`},
-		{`cron "@every 5m"`, `@every is not accepted; use when every "5m"`},
+		{`cron "@every 5m"`, `@every is not accepted ("@every 5m"); use when every "5m"`},
 		{`cron "@reboot"`, `@daily`},
 	} {
 		var msg string
