@@ -271,6 +271,9 @@ func Sequence(s view.Sequence) string {
 			}
 			writeBlockOps(&b, view.BlockOps(path, m.Branch))
 			path = m.Branch
+			if m.Stream {
+				b.WriteString("loop stream\n")
+			}
 			switch m.Kind {
 			case view.MessageNone:
 			case view.MessageInbound, view.MessageFound:
@@ -295,6 +298,9 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "%s %s %s : %s\n", al.of(m.From), seqArrow("->>", m.Inferred), al.of(m.To), m.Label)
 			default:
 				fmt.Fprintf(&b, "%s %s %s : %s\n", al.of(m.From), seqArrow("->", m.Inferred), al.of(m.To), m.Label)
+			}
+			if m.Stream {
+				b.WriteString("end\n")
 			}
 		}
 		writeBlockOps(&b, view.BlockOps(path, nil))

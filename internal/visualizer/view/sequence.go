@@ -73,6 +73,10 @@ type Message struct {
 	Over []string
 	// Inferred draws the message grey, with an "(inferred)" suffix.
 	Inferred bool
+	// Stream wraps the message in its own one-message "loop stream" box. The
+	// box opens and closes around this message only, inside whatever blocks
+	// BlockOps already opened.
+	Stream bool
 }
 
 // BranchRef locates a message inside one branch of a block.
@@ -386,6 +390,7 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	case interaction.Request:
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageCall
 	case interaction.Response:
+		msg.Stream = it.Stream
 		if it.To == interaction.Unobserved {
 			msg.From, msg.Kind = ns.add(it.From), MessageLost
 			break

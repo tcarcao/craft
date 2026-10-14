@@ -139,6 +139,9 @@ func Sequence(s view.Sequence) string {
 			writeBlockOps(&b, view.BlockOps(path, m.Branch))
 			path = m.Branch
 			label := strings.ReplaceAll(m.Label, ";", ",")
+			if m.Stream {
+				b.WriteString("    loop stream\n")
+			}
 			switch m.Kind {
 			case view.MessageNone:
 			case view.MessageInbound:
@@ -164,6 +167,9 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "    %s-)%s: %s\n", al.of(m.From), al.of(m.To), label)
 			default:
 				fmt.Fprintf(&b, "    %s->>%s: %s\n", al.of(m.From), al.of(m.To), label)
+			}
+			if m.Stream {
+				b.WriteString("    end\n")
 			}
 		}
 		writeBlockOps(&b, view.BlockOps(path, nil))

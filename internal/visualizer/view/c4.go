@@ -505,7 +505,11 @@ func (b *c4Builder) relateServices() {
 		case interaction.Response:
 			from, to := b.serviceOf(it.From), b.serviceOf(it.To)
 			if it.Targeted && from != "" && to != "" && from != to {
-				b.relate(b.containerOf(it.From), b.containerOf(it.To), it.Label, "Return Data")
+				tech := "Return Data"
+				if it.Stream {
+					tech = "Return Data (stream)"
+				}
+				b.relate(b.containerOf(it.From), b.containerOf(it.To), it.Label, tech)
 			}
 		case interaction.Publish:
 			if b.storeDrawn(it) {

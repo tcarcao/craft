@@ -1435,3 +1435,94 @@ use_case "U" {
 		}
 	}
 }
+
+const streamSrc = `actors {
+    user Seller
+    system AiAssistant
+}
+domain seller {
+    frontendplatform
+    graphql
+}
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+        graphql asks AiAssistant to stream the reply  [POST /api/v1/assistant/chat_streaming]
+        AiAssistant returns stream the reply as META, TOKEN and DONE events
+        graphql returns stream each event to the client
+        frontendplatform appends every TOKEN delta to the message
+}
+`
+
+func TestSequence_StreamIsALoopBox(t *testing.T) {
+	puml, mmd := sequenceSource(t, streamSrc)
+	wantP := "loop stream\nAiAssistant --> graphql : streams the reply as META, TOKEN and DONE events\nend\nloop stream\ngraphql --> frontendplatform : streams each event to the client\nend\n"
+	if !strings.Contains(puml, wantP) {
+		t.Errorf("plantuml:\n%s", puml)
+	}
+	wantM := "    loop stream\n    AiAssistant-->>graphql: streams the reply as META, TOKEN and DONE events\n    end\n"
+	if !strings.Contains(mmd, wantM) {
+		t.Errorf("mermaid:\n%s", mmd)
+	}
+}
+
+func TestSequence_StreamInsideAnAltAndToTheUnobservedCaller(t *testing.T) {
+	puml, mmd := sequenceSource(t, `domain seller {
+    frontendplatform
+    graphql
+}
+use_case "Assistant" {
+    when frontendplatform opens the assistant
+        frontendplatform asks graphql to stream it  [assistantStream]
+        alt "streaming"
+            graphql returns stream each event
+        else "batch"
+            graphql returns the whole answer
+}
+use_case "Assistant API" {
+    when graphql receives a chat request  [assistantStream]
+        graphql returns stream each event
+}
+`)
+	wantAlt := "alt streaming\nloop stream\ngraphql --> frontendplatform : streams each event\nend\nelse batch\n"
+	if !strings.Contains(puml, wantAlt) {
+		t.Errorf("plantuml alt:\n%s", puml)
+	}
+	if want := "loop stream\ngraphql -->] : streams each event\nend\n"; !strings.Contains(puml, want) {
+		t.Errorf("plantuml lost:\n%s", puml)
+	}
+	if want := "    loop stream\n    graphql-->>Unobserved: streams each event\n    end\n"; !strings.Contains(mmd, want) {
+		t.Errorf("mermaid lost:\n%s", mmd)
+	}
+}
+
+func TestC4_StreamTechnology(t *testing.T) {
+	doc := resolvedDoc(t, `domain shop {
+    a
+    b
+}
+services {
+    SvcA {
+        contexts: a
+    }
+    SvcB {
+        contexts: b
+    }
+}
+use_case "U" {
+    when a starts
+        a asks b for rows  [getRows]
+        b returns stream to a the rows
+        b returns to a the count
+}
+`)
+	out, _, err := renderSource(doc, ViewC4, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"streams the rows", "Return Data (stream)"`, `"returns the count", "Return Data"`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("c4 lacks %s:\n%s", want, out)
+		}
+	}
+}
