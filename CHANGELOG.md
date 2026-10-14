@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.24.0] — 2026-10-14
 
 **Why a minor version.** No exported `pkg/craft` identifier is removed or changes type, and every model addition is an optional JSON key: a file that uses none of the new constructs gives the same `.craftjson` as in 2.23.0. Three inputs that parsed before now have a meaning (`returns stream …`, `[inferred …]`, `[ADDR …]`/`[SQL …]`), and two that parsed silently wrong are now errors (see **Changed**). re-arch-central uses none of them: it validates with 0 errors, and the only new warning is `duplicate-scenario-body` (8).
 
