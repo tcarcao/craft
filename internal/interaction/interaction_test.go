@@ -1001,3 +1001,26 @@ use_case "Keys" {
 		t.Errorf("request = %+v", req)
 	}
 }
+
+func TestDerive_DuplicateListItemListensOnce(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Pay" {
+    when Customer pays
+        Billing notifies sns.paid
+}
+use_case "Ledger" {
+    when Ordering listens sns.paid, sns.refunded, sns.paid
+        Ordering writes a row
+}
+`})
+	var got []string
+	for _, it := range its {
+		if it.Kind == interaction.Listen {
+			got = append(got, it.From.Name+"->"+it.To.Name+" "+it.Event)
+		}
+	}
+	want := []string{"Billing->Ordering sns.paid", "External->Ordering sns.refunded"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
+	}
+}

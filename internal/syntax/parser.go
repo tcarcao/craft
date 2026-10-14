@@ -3231,18 +3231,26 @@ func (p *Parser) parseEventItem() {
 // parseEventList parses `event_item (',' NL* event_item)*` (spec §4.1). The
 // items are wrapped in a SyntaxKindEventList only when a comma is seen, so a
 // single item keeps the v2.23 tree. A comma with no item after it is
-// reported on the comma; the next line then parses as a step. It returns the
-// last token consumed, whose line is where a trailing schedule or bracket
-// must sit.
+// reported on the comma; the next line then parses as a step. An item on the
+// comma's line followed by extra words (`a.B, c.D foo`) is kept, and the
+// extra words are reported and swept up to the end of the line, so they do
+// not become a step. It returns the last token consumed, whose line is where
+// a trailing schedule or bracket must sit.
 func (p *Parser) parseEventList() (lexer.Token, []model.Diagnostic) {
 	var diags []model.Diagnostic
 	cp := p.builder.Checkpoint()
 	p.parseEventItem()
 	commas := 0
+	junkLine := -1
 	for p.peek().Type == lexer.TokenComma {
 		comma := p.consumeAs(SyntaxKindComma)
 		commas++
 		if !p.eventItemAhead(0) {
+			if next := p.peek(); next.Line == comma.Line && (next.Type == lexer.TokenIdent || isAnyKeywordAsIdent(next.Type)) {
+				p.parseEventItem()
+				junkLine = next.Line
+				break
+			}
 			diags = append(diags, p.diagUnexpected(comma, "an event after `,`"))
 			break
 		}
@@ -3251,6 +3259,10 @@ func (p *Parser) parseEventList() (lexer.Token, []model.Diagnostic) {
 	if commas > 0 {
 		p.builder.StartNodeAt(cp, SyntaxKindEventList)
 		p.builder.FinishNode()
+	}
+	if junkLine >= 0 {
+		// Outside the EventList node, so the items stay clean.
+		diags = append(diags, p.sweepRestOfLine(junkLine, "`,` or the end of the line after an event")...)
 	}
 	return p.lastConsumed(), diags
 }

@@ -229,7 +229,14 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			break
 		}
 		listener := endpoint(t.Context, t.Subject)
+		// A repeated item (duplicate-event-in-list warns) listens once, so
+		// no view draws the same edge twice.
+		seen := map[string]bool{}
 		for _, ev := range t.EventList() {
+			if seen[ev] {
+				continue
+			}
+			seen[ev] = true
 			sources := publishers[ev]
 			if len(sources) == 0 {
 				sources = []Endpoint{External}

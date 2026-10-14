@@ -71,3 +71,22 @@ func TestListensList_DanglingCommaBeforeAStep(t *testing.T) {
 		t.Fatalf("diags = %v", diags)
 	}
 }
+
+func TestListensList_ExtraWordsAfterAnItemAreNotAStep(t *testing.T) {
+	src := "use_case \"U\" {\n    when seshat listens a.B, c.D foo bar\n        seshat writes the row\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/unexpected-token" {
+		t.Fatalf("diags = %v", diags)
+	}
+	// The error is at `foo`, not at the comma.
+	if r := diags[0].Range; r.Start.Line != 1 || r.Start.Character != 33 {
+		t.Errorf("range = %+v, want line 1 character 33", r)
+	}
+	sc := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0]
+	if got := itemValues(sc.Trigger().EventItems()); !slices.Equal(got, []string{"a.B", "c.D"}) {
+		t.Errorf("items = %v", got)
+	}
+	if n := len(sc.Steps()); n != 1 {
+		t.Errorf("%d steps, want 1: the extra words are not a step", n)
+	}
+}
