@@ -1284,3 +1284,33 @@ use_case "U" {
 	requireLine(t, "plantuml", puml, "b ->> b : x.Failed")
 	requireLine(t, "plantuml", puml, "[-> b : x.Other")
 }
+
+func TestSequence_SectionTitleShowsScope(t *testing.T) {
+	src := `actors {
+    system CRON
+}
+domain analytics {
+    adstatistics
+}
+use_case "Rebuild a market's daily statistics" {
+    tags {
+        sites: imovirtualpt, otodompl, storiaro
+        envs: production
+    }
+    when cron "0 1/2 * * *"
+        adstatistics rebuilds the day's advert facts
+}
+use_case "Sites only" {
+    tags {
+        sites: "otodompl"
+    }
+    when cron "0 2 * * *"
+        adstatistics rebuilds it
+}
+`
+	puml, mmd := sequenceSource(t, src)
+	title := "Rebuild a market's daily statistics [sites: imovirtualpt, otodompl, storiaro] [envs: production]"
+	requireLine(t, "plantuml", puml, "== "+title+" ==")
+	requireLine(t, "plantuml", puml, "== Sites only [sites: otodompl] ==")
+	requireLine(t, "mermaid", mmd, "Note over CRON,adstatistics: "+title)
+}

@@ -146,7 +146,7 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 	byUseCase := map[string]int{}
 	for _, uc := range doc.UseCases {
 		byUseCase[uc.Name] = len(b.seq.Sections)
-		b.seq.Sections = append(b.seq.Sections, SequenceSection{Title: uc.Name})
+		b.seq.Sections = append(b.seq.Sections, SequenceSection{Title: sectionTitle(uc)})
 		b.onStage = append(b.onStage, map[string]bool{})
 	}
 
@@ -568,6 +568,18 @@ func (l *scenarioLayout) anchor() []string {
 		return []string{m.From, m.To}
 	}
 	return nil
+}
+
+// sectionTitle is a use case's section title, with its scope tags appended:
+// `<name> [sites: a, b] [envs: c]` (spec §5.3). Values keep authored order.
+func sectionTitle(uc model.UseCase) string {
+	title := uc.Name
+	for _, key := range []string{model.TagSites, model.TagEnvs} {
+		if vals := uc.TagValues[key]; len(vals) > 0 {
+			title += " [" + key + ": " + strings.Join(vals, ", ") + "]"
+		}
+	}
+	return title
 }
 
 // scenarioTitle titles the i-th scenario's frame: its name, else its trigger.

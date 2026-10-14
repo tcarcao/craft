@@ -110,8 +110,9 @@ func Workspace(files []FileResult) Result {
 		res.Symbols, res.Resolution = ws, rm
 		resolveParticipants(res.Doc, ws)
 		commDiags := sema.LintCommunication(perFileTrees, ws, perFileLIs, interaction.Derive(res.Doc))
+		modelDiags := sema.LintModel(res.Doc, perFileTrees, perFileLIs)
 
-		wsDiags := append(append(append(mergeDiags, resolveDiags...), lintDiags...), commDiags...)
+		wsDiags := append(append(append(append(mergeDiags, resolveDiags...), lintDiags...), commDiags...), modelDiags...)
 		res.WorkspaceDiagnostics = sortDiagnostics(wsDiags)
 		all = append(all, wsDiags...)
 	}
