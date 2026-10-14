@@ -92,7 +92,10 @@ type Interaction struct {
 	// Operations is copied from model.Action.Operations: each item of a
 	// bracket that lists two or more; nil otherwise.
 	Operations []model.Operation
-	Site       Site
+	// OneOf is set on each Publish of a `notifies one of`: one of the
+	// action's events is published per run, chosen at run time.
+	OneOf bool
+	Site  Site
 	// Targeted is true for a Response written with an explicit `to` target,
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
@@ -141,8 +144,13 @@ func Derive(doc *model.CraftDoc) []Interaction {
 	for _, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
 			for _, a := range sc.Actions() {
-				if a.Type == lang.ActionAsync && a.Context != "" && a.Event != "" {
-					publishers[a.Event] = appendEndpoint(publishers[a.Event], endpoint(a.Context, a.From))
+				if a.Type != lang.ActionAsync || a.Context == "" {
+					continue
+				}
+				for _, ev := range a.EventList() {
+					if ev != "" {
+						publishers[ev] = appendEndpoint(publishers[ev], endpoint(a.Context, a.From))
+					}
 				}
 			}
 		}
@@ -443,11 +451,20 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 		it.Kind, it.To = Request, endpoint(a.TargetContext, a.To)
 		w.callStack = append(w.callStack, frame{caller: it.From, callee: it.To})
 	case lang.ActionAsync:
-		if a.Event == "" {
-			return
+		// One Publish per event; a `notifies one of` publishes each of its
+		// events at the same step (spec §8.5).
+		for _, ev := range a.EventList() {
+			if ev == "" {
+				continue
+			}
+			p := it
+			p.Kind, p.Event, p.Label = Publish, ev, ev
+			p.OneOf = len(a.Events) > 0
+			p.Via = storeEndpoint(a.Store)
+			p.Branch = slices.Clone(path)
+			w.out = append(w.out, p)
 		}
-		it.Kind, it.Event = Publish, a.Event
-		it.Via = storeEndpoint(a.Store)
+		return
 	case lang.ActionInternal:
 		it.Kind, it.To = Internal, it.From
 	case lang.ActionReturn:

@@ -1024,3 +1024,28 @@ use_case "Ledger" {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
 }
+
+func TestDerive_NotifiesOneOfPublishesEachEventAtOneStep(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Outbox" {
+    when Customer pays
+        Billing notifies one of shop.Paid, shop.Failed
+}
+use_case "Ship" {
+    when Shipping listens shop.Paid
+        Shipping ships it
+}
+`})
+	var pubs []string
+	for _, it := range its {
+		if it.Kind == interaction.Publish {
+			pubs = append(pubs, fmt.Sprintf("%d %s %v", it.Step, it.Event, it.OneOf))
+		}
+		if it.Kind == interaction.Listen && it.From.Name != "Billing" {
+			t.Errorf("shop.Paid must pair with Billing: %+v", it)
+		}
+	}
+	if want := []string{"1 shop.Paid true", "1 shop.Failed true"}; !slices.Equal(pubs, want) {
+		t.Errorf("publishes = %v", pubs)
+	}
+}

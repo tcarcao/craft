@@ -300,6 +300,25 @@ func (b *sequenceBuilder) addRoster(idx int, listens []interaction.Interaction, 
 	onStage[to] = true
 }
 
+// addOneOf draws the publishes of one `notifies one of` action as one
+// message on the publisher's lifeline (spec §8.6), labelled with its events,
+// capped as capList caps them.
+func (b *sequenceBuilder) addOneOf(idx int, pubs []interaction.Interaction, title string) {
+	quoted := make([]string, len(pubs))
+	for i, it := range pubs {
+		quoted[i] = fmt.Sprintf("%q", it.Event)
+	}
+	from := b.ns.add(pubs[0].From)
+	msg := Message{From: from, To: from, Kind: MessageAsync, Scenario: title, Branch: branchPath(pubs[0].Branch),
+		Label: "notifies one of " + capList(quoted)}
+	if op := pubs[0].Operation; op != nil && op.Text != "" {
+		msg.Label += " [" + op.Text + "]"
+	}
+	b.appear(from)
+	b.onStage[idx][from] = true
+	b.seq.Sections[idx].Messages = append(b.seq.Sections[idx].Messages, msg)
+}
+
 // inboundKey identifies the one arrow a listening scenario draws for an event.
 func inboundKey(it interaction.Interaction) string {
 	return fmt.Sprintf("%d|%s|%s", it.UseCaseIndex, it.Scenario, it.Event)
@@ -454,6 +473,10 @@ type scenarioLayout struct {
 // path where the opt is skipped) is skipped here too and drawn by
 // emitSkipTrigger just before the first action after the block.
 func (l *scenarioLayout) emit(step int) {
+	if its := l.bySteps[step]; step > 0 && len(its) > 0 && its[0].Kind == interaction.Publish && its[0].OneOf {
+		l.b.addOneOf(l.idx, its, l.title)
+		return
+	}
 	var roster []interaction.Interaction
 	for _, it := range l.bySteps[step] {
 		if step == 0 && it.Kind == interaction.Trigger && (it.Branch != nil || l.opensBlock) {

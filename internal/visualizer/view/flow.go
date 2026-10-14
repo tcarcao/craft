@@ -89,7 +89,11 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 				add(ns.add(it.From), ns.addStore(it.Via), StyleAsync, cmp.Or(storeChange(it.Event), "writes"))
 				continue
 			}
-			add(ns.add(it.From), ns.addQueue(it.From), StyleAsync, it.Label)
+			label := it.Label
+			if it.OneOf {
+				label = "one of: " + label
+			}
+			add(ns.add(it.From), ns.addQueue(it.From), StyleAsync, label)
 		case interaction.Listen:
 			if !it.Via.IsZero() {
 				k := readKey{it.UseCaseIndex, it.Scenario, it.Via.Key}

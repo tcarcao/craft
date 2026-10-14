@@ -1314,3 +1314,28 @@ use_case "Sites only" {
 	requireLine(t, "plantuml", puml, "== Sites only [sites: otodompl] ==")
 	requireLine(t, "mermaid", mmd, "Note over CRON,adstatistics: "+title)
 }
+
+func TestSequence_NotifiesOneOfIsOneMessage(t *testing.T) {
+	src := `domain billing {
+    nmf_monetization
+}
+use_case "nMF republishes a stored money record onto its bus" {
+    when nmf_monetization listens stream.user_event_store
+        nmf_monetization reads the detail-type off the stored column
+        nmf_monetization notifies one of nmfbus.FeatureEnabled, nmfbus.FeatureDisabled,
+            nmfbus.CreateAutoSchedule, nmfbus.SubAccountBundleUpdated
+}
+`
+	puml, mmd := sequenceSource(t, src)
+	label := `notifies one of "nmfbus.FeatureEnabled", "nmfbus.FeatureDisabled", "nmfbus.CreateAutoSchedule" (+1 more)`
+	requireLine(t, "plantuml", puml, "nmf_monetization ->> nmf_monetization : "+label)
+	requireLine(t, "mermaid", mmd, "nmf_monetization-)nmf_monetization: "+label)
+	if n := strings.Count(puml, "nmf_monetization ->> nmf_monetization"); n != 1 {
+		t.Errorf("%d publish arrows, want 1", n)
+	}
+	doc := resolvedDoc(t, src)
+	flow, _, _ := renderSource(doc, ViewFlow, PlantUML)
+	if !strings.Contains(string(flow), "one of: nmfbus.CreateAutoSchedule") {
+		t.Errorf("flow:\n%s", flow)
+	}
+}

@@ -106,6 +106,7 @@ use_case "Checkout" {
             and "b"
                 opt "o"
                     Billing asks Ordering to twelfth
+        Billing notifies one of shop.Settled, shop.Failed
     scenario "roster"
     when Billing listens shop.Paid, shop.Refunded
         Billing records it
@@ -128,6 +129,10 @@ use_case "Checkout" {
 			if it.Step < lastStep {
 				t.Errorf("%s: step %d after %d: interactions not in step order", title, it.Step, lastStep)
 			}
+			// The publishes of one `notifies one of` are one message.
+			if it.Kind == interaction.Publish && it.OneOf && len(want) > 0 && want[len(want)-1].Step == it.Step {
+				continue
+			}
 			lastStep = it.Step
 			want = append(want, it)
 		}
@@ -146,7 +151,14 @@ use_case "Checkout" {
 			t.Fatalf("%s: drew %d step messages, interactions have %d", title, len(got), len(want))
 		}
 		for i, it := range want {
-			if got[i].Label != it.Label || !reflect.DeepEqual(got[i].Branch, branchPath(it.Branch)) {
+			wantLabel := it.Label
+			if it.Kind == interaction.Publish && it.OneOf {
+				wantLabel = got[i].Label
+				if !strings.HasPrefix(wantLabel, "notifies one of ") {
+					t.Errorf("%s: message %d = %q, want a merged one-of publish", title, i, wantLabel)
+				}
+			}
+			if got[i].Label != wantLabel || !reflect.DeepEqual(got[i].Branch, branchPath(it.Branch)) {
 				t.Errorf("%s: message %d = %q in %+v, want %q in %+v (step %d)", title, i, got[i].Label, got[i].Branch, it.Label, branchPath(it.Branch), it.Step)
 			}
 		}
