@@ -1298,7 +1298,7 @@ craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' -
      so the cycle is entered where the flow reaches it; when no placed member reaches one, the
      namesake, then the smallest (source file, line). Rules (a)–(c) break ties inside each case, and
      the result records `Cycle: true`; the CLI
-  prints `note: journey <slug> has a hand-off cycle; its members are ordered by source position` to
+  prints `note: journey <slug> has a hand-off cycle; it is entered where the flow reaches it` to
   stderr. The order is deterministic.
 
 ```go

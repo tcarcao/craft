@@ -60,6 +60,7 @@ func generateCmd() *cobra.Command {
 			}
 
 			if len(journeys) > 0 {
+				journeys = dedupeSlugs(journeys)
 				switch {
 				case cmd.Flags().Changed("type") && strings.ToLower(diagType) != "sequence":
 					return fmt.Errorf("`--journey` draws a sequence; drop `--type` or use `--type sequence`")
@@ -153,6 +154,19 @@ func generateCmd() *cobra.Command {
 	return cmd
 }
 
+// dedupeSlugs drops repeated slugs, keeping the first of each in order.
+func dedupeSlugs(slugs []string) []string {
+	seen := make(map[string]bool, len(slugs))
+	out := slugs[:0:0]
+	for _, s := range slugs {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // generateJourneys writes one spine sequence per journey slug; "all" stands
 // for every journey with two or more members.
 func generateJourneys(r *visualizer.Renderer, model *craft.CraftDoc, journeys []string, base, outDir, format string, stdout bool, stdoutW io.Writer, force bool) error {
@@ -176,6 +190,7 @@ func generateJourneys(r *visualizer.Renderer, model *craft.CraftDoc, journeys []
 			}
 		}
 	}
+	slugs = dedupeSlugs(slugs) // a slug named and also covered by all
 	if len(slugs) == 0 {
 		fmt.Fprintln(os.Stderr, "note: no journey has two or more members; nothing to draw")
 		return nil
@@ -195,7 +210,7 @@ func generateJourneys(r *visualizer.Renderer, model *craft.CraftDoc, journeys []
 	}
 	for i, slug := range slugs {
 		if spines[i].Cycle {
-			fmt.Fprintf(os.Stderr, "note: journey %s has a hand-off cycle; its members are ordered by source position\n", slug)
+			fmt.Fprintf(os.Stderr, "note: journey %s has a hand-off cycle; it is entered where the flow reaches it\n", slug)
 		}
 		out, err := r.Render(model, visualizer.Request{View: visualizer.ViewSequence, Backend: backend, Format: outFormat, Journey: slug})
 		if err != nil {

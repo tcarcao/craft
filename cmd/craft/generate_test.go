@@ -952,3 +952,21 @@ func TestClosestSlugs(t *testing.T) {
 		t.Errorf("closestSlugs = %v, want %v", got, want)
 	}
 }
+
+// A slug named twice (or named and also covered by all) is drawn once.
+func TestGenerateCmd_JourneyRepeatedSlugDrawnOnce(t *testing.T) {
+	_, files := journeyFiles(t)
+	var buf bytes.Buffer
+	root := newRootCmd()
+	root.SetOut(&buf)
+	root.SetArgs(append(append([]string{"generate"}, files...), "--journey", "seller-promotes-an-advert,seller-promotes-an-advert", "--stdout"))
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(buf.String(), "@startuml"); n != 1 {
+		t.Errorf("drew %d diagrams, want 1", n)
+	}
+	if got := dedupeSlugs([]string{"b", "all", "a", "b", "all"}); strings.Join(got, ",") != "b,all,a" {
+		t.Errorf("dedupeSlugs = %v", got)
+	}
+}
