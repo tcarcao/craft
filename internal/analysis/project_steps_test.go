@@ -98,3 +98,47 @@ func TestProjectSteps_IncompleteActionInBranchConsumesTwo(t *testing.T) {
 		t.Errorf("IDs = %v, want %v", got, want)
 	}
 }
+
+// Notes do not count as steps of a fan-out par: each attaches to the branch of
+// the action before it, or to the first branch when it comes first.
+func TestProject_FanOutParNotesJoinTheBranchOfTheStepBeforeThem(t *testing.T) {
+	steps := stepsOf(t, `domain d {
+    x
+    y
+}
+use_case "U" {
+    when O does it
+        par "lookups"
+            note "first"
+            x asks y for a
+            note "about a"
+            x asks y for b
+            finding "about b"
+}
+`)
+	b := steps[0].Block
+	if b == nil || !b.Split || len(b.Branches) != 2 {
+		t.Fatalf("block = %+v", b)
+	}
+	kinds := func(br model.Branch) string {
+		var out []string
+		for _, st := range br.Steps {
+			switch {
+			case st.Note != nil:
+				out = append(out, st.Note.ID+":"+st.Note.Text)
+			case st.Action != nil:
+				out = append(out, st.Action.ID)
+			}
+		}
+		return strings.Join(out, " ")
+	}
+	if got, want := kinds(b.Branches[0]), "note_3:first action_4 note_5:about a"; got != want {
+		t.Errorf("branch 0 = %q, want %q", got, want)
+	}
+	if got, want := kinds(b.Branches[1]), "action_6 note_7:about b"; got != want {
+		t.Errorf("branch 1 = %q, want %q", got, want)
+	}
+	if b.Branches[0].Line != 9 || b.Branches[1].Line != 11 {
+		t.Errorf("branch lines = %d, %d; want the lines of their actions (9, 11)", b.Branches[0].Line, b.Branches[1].Line)
+	}
+}

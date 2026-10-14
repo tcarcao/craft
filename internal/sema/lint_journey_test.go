@@ -48,3 +48,10 @@ func TestLint_ReceivesTriggersDifferingByOperationAreDistinguishable(t *testing.
 		t.Errorf("%d indistinguishable-scenarios warnings, want 0", n)
 	}
 }
+
+func TestLint_SingleBranchParIgnoresNotes(t *testing.T) {
+	oneWithNote := "use_case \"U\" {\n  when O does\n    par \"lookups\"\n      x asks y for a\n      note \"cached\"\n}"
+	if n := lintCodes(t, oneWithNote, "craft/lint/single-branch-par"); n != 1 {
+		t.Errorf("one step and a note: %d warnings, want 1", n)
+	}
+}

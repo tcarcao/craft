@@ -377,7 +377,7 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 	// skip: the scenario opens with an opt; the first action after it is
 	// reached by the unbranched trigger.
 	skip := false
-	first := firstStepIndex(steps)
+	first := model.FirstStepIndex(steps)
 	for i, st := range steps {
 		switch {
 		case st.Action != nil:
@@ -478,15 +478,4 @@ func viewRef(block string, kind lang.BlockKind, label string, index int, split b
 		label = ""
 	}
 	return BranchRef{Block: block, Kind: kind, Label: label, Index: index}
-}
-
-// firstStepIndex returns the index of the first step that is not a note, or
-// -1. It mirrors the helper of the same name in package interaction.
-func firstStepIndex(steps []model.Step) int {
-	for i, st := range steps {
-		if st.Note == nil {
-			return i
-		}
-	}
-	return -1
 }

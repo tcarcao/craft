@@ -635,7 +635,7 @@ func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 					continue
 				}
 				brs := b.Branches()
-				if b.IsFanOut() && len(brs[0].Steps()) == 1 {
+				if b.IsFanOut() && countNonNotes(brs[0].Steps()) == 1 {
 					if tok := brs[0].HeaderToken(); tok != nil {
 						line, col := li.LineCol16(tok.Offset())
 						start := colToLSP(col)
@@ -663,6 +663,18 @@ func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 		}
 	}
 	return diags
+}
+
+// countNonNotes counts the steps that are not notes: notes do not make a
+// fan-out par branch (spec §4.1 rule 2).
+func countNonNotes(steps []syntax.StepDecl) int {
+	n := 0
+	for _, st := range steps {
+		if _, isNote := st.Note(); !isNote {
+			n++
+		}
+	}
+	return n
 }
 
 // ── receives-on-actor ─────────────────────────────────────────────────────────

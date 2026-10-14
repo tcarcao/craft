@@ -102,8 +102,10 @@ type Interaction struct {
 	// the first action after the block (when there is one). An opening par
 	// gets one unbranched Trigger to its first action in source order, plus
 	// one inside each other branch whose first action has a different
-	// subject. An opening loop gets one unbranched Trigger. Each interaction
-	// owns its slice.
+	// subject. An opening loop gets one unbranched Trigger. A branch of an
+	// opening alt or opt that itself opens with a par or loop is treated the
+	// same way, at that branch's path, before the box. Each interaction owns
+	// its slice.
 	Branch []BranchRef
 }
 
@@ -270,9 +272,9 @@ type walker struct {
 	// trigger, when set, is the trigger of a scenario that opens with a
 	// block, To unset: each branch the scenario opens with gets a copy.
 	trigger *Interaction
-	// reached is the Key the unbranched trigger of an opening par already
-	// reaches. A par branch whose first action has that subject needs no
-	// trigger of its own (spec §4.4); "" for any other scenario.
+	// reached is the Key the trigger drawn before an opening par (or loop)
+	// already reaches. A par branch whose first action has that subject needs
+	// no trigger of its own (spec §4.4); "" outside such a block.
 	reached string
 	step    int
 	out     []Interaction
@@ -289,13 +291,15 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 	// skipped: the scenario opens with an opt, so the path where it is not
 	// taken still needs a trigger, into the first action after the block.
 	skipped := false
-	first := firstStepIndex(steps)
+	first := model.FirstStepIndex(steps)
 	for i, st := range steps {
 		switch {
 		case st.Note != nil:
 			continue
 		case st.Block != nil:
-			if pending && i == first {
+			if pending && i == first && w.boxTrigger(st.Block, path) {
+				pending, triggered = false, true
+			} else if pending && i == first {
 				if w.walkBlock(st.Block, path, true) {
 					pending, triggered = false, true
 				}
@@ -318,6 +322,28 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 		}
 	}
 	return triggered
+}
+
+// boxTrigger triggers a body at path that opens with a par or loop the way a
+// scenario that opens with one is triggered (spec §4.4): once, at path, to the
+// block's first action, drawn before the box. A loop body is then walked
+// without triggers; a par branch whose first action has another subject still
+// gets one of its own (w.reached). It reports false, and does nothing, for any
+// other block or when no trigger applies, so the caller falls back to the
+// per-branch rule.
+func (w *walker) boxTrigger(b *model.Block, path []BranchRef) bool {
+	if w.trigger == nil || (b.Kind != lang.BlockPar && b.Kind != lang.BlockLoop) {
+		return false
+	}
+	a := b.FirstAction()
+	if a == nil || !w.branchTrigger(*a, path) {
+		return false
+	}
+	saved := w.reached
+	w.reached = endpoint(a.Context, a.From).Key
+	w.walkBlock(b, path, b.Kind == lang.BlockPar)
+	w.reached = saved
+	return true
 }
 
 // branchTrigger draws the scenario's trigger into the branch at path, to a,
@@ -404,16 +430,6 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 		return
 	}
 	w.out = append(w.out, it)
-}
-
-// firstStepIndex returns the index of the first step that is not a note, or -1.
-func firstStepIndex(steps []model.Step) int {
-	for i, st := range steps {
-		if st.Note == nil {
-			return i
-		}
-	}
-	return -1
 }
 
 // frame is one outstanding call: caller asked callee and has not been

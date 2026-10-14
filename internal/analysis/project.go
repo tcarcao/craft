@@ -233,6 +233,43 @@ func projectNote(n syntax.NoteDecl, id string, li green.LineIndex) model.Note {
 	return out
 }
 
+// fanOutGroups splits the body of a par written without `and` into its
+// concurrent branches: one per step that is not a note. Notes do not count as
+// steps (spec §4.1 rule 2): each joins the branch of the step before it, and
+// notes before the first step join the first branch. A body of notes only is
+// one branch. Source order is kept, so IDs stay in source order.
+func fanOutGroups(steps []syntax.StepDecl) [][]syntax.StepDecl {
+	var groups [][]syntax.StepDecl
+	var lead []syntax.StepDecl
+	for _, st := range steps {
+		if _, isNote := st.Note(); isNote {
+			if len(groups) == 0 {
+				lead = append(lead, st)
+			} else {
+				groups[len(groups)-1] = append(groups[len(groups)-1], st)
+			}
+			continue
+		}
+		groups = append(groups, append(lead, st))
+		lead = nil
+	}
+	if len(groups) == 0 {
+		return [][]syntax.StepDecl{lead}
+	}
+	return groups
+}
+
+// firstNonNote returns the index of the first step of group that is not a
+// note, or 0 when every step is one.
+func firstNonNote(group []syntax.StepDecl) int {
+	for i, st := range group {
+		if _, isNote := st.Note(); !isNote {
+			return i
+		}
+	}
+	return 0
+}
+
 // projectBlock projects one alt/opt block. The block takes its number before
 // its branches, so it precedes the actions inside it in ID order.
 func projectBlock(b syntax.BlockDecl, counter *int, li green.LineIndex) *model.Block {
@@ -248,12 +285,12 @@ func projectBlock(b syntax.BlockDecl, counter *int, li green.LineIndex) *model.B
 			if tok := br.HeaderToken(); tok != nil {
 				mb.Line, mb.Column = li.LineCol16(tok.Offset())
 			}
-			for _, st := range steps {
+			for _, group := range fanOutGroups(steps) {
 				mbr := model.Branch{Label: br.Label()}
-				if toks := st.Node().Tokens(); len(toks) > 0 {
+				if toks := group[firstNonNote(group)].Node().Tokens(); len(toks) > 0 {
 					mbr.Line, _ = li.LineCol(toks[0].Offset())
 				}
-				mbr.Steps = projectSteps([]syntax.StepDecl{st}, counter, li)
+				mbr.Steps = projectSteps(group, counter, li)
 				mb.Branches = append(mb.Branches, mbr)
 			}
 			return mb

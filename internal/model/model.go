@@ -254,13 +254,36 @@ type SurfaceOperation struct {
 // OpeningBlock returns the block the scenario opens with: its first step that
 // is not a note, when that step is a block. Nil otherwise.
 func (s Scenario) OpeningBlock() *Block {
-	for _, st := range s.Steps {
-		if st.Note != nil {
-			continue
-		}
-		return st.Block
+	if i := FirstStepIndex(s.Steps); i >= 0 {
+		return s.Steps[i].Block
 	}
 	return nil
+}
+
+// FirstStepIndex returns the index of the first step that is not a note, or
+// -1 when there is none. It is "the first step" of a scenario or branch
+// wherever opening rules apply (OpeningBlock, triggers).
+func FirstStepIndex(steps []Step) int {
+	for i, st := range steps {
+		if st.Note == nil {
+			return i
+		}
+	}
+	return -1
+}
+
+// FirstAction returns the block's first action in source order (a
+// depth-first walk of its branches) that has a subject, or nil.
+func (b *Block) FirstAction() *Action {
+	var first *Action
+	for i := range b.Branches {
+		eachAction(b.Branches[i].Steps, func(a *Action) {
+			if first == nil && a.Context != "" {
+				first = a
+			}
+		})
+	}
+	return first
 }
 
 // Branch is one labelled path of a Block.

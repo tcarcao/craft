@@ -1552,7 +1552,8 @@ func (b BlockDecl) Kind() lang.BlockKind {
 }
 
 // IsFanOut reports whether the block is a par written without `and`: each
-// step of its body runs as its own concurrent branch (spec §4.1 rule 2).
+// step of its body that is not a note runs as its own concurrent branch
+// (spec §4.1 rule 2).
 func (b BlockDecl) IsFanOut() bool {
 	brs := b.Branches()
 	return len(brs) == 1 && brs[0].Keyword() == "par"

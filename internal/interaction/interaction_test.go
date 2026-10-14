@@ -853,3 +853,62 @@ use_case "Sweep" {
 		t.Errorf("%d triggers, want 1", n)
 	}
 }
+
+// A branch of an opening alt that itself opens with a par or a loop is
+// triggered once, at the branch, before the box, as a scenario that opens with
+// a par or loop is. Only a par branch that starts at another participant gets
+// a trigger of its own.
+func TestDerive_ParOrLoopOpeningAnAltBranchIsTriggeredOnceBeforeTheBox(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Reads" {
+    when Customer opens an advert
+        alt "fresh"
+            par "fan"
+                Ordering asks Billing for a
+                Ordering asks Shipping for b
+        else "stale"
+            loop "each"
+                Ordering asks Billing to refresh
+        else "mixed"
+            par "split"
+                Ordering asks Billing for c
+                Shipping asks Billing for d
+}
+`})
+	want := `0 trigger Customer->Ordering {alt:fresh#0}
+1 request Ordering->Billing {alt:fresh#0 > par:fan#0}
+2 request Ordering->Shipping {alt:fresh#0 > par:fan#1}
+0 trigger Customer->Ordering {alt:stale#1}
+3 request Ordering->Billing {alt:stale#1 > loop:each#0}
+0 trigger Customer->Ordering {alt:mixed#2}
+4 request Ordering->Billing {alt:mixed#2 > par:split#0}
+0 trigger Customer->Shipping {alt:mixed#2 > par:split#1}
+5 request Shipping->Billing {alt:mixed#2 > par:split#1}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// In a branch of an opening par that starts elsewhere and itself opens with a
+// par, the inner par's branches compare against that branch's trigger.
+func TestDerive_NestedOpeningParsTriggerEachNewSubjectOnce(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Reads" {
+    when Customer opens the page
+        par "outer"
+            Ordering asks Billing for a
+        and "other"
+            par "inner"
+                Shipping asks Billing for b
+                Shipping asks Ordering for c
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {par:outer#0}
+0 trigger Customer->Shipping {par:other#1}
+2 request Shipping->Billing {par:other#1 > par:inner#0}
+3 request Shipping->Ordering {par:other#1 > par:inner#1}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

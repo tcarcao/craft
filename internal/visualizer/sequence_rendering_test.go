@@ -899,3 +899,62 @@ func TestArchitectureAndC4_ReceivesDrawNoUnobservedCaller(t *testing.T) {
 		}
 	}
 }
+
+const altOpensParSrc = `actor user Seeker
+domain ad {
+    graphql
+    atlas
+}
+use_case "Seeker opens an advert" {
+    when Seeker opens an advert
+        alt "fresh"
+            par "fan"
+                graphql asks atlas for a
+                graphql asks atlas for b
+        else "stale"
+            loop "each"
+                graphql asks atlas to refresh
+}
+`
+
+// An alt branch that opens with a par or loop draws the trigger once, in the
+// alt branch, before the box (not once per par branch, nor inside the loop).
+func TestSequence_ParOrLoopOpeningAnAltBranchDrawsTheTriggerOnceBeforeTheBox(t *testing.T) {
+	puml, mmd := sequenceSource(t, altOpensParSrc)
+	wantPuml := `alt fresh
+Seeker -> graphql : opens an advert
+par fan
+graphql -> atlas : for a
+else
+graphql -> atlas : for b
+end
+else stale
+Seeker -> graphql : opens an advert
+loop each
+graphql -> atlas : to refresh
+end
+end`
+	if !strings.Contains(puml, wantPuml) {
+		t.Errorf("plantuml:\n--- got\n%s\n--- want\n%s", puml, wantPuml)
+	}
+	if n := strings.Count(mmd, "Seeker->>graphql: opens an advert"); n != 2 {
+		t.Errorf("mermaid draws the trigger %d times, want 2:\n%s", n, mmd)
+	}
+}
+
+func TestFlow_ParOrLoopOpeningAnAltBranchLabelsTheTriggerWithTheAltBranch(t *testing.T) {
+	doc := resolvedDoc(t, altOpensParSrc)
+	out, _, err := renderSource(doc, ViewFlow, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if strings.Contains(s, "[par: fan] opens an advert") || strings.Contains(s, "[loop: each] opens an advert") {
+		t.Errorf("flow labels a trigger with the inner box:\n%s", s)
+	}
+	for _, want := range []string{"[fresh] opens an advert", "[stale] opens an advert"} {
+		if strings.Count(s, want) != 1 {
+			t.Errorf("flow should have %q once:\n%s", want, s)
+		}
+	}
+}

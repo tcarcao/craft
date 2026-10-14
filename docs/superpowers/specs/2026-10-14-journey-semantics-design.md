@@ -131,9 +131,10 @@ A branch that has several steps in sequence uses `and`:
 Rules. These are the v2.21 rules (§3.1 there) unless stated otherwise:
 1. `par "<label>"` opens a concurrent block. `and "<label>"` adds a branch to the nearest open `par` whose
    header is at the same column, in the same way that `else` adds one to an `alt`.
-2. **Fan-out form.** A `par` with no `and` runs each step of its body (an action, a nested block or a
-   note) as its own concurrent branch. A `par` with at least one `and` has one sequential branch per
-   header. The fan-out form exists because every corpus case is "one caller issues N independent
+2. **Fan-out form.** A `par` with no `and` runs each step of its body (an action or a nested block) as
+   its own concurrent branch. Notes do not count as steps, neither for the split nor for
+   `single-branch-par`: a note joins the branch of the step before it, or the first branch when it comes
+   before every step. A `par` with at least one `and` has one sequential branch per header. The fan-out form exists because every corpus case is "one caller issues N independent
    requests". With the explicit form, each of the N requests would need an `and "…"` header whose label
    repeats its step (§13 decision 2).
 3. `loop "<condition>"` opens a block with exactly one branch, like `opt`. The label is the condition or
@@ -148,7 +149,7 @@ Rules. These are the v2.21 rules (§3.1 there) unless stated otherwise:
 | `craft/syntax/orphan-and` (new, error) | An `and` has no open `par` at its column. | Parsed as the first branch of a new `par` with that label. |
 | `craft/syntax/orphan-else` (message widened) | An `else` whose open block at its column is a `par`, `loop` or `opt`, or that has no block there. Message: "`else` continues an `alt` at the same column; a `par` continues with `and`". | Unchanged. |
 | `craft/syntax/empty-branch`, `craft/syntax/missing-label`, `craft/syntax/inconsistent-indent` | Same conditions as for alt/opt, now also for `par`, `and` and `loop`. | Unchanged. |
-| `craft/lint/single-branch-par` (new, warning) | A `par` with no `and` whose body has exactly one step. Nothing in it runs concurrently. | n/a |
+| `craft/lint/single-branch-par` (new, warning) | A `par` with no `and` whose body has exactly one step that is not a note. Nothing in it runs concurrently. | n/a |
 
 ### 4.3 Model
 `Block.Kind` gains `par` and `loop`, and `Block` gains one field:
