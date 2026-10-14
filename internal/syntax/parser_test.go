@@ -1121,20 +1121,23 @@ func TestOpAnnotation_BalancedBraceInPhraseDoesNotOpenAnnotation(t *testing.T) {
 	}
 }
 
-// notifies has no phrase, so a trailing annotation is only recognised when it
-// starts immediately after the event (lookahead index 0). Regression for a
-// reviewer-found bug where a stray token between the event and `[` (like a
-// malformed multi-word event) still satisfied `opAnnotationStart(...) >= 0`,
-// mis-anchoring parseOpAnnotation on the stray token instead of `[`.
-func TestOpAnnotation_NotifiesStrayTokenBeforeBracketStaysUnopened(t *testing.T) {
+// notifies has no phrase, so a stray token between the event and `[` (a
+// malformed multi-word event) is an error at that token. Regression for a
+// reviewer-found bug where such a token mis-anchored parseOpAnnotation on the
+// stray token instead of `[`: the stray words are swept into an error node
+// first, so the annotation that follows is read from its own `[`.
+func TestOpAnnotation_NotifiesStrayTokenBeforeBracketIsReported(t *testing.T) {
 	src := `use_case "X" {
   when U does x
     A notifies Order Created [TOPIC t]
 }`
-	tree := astParse(src)
-	a := syntax.AsFile(tree).UseCases()[0].Scenarios()[0].Actions()[0]
-	if a.OpAnnotation() != nil {
-		t.Errorf("expected no op annotation when a stray token precedes `[`, got OpText() = %q", a.OpText())
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/unexpected-token" || diags[0].Range.Start.Character != 21 {
+		t.Fatalf("diags = %v", diags)
+	}
+	a := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.EventValue() != "Order" || a.OpText() != "TOPIC t" {
+		t.Errorf("event %q, op %q", a.EventValue(), a.OpText())
 	}
 }
 

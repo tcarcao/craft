@@ -1708,14 +1708,33 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 		diags = append(diags, p.diagUnterminatedString(eventTok))
 		p.consumeAs(SyntaxKindError)
 	}
-	// notifies has no phrase between the event and a possible annotation, so
-	// the cursor is only correctly positioned on `[` when the annotation
-	// starts immediately (lookahead index 0). A stray token in between (e.g.
-	// a malformed multi-word event) must not be swallowed as if it were `[`.
-	if p.opAnnotationStart(eventTok.Line) == 0 {
+	// notifies has no phrase between the event and a possible annotation:
+	// an event is one name. Extra words (`sync notifies the owners team`)
+	// are reported at the first one and swept, up to a trailing annotation,
+	// so they neither vanish silently nor parse as a step.
+	start := p.opAnnotationStart(eventTok.Line)
+	if t := p.peek(); start != 0 && t.Line == eventTok.Line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace {
+		diags = append(diags, p.diagNotifiesExtraWords(t))
+		p.builder.StartNode(SyntaxKindErrorNode)
+		for n := 0; (start < 0 || n < start) && p.peek().Line == eventTok.Line &&
+			p.peek().Type != lexer.TokenEOF && p.peek().Type != lexer.TokenRBrace; n++ {
+			p.consume()
+		}
+		p.builder.FinishNode()
+		start = p.opAnnotationStart(eventTok.Line)
+	}
+	if start == 0 {
 		diags = append(diags, p.parseOpAnnotation()...)
 	}
 	return diags
+}
+
+// diagNotifiesExtraWords reports the words after a `notifies` event on its
+// line, at the first of them.
+func (p *Parser) diagNotifiesExtraWords(tok lexer.Token) model.Diagnostic {
+	d := p.diagUnexpected(tok, "the end of the line")
+	d.Message = "a `notifies` event is one name: write a ref such as `team.OwnersNotified` or a quoted string; to describe work in prose, write an internal step (`sync informs the owners team`)"
+	return d
 }
 
 // parseReturnsAction parses [to <target>] [connector_word] <phrase> after `returns`.

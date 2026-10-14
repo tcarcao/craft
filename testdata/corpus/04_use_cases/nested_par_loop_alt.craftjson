@@ -210,29 +210,14 @@
                                     "id": "action_12",
                                     "type": "async_action",
                                     "context": "sync",
-                                    "event": "the",
-                                    "ref": "the",
-                                    "description": "sync notifies \"the\"",
+                                    "event": "owners.RunFlagged",
+                                    "ref": "owners.RunFlagged",
+                                    "description": "sync notifies \"owners.RunFlagged\"",
                                     "line": 22,
                                     "column": 17,
                                     "from": {
                                       "kind": "bounded_context",
                                       "id": "owners/sync"
-                                    }
-                                  }
-                                },
-                                {
-                                  "action": {
-                                    "id": "action_13",
-                                    "type": "internal_action",
-                                    "context": "owners",
-                                    "verb": "team",
-                                    "description": "owners team",
-                                    "line": 22,
-                                    "column": 35,
-                                    "from": {
-                                      "kind": "domain",
-                                      "id": "owners"
                                     }
                                   }
                                 }

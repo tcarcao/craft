@@ -19,5 +19,5 @@ use_case "Owners are reconciled" {
             sync asks audit to log the run
         and "b"
             opt "the run had flags"
-                sync notifies the owners team
+                sync notifies owners.RunFlagged
 }
