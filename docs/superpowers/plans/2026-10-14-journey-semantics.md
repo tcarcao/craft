@@ -3289,6 +3289,13 @@ surface_item  = 'callers' ':' name_list | 'spec' ':' STRING | note_stmt
 - [ ] **Step 3:** Copy `docs/journeys/invoicing/atlas-invoice-sms-reminders.craft` and `docs/journeys/ad/seeker-advert-detail.craft` to a temp dir. Rewrite the first with `listens store.sms_queue.inserted cron "* 10 * * 1-5"` (drop the `polls` tag) and the second with a fan-out `par` around the concurrent field-resolver asks. Validate them together with the topology/actors files (0 errors), and render sequence and flow in `puml` and `mmd` into `~/Downloads/domain-hub/journey-assessment/_render-journey-semantics/`. Check by eye: one `par` box with one arrow per resolver; a `database "sms_queue"` lane with `polls inserted (from …), cron * 10 * * 1-5`.
 - [ ] **Step 4:** Nothing is committed in re-arch-central. Record the before/after code counts in the release commit message body (Task 24).
 
+**Result (2026-10-14, branch at baf0b11 vs released 2.22.0).**
+- `validate` over topology, actors, context_map and `docs/journeys/*/*.craft` (370 journey files): 0 errors in both. 2.22.0 reports 135 diagnostics (132 warnings, 3 hints); the branch reports exactly one more, `craft/lint/repeated-request` ×1 in `ad/apollo-file-ttls-are-renewed.craft` (`atlas-agency` and `atlas-identity` both send `[bulkExtend]` to `Apollo` in one batch job: two backends, not client alternatives, so the warning is correct by the lint's rule and the author decides). Before the call-chain rule it was 3 (two in location-surfaces). No other new message, and none removed.
+- `fmt --check` on the same files: clean with both binaries (byte-identical).
+- `generate --type all` (puml and mermaid), `--mode architecture` and `--boundaries transparent`: every difference is a store hand-off. the 20 distinct `store.<name>.<change>` refs become `database` participants and writer/reader arrows (sequence, flow, architecture), and C4 drops their 42 `Event_Queue` publications and deliveries and adds 5 `Shared store` relations (writer and reader in different containers; no store ref names a declared data store). No other change.
+- Pilot rewrites (temp copies): `atlas-invoice-sms-reminders.craft` with `listens store.sms_queue.inserted cron "* 10 * * 1-5"` (no `polls` tag) and `seeker-advert-detail.craft` with a fan-out `par "field resolvers"` around the five native Atlas asks validate with 0 errors; renders are in `journey-assessment/_render-journey-semantics/`: one `par` frame with five `else`-separated arrows, a `database "sms_queue"` lane with `polls inserted (from atlas-billing), cron * 10 * * 1-5`.
+- Found on the way: `craft generate` hung forever on a relative plus an absolute input (fixed in baf0b11; 2.22.0 has the same loop).
+
 ---
 
 ### Task 24: Release craft v2.23.0 — **cheap**
