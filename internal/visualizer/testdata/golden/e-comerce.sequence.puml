@@ -14,41 +14,57 @@ actor "CRON" as CRON
 
 == Purchase VAS to Wallet ==
 
+group 1: when Business_User purchases VAS to wallet
 Business_User -> WalletItemPurchase : purchases VAS to wallet
 WalletItemPurchase -> Wallet : to initiate a VAS addition
 Wallet ->> Wallet : notifies "VAS Addition Request Approved"
+end
+group 2: when WalletItemPurchase listens "VAS Addition Request Approved"
 Wallet ->> WalletItemPurchase : VAS Addition Request Approved
 WalletItemPurchase -> OrderManagement : to create an Order
 OrderManagement ->> OrderManagement : notifies "Order Created"
 OrderManagement -> OrderManagement : marks the Order as payment deferred
 OrderManagement ->> OrderManagement : notifies "Order payment deferred"
+end
+group 3: when OrderFulfilment listens "Order payment deferred"
 OrderManagement ->> OrderFulfilment : Order payment deferred
 OrderFulfilment -> WalletItemAddition : to fulfil the addition request
 WalletItemAddition -> Wallet : to add VAS
 Wallet ->> Wallet : notifies "VAS added"
+end
+group 4: when OrderFulfilment listens "VAS added"
 Wallet ->> OrderFulfilment : VAS added
 OrderFulfilment -> OrderManagement : to mark the Order as fulfiled
 OrderManagement ->> OrderManagement : notifies "Order completed"
+end
 
 == VAS scheduled and no VAS in Wallet ==
 
+group 1: when Business_User schedules VAS
 Business_User -> VASScheduling : schedules VAS
 VASScheduling -> Wallet : to reserve a VAS
 Wallet -> Wallet : creates an unconfirmed VAS reservation
 Wallet ->> Wallet : notifies "VAS Addition Request Approved"
 VASScheduling -> VASScheduling : drafts a VAS schedule
+end
+group 2: when VASScheduling listens "VAS Addition Request Approved"
 Wallet ->> VASScheduling : VAS Addition Request Approved
 VASScheduling -> OrderManagement : to create an Order
 OrderManagement ->> OrderManagement : notifies "Order Created"
 OrderManagement -> OrderManagement : marks the Order as payment deferred
 OrderManagement ->> OrderManagement : notifies "Order payment deferred"
+end
+group 3: when OrderFulfilment listens "Order payment deferred"
 OrderManagement ->> OrderFulfilment : Order payment deferred
 OrderFulfilment -> WalletItemAddition : to fulfil the addition request
 WalletItemAddition -> Wallet : to add VAS
 Wallet ->> Wallet : notifies "VAS added"
+end
+group 4: when OrderFulfilment listens "VAS added"
 Wallet ->> OrderFulfilment : VAS added
 OrderFulfilment -> OrderManagement : to mark the Order as fulfiled
 OrderManagement ->> OrderManagement : notifies "Order completed"
+end
 
 == VAS scheduled and VAS in Wallet ==
 

@@ -16,35 +16,59 @@ sequenceDiagram
     participant Susbscription as Susbscription
     participant External as External
     Note over Customer,Susbscription: C2C user purchases
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 1: when Customer decides to purchase a VAS
     Customer->>Offering: decides to purchase a VAS
     Offering-->>Customer: returns available offering
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 2: when Customer asks Order to create an order
     Customer->>Order: asks Order to create an order
     Order->>Order: creates a draft Order
     Order-->>Customer: returns the url of the payment providers
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 3: when Customer pays for the order
     Customer->>PaymentProvider: pays for the order
     PaymentProvider->>PaymentProvider: confirms payment
     PaymentProvider-)PaymentProvider: notifies "PaymentCompleted"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 4: when Order listens "PaymentCompleted"
     PaymentProvider-)Order: PaymentCompleted
     Order->>Order: marks the Order as Paid
+    end
     Note over Customer,Susbscription: VAS scheduled and no VAS in Wallet
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 1: when Business_User schedules VAS
     Business_User->>VASScheduling: schedules VAS
     VASScheduling->>Wallet: to reserve a VAS
     Wallet->>Wallet: creates an unconfirmed VAS reservation
     Wallet-)Wallet: notifies "VAS Addition Request Approved"
     VASScheduling->>VASScheduling: drafts a VAS schedule
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 2: when VASScheduling listens "VAS Addition Request Approved"
     Wallet-)VASScheduling: VAS Addition Request Approved
     VASScheduling->>OrderManagement: to create an Order
     OrderManagement-)OrderManagement: notifies "Order Created"
     OrderManagement->>OrderManagement: marks the Order as payment deferred
     OrderManagement-)OrderManagement: notifies "Order payment deferred"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 3: when OrderFulfilment listens "Order payment deferred"
     OrderManagement-)OrderFulfilment: Order payment deferred
     External->>OrderFulfilment: Order payment deferred
     OrderFulfilment->>WalletItemAddition: to fulfil the addition request
     WalletItemAddition->>Wallet: to add VAS
     Wallet-)Wallet: notifies "VAS added"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 4: when OrderFulfilment listens "VAS added"
     Wallet-)OrderFulfilment: VAS added
     OrderFulfilment->>OrderManagement: to mark the Order as fulfiled
     OrderManagement-)OrderManagement: notifies "Order completed"
+    end
     Note over Customer,Susbscription: VAS scheduled and VAS in Wallet
     Business_User->>VASScheduling: schedules VAS
     VASScheduling->>Wallet: to reserve a VAS
@@ -62,39 +86,60 @@ sequenceDiagram
     Wallet->>Wallet: removes VAS
     Wallet-)Wallet: notifies "VAS Expired"
     Note over Customer,Susbscription: Purchase VAS schedule and its renewal (ideal scenario)
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 1: when Business_User schedules a VAS
     Business_User->>OrderMgmt: schedules a VAS
     OrderMgmt->>OrderMgmt: creates an "Order with two items to fulfil: VAS and VAS Subscription"
     OrderMgmt-)OrderMgmt: notifies "Order Created"
     OrderMgmt->>OrderMgmt: marks the Order as payment deferred
     OrderMgmt-)OrderMgmt: notifies "Order payment deferred"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 2: when OrderFulfilment listens "Order payment deferred"
     External->>OrderFulfilment: Order payment deferred
     OrderMgmt-)OrderFulfilment: Order payment deferred
     OrderFulfilment->>VASMgmt: to schedule the VAS
     VASMgmt->>VASMgmt: schedules the VAS for future application
     VASMgmt-)VASMgmt: notifies "VAS scheduled"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 3: when OrderFulfilment listens "VAS scheduled"
     VASMgmt-)OrderFulfilment: VAS scheduled
     OrderFulfilment->>Subscription: to create a VAS Subscription
     Subscription->>Subscription: creates a VAS Subscription with the details
     OrderFulfilment->>OrderFulfilment: marks the vas subscription item as Fulfiled
+    end
     Note over Customer,Susbscription: Purchase VAS schedule and its renewal (current possible scenario)
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 1: when Business_User schedules a VAS
     Business_User->>VASMgmt: schedules a VAS
     VASMgmt->>VASMgmt: schedules a VAS for future application
     VASMgmt-)VASMgmt: notifies "VAS scheduled with subscription included"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 2: when Subscription listens "VAS scheduled with subscription included"
     VASMgmt-)Subscription: VAS scheduled with subscription included
     Subscription->>Subscription: creates a VAS Subscription with the details
+    end
     Note over Customer,Susbscription: Scheduled VAS Applied
     Note over VASMgmt: identifies a scheduled VAS to apply
     VASMgmt->>VASMgmt: applies a VAS and stores details until when its valid
     VASMgmt-)VASMgmt: notifies "VAS Applied"
     Note over Customer,Susbscription: VAS Renewal Flow
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 1: when VASMgmt identifies a VAS expired
     Note over VASMgmt: identifies a VAS expired
     VASMgmt->>VASMgmt: marks the VAS as expired
     VASMgmt-)VASMgmt: notifies "VAS expired"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,Susbscription: 2: when Subscription listens "VAS expired"
     VASMgmt-)Subscription: VAS expired
     Subscription->>Subscription: checks if VAS has active associated subscription
     Subscription->>VASMgmt: to "schedule/apply a new VAS"
     Subscription->>Subscription: renews the VAS Subscription with the VAS
     Susbscription-)Susbscription: notifies "VAS Subscription Renewed"
+    end
     Note over Customer,Susbscription: Stop Auto-Renewal
     Business_User->>Subscription: stops the VAS Auto-Renewal
     Subscription->>Subscription: cancels the subscription

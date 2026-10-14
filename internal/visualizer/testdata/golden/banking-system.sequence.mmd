@@ -7,32 +7,47 @@ sequenceDiagram
     participant CustomerNotification as CustomerNotification
     actor CRON as CRON
     Note over Customer,CRON: Money Transfer
+    rect rgb(245, 245, 245)
+    Note over Customer,CRON: 1: when Customer initiates transfer
     Customer->>PaymentProcessing: initiates transfer
     PaymentProcessing->>AccountManagement: to verify source account
     PaymentProcessing->>TransactionValidation: to check transfer limits
     TransactionValidation->>TransactionValidation: validates transaction rules
     PaymentProcessing->>BalanceTracking: to reserve funds
     BalanceTracking-)BalanceTracking: notifies "Funds Reserved"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,CRON: 2: when PaymentProcessing listens "Funds Reserved"
     BalanceTracking-)PaymentProcessing: Funds Reserved
     PaymentProcessing->>AccountManagement: to verify destination account
     PaymentProcessing->>PaymentProcessing: executes fund transfer
     BalanceTracking->>BalanceTracking: updates account balances
     PaymentProcessing-)PaymentProcessing: notifies "Transfer Completed"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,CRON: 3: when CustomerNotification listens "Transfer Completed"
     PaymentProcessing-)CustomerNotification: Transfer Completed
     CustomerNotification->>CustomerNotification: sends confirmation to both accounts
+    end
     Note over Customer,CRON: Account Balance Check
     Customer->>AccountManagement: checks balance
     AccountManagement->>BalanceTracking: to get current balance
     BalanceTracking->>BalanceTracking: calculates available balance
     AccountManagement-->>Customer: returns balance information
     Note over Customer,CRON: Suspicious Activity Detection
+    rect rgb(245, 245, 245)
+    Note over Customer,CRON: 1: when TransactionValidation detects suspicious pattern
     Note over TransactionValidation: detects suspicious pattern
     TransactionValidation->>AccountManagement: to freeze account
     AccountManagement->>AccountManagement: applies security hold
     TransactionValidation-)TransactionValidation: notifies "Account Frozen"
+    end
+    rect rgb(245, 245, 245)
+    Note over Customer,CRON: 2: when CustomerNotification listens "Account Frozen"
     TransactionValidation-)CustomerNotification: Account Frozen
     CustomerNotification->>CustomerNotification: sends security alert to customer
     CustomerNotification-)CustomerNotification: notifies "bank security team"
+    end
     Note over Customer,CRON: Scheduled Payment Processing
     CRON->>PaymentProcessing: triggers scheduled payments
     PaymentProcessing->>AccountManagement: to get scheduled payments

@@ -19,28 +19,42 @@ VASScheduler ->> VASScheduler : notifies "VASReadyForFulfillment"
 
 == One-time VAS — fulfillment through provider apply ==
 
+group 1: when VASFulfillment starts fulfillment of a VAS
 VASFulfillment -> VASFulfillment : validates snapshot parameters are present
 VASFulfillment ->> VASFulfillment : notifies "RequestVasApplication"
+end
+group 2: when VasApplication listens "RequestVasApplication"
 VASFulfillment ->> VasApplication : RequestVasApplication
 VasApplication -> VasApplication : delegates apply through provider translator
 VasApplication ->> VasApplication : notifies "VasApplicationAcknowledged"
+end
+group 3: when VASFulfillment listens "VasApplicationAcknowledged"
 VasApplication ->> VASFulfillment : VasApplicationAcknowledged
 VASFulfillment -> VASFulfillment : records correlation for vasFulfillmentId
+end
+group 4: when VasApplication has applied VAS
 VasApplication ->> VasApplication : notifies "VasApplied"
+end
+group 5: when VASFulfillment listens "VasApplied"
 VasApplication ->> VASFulfillment : VasApplied
 VASFulfillment -> VASFulfillment : advances internal VAS lifecycle for succeeded delivery
 VASFulfillment -> VasLifecycle : to record fulfillment outcome on VAS aggregate
 VASFulfillment ->> VASFulfillment : notifies "VasFulfilled"
+end
 
 == VAS application rejected by provider ==
 
+group 1: when VasApplication listens "RequestVasApplication"
 [-> VasApplication : RequestVasApplication
 VasApplication -> VasApplication : delegates apply through provider translator
 VasApplication ->> VasApplication : notifies "VasApplicationFailed"
+end
+group 2: when VASFulfillment listens "VasApplicationFailed"
 VasApplication ->> VASFulfillment : VasApplicationFailed
 VASFulfillment -> VASFulfillment : classifies failure and exhausts retry policy when applicable
 VASFulfillment -> VasLifecycle : to record terminal failure for the VAS attempt
 VASFulfillment ->> VASFulfillment : notifies "VasFulfillmentFailed"
+end
 
 == Provider silent — fulfillment timeout ==
 
@@ -52,12 +66,18 @@ VASFulfillment ->> VASFulfillment : notifies "RequestEndOfVasApplication"
 
 == Time-based VAS — scheduled finish ==
 
+group 1: when VasLifecycleTimer fires configured end_time for active time_based VAS
 VasLifecycleTimer -> VASFulfillment : fires configured end_time for active time_based VAS
 VASFulfillment ->> VASFulfillment : notifies "RequestEndOfVasApplication"
+end
+group 2: when VasApplication listens "RequestEndOfVasApplication"
 VASFulfillment ->> VasApplication : RequestEndOfVasApplication
 VasApplication -> VasApplication : delegates finish through provider translator
 VasApplication ->> VasApplication : notifies "VasApplicationEnded"
+end
+group 3: when VasLifecycle listens "VasApplicationEnded"
 VasApplication ->> VasLifecycle : VasApplicationEnded
 VasLifecycle -> VasLifecycle : records time-based VAS as ended
+end
 
 @enduml

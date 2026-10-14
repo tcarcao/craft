@@ -75,3 +75,34 @@ use_case "Seeker opens an advert" {
 	requireLine(t, "mermaid", mmd, "frontendplatform->>graphql: for the advert [ad]")
 	requireLine(t, "plantuml", puml, `graphql ->> graphql : notifies "AdvertViewed" [TOPIC web.advert-viewed]`)
 }
+
+// A use case with several scenarios frames each one, numbered and titled by
+// its trigger, so alternatives do not read as one long chain. A use case with
+// a single scenario is drawn without a frame.
+func TestSequence_ScenariosAreFramed(t *testing.T) {
+	puml, mmd := sequenceSource(t, `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+    when Customer places an order with an empty basket
+        Ordering rejects the order
+}
+use_case "Single" {
+    when Customer cancels an order
+        Ordering asks Billing to refund the card
+}
+`)
+	requireLine(t, "plantuml", puml, "group 1: when Customer places an order")
+	requireLine(t, "plantuml", puml, "group 2: when Customer places an order with an empty basket")
+	if n := strings.Count(puml, "\nend\n"); n != 2 {
+		t.Errorf("plantuml: %d group ends, want 2:\n%s", n, puml)
+	}
+	forbidLine(t, "plantuml", puml, "group 1: when Customer cancels an order")
+	if !strings.Contains(mmd, ": 2: when Customer places an order with an empty basket") || strings.Count(mmd, "    rect ") != 2 {
+		t.Errorf("mermaid scenarios not framed:\n%s", mmd)
+	}
+}

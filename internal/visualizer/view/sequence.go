@@ -1,6 +1,9 @@
 package view
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/tcarcao/craft/v2/internal/interaction"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
@@ -36,6 +39,10 @@ type Message struct {
 	From, To string
 	Kind     MessageKind
 	Label    string
+	// Scenario titles the scenario the message belongs to when its use case
+	// has more than one ("2: when …"); writers frame each one. Empty for a
+	// use case with a single scenario.
+	Scenario string
 }
 
 // BuildSequence lays out its as a sequence diagram. Use cases with no
@@ -55,9 +62,15 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 
 	var seq Sequence
 	byUseCase := map[string]int{}
+	scenarioTitle := map[string]string{} // use case + scenario ID → frame title
 	for _, uc := range doc.UseCases {
 		byUseCase[uc.Name] = len(seq.Sections)
 		seq.Sections = append(seq.Sections, SequenceSection{Title: uc.Name})
+		if len(uc.Scenarios) > 1 {
+			for i, sc := range uc.Scenarios {
+				scenarioTitle[uc.Name+"|"+sc.ID] = fmt.Sprintf("%d: %s", i+1, strings.TrimSpace(sc.Trigger.Description))
+			}
+		}
 	}
 
 	inbound := map[string]bool{}
@@ -70,7 +83,7 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 		if !ok {
 			continue
 		}
-		msg := Message{Label: it.Label}
+		msg := Message{Label: it.Label, Scenario: scenarioTitle[it.UseCase+"|"+it.Scenario]}
 		switch it.Kind {
 		case interaction.Trigger:
 			msg.From, msg.To, msg.Kind = ns.addActor(it.From), ns.add(it.To), MessageCall

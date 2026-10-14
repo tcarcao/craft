@@ -209,7 +209,17 @@ func Sequence(s view.Sequence) string {
 	}
 	for _, sec := range s.Sections {
 		fmt.Fprintf(&b, "== %s ==\n\n", sec.Title)
+		group := ""
 		for _, m := range sec.Messages {
+			if m.Scenario != group {
+				if group != "" {
+					b.WriteString("end\n")
+				}
+				if m.Scenario != "" {
+					fmt.Fprintf(&b, "group %s\n", m.Scenario)
+				}
+				group = m.Scenario
+			}
 			switch m.Kind {
 			case view.MessageInbound:
 				fmt.Fprintf(&b, "[-> %s : %s\n", al.of(m.To), m.Label)
@@ -222,6 +232,9 @@ func Sequence(s view.Sequence) string {
 			default:
 				fmt.Fprintf(&b, "%s -> %s : %s\n", al.of(m.From), al.of(m.To), m.Label)
 			}
+		}
+		if group != "" {
+			b.WriteString("end\n")
 		}
 		b.WriteString("\n")
 	}

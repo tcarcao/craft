@@ -13,19 +13,25 @@ actor "CRON" as CRON
 
 == Money Transfer ==
 
+group 1: when Customer initiates transfer
 Customer -> PaymentProcessing : initiates transfer
 PaymentProcessing -> AccountManagement : to verify source account
 PaymentProcessing -> TransactionValidation : to check transfer limits
 TransactionValidation -> TransactionValidation : validates transaction rules
 PaymentProcessing -> BalanceTracking : to reserve funds
 BalanceTracking ->> BalanceTracking : notifies "Funds Reserved"
+end
+group 2: when PaymentProcessing listens "Funds Reserved"
 BalanceTracking ->> PaymentProcessing : Funds Reserved
 PaymentProcessing -> AccountManagement : to verify destination account
 PaymentProcessing -> PaymentProcessing : executes fund transfer
 BalanceTracking -> BalanceTracking : updates account balances
 PaymentProcessing ->> PaymentProcessing : notifies "Transfer Completed"
+end
+group 3: when CustomerNotification listens "Transfer Completed"
 PaymentProcessing ->> CustomerNotification : Transfer Completed
 CustomerNotification -> CustomerNotification : sends confirmation to both accounts
+end
 
 == Account Balance Check ==
 
@@ -36,13 +42,17 @@ AccountManagement --> Customer : returns balance information
 
 == Suspicious Activity Detection ==
 
+group 1: when TransactionValidation detects suspicious pattern
 note over TransactionValidation : detects suspicious pattern
 TransactionValidation -> AccountManagement : to freeze account
 AccountManagement -> AccountManagement : applies security hold
 TransactionValidation ->> TransactionValidation : notifies "Account Frozen"
+end
+group 2: when CustomerNotification listens "Account Frozen"
 TransactionValidation ->> CustomerNotification : Account Frozen
 CustomerNotification -> CustomerNotification : sends security alert to customer
 CustomerNotification ->> CustomerNotification : notifies "bank security team"
+end
 
 == Scheduled Payment Processing ==
 

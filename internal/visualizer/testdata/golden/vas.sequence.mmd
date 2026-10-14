@@ -12,26 +12,47 @@ sequenceDiagram
     VASScheduler->>VASScheduler: selects VAS deliveries that are due from snapshot
     VASScheduler-)VASScheduler: notifies "VASReadyForFulfillment"
     Note over CRON,VasLifecycleTimer: One-time VAS — fulfillment through provider apply
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 1: when VASFulfillment starts fulfillment of a VAS
     VASFulfillment->>VASFulfillment: validates snapshot parameters are present
     VASFulfillment-)VASFulfillment: notifies "RequestVasApplication"
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 2: when VasApplication listens "RequestVasApplication"
     VASFulfillment-)VasApplication: RequestVasApplication
     VasApplication->>VasApplication: delegates apply through provider translator
     VasApplication-)VasApplication: notifies "VasApplicationAcknowledged"
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 3: when VASFulfillment listens "VasApplicationAcknowledged"
     VasApplication-)VASFulfillment: VasApplicationAcknowledged
     VASFulfillment->>VASFulfillment: records correlation for vasFulfillmentId
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 4: when VasApplication has applied VAS
     VasApplication-)VasApplication: notifies "VasApplied"
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 5: when VASFulfillment listens "VasApplied"
     VasApplication-)VASFulfillment: VasApplied
     VASFulfillment->>VASFulfillment: advances internal VAS lifecycle for succeeded delivery
     VASFulfillment->>VasLifecycle: to record fulfillment outcome on VAS aggregate
     VASFulfillment-)VASFulfillment: notifies "VasFulfilled"
+    end
     Note over CRON,VasLifecycleTimer: VAS application rejected by provider
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 1: when VasApplication listens "RequestVasApplication"
     External->>VasApplication: RequestVasApplication
     VasApplication->>VasApplication: delegates apply through provider translator
     VasApplication-)VasApplication: notifies "VasApplicationFailed"
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 2: when VASFulfillment listens "VasApplicationFailed"
     VasApplication-)VASFulfillment: VasApplicationFailed
     VASFulfillment->>VASFulfillment: classifies failure and exhausts retry policy when applicable
     VASFulfillment->>VasLifecycle: to record terminal failure for the VAS attempt
     VASFulfillment-)VASFulfillment: notifies "VasFulfillmentFailed"
+    end
     Note over CRON,VasLifecycleTimer: Provider silent — fulfillment timeout
     FulfillmentTimer->>VASFulfillment: fires fulfillment deadline sweep
     VASFulfillment->>VASFulfillment: finds pending correlations past deadline
@@ -39,10 +60,19 @@ sequenceDiagram
     VASFulfillment-)VASFulfillment: notifies "VasFulfillmentTimedOut"
     VASFulfillment-)VASFulfillment: notifies "RequestEndOfVasApplication"
     Note over CRON,VasLifecycleTimer: Time-based VAS — scheduled finish
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 1: when VasLifecycleTimer fires configured end_time for active time_based VAS
     VasLifecycleTimer->>VASFulfillment: fires configured end_time for active time_based VAS
     VASFulfillment-)VASFulfillment: notifies "RequestEndOfVasApplication"
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 2: when VasApplication listens "RequestEndOfVasApplication"
     VASFulfillment-)VasApplication: RequestEndOfVasApplication
     VasApplication->>VasApplication: delegates finish through provider translator
     VasApplication-)VasApplication: notifies "VasApplicationEnded"
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,VasLifecycleTimer: 3: when VasLifecycle listens "VasApplicationEnded"
     VasApplication-)VasLifecycle: VasApplicationEnded
     VasLifecycle->>VasLifecycle: records time-based VAS as ended
+    end

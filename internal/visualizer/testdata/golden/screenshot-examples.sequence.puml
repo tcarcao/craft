@@ -28,87 +28,119 @@ actor "Customer_Support" as Customer_Support
 
 == User Registration ==
 
+group 1: when Business_User creates Account
 Business_User -> Authentication : creates Account
 Authentication -> Authentication : validates email format
 Authentication -> user_db : to check email uniqueness
 Profile -> Profile : creates user profile
 Profile -> user_db : to store profile data
 Authentication ->> Authentication : notifies "UserRegistered"
+end
+group 2: when Profile listens "UserRegistered"
 Authentication ->> Profile : UserRegistered
 Preferences -> Preferences : creates default preferences
 Preferences -> user_db : to save preferences
 EmailNotifier -> EmailNotifier : sends welcome email
+end
 
 == Product Purchase Flow ==
 
+group 1: when Business_User views Product
 Business_User -> Catalog : views Product
 Catalog --> Business_User : returns product details
 Pricing -> Pricing : calculates current price
 Inventory -> Inventory : checks availability
+end
+group 2: when Business_User adds Product to Cart
 Business_User -> OrderManagement : adds Product to Cart
 OrderManagement -> OrderManagement : creates draft order
 OrderManagement -> order_db : to save draft
 Inventory -> Inventory : reserves stock
 Pricing -> Pricing : applies discounts
 OrderManagement --> Business_User : returns cart summary
+end
+group 3: when Business_User confirms Purchase
 Business_User -> OrderManagement : confirms Purchase
 OrderManagement -> OrderManagement : validates order
 Payment -> Payment : processes payment
 Payment -> payment_gateway : to charge card
 Payment ->> Payment : notifies "PaymentCompleted"
+end
+group 4: when OrderManagement listens "PaymentCompleted"
 Payment ->> OrderManagement : PaymentCompleted
 OrderManagement -> OrderManagement : marks order as paid
 Inventory -> Inventory : confirms stock allocation
 Shipping -> Shipping : creates shipment
 Shipping -> shipping_provider : to schedule pickup
 OrderManagement ->> OrderManagement : notifies "OrderConfirmed"
+end
+group 5: when EmailNotifier listens "OrderConfirmed"
 OrderManagement ->> EmailNotifier : OrderConfirmed
 EmailNotifier -> EmailNotifier : sends order confirmation
 SMSNotifier -> SMSNotifier : sends tracking notification
+end
 
 == Inventory Sync ==
 
+group 1: when CronScheduler triggers "DailyInventorySync"
 CronScheduler -> Inventory : triggers "DailyInventorySync"
 Inventory -> Inventory : fetches stock levels
 Inventory -> inventory_system : to get current stock
 Inventory ->> Inventory : notifies "StockLevelsUpdated"
+end
+group 2: when Catalog listens "StockLevelsUpdated"
 Inventory ->> Catalog : StockLevelsUpdated
 Catalog -> Catalog : updates product availability
 Catalog -> product_db : to update stock status
 Catalog ->> Catalog : notifies "CatalogUpdated"
+end
+group 3: when PushNotifier listens "CatalogUpdated"
 Catalog ->> PushNotifier : CatalogUpdated
 PushNotifier -> PushNotifier : sends restock notifications
 PushNotifier -> notification_queue : to queue messages
+end
 
 == Customer Support Inquiry ==
 
+group 1: when Customer_Support views Order
 Customer_Support -> OrderManagement : views Order
 OrderManagement -> OrderManagement : fetches order details
 OrderManagement -> order_db : to retrieve order
 Payment -> Payment : retrieves payment history
 Shipping -> Shipping : retrieves shipment status
 OrderManagement --> Customer_Support : returns complete order view
+end
+group 2: when Customer_Support updates Order
 Customer_Support -> OrderManagement : updates Order
 OrderManagement -> OrderManagement : validates changes
 OrderManagement -> order_db : to update order
 OrderManagement ->> OrderManagement : notifies "OrderUpdated"
+end
+group 3: when EmailNotifier listens "OrderUpdated"
 OrderManagement ->> EmailNotifier : OrderUpdated
 EmailNotifier -> EmailNotifier : sends update notification to customer
+end
 
 == Password Reset ==
 
+group 1: when Business_User requests password reset
 Business_User -> Authentication : requests password reset
 Authentication -> Authentication : validates email
 Authentication -> Authentication : generates reset token
 Authentication -> user_db : to store token
 EmailNotifier -> EmailNotifier : sends reset email
+end
+group 2: when Business_User submits new password
 Business_User -> Authentication : submits new password
 Authentication -> Authentication : validates reset token
 Authentication -> user_db : to verify token
 Authentication -> Authentication : updates password
 Authentication ->> Authentication : notifies "PasswordChanged"
+end
+group 3: when EmailNotifier listens "PasswordChanged"
 Authentication ->> EmailNotifier : PasswordChanged
 EmailNotifier -> EmailNotifier : sends confirmation email
+end
 
 == User Login ==
 

@@ -96,7 +96,18 @@ func Sequence(s view.Sequence) string {
 		case len(s.Participants) == 1:
 			fmt.Fprintf(&b, "    Note over %s: %s\n", al.of(s.Participants[0].ID), sec.Title)
 		}
+		group := ""
 		for _, m := range sec.Messages {
+			if m.Scenario != group {
+				if group != "" {
+					b.WriteString("    end\n")
+				}
+				if m.Scenario != "" {
+					b.WriteString("    rect rgb(245, 245, 245)\n")
+					fmt.Fprintf(&b, "    Note over %s: %s\n", spanAll(s, al), strings.ReplaceAll(m.Scenario, ";", ","))
+				}
+				group = m.Scenario
+			}
 			label := strings.ReplaceAll(m.Label, ";", ",")
 			switch m.Kind {
 			case view.MessageInbound:
@@ -111,6 +122,17 @@ func Sequence(s view.Sequence) string {
 				fmt.Fprintf(&b, "    %s->>%s: %s\n", al.of(m.From), al.of(m.To), label)
 			}
 		}
+		if group != "" {
+			b.WriteString("    end\n")
+		}
 	}
 	return b.String()
+}
+
+// spanAll is the participant range a note across the whole diagram covers.
+func spanAll(s view.Sequence, al *aliases) string {
+	if len(s.Participants) > 1 {
+		return al.of(s.Participants[0].ID) + "," + al.of(s.Participants[len(s.Participants)-1].ID)
+	}
+	return al.of(s.Participants[0].ID)
 }
