@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"unicode"
@@ -106,7 +107,10 @@ type c4Builder struct {
 	// service; in transparent mode every context a user scenario touches.
 	entries map[string]string
 
-	actors    map[string]bool
+	actors map[string]bool
+	// egress holds the actors that are only the target of an ADDR egress
+	// from a service: drawn as external systems, but not as users.
+	egress    map[string]bool
 	relations []C4Relation
 }
 
@@ -117,6 +121,7 @@ func BuildC4(doc *model.CraftDoc, its []interaction.Interaction, opts C4Options)
 		focused: map[string]bool{}, ctxSvc: map[string]string{},
 		containers: map[string]C4Container{}, entries: map[string]string{},
 		actors: map[string]bool{},
+		egress: map[string]bool{},
 	}
 	b.indexServices()
 	b.findEntries()
@@ -162,7 +167,9 @@ func BuildC4(doc *model.CraftDoc, its []interaction.Interaction, opts C4Options)
 	b.relateEvents()
 	c4.Relations = dedupeRelations(b.relations)
 
-	for _, name := range sortedKeys(b.actors) {
+	all := maps.Clone(b.actors)
+	maps.Copy(all, b.egress)
+	for _, name := range sortedKeys(all) {
 		c4.Actors = append(c4.Actors, b.actor(name))
 	}
 	c4.Languages = b.languages()
@@ -250,6 +257,18 @@ func (b *c4Builder) findActors() {
 		}
 		b.actors[it.From.Key] = true
 	}
+	for _, it := range b.its {
+		if isAddrEgress(it) && b.ctxSvc[it.From.Key] != "" && !b.actors[it.To.Key] &&
+			(!b.hasFocus || b.scenarioTouchesFocus(it.Scenario)) {
+			b.egress[it.To.Key] = true
+		}
+	}
+}
+
+// isAddrEgress reports whether it is a request with an ADDR item to an actor:
+// egress to an address outside the estate (spec §9.1).
+func isAddrEgress(it interaction.Interaction) bool {
+	return it.Kind == interaction.Request && it.To.Kind == model.ParticipantActor && requestTechnology(it) == "HTTP (bare address)"
 }
 
 func (b *c4Builder) scenarioTouchesFocus(scenario string) bool {
@@ -492,6 +511,14 @@ func (b *c4Builder) relateServices() {
 				if b.opts.Boundaries {
 					b.relate(b.containerOf(it.From), b.containerOf(it.To), it.Label, "Database Query")
 				}
+				continue
+			}
+			if isAddrEgress(it) && (b.egress[it.To.Key] || b.actors[it.To.Key]) {
+				label := it.Label
+				if it.Inferred {
+					label += " (inferred)"
+				}
+				b.relate(b.containerOf(it.From), it.To.Key, label, requestTechnology(it))
 				continue
 			}
 			from, to := b.serviceOf(it.From), b.serviceOf(it.To)

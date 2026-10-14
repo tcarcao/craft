@@ -2123,6 +2123,11 @@ func (a ActionDecl) OneOfTokens() (one, of *SyntaxToken) {
 	return a.node.ChildToken(SyntaxKindKwOne), a.node.ChildToken(SyntaxKindKwOf)
 }
 
+// HasErrorNode reports whether the parser wrapped part of the action's line
+// in an error node (stray words after an event, a bare list). Lints that
+// count the action's items skip such an action: the syntax error says it.
+func (a ActionDecl) HasErrorNode() bool { return a.node.ChildNode(SyntaxKindErrorNode) != nil }
+
 // EventItems returns the events of an async action in source order: one for
 // `notifies E`, every item for `notifies one of …`.
 func (a ActionDecl) EventItems() []EventItem {

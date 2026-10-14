@@ -1436,6 +1436,47 @@ use_case "U" {
 	}
 }
 
+// TestC4_AddrEgressToASystemActor: C4 draws service-to-service requests
+// only, so an ADDR egress to a system actor (spec §9.1's ObjectStore) is drawn
+// as a relation to that external system. Other requests to actors stay out.
+func TestC4_AddrEgressToASystemActor(t *testing.T) {
+	doc := resolvedDoc(t, `actors {
+    system CRON
+    system ObjectStore
+    system Mailer
+}
+domain obido {
+    obidoanalytics
+}
+services {
+    Analytics {
+        contexts: obidoanalytics
+    }
+}
+use_case "U" {
+    when cron "0 18 * * *"
+        obidoanalytics asks ObjectStore to take the snapshot  [ADDR "SNAPSHOT_DESTINATION"]
+        obidoanalytics asks Mailer to send it  [sendMail]
+}
+`)
+	out, _, err := renderSource(doc, ViewC4, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		`System_Ext(ObjectStore, "ObjectStore", "External system")`,
+		`, ObjectStore, "to take the snapshot", "HTTP (bare address)")`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("c4 lacks %s:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Mailer") {
+		t.Errorf("a request to an actor without ADDR is still not drawn:\n%s", s)
+	}
+}
+
 const streamSrc = `actors {
     user Seller
     system AiAssistant

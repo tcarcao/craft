@@ -262,6 +262,10 @@ func TestLint_OneOfSingleEvent(t *testing.T) {
 	if n := lintCodes(t, "use_case \"U\" {\n  when O does\n    x notifies one of a.Ended, b.Ended, a.Ended\n}", "craft/lint/duplicate-event-in-list"); n != 1 {
 		t.Errorf("duplicate: %d", n)
 	}
+	// Stray words break the list: the syntax error stands alone.
+	if n := lintCodes(t, "use_case \"U\" {\n  when O does\n    x notifies one of shop.A foo, shop.B  [opX]\n}", "craft/lint/one-of-single-event"); n != 0 {
+		t.Errorf("after a syntax error: %d", n)
+	}
 }
 
 func TestLint_OneOfItemsAreEachPublished(t *testing.T) {
@@ -294,6 +298,22 @@ func TestLint_UnquotedAddress(t *testing.T) {
 	quoted := "use_case \"U\" {\n  when O does\n    o asks s to take it  [ADDR \"//cdn.example.com/x\"]\n}"
 	if n := lintCodes(t, cut, "craft/lint/unquoted-address"); n != 1 {
 		t.Errorf("cut: %d", n)
+	}
+	// The cut bracket may hold `inferred` or earlier items before ADDR; the
+	// range is the last `ADDR`.
+	for src, col := range map[string]int{
+		"use_case \"U\" {\n  when O does\n    o asks s to take it  [inferred ADDR //cdn.example.com/x]\n}": 35,
+		"use_case \"U\" {\n  when O does\n    o asks s to take it  [GET /x, ADDR //cdn.example.com/y]\n}":  34,
+	} {
+		var got []model.Diagnostic
+		for _, d := range analyzeSingleFileForTest(t, src) {
+			if d.Code == "craft/lint/unquoted-address" {
+				got = append(got, d)
+			}
+		}
+		if len(got) != 1 || got[0].Range.Start.Character != col || got[0].Range.End.Character != col+4 {
+			t.Errorf("%s:\n%+v, want one at the ADDR (%d-%d)", src, got, col, col+4)
+		}
 	}
 	for _, src := range []string{whole, quoted} {
 		if n := lintCodes(t, src, "craft/lint/unquoted-address"); n != 0 {

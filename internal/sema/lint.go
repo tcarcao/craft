@@ -991,7 +991,7 @@ func lintOneOfSingleEvent(perFileTrees map[string]syntax.SyntaxNode, lis map[str
 		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
 			for _, sc := range uc.Scenarios() {
 				for _, a := range sc.Actions() {
-					if !a.IsOneOf() || len(a.EventItems()) != 1 {
+					if !a.IsOneOf() || len(a.EventItems()) != 1 || a.HasErrorNode() {
 						continue
 					}
 					one, of := a.OneOfTokens()
@@ -1052,6 +1052,10 @@ func lintEgressOnInternalStep(perFileTrees map[string]syntax.SyntaxNode, lis map
 // Warning: an action whose phrase ends in `[ADDR` because a `//` after a
 // space opened a comment and cut the bracket (spec §9.3; plan correction 2).
 
+// cutAddrRe matches a phrase that ends inside an unclosed bracket whose last
+// word is ADDR: `[ADDR`, `[inferred ADDR`, `[GET /x, ADDR`.
+var cutAddrRe = regexp.MustCompile(`\[[^\]]*\bADDR$`)
+
 func lintUnquotedAddress(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
 	var diags []model.Diagnostic
 	for _, uri := range sortedTreeURIs(perFileTrees) {
@@ -1063,7 +1067,7 @@ func lintUnquotedAddress(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
 			for _, sc := range uc.Scenarios() {
 				for _, a := range sc.Actions() {
-					if a.OpAnnotation() != nil || !strings.HasSuffix(strings.TrimSpace(a.PhraseText()), "[ADDR") {
+					if a.OpAnnotation() != nil || !cutAddrRe.MatchString(strings.TrimSpace(a.PhraseText())) {
 						continue
 					}
 					line := a.Line(li)
@@ -1073,8 +1077,10 @@ func lintUnquotedAddress(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 						end = len(src) - start
 					}
 					text := src[start : start+end]
-					at := strings.LastIndex(text, "[ADDR")
-					if at < 0 || !strings.Contains(text[at:], "//") {
+					// The range is the last ADDR: `[inferred ADDR //…` and
+					// `[GET /x, ADDR //…` are cut the same way.
+					at := strings.LastIndex(text, lang.OpVerbAddr)
+					if at < 0 || strings.LastIndex(text[:at], "[") < 0 || !strings.Contains(text[at:], "//") {
 						continue
 					}
 					col := lspLen(text[:at])
@@ -1085,7 +1091,7 @@ func lintUnquotedAddress(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 						SourceURI: uri,
 						Range: model.Range{
 							Start: model.Position{Line: lineToLSP(line), Character: col},
-							End:   model.Position{Line: lineToLSP(line), Character: col + len("[ADDR")},
+							End:   model.Position{Line: lineToLSP(line), Character: col + len(lang.OpVerbAddr)},
 						},
 					})
 				}
