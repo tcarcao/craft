@@ -258,3 +258,125 @@ use_case "Checkout" {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func branchSummary(its []interaction.Interaction) string {
+	var lines []string
+	for _, it := range its {
+		var path []string
+		for _, b := range it.Branch {
+			path = append(path, fmt.Sprintf("%s:%s#%d", b.Kind, b.Label, b.Index))
+		}
+		to := it.To.Name
+		if it.To.IsZero() {
+			to = "·"
+		}
+		lines = append(lines, fmt.Sprintf("%d %s %s->%s {%s}", it.Step, it.Kind, it.From.Name, to, strings.Join(path, " > ")))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func TestDerive_BranchPathsAndPerBranchCallStack(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+        alt "the card is accepted"
+            Billing returns the receipt
+        else "the card is declined"
+            Billing asks Bank for a second opinion
+            opt "the bank also declines"
+                Bank returns the refusal
+            Billing returns the refusal
+        Ordering returns the confirmation
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {}
+2 response Billing->Ordering {alt:the card is accepted#0}
+3 request Billing->Bank {alt:the card is declined#1}
+4 response Bank->Billing {alt:the card is declined#1 > opt:the bank also declines#0}
+5 response Billing->Ordering {alt:the card is declined#1}
+6 response Ordering->Customer {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// The trigger reaches the first action in source order, even inside a block.
+func TestDerive_TriggerTargetsFirstActionInsideABlock(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        alt "with a voucher"
+            Billing applies the voucher
+        else "without"
+            Ordering charges the card
+}
+`})
+	if its[0].Kind != interaction.Trigger || its[0].To.Name != "Billing" {
+		t.Errorf("trigger = %+v", its[0])
+	}
+}
+
+// Each alt branch starts from the call stack as it was at the alt, and the
+// stack after the block is the one from before it. A call left unanswered in
+// the first branch must not capture a return in the second branch (it would
+// go to Ordering), and the second branch's return must not leak past the
+// block (the last return would go to Customer).
+func TestDerive_AltBranchesDoNotShareTheCallStack(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Shipping asks Billing to reserve the shipping fee
+        alt "the card is charged now"
+            Ordering asks Billing to charge the card
+        else "the card is charged later"
+            Billing returns the reservation
+        Billing returns the fee
+}
+`})
+	want := `0 trigger Customer->Shipping {}
+1 request Shipping->Billing {}
+2 request Ordering->Billing {alt:the card is charged now#0}
+3 response Billing->Shipping {alt:the card is charged later#1}
+4 response Billing->Shipping {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// A notifies inside a branch pairs with listeners like any other, and the
+// publish carries its branch path.
+func TestDerive_PublishInsideABranchPairsWithListeners(t *testing.T) {
+	its := derive(t, map[string]string{
+		"a.craft": structure + `
+use_case "Pay" {
+    when Customer pays
+        Billing charges the card
+        opt "the payment settles"
+            Billing notifies "Payment Settled"
+}
+`,
+		"b.craft": `
+use_case "Ship" {
+    when Shipping listens "Payment Settled"
+        Shipping books a courier
+}
+`,
+	})
+	var publish, listen *interaction.Interaction
+	for i := range its {
+		switch its[i].Kind {
+		case interaction.Publish:
+			publish = &its[i]
+		case interaction.Listen:
+			listen = &its[i]
+		}
+	}
+	if publish == nil || len(publish.Branch) != 1 || publish.Branch[0].Label != "the payment settles" || publish.Branch[0].Index != 0 || publish.Branch[0].Block == "" {
+		t.Errorf("publish = %+v", publish)
+	}
+	if listen == nil || listen.From.Name != "Billing" || listen.To.Name != "Shipping" || listen.Event != "Payment Settled" || listen.Branch != nil {
+		t.Errorf("listen = %+v", listen)
+	}
+}

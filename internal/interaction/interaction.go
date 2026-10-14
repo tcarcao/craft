@@ -8,6 +8,7 @@
 package interaction
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
@@ -79,6 +80,17 @@ type Interaction struct {
 	// Targeted is true for a Response written with an explicit `to` target,
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
+	// Branch is the path from the outermost block inward to the branch the
+	// action sits in; nil outside blocks.
+	Branch []BranchRef
+}
+
+// BranchRef locates an interaction inside one branch of a block.
+type BranchRef struct {
+	Block string // model.Block.ID
+	Kind  lang.BlockKind
+	Label string
+	Index int // 0-based branch index within the block
 }
 
 // Derive lists every interaction of doc in source order: use case, scenario,
@@ -154,44 +166,86 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 		}
 	}
 
-	for i, a := range actions {
-		if a.Context == "" {
-			continue
+	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, out: out}
+	w.walk(sc.Steps, nil)
+	return w.out
+}
+
+// walker visits a scenario's steps depth-first, in source order, numbering
+// actions and keeping the call stack per branch.
+type walker struct {
+	base      Interaction
+	uri       string
+	callStack []frame
+	step      int
+	out       []Interaction
+}
+
+// walk visits steps that sit at path. Every branch of an alt starts from the
+// call stack as it was at the alt; an opt body continues from it. After any
+// block the stack is restored to its state at the block's start, because which
+// branch ran is unknown.
+func (w *walker) walk(steps []model.Step, path []BranchRef) {
+	for _, st := range steps {
+		switch {
+		case st.Block != nil:
+			b := st.Block
+			saved := append([]frame(nil), w.callStack...)
+			for i, br := range b.Branches {
+				if b.Kind == lang.BlockAlt || i == 0 {
+					w.callStack = append([]frame(nil), saved...)
+				}
+				// A fresh, clipped slice: interactions never share a backing
+				// array with room to grow.
+				inner := slices.Clip(append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}))
+				w.walk(br.Steps, inner)
+			}
+			w.callStack = saved
+		case st.Action != nil:
+			w.step++
+			w.action(*st.Action, path)
 		}
-		it := base
-		it.Step = i + 1
-		it.From = endpoint(a.Context, a.From)
-		it.Label = label(a)
-		it.Operation = a.Operation
-		it.Site = Site{URI: uc.SourceURI, Line: a.Line, Column: a.Column, Length: utf16Len(a.Context)}
-		switch a.Type {
-		case lang.ActionSync:
-			if a.TargetContext == "" {
-				continue
-			}
-			it.Kind, it.To = Request, endpoint(a.TargetContext, a.To)
-			callStack = append(callStack, frame{caller: it.From, callee: it.To})
-		case lang.ActionAsync:
-			if a.Event == "" {
-				continue
-			}
-			it.Kind, it.Event = Publish, a.Event
-		case lang.ActionInternal:
-			it.Kind, it.To = Internal, it.From
-		case lang.ActionReturn:
-			it.Kind = Response
-			switch {
-			case a.TargetContext != "":
-				it.To, it.Targeted = endpoint(a.TargetContext, a.To), true
-			default:
-				it.To, callStack = answer(callStack, it.From)
-			}
-		default:
-			continue
-		}
-		out = append(out, it)
 	}
-	return out
+}
+
+// action derives the interaction of the w.step-th action, if it has one.
+func (w *walker) action(a model.Action, path []BranchRef) {
+	if a.Context == "" {
+		return
+	}
+	it := w.base
+	it.Step = w.step
+	it.Branch = path
+	it.From = endpoint(a.Context, a.From)
+	it.Label = label(a)
+	it.Operation = a.Operation
+	it.Site = Site{URI: w.uri, Line: a.Line, Column: a.Column, Length: utf16Len(a.Context)}
+	switch a.Type {
+	case lang.ActionSync:
+		if a.TargetContext == "" {
+			return
+		}
+		it.Kind, it.To = Request, endpoint(a.TargetContext, a.To)
+		w.callStack = append(w.callStack, frame{caller: it.From, callee: it.To})
+	case lang.ActionAsync:
+		if a.Event == "" {
+			return
+		}
+		it.Kind, it.Event = Publish, a.Event
+	case lang.ActionInternal:
+		it.Kind, it.To = Internal, it.From
+	case lang.ActionReturn:
+		it.Kind = Response
+		switch {
+		case a.TargetContext != "":
+			it.To, it.Targeted = endpoint(a.TargetContext, a.To), true
+		default:
+			it.To, w.callStack = answer(w.callStack, it.From)
+		}
+	default:
+		return
+	}
+	w.out = append(w.out, it)
 }
 
 // frame is one outstanding call: caller asked callee and has not been
