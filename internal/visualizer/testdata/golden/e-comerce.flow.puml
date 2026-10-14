@@ -78,12 +78,12 @@ VASScheduling ->> Wallet : 34. to reserve a VAS
 Wallet -> Wallet : 35. reserves a VAS
 Wallet ->> Wallet_events : 36. VAS Reserved
 VASScheduling -> VASScheduling : 37. creates a VAS schedule
-Business_User --> VASScheduling : 38. unschedules VAS scheduling
+Business_User --> VASScheduling : 38. unschedules a VAS scheduling
 VASScheduling ->> Wallet : 39. to cancel the VAS reservation
 Wallet -> Wallet : 40. cancels VAS reservation
 Wallet ->> Wallet_events : 41. VAS Reservation Canceled
 VASScheduling -> VASScheduling : 42. cancels the VAS schedule
-CRON --> Wallet : 43. identifies VAS expiring
+CRON --> Wallet : 43. identifies a VAS expiring
 Wallet -> Wallet : 44. removes VAS
 Wallet ->> Wallet_events : 45. VAS Expired
 

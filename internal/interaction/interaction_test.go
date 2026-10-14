@@ -225,3 +225,17 @@ use_case "U" {
 		}
 	}
 }
+
+// A trigger's connector word is part of what the actor does: "places an
+// order" must not be drawn as "places order".
+func TestDerive_TriggerLabelKeepsConnector(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Ordering validates the basket
+}
+`})
+	if got, want := its[0].Label, "places an order"; got != want {
+		t.Errorf("trigger label = %q, want %q", got, want)
+	}
+}

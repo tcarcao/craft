@@ -36,12 +36,12 @@ actor "VASMgmt" as VASMgmt
 queue "Wallet events" as Wallet_events
 
 ' Workflow flows
-Business_User --> VASScheduling : 1. unschedules VAS scheduling
+Business_User --> VASScheduling : 1. unschedules a VAS scheduling
 VASScheduling ->> Wallet : 2. to cancel the VAS reservation
 Wallet -> Wallet : 3. cancels VAS reservation
 Wallet ->> Wallet_events : 4. VAS Reservation Canceled
 VASScheduling -> VASScheduling : 5. cancels the VAS schedule
-VASMgmt --> VASMgmt : 6. identifies scheduled VAS to apply
+VASMgmt --> VASMgmt : 6. identifies a scheduled VAS to apply
 VASMgmt -> VASMgmt : 7. applies a VAS and stores details until when its valid
 
 @enduml

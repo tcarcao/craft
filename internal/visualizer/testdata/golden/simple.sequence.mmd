@@ -16,12 +16,12 @@ sequenceDiagram
     participant Susbscription as Susbscription
     participant External as External
     Note over Customer,Susbscription: C2C user purchases
-    Customer->>Offering: decides purchase a VAS
+    Customer->>Offering: decides to purchase a VAS
     Offering-->>Customer: returns available offering
     Customer->>Order: asks Order to create an order
     Order->>Order: creates a draft Order
     Order-->>Customer: returns the url of the payment providers
-    Customer->>PaymentProvider: pays the order
+    Customer->>PaymentProvider: pays for the order
     PaymentProvider->>PaymentProvider: confirms payment
     PaymentProvider-)PaymentProvider: notifies "PaymentCompleted"
     PaymentProvider-)Order: PaymentCompleted
@@ -52,17 +52,17 @@ sequenceDiagram
     Wallet-)Wallet: notifies "VAS Reserved"
     VASScheduling->>VASScheduling: creates a VAS schedule
     Note over Customer,Susbscription: VAS unscheduled
-    Business_User->>VASScheduling: unschedules VAS scheduling
+    Business_User->>VASScheduling: unschedules a VAS scheduling
     VASScheduling->>Wallet: to cancel the VAS reservation
     Wallet->>Wallet: cancels VAS reservation
     Wallet-)Wallet: notifies "VAS Reservation Canceled"
     VASScheduling->>VASScheduling: cancels the VAS schedule
     Note over Customer,Susbscription: VAS expires
-    CRON->>Wallet: identifies VAS expiring
+    CRON->>Wallet: identifies a VAS expiring
     Wallet->>Wallet: removes VAS
     Wallet-)Wallet: notifies "VAS Expired"
     Note over Customer,Susbscription: Purchase VAS schedule and its renewal (ideal scenario)
-    Business_User->>OrderMgmt: schedules VAS
+    Business_User->>OrderMgmt: schedules a VAS
     OrderMgmt->>OrderMgmt: creates an "Order with two items to fulfil: VAS and VAS Subscription"
     OrderMgmt-)OrderMgmt: notifies "Order Created"
     OrderMgmt->>OrderMgmt: marks the Order as payment deferred
@@ -77,17 +77,17 @@ sequenceDiagram
     Subscription->>Subscription: creates a VAS Subscription with the details
     OrderFulfilment->>OrderFulfilment: marks the vas subscription item as Fulfiled
     Note over Customer,Susbscription: Purchase VAS schedule and its renewal (current possible scenario)
-    Business_User->>VASMgmt: schedules VAS
+    Business_User->>VASMgmt: schedules a VAS
     VASMgmt->>VASMgmt: schedules a VAS for future application
     VASMgmt-)VASMgmt: notifies "VAS scheduled with subscription included"
     VASMgmt-)Subscription: VAS scheduled with subscription included
     Subscription->>Subscription: creates a VAS Subscription with the details
     Note over Customer,Susbscription: Scheduled VAS Applied
-    VASMgmt->>VASMgmt: identifies scheduled VAS to apply
+    VASMgmt->>VASMgmt: identifies a scheduled VAS to apply
     VASMgmt->>VASMgmt: applies a VAS and stores details until when its valid
     VASMgmt-)VASMgmt: notifies "VAS Applied"
     Note over Customer,Susbscription: VAS Renewal Flow
-    VASMgmt->>VASMgmt: identifies VAS expired
+    VASMgmt->>VASMgmt: identifies a VAS expired
     VASMgmt->>VASMgmt: marks the VAS as expired
     VASMgmt-)VASMgmt: notifies "VAS expired"
     VASMgmt-)Subscription: VAS expired
@@ -96,5 +96,5 @@ sequenceDiagram
     Subscription->>Subscription: renews the VAS Subscription with the VAS
     Susbscription-)Susbscription: notifies "VAS Subscription Renewed"
     Note over Customer,Susbscription: Stop Auto-Renewal
-    Business_User->>Subscription: stops VAS Auto-Renewal
+    Business_User->>Subscription: stops the VAS Auto-Renewal
     Subscription->>Subscription: cancels the subscription

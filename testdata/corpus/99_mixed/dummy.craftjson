@@ -9,8 +9,9 @@
             "type": "external",
             "actor": "Business_User",
             "verb": "unschedules",
+            "connector": "a",
             "phrase": "VAS scheduling",
-            "description": "when Business_User unschedules VAS scheduling",
+            "description": "when Business_User unschedules a VAS scheduling",
             "line": 2,
             "column": 10
           },
@@ -71,8 +72,9 @@
             "type": "external",
             "actor": "VASMgmt",
             "verb": "identifies",
+            "connector": "a",
             "phrase": "scheduled VAS to apply",
-            "description": "when VASMgmt identifies scheduled VAS to apply",
+            "description": "when VASMgmt identifies a scheduled VAS to apply",
             "line": 10,
             "column": 10
           },

@@ -186,7 +186,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 	t := sc.Trigger()
 	kind := t.Kind()
-	var actor, context, event, verb, phrase, ref string
+	var actor, context, event, verb, connector, phrase, ref string
 	switch kind {
 	case lang.TriggerEvent:
 		event = t.EventValue()
@@ -197,6 +197,7 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 	default: // external
 		actor = t.ExternalSubjectText()
 		verb = t.ExternalVerbText()
+		connector = t.Connector()
 		phrase = t.PhraseText()
 	}
 	var description string
@@ -207,12 +208,13 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		description = fmt.Sprintf("when %s listens %q", context, event)
 	default:
 		// No trimming: an empty phrase leaves a trailing space, as it always has.
-		description = fmt.Sprintf("when %s %s %s", actor, verb, phrase)
+		description = fmt.Sprintf("when %s %s %s", actor, verb, joinConnector(connector, phrase))
 	}
 	out := model.Trigger{
 		Type:        kind,
 		Actor:       actor,
 		Verb:        verb,
+		Connector:   connector,
 		Phrase:      phrase,
 		Context:     context,
 		Event:       event,
@@ -224,6 +226,17 @@ func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {
 		out.Line, _ = li.LineCol(when.Offset())
 	}
 	return out
+}
+
+// joinConnector puts a trigger's connector word back in front of its phrase.
+func joinConnector(connector, phrase string) string {
+	if connector == "" {
+		return phrase
+	}
+	if phrase == "" {
+		return connector
+	}
+	return connector + " " + phrase
 }
 
 func projectAction(a syntax.ActionDecl, id string, li green.LineIndex) model.Action {

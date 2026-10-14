@@ -722,8 +722,9 @@
             "type": "external",
             "actor": "Business_User",
             "verb": "unschedules",
+            "connector": "a",
             "phrase": "VAS scheduling",
-            "description": "when Business_User unschedules VAS scheduling",
+            "description": "when Business_User unschedules a VAS scheduling",
             "line": 79,
             "column": 10
           },
@@ -809,8 +810,9 @@
             "type": "external",
             "actor": "CRON",
             "verb": "identifies",
+            "connector": "a",
             "phrase": "VAS expiring",
-            "description": "when CRON identifies VAS expiring",
+            "description": "when CRON identifies a VAS expiring",
             "line": 87,
             "column": 10
           },

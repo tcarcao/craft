@@ -52,12 +52,12 @@ queue "VASMgmt events" as VASMgmt_events
 queue "Wallet events" as Wallet_events
 
 ' Workflow flows
-Customer --> Offering : 1. decides purchase a VAS
+Customer --> Offering : 1. decides to purchase a VAS
 Offering --> Customer : 2. returns available offering
 Customer --> Order : 3. asks Order to create an order
 Order -> Order : 4. creates a draft Order
 Order --> Customer : 5. returns the url of the payment providers
-Customer --> PaymentProvider : 6. pays the order
+Customer --> PaymentProvider : 6. pays for the order
 PaymentProvider -> PaymentProvider : 7. confirms payment
 PaymentProvider ->> PaymentProvider_events : 8. PaymentCompleted
 PaymentProvider_events --> Order : 9. PaymentCompleted
@@ -85,15 +85,15 @@ VASScheduling ->> Wallet : 30. to reserve a VAS
 Wallet -> Wallet : 31. reserves a VAS
 Wallet ->> Wallet_events : 32. VAS Reserved
 VASScheduling -> VASScheduling : 33. creates a VAS schedule
-Business_User --> VASScheduling : 34. unschedules VAS scheduling
+Business_User --> VASScheduling : 34. unschedules a VAS scheduling
 VASScheduling ->> Wallet : 35. to cancel the VAS reservation
 Wallet -> Wallet : 36. cancels VAS reservation
 Wallet ->> Wallet_events : 37. VAS Reservation Canceled
 VASScheduling -> VASScheduling : 38. cancels the VAS schedule
-CRON --> Wallet : 39. identifies VAS expiring
+CRON --> Wallet : 39. identifies a VAS expiring
 Wallet -> Wallet : 40. removes VAS
 Wallet ->> Wallet_events : 41. VAS Expired
-Business_User --> OrderMgmt : 42. schedules VAS
+Business_User --> OrderMgmt : 42. schedules a VAS
 OrderMgmt -> OrderMgmt : 43. creates an "Order with two items to fulfil: VAS and VAS Subscription"
 OrderMgmt ->> OrderMgmt_events : 44. Order Created
 OrderMgmt -> OrderMgmt : 45. marks the Order as payment deferred
@@ -107,15 +107,15 @@ VASMgmt_events --> OrderFulfilment : 52. VAS scheduled
 OrderFulfilment ->> Subscription : 53. to create a VAS Subscription
 Subscription -> Subscription : 54. creates a VAS Subscription with the details
 OrderFulfilment -> OrderFulfilment : 55. marks the vas subscription item as Fulfiled
-Business_User --> VASMgmt : 56. schedules VAS
+Business_User --> VASMgmt : 56. schedules a VAS
 VASMgmt -> VASMgmt : 57. schedules a VAS for future application
 VASMgmt ->> VASMgmt_events : 58. VAS scheduled with subscription included
 VASMgmt_events --> Subscription : 59. VAS scheduled with subscription included
 Subscription -> Subscription : 60. creates a VAS Subscription with the details
-VASMgmt --> VASMgmt : 61. identifies scheduled VAS to apply
+VASMgmt --> VASMgmt : 61. identifies a scheduled VAS to apply
 VASMgmt -> VASMgmt : 62. applies a VAS and stores details until when its valid
 VASMgmt ->> VASMgmt_events : 63. VAS Applied
-VASMgmt --> VASMgmt : 64. identifies VAS expired
+VASMgmt --> VASMgmt : 64. identifies a VAS expired
 VASMgmt -> VASMgmt : 65. marks the VAS as expired
 VASMgmt ->> VASMgmt_events : 66. VAS expired
 VASMgmt_events --> Subscription : 67. VAS expired
@@ -123,7 +123,7 @@ Subscription -> Subscription : 68. checks if VAS has active associated subscript
 Subscription ->> VASMgmt : 69. to "schedule/apply a new VAS"
 Subscription -> Subscription : 70. renews the VAS Subscription with the VAS
 Susbscription ->> Susbscription_events : 71. VAS Subscription Renewed
-Business_User --> Subscription : 72. stops VAS Auto-Renewal
+Business_User --> Subscription : 72. stops the VAS Auto-Renewal
 Subscription -> Subscription : 73. cancels the subscription
 
 @enduml

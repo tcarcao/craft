@@ -1558,6 +1558,21 @@ func (t TriggerDecl) PhraseText() string {
 	return t.rawTextFrom(phraseStart)
 }
 
+// Connector returns the connector word between an external trigger's verb and
+// its phrase (`when Customer places an order` → "an"), or "" when there is
+// none. PhraseText skips it; diagrams and descriptions put it back.
+func (t TriggerDecl) Connector() string {
+	if t.Kind() != lang.TriggerExternal {
+		return ""
+	}
+	tokens := t.node.Tokens()
+	i := tokenIndexAt(significantElements(t.node), 2)
+	if i < len(tokens) && isConnectorWord(tokens[i].Text()) {
+		return tokens[i].Text()
+	}
+	return ""
+}
+
 // SourceText renders the trigger as canonical .craft source: the exact text the
 // LSP formatter writes after `when `.
 //

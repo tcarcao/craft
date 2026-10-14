@@ -129,7 +129,7 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 			first := sc.Actions[0]
 			it := base
 			it.Kind, it.From, it.To = Trigger, actor, endpoint(first.Context, first.From)
-			it.Label = strings.TrimSpace(t.Verb + " " + t.Phrase)
+			it.Label = strings.Join(strings.Fields(t.Verb+" "+t.Connector+" "+t.Phrase), " ")
 			it.Site = triggerSite
 			it.Site.Length = utf16Len(t.Actor)
 			out = append(out, it)

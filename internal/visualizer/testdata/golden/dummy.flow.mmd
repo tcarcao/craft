@@ -4,10 +4,10 @@ flowchart LR
     VASScheduling["VASScheduling"]
     Wallet["Wallet"]
     Wallet_events[("Wallet events")]
-    Business_User -- "1. unschedules VAS scheduling" --> VASScheduling
+    Business_User -- "1. unschedules a VAS scheduling" --> VASScheduling
     VASScheduling -- "2. to cancel the VAS reservation" --> Wallet
     Wallet -- "3. cancels VAS reservation" --> Wallet
     Wallet -- "4. VAS Reservation Canceled" --> Wallet_events
     VASScheduling -- "5. cancels the VAS schedule" --> VASScheduling
-    VASMgmt -- "6. identifies scheduled VAS to apply" --> VASMgmt
+    VASMgmt -- "6. identifies a scheduled VAS to apply" --> VASMgmt
     VASMgmt -- "7. applies a VAS and stores details until when its valid" --> VASMgmt

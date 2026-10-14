@@ -9,8 +9,9 @@
             "type": "external",
             "actor": "CRON",
             "verb": "detects",
+            "connector": "a",
             "phrase": "failed charge",
-            "description": "when CRON detects failed charge",
+            "description": "when CRON detects a failed charge",
             "line": 8,
             "column": 10
           },

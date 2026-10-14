@@ -60,7 +60,7 @@ VASScheduling -> VASScheduling : creates a VAS schedule
 
 == VAS unscheduled ==
 
-Business_User -> VASScheduling : unschedules VAS scheduling
+Business_User -> VASScheduling : unschedules a VAS scheduling
 VASScheduling -> Wallet : to cancel the VAS reservation
 Wallet -> Wallet : cancels VAS reservation
 Wallet ->> Wallet : notifies "VAS Reservation Canceled"
@@ -68,7 +68,7 @@ VASScheduling -> VASScheduling : cancels the VAS schedule
 
 == VAS expires ==
 
-CRON -> Wallet : identifies VAS expiring
+CRON -> Wallet : identifies a VAS expiring
 Wallet -> Wallet : removes VAS
 Wallet ->> Wallet : notifies "VAS Expired"
 

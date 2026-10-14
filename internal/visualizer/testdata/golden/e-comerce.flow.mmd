@@ -46,11 +46,11 @@ flowchart LR
     Wallet -- "35. reserves a VAS" --> Wallet
     Wallet -- "36. VAS Reserved" --> Wallet_events
     VASScheduling -- "37. creates a VAS schedule" --> VASScheduling
-    Business_User -- "38. unschedules VAS scheduling" --> VASScheduling
+    Business_User -- "38. unschedules a VAS scheduling" --> VASScheduling
     VASScheduling -- "39. to cancel the VAS reservation" --> Wallet
     Wallet -- "40. cancels VAS reservation" --> Wallet
     Wallet -- "41. VAS Reservation Canceled" --> Wallet_events
     VASScheduling -- "42. cancels the VAS schedule" --> VASScheduling
-    CRON -- "43. identifies VAS expiring" --> Wallet
+    CRON -- "43. identifies a VAS expiring" --> Wallet
     Wallet -- "44. removes VAS" --> Wallet
     Wallet -- "45. VAS Expired" --> Wallet_events
