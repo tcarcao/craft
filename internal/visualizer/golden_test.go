@@ -14,14 +14,14 @@ import (
 var updateGolden = flag.Bool("update", false, "rewrite testdata/golden from the current output")
 
 // goldenModels are the models every view is rendered from: the mixed corpus
-// (whole-model examples) plus the VAS fixture.
+// (whole-model examples) plus the VAS and journey-semantics fixtures.
 func goldenModels(t *testing.T) map[string]string {
 	t.Helper()
 	files, err := filepath.Glob("../../testdata/corpus/99_mixed/*.craft")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no corpus models found: %v", err)
 	}
-	files = append(files, "testdata/vas.craft")
+	files = append(files, "testdata/vas.craft", "testdata/journey-semantics.craft")
 	out := map[string]string{}
 	for _, f := range files {
 		out[strings.TrimSuffix(filepath.Base(f), ".craft")] = f
@@ -102,5 +102,29 @@ func TestGolden(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestGolden_SurfaceMarkdown renders the surface fixture (surfaceModel, the
+// spec §8.1 example) as the surface view and compares it with
+// testdata/golden/surface.md. Run with -update to rewrite it.
+func TestGolden_SurfaceMarkdown(t *testing.T) {
+	out, err := New(nil).Render(resolvedDoc(t, surfaceModel), Request{View: ViewSurface, Backend: PlantUML, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden := filepath.Join("testdata", "golden", "surface.md")
+	if *updateGolden {
+		if err := os.WriteFile(golden, out.Data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatalf("missing golden (run with -update): %v", err)
+	}
+	if string(out.Data) != string(want) {
+		t.Errorf("output differs from %s (run with -update and review the diff)\n--- got ---\n%s", golden, out.Data)
 	}
 }

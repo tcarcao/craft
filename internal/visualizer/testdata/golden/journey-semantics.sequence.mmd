@@ -1,0 +1,62 @@
+sequenceDiagram
+    actor Seeker as Seeker
+    participant frontendplatform as frontendplatform
+    participant graphql as graphql
+    participant atlas as atlas
+    participant media as media
+    participant adcore as adcore
+    participant Dapi as Dapi
+    actor Seller as Seller
+    participant paymentgateway as paymentgateway
+    actor CRON as CRON
+    participant invoicing as invoicing
+    participant sms_queue as sms_queue (store)
+    participant smsdispatch as smsdispatch
+    actor Siren as Siren
+    participant Unobserved as unobserved caller
+    Note over Seeker,Siren: Seeker reads an advert
+    rect rgb(245, 245, 245)
+    Note over Seeker,Siren: 1: when Seeker opens an advert
+    Seeker->>frontendplatform: opens an advert
+    frontendplatform->>graphql: for the advert [ad]
+    par field resolvers
+    graphql->>atlas: for the SEO title [postSeoadvertsbatch]
+    and
+    graphql->>atlas: for the targeting data [postAdverttargetingbatch]
+    and
+    graphql->>atlas: where the advert came from [postAdsourcebatch]
+    end
+    loop for each image, until all are signed
+    graphql->>media: to sign the image URL [signUrl]
+    end
+    end
+    rect rgb(245, 245, 245)
+    Note over Seeker,Siren: 2: when Seeker opens the advert statistics
+    Seeker->>frontendplatform: opens the advert statistics
+    frontendplatform->>graphql: for the advert [ad]
+    par the advert
+    graphql->>adcore: for the advert [GET /ads]
+    graphql->>atlas: for the owner [getAdsMappings]
+    and the statistics
+    graphql->>Dapi: for the page statistics [GET /projects/{site}_ad_statistics]
+    end
+    end
+    Note over Seeker,Siren: Seller pays an invoice
+    Note over Seeker,Siren: Finding: nothing retries a failed callback, a lost callback leaves the invoice open
+    Seller->>frontendplatform: pays an invoice
+    frontendplatform->>graphql: to pay [payInvoice]
+    Note over frontendplatform,graphql: the gateway forwards the seller's session, not a service token
+    graphql->>paymentgateway: to start the payment [POST /payments]
+    Note over graphql,paymentgateway: Finding: no idempotency key: a client retry starts a second payment
+    Note over Seeker,Siren: Adverts are swept for reindexing
+    Unobserved->>graphql: a reindex sweep [reindexAdverts]
+    graphql->>atlas: for every advert that needs reindexing [getAlladvertstoreindex]
+    graphql-->>Unobserved: returns the advert ids
+    Note over Seeker,Siren: Invoicing queues a payment reminder
+    CRON->>invoicing: cron 0 9 * * 1-5
+    invoicing->>invoicing: finds the invoices due in three days
+    invoicing->>sms_queue: inserted
+    Note over Seeker,Siren: The queued reminder is sent
+    smsdispatch->>sms_queue: polls inserted (from invoicing), cron * 10 * * 1-5
+    smsdispatch->>smsdispatch: claims the unsent rows
+    smsdispatch->>Siren: to send the SMS [sendSmsNotificationEvent]

@@ -1,0 +1,22 @@
+C4Container
+    title Container Diagram - Architecture (transparent mode)
+    System_Ext(CRON, "CRON", "External system")
+    Person(Seeker, "Seeker", "External user")
+    Person(Seller, "Seller", "External user")
+    System_Boundary(advertplatform_boundary, "advertplatform") {
+        Container(advertplatform_Application, "advertplatform Application", "Application", "Core business logic for advertplatform domains: frontendplatform, graphql, atlas, media, adcore, Dapi")
+    }
+    System_Boundary(messaging_boundary, "messaging") {
+        Container(messaging_Application, "messaging Application", "Application", "Core business logic for messaging domains: smsdispatch, invoicing")
+        ContainerDb(messaging_sms_queue, "messaging_sms_queue", "Database", "Stores sms_queue data")
+    }
+    System_Boundary(payments_api_boundary, "payments-api") {
+        Container(payments_api_Application, "payments-api Application", "Application", "Core business logic for payments-api domains: paymentgateway")
+    }
+    Rel(Seeker, advertplatform_Application, "Triggers")
+    Rel(Seller, advertplatform_Application, "Triggers")
+    Rel(CRON, messaging_Application, "Triggers")
+    Rel(advertplatform_Application, payments_api_Application, "to start the payment", "Service API")
+    Rel(messaging_Application, messaging_sms_queue, "writes inserted", "Database Query")
+    Rel(messaging_Application, messaging_sms_queue, "polls", "Database Query")
+    Rel(messaging_Application, messaging_sms_queue, "Reads/Writes data", "Database Protocol")

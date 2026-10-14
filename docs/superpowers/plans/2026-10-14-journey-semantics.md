@@ -24,7 +24,7 @@
 - Corpus goldens: `go test ./internal/corpustest/ -run TestHarnessA -update`
 - Diagnostics goldens: `go test ./internal/corpustest/ -run TestHarnessC` (hand-authored `.diagnostics.json`; never `-update` them). Harness C runs parse + `AnalyzeFile` + `MergeWorkspaceSymbols` + `AnalyzeWorkspace`, **not** `LintWorkspace`, so lint codes are tested with unit tests in `internal/sema/lint_journey_test.go`.
 - Diagram goldens: `go test ./internal/visualizer/ -run TestGolden -update`
-- Mermaid/PlantUML render check (needs Docker): `go test -tags integration ./internal/visualizer/ -run 'Mermaid|Render'`
+- Mermaid/PlantUML render check (needs Docker or Podman; pulls the pinned `minlag/mermaid-cli:12.0.0` and `plantuml/plantuml-server:jetty` images): `make test-integration RUN='Mermaid|Render'`. The make target sets the testcontainers environment podman needs on macOS (Ryuk off, `DOCKER_HOST` at the podman machine socket); with Docker, `go test -tags integration -count=1 ./internal/visualizer/ -run 'Mermaid|Render'` works as well.
 
 ---
 

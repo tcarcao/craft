@@ -1,0 +1,44 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (transparent mode)
+
+System_Ext(CRON, "CRON", "External system")
+Person(Seeker, "Seeker", "External user")
+Person(Seller, "Seller", "External user")
+
+System_Boundary(advertplatform_boundary, "advertplatform") {
+    Container(advertplatform_Application, "advertplatform Application", "Application", "Core business logic for advertplatform domains: frontendplatform, graphql, atlas, media, adcore, Dapi")
+}
+
+System_Boundary(messaging_boundary, "messaging") {
+    Container(messaging_Application, "messaging Application", "Application", "Core business logic for messaging domains: smsdispatch, invoicing")
+    ContainerDb(messaging_sms_queue, "messaging_sms_queue", "Database", "Stores sms_queue data", $sprite="database")
+}
+
+System_Boundary(payments_api_boundary, "payments-api") {
+    Container(payments_api_Application, "payments-api Application", "Application", "Core business logic for payments-api domains: paymentgateway")
+}
+
+Rel(Seeker, advertplatform_Application, "Triggers")
+Rel(Seller, advertplatform_Application, "Triggers")
+Rel(CRON, messaging_Application, "Triggers")
+Rel(advertplatform_Application, payments_api_Application, "to start the payment", "Service API")
+Rel(messaging_Application, messaging_sms_queue, "writes inserted", "Database Query")
+Rel(messaging_Application, messaging_sms_queue, "polls", "Database Query")
+Rel(messaging_Application, messaging_sms_queue, "Reads/Writes data", "Database Protocol")
+
+@enduml

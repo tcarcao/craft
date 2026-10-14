@@ -53,7 +53,7 @@ test:
 	go test ./...
 
 test-integration: ## Run integration tests that spin up real renderers via testcontainers (requires Docker/Podman)
-	$(TC_ENV) go test -tags=integration -count=1 ./internal/visualizer/...
+	$(TC_ENV) go test -tags=integration -count=1 $(if $(RUN),-run '$(RUN)') ./internal/visualizer/...
 
 vet:
 	go vet ./...
@@ -73,7 +73,7 @@ help:
 	@echo ""
 	@echo "Other:"
 	@echo "  test                     - Run unit tests"
-	@echo "  test-integration         - Run integration tests (requires Docker/Podman; spins up real renderers)"
+	@echo "  test-integration         - Run integration tests (requires Docker/Podman; spins up real renderers; RUN=<regexp> selects tests)"
 	@echo "                             First-time: go get github.com/testcontainers/testcontainers-go"
 	@echo "  vet                      - Run go vet on all packages"
 	@echo "  test-release             - Download and smoke-test the latest GitHub release (current platform)"

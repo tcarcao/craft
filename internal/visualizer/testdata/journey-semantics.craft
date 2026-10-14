@@ -1,0 +1,88 @@
+// Journey semantics (v2.23.0): the spec examples of §4.1 (par/loop, and the
+// `and` form as a second scenario), §5.1 (notes and findings), §6.1
+// (receives) and §7.5 (store hand-off with a polled listens schedule).
+
+actors {
+    user Seeker
+    user Seller
+    system CRON
+    system Siren
+}
+
+domain billing {
+    invoicing
+    smsdispatch
+}
+
+domain adverts {
+    frontendplatform
+    graphql
+    atlas
+    media
+    adcore
+    Dapi
+}
+
+domain payments {
+    paymentgateway
+}
+
+services {
+    messaging {
+        contexts: smsdispatch, invoicing
+        data-stores: sms_queue
+    }
+    advertplatform {
+        contexts: frontendplatform, graphql, atlas, media, adcore, Dapi
+    }
+    payments-api {
+        contexts: paymentgateway
+    }
+}
+
+use_case "Seeker reads an advert" {
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert       [ad]
+        par "field resolvers"
+            graphql asks atlas for the SEO title           [postSeoadvertsbatch]
+            graphql asks atlas for the targeting data      [postAdverttargetingbatch]
+            graphql asks atlas where the advert came from  [postAdsourcebatch]
+        loop "for each image, until all are signed"
+            graphql asks media to sign the image URL       [signUrl]
+
+    when Seeker opens the advert statistics
+        frontendplatform asks graphql for the advert   [ad]
+        par "the advert"
+            graphql asks adcore for the advert         [GET /ads]
+            graphql asks atlas for the owner           [getAdsMappings]
+        and "the statistics"
+            graphql asks Dapi for the page statistics  [GET /projects/{site}_ad_statistics]
+}
+
+use_case "Seller pays an invoice" {
+    finding "nothing retries a failed callback; a lost callback leaves the invoice open"
+
+    when Seller pays an invoice
+        frontendplatform asks graphql to pay              [payInvoice]
+        note "the gateway forwards the seller's session, not a service token"
+        graphql asks paymentgateway to start the payment  [POST /payments]
+        finding "no idempotency key: a client retry starts a second payment"
+}
+
+use_case "Adverts are swept for reindexing" {
+    when graphql receives a reindex sweep                          [reindexAdverts]
+        graphql asks atlas for every advert that needs reindexing  [getAlladvertstoreindex]
+        graphql returns the advert ids
+}
+
+use_case "Invoicing queues a payment reminder" {
+    when cron "0 9 * * 1-5"
+        invoicing finds the invoices due in three days
+        invoicing notifies store.sms_queue.inserted
+}
+
+use_case "The queued reminder is sent" {
+    when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+        smsdispatch claims the unsent rows
+        smsdispatch asks Siren to send the SMS  [sendSmsNotificationEvent]
+}

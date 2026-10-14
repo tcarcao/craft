@@ -9,7 +9,11 @@
 //
 //	go get github.com/testcontainers/testcontainers-go      # first time only
 //	make test-integration
+//	make test-integration RUN=JourneySemantics   # one group of checks
 //	# or:  go test -tags=integration ./internal/visualizer/...
+//
+// With podman on macOS, use the make target: it disables Ryuk and points
+// DOCKER_HOST at the podman machine socket, which testcontainers needs.
 //
 // Requires a working Docker / Podman daemon at test time.
 package visualizer_test
@@ -48,6 +52,11 @@ var renderErrorMarkers = []string{
 // Pinned image. Bump intentionally — every bump is a chance to catch stdlib
 // drift before users do.
 const plantumlImage = "plantuml/plantuml-server:jetty"
+
+// mermaidCLIImage is the mermaid-cli (mmdc) image the Mermaid render checks
+// run. Pinned for the same reason as plantumlImage: a parser change upstream
+// should fail a deliberate bump, not a random run.
+const mermaidCLIImage = "minlag/mermaid-cli:12.0.0"
 
 // Single PlantUML container is shared by every test in this file. Spinning one
 // per sub-test is wasteful and flaky under podman.
@@ -316,7 +325,7 @@ func TestVAS_MermaidSequenceRenders(t *testing.T) {
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image: "minlag/mermaid-cli:latest",
+		Image: mermaidCLIImage,
 		// /tmp is world-writable so mmdc (non-root) can write output.svg there.
 		Cmd: []string{"-i", "/tmp/input.mmd", "-o", "/tmp/output.svg"},
 		Files: []testcontainers.ContainerFile{
@@ -385,7 +394,7 @@ func TestVAS_MermaidDomainDetailedRenders(t *testing.T) {
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image: "minlag/mermaid-cli:latest",
+		Image: mermaidCLIImage,
 		Cmd:   []string{"-i", "/tmp/input.mmd", "-o", "/tmp/output.svg"},
 		Files: []testcontainers.ContainerFile{
 			{HostFilePath: inPath, ContainerFilePath: "/tmp/input.mmd", FileMode: 0o644},
@@ -452,7 +461,7 @@ func TestVAS_MermaidDomainArchitectureRenders(t *testing.T) {
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image: "minlag/mermaid-cli:latest",
+		Image: mermaidCLIImage,
 		Cmd:   []string{"-i", "/tmp/input.mmd", "-o", "/tmp/output.svg"},
 		Files: []testcontainers.ContainerFile{
 			{HostFilePath: inPath, ContainerFilePath: "/tmp/input.mmd", FileMode: 0o644},
@@ -519,7 +528,7 @@ func TestVAS_MermaidC4Renders(t *testing.T) {
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image: "minlag/mermaid-cli:latest",
+		Image: mermaidCLIImage,
 		Cmd:   []string{"-i", "/tmp/input.mmd", "-o", "/tmp/output.svg"},
 		Files: []testcontainers.ContainerFile{
 			{HostFilePath: inPath, ContainerFilePath: "/tmp/input.mmd", FileMode: 0o644},
@@ -581,4 +590,107 @@ func renderSource(doc *craft.CraftDoc, v visualizer.View, backend visualizer.Bac
 	}
 	out, err := visualizer.New(nil).Render(doc, req)
 	return out.Data, out.ContentType, err
+}
+
+// journeySemanticsDoc analyses the journey-semantics fixture: par/and/loop,
+// notes and findings, a receives trigger (found and lost messages) and a store
+// hand-off with a scheduled listens trigger.
+func journeySemanticsDoc(t *testing.T) *craft.CraftDoc {
+	t.Helper()
+	src, err := os.ReadFile("testdata/journey-semantics.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	return analysis.Workspace([]analysis.FileResult{analysis.File("journey-semantics.craft", string(src))}).Doc
+}
+
+// TestJourneySemantics_MermaidSequenceRenders proves mermaid-cli accepts the
+// new sequence constructs, above all the bare `and` that separates the
+// branches of a fan-out `par` (spec §4.5), and the `Unobserved` participant
+// that stands in for found and lost messages. Flow, architecture and C4 are
+// rendered too, for the store node and the unobserved-caller node.
+func TestJourneySemantics_MermaidSequenceRenders(t *testing.T) {
+	doc := journeySemanticsDoc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			src, err := renderMermaid(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			if v == visualizer.ViewSequence && !strings.Contains(src, "\n    and\n") {
+				t.Fatalf("expected a bare `and` in the sequence source:\n%s", src)
+			}
+			assertMermaidRenders(t, src)
+		})
+	}
+}
+
+// TestJourneySemantics_PlantUMLRenders renders every view of the
+// journey-semantics fixture on the strict PlantUML server: par/loop frames,
+// coloured finding notes, `[->`/`-->]` found and lost messages, and the
+// `database` participant of a store hand-off.
+func TestJourneySemantics_PlantUMLRenders(t *testing.T) {
+	endpoint := plantUMLEndpoint(t)
+	doc := journeySemanticsDoc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			puml, _, err := renderPUML(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			assertRendersClean(t, endpoint, string(puml))
+		})
+	}
+}
+
+// assertMermaidRenders runs mermaid-cli on src in a container and fails when
+// mmdc exits non-zero or writes an empty SVG. It skips when no container
+// runtime is available, like plantUMLEndpoint.
+func assertMermaidRenders(t *testing.T, src string) {
+	t.Helper()
+	ctx := context.Background()
+	inPath := filepath.Join(t.TempDir(), "input.mmd")
+	if err := os.WriteFile(inPath, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image: mermaidCLIImage,
+			// /tmp is world-writable so mmdc (non-root) can write output.svg there.
+			Cmd: []string{"-i", "/tmp/input.mmd", "-o", "/tmp/output.svg"},
+			Files: []testcontainers.ContainerFile{
+				{HostFilePath: inPath, ContainerFilePath: "/tmp/input.mmd", FileMode: 0o644},
+			},
+			WaitingFor: wait.ForExit().WithExitTimeout(120 * time.Second),
+		},
+		Started: true,
+	})
+	if err != nil {
+		t.Skipf("mermaid-cli container unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Terminate(ctx) })
+	state, err := c.State(ctx)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if state.ExitCode != 0 {
+		var logBuf []byte
+		if logs, _ := c.Logs(ctx); logs != nil {
+			logBuf, _ = io.ReadAll(logs)
+			_ = logs.Close()
+		}
+		t.Fatalf("mmdc exited non-zero (%d):\n%s\n--- source ---\n%s", state.ExitCode, snippet(logBuf), src)
+	}
+	rc, err := c.CopyFileFromContainer(ctx, "/tmp/output.svg")
+	if err != nil {
+		t.Fatalf("copy output: %v", err)
+	}
+	defer rc.Close()
+	out, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("mmdc produced empty SVG")
+	}
 }

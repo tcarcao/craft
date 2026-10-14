@@ -1,0 +1,25 @@
+flowchart LR
+    subgraph advertplatform["advertplatform"]
+        Dapi["Dapi"]
+        adcore["adcore"]
+        atlas["atlas"]
+        frontendplatform["frontendplatform"]
+        graphql["graphql"]
+        media["media"]
+    end
+    subgraph messaging["messaging"]
+        invoicing["invoicing"]
+        smsdispatch["smsdispatch"]
+        sms_queue[("sms_queue")]
+    end
+    subgraph payments_api["payments-api"]
+        paymentgateway["paymentgateway"]
+    end
+    frontendplatform --> graphql
+    graphql --> Dapi
+    graphql --> adcore
+    graphql --> atlas
+    graphql --> media
+    graphql --> paymentgateway
+    invoicing --> sms_queue
+    sms_queue --> smsdispatch

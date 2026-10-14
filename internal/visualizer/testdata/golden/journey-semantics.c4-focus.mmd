@@ -1,0 +1,41 @@
+C4Container
+    title Container Diagram - Architecture (boundaries mode)
+    System_Ext(CRON, "CRON", "External system")
+    Enterprise_Boundary(advertplatform_boundary, "advertplatform") {
+        Container_Boundary(advertplatform_frontendplatform_Domain_boundary, "frontendplatform Domain") {
+            Container_Ext(frontendplatform, "frontendplatform", "Application", "frontendplatform [Context]")
+        }
+        Container_Boundary(advertplatform_graphql_Domain_boundary, "graphql Domain") {
+            Container_Ext(graphql, "graphql", "Application", "graphql [Context]")
+        }
+        Container_Boundary(advertplatform_atlas_Domain_boundary, "atlas Domain") {
+            Container_Ext(atlas, "atlas", "Application", "atlas [Context]")
+        }
+        Container_Boundary(advertplatform_media_Domain_boundary, "media Domain") {
+            Container_Ext(media, "media", "Application", "media [Context]")
+        }
+        Container_Boundary(advertplatform_adcore_Domain_boundary, "adcore Domain") {
+            Container_Ext(adcore, "adcore", "Application", "adcore [Context]")
+        }
+        Container_Boundary(advertplatform_Dapi_Domain_boundary, "Dapi Domain") {
+            Container_Ext(Dapi, "Dapi", "Application", "Dapi [Context]")
+        }
+    }
+    Enterprise_Boundary(payments_api_boundary, "payments-api") {
+        Container_Boundary(payments_api_paymentgateway_Domain_boundary, "paymentgateway Domain") {
+            Container_Ext(paymentgateway, "paymentgateway", "Application", "paymentgateway [Context]")
+        }
+    }
+    System_Boundary(messaging_boundary, "messaging") {
+        Container_Boundary(messaging_smsdispatch_Domain_boundary, "smsdispatch Domain") {
+            Container(smsdispatch, "smsdispatch", "Application", "smsdispatch [Context]")
+        }
+        Container_Boundary(messaging_invoicing_Domain_boundary, "invoicing Domain") {
+            Container(invoicing, "invoicing", "Application", "invoicing [Context]")
+        }
+        ContainerDb(messaging_sms_queue, "messaging_sms_queue", "Database", "Stores sms_queue data")
+    }
+    Rel(CRON, invoicing, "Triggers")
+    Rel(graphql, paymentgateway, "to start the payment", "Service API")
+    Rel(invoicing, messaging_sms_queue, "writes inserted", "Database Query")
+    Rel(smsdispatch, messaging_sms_queue, "polls", "Database Query")

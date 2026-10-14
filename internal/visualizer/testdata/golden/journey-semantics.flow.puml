@@ -1,0 +1,74 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "Dapi" as Dapi
+frame "adcore" as adcore
+frame "atlas" as atlas
+frame "frontendplatform" as frontendplatform
+frame "graphql" as graphql
+frame "invoicing" as invoicing
+frame "media" as media
+frame "paymentgateway" as paymentgateway
+frame "smsdispatch" as smsdispatch
+
+' Actors
+boundary "CRON" as CRON
+actor "Seeker" as Seeker
+actor "Seller" as Seller
+boundary "Siren" as Siren
+
+cloud "unobserved caller" as unobserved_caller
+
+' Data stores
+database "sms_queue" as sms_queue
+
+' Workflow flows
+Seeker --> frontendplatform : 1. opens an advert
+frontendplatform ->> graphql : 2. for the advert
+graphql ->> atlas : 3. [par: field resolvers] for the SEO title
+graphql ->> atlas : 4. [par: field resolvers] for the targeting data
+graphql ->> atlas : 5. [par: field resolvers] where the advert came from
+graphql ->> media : 6. [loop: for each image, until all are signed] to sign the image URL
+Seeker --> frontendplatform : 7. opens the advert statistics
+frontendplatform ->> graphql : 8. for the advert
+graphql ->> adcore : 9. [par: the advert] for the advert
+graphql ->> atlas : 10. [par: the advert] for the owner
+graphql ->> Dapi : 11. [par: the statistics] for the page statistics
+Seller --> frontendplatform : 12. pays an invoice
+frontendplatform ->> graphql : 13. to pay
+graphql ->> paymentgateway : 14. to start the payment
+unobserved_caller --> graphql : 15. a reindex sweep
+graphql ->> atlas : 16. for every advert that needs reindexing
+graphql --> unobserved_caller : 17. returns the advert ids
+CRON --> invoicing : 18. cron 0 9 * * 1-5
+invoicing -> invoicing : 19. finds the invoices due in three days
+invoicing ->> sms_queue : 20. inserted
+sms_queue --> smsdispatch : 21. polls inserted
+smsdispatch -> smsdispatch : 22. claims the unsent rows
+smsdispatch ->> Siren : 23. to send the SMS
+
+@enduml

@@ -1,0 +1,59 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Service boundaries
+rectangle "advertplatform" as advertplatform {
+  frame "Dapi" as Dapi
+  frame "adcore" as adcore
+  frame "atlas" as atlas
+  frame "frontendplatform" as frontendplatform
+  frame "graphql" as graphql
+  frame "media" as media
+}
+rectangle "messaging" as messaging {
+  frame "invoicing" as invoicing
+  frame "smsdispatch" as smsdispatch
+  database "sms_queue" as sms_queue
+}
+rectangle "payments-api" as payments_api {
+  frame "paymentgateway" as paymentgateway
+}
+
+' Subdomain connections
+frontendplatform --> graphql
+graphql --> Dapi
+graphql --> adcore
+graphql --> atlas
+graphql --> media
+graphql --> paymentgateway
+invoicing --> sms_queue
+sms_queue --> smsdispatch
+
+@enduml
