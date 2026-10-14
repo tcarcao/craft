@@ -2360,3 +2360,49 @@ func TestRefusingSyntaxCodes_JourneySemantics(t *testing.T) {
 		}
 	}
 }
+
+func TestFormat_EventListsHangOneUnit(t *testing.T) {
+	in := "use_case \"U\" {\n  when seshat listens sns.a,   sns.b,\n   sns.c,\n        // the rest\n  sns.d every   \"5m\"\n      seshat writes the row\n      outbox notifies one of x.A,\n  x.B\n}\n"
+	want := "use_case \"U\" {\n    when seshat listens sns.a, sns.b,\n            sns.c,\n            // the rest\n            sns.d every \"5m\"\n        seshat writes the row\n        outbox notifies one of x.A,\n            x.B\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
+func TestFormat_BracketItemsAndMarkers(t *testing.T) {
+	in := "use_case \"U\" {\n    when O does\n        a asks b to create it  [CreateApiKey,   CreateUsagePlanKey]\n        a asks b for paths  [GET /p/{lat},{lon}]\n        a asks b to start  [inferred   POST /x]\n        a asks c for rows  [SQL investment   flat]\n        b returns   stream   to a each token\n}\n"
+	got := FormatDocument(in)
+	for _, want := range []string{
+		"[CreateApiKey, CreateUsagePlanKey]",
+		"[GET /p/{lat},{lon}]",
+		"[inferred POST /x]",
+		"[SQL investment flat]",
+		"        b returns stream to a each token\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
+// TestFormat_OneLineListsAndEgress pins the one-line forms: a listens list
+// with a schedule tail, `notifies one of`, a quoted ADDR with `//`, a bare
+// `[inferred]`, and `inferred` heading a list of ADDR and SQL items.
+func TestFormat_OneLineListsAndEgress(t *testing.T) {
+	in := "use_case \"U\" {\n    when s listens a.A,b.B ,  c.C   cron  \"* * * * *\"\n        x notifies   one   of   y.A ,y.B\n        x asks Store to put it  [ADDR   \"https://s3.example.com/x\"]\n        x asks Store to put it  [inferred]\n        x asks Store to put it  [inferred  ADDR  host.example.com,  SQL a b]\n}\n"
+	want := "use_case \"U\" {\n    when s listens a.A, b.B, c.C cron \"* * * * *\"\n        x notifies one of y.A, y.B\n        x asks Store to put it  [ADDR \"https://s3.example.com/x\"]\n        x asks Store to put it  [inferred]\n        x asks Store to put it  [inferred ADDR host.example.com, SQL a b]\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}

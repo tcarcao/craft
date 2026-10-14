@@ -15,6 +15,20 @@ func FuzzParseUseCaseBody(f *testing.F) {
 		"    when graphql receives a reindex sweep  [reindexAdverts]\n        graphql returns the ids\n",
 		"    when smsdispatch listens store.sms_queue.inserted cron \"* 10 * * 1-5\"\n        smsdispatch claims the rows\n",
 		"    when invoicing listens store.sms_queue every \"5m\"\n        invoicing notifies store.sms_queue.updated\n",
+		// v2.24: a listens roster (spec §4.1).
+		"    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed,\n            sns.mercury-message-received, sns.mercury-cooked\n        seshat writes one row per event\n",
+		// v2.24: returns stream (§7.1).
+		"    when Seller asks the assistant a question\n        frontendplatform asks graphql to stream the answer  [assistantStream]\n        graphql asks AiAssistant to stream the reply  [POST /api/v1/assistant/chat_streaming]\n        AiAssistant returns stream the reply as META, TOKEN and DONE events\n        graphql returns stream to frontendplatform each event to the client\n        frontendplatform appends every TOKEN delta to the message\n",
+		// v2.24: operation lists (§8.1).
+		"    when Partner saves an advert\n        app-manager asks AwsApiGateway to create the key and bind it to the plan  [CreateApiKey, CreateUsagePlanKey]\n        Partner asks ad/atlas-advert to save or delete the advert  [postAdvert, putAdvert, deleteAdvert]\n        a asks b for paths  [GET /nearest/paths/{latitude},{longitude}]\n",
+		// v2.24: notifies one of (§8.3).
+		"    when nmf_monetization listens stream.user_event_store\n        nmf_monetization reads the detail-type off the stored column\n        nmf_monetization notifies one of nmfbus.FeatureEnabled, nmfbus.FeatureDisabled,\n                nmfbus.CreateAutoSchedule, nmfbus.SubAccountBundleUpdated\n",
+		// v2.24: SQL and ADDR (§9.1, first example).
+		"    when cron \"0 18 * * *\"\n        obidoanalytics asks front for the city, region and developer graph  [SQL investment flat city region developer]\n        obidoanalytics asks ObjectStore to take the refreshed snapshot  [ADDR \"SNAPSHOT_DESTINATION\"]\n",
+		// v2.24: inferred (§9.1, second example).
+		"    when Seller resumes a selling draft\n        mobile asks graphql to open a selling chat session  [agenticSellingStart]\n        graphql asks ShaperAgent to initiate the chat  [inferred POST /api/v1/assistant/initiate_chat]\n        graphql asks ShaperAgent to ping  [inferred]\n",
+		// v2.24: a dangling list comma at end of input.
+		"    when s listens a.A,\n",
 	} {
 		f.Add(body, true)
 	}
@@ -35,6 +49,10 @@ func FuzzParseUseCaseBody(f *testing.F) {
 				}
 				if a, ok := st.Action(); ok {
 					_, _, _ = a.SubjectName(), a.TargetName(), a.OpText()
+					_, _, _ = a.IsStream(), a.IsOneOf(), a.IsInferred()
+					_ = a.EventItems()
+					one, of := a.OneOfTokens()
+					_, _ = one, of
 					continue
 				}
 				if b, ok := st.Block(); ok {
@@ -53,6 +71,7 @@ func FuzzParseUseCaseBody(f *testing.F) {
 			for _, sc := range uc.Scenarios() {
 				tr := sc.Trigger()
 				_, _, _ = tr.Kind(), tr.ContextName(), tr.EventRef()
+				_ = tr.EventItems()
 				walk(sc.Steps())
 			}
 		}

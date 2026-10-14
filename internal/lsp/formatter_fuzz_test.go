@@ -82,6 +82,9 @@ func FuzzFormatBranches(f *testing.F) {
 		"04_use_cases/par_fanout", "04_use_cases/par_and", "04_use_cases/loop",
 		"04_use_cases/nested_par_loop_alt", "04_use_cases/notes_findings",
 		"04_use_cases/receives_trigger", "04_use_cases/listens_schedule", "04_use_cases/store_handoff",
+		"04_use_cases/listens_list_multiline", "04_use_cases/notifies_one_of",
+		"04_use_cases/operation_list", "04_use_cases/op_inferred", "04_use_cases/op_sql",
+		"04_use_cases/op_addr_quoted", "04_use_cases/returns_stream_to",
 		"09_surfaces/surface_basic", "09_surfaces/surface_notes_callers_unknown",
 	} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", filepath.FromSlash(name)+".craft"))
