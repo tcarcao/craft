@@ -1,5 +1,42 @@
 # Changelog
 
+## [Unreleased]
+
+**Why a minor version.** No exported `pkg/craft` identifier is removed or changes type, and every model addition is an optional JSON key: a file that uses none of the new constructs gives the same `.craftjson` as in 2.23.0. Three inputs that parsed before now have a meaning (`returns stream …`, `[inferred …]`, `[ADDR …]`/`[SQL …]`), and two that parsed silently wrong are now errors (see **Changed**). re-arch-central uses none of them: it validates with 0 errors, and the only new warning is `duplicate-scenario-body` (13).
+
+### Added
+- **`listens` lists (roster triggers).** `when seshat listens sns.a-changed, sns.b-changed, …` starts the scenario on any of the listed events. A trailing comma continues the list on the next line; the continuation line is part of the trigger, never a step. A listens schedule goes after the last item. `Trigger.Events` holds the list and `Trigger.EventList()` returns it (or `Event` alone); `Event` and `Ref` stay the first item, and `Description` lists every item. Each item pairs with its publishers on its own.
+- **`notifies one of <event list>`**: the step publishes exactly one of the listed events per run, chosen at run time. `Action.Events` and `Action.EventList()`, as for triggers; one publish per item.
+- **Operation lists.** A comma list in one bracket (`[CreateApiKey, CreateUsagePlanKey]`) is one hop that uses several operations. Items split at a comma followed by whitespace, outside braces and strings (`[GET /p/{lat},{lng}]` stays one item). `Action.Operations` and `Action.OperationList()`; `Action.Operation` keeps the whole bracket, byte-identical to 2.23.
+- **`X returns stream [to Y] <phrase>`**, a reply that repeats until it ends. `Action.Stream`, and `Action.Answers`: the ID of the `asks` the stream answers (the open request on the call stack; with `to Y`, the most recent open request from `Y` to the streamer), or `""`.
+- **`ADDR` and `SQL` protocol verbs.** `[SQL <table> …]` is a direct use of another party's tables (`Operation.Tables()` splits the payload); `[ADDR <address>]` is egress to an address with no operation id, its quotes dropped from `Operation.Payload`. Quote an address that starts with `//`.
+- **`[inferred …]`**: `inferred` as the first word of a bracket marks the hop as inferred, not read in code (`Action.Inferred`). It is not part of `Operation.Text`; `[inferred]` alone leaves `Action.Operation` nil.
+- **Actor kinds `scheduler`, `tool` and `infra`**, next to `user`, `system` and `service` (`KnownActorTypes()`). Any other kind stays legal and is drawn as a person.
+- **Scope in sequence titles**: a use case's `sites` and `envs` tags are printed in its section title, `[sites: …] [envs: …]`.
+- **Diagnostics.** Sema: `craft/sema/store-ref-in-event-list` (error; a store ref in a list of two or more items). Lint (warnings): `craft/lint/duplicate-event-in-list`, `duplicate-operation-in-list`, `duplicate-scenario-body` (two scenarios of one use case run the same steps; for two `listens` triggers of one subject the message gives the folded trigger, otherwise it names what differs), `one-of-single-event`, `stream-without-caller`, `egress-on-internal-step` (`ADDR`/`SQL` on an internal step or a return) and `unquoted-address` (a `//` comment cut an `[ADDR …]` bracket). `duplicate-scenario-body` runs in the new `sema.LintModel`, over the resolved model. See `docs/DIAGNOSTICS.md`, which now also lists 27 older codes it was missing.
+- **Language server.** Hover on the six actor kinds (and an unknown kind), `sites`/`envs` keys, a listens roster and each of its items (with publishers), `returns stream` (with the request it answers), `one of`, `inferred`, `SQL`/`ADDR`, and a bracket of several items (with each item's surface entry). Definition from a `listens` item, single or in a list, to every `notifies` that publishes it, and from a bracket item to its surface operation. Completion of the actor kinds, published events at a list item, `stream` after `returns`, `one of` after `notifies`, `inferred` and the protocol verbs (with `ADDR`, `SQL`) at a bracket head, a target's remaining surface operations after `, ` in a bracket, and `sites:`/`envs:` keys and their used values (most frequent first). Semantic tokens: `one`, `of`, `stream` and `inferred` as `craft-flow-keyword`.
+- **`pkg/craft`**: `ActorTypeScheduler`, `ActorTypeTool`, `ActorTypeInfra`, `OpVerbAddr`, `OpVerbSQL`, `TagSites`, `TagEnvs`, `KnownActorTypes()`; fields `Trigger.Events`, `Action.Events`, `Action.Operations`, `Action.Stream`, `Action.Answers`, `Action.Inferred`; methods `Trigger.EventList`, `Action.EventList`, `Action.OperationList`, `Operation.Tables`. The stability note says that a listens trigger or a notifies may carry several events, and an action several operations.
+
+### Changed
+- **`X returns stream …`, `[inferred …]`, `[ADDR …]` and `[SQL …]` now have meaning.** They were a return whose phrase starts with "stream", an operation whose payload starts with "inferred", and operations with an empty verb and `ADDR`/`SQL` in the payload. No known uses.
+- **`notifies one of a.B, c.D`** used to parse as the event `one` plus a second, internal step `of a.B , c.D`. No known uses.
+- **Words after a `notifies` event are an error.** `sync notifies the owners team` read as the event `the` plus an internal step `owners team`; it is now `craft/syntax/unexpected-token` at the first extra word (an event is one name; write an internal step for prose). A trailing annotation is still read. A bare list, `notifies a.B, c.D`, is the same error with a message that points at `notifies one of`. re-arch-central: 0 hits.
+- **`craft/syntax/empty-op-annotation`** also reports an empty item of an operation list (`[a, , b]`, `[a, ]`) and `[ADDR]`/`[SQL]` without a payload. **`craft/syntax/unexpected-token`** also reports a list comma with no event after it and words after a list item.
+- **Event lints report per list item**: `dead-event`, `event-not-past-tense` and `store-without-change`, with the item as the range. `operation-not-in-surface` checks each item of an operation list.
+- **`ProtocolVerbs()`** includes `ADDR` and `SQL`.
+
+### Changed — diagrams
+- **`scheduler`, `tool` and `infra` actors** draw as stereotyped boundaries (`boundary "Ticker" as Ticker <<scheduler>>`) in sequence and flow PlantUML; Mermaid sequence draws a `participant` marked `(scheduler)`; C4 a `System_Ext` described "Scheduler", "Operator tool" or "Platform infrastructure". `user`, `system`, `service` and unknown kinds are unchanged.
+- **A roster trigger draws one inbound arrow**: a publisher already in the section delivers its items itself; every other item arrives on one arrow per trigger, labelled with up to three items, `(+N more)`, then `(from <publishers>)` and the schedule. Flow draws one edge per item, as N separate triggers did, and C4 one `Event_Queue` delivery per item.
+- **`notifies one of` draws one sequence message**, `notifies one of "a", "b", "c" (+1 more)`; the flow view draws one edge per item labelled `one of: <event>`; C4 one `Event_Queue` publication per item.
+- **Inferred hops** draw grey with the suffix ` (inferred)`: PlantUML `-[#999999]>` (`-[#999999]->>` in flow), Mermaid the suffix only; C4 labels gain ` (inferred)`. **`ADDR` labels** print the address without quotes.
+- **Streamed replies** sit in their own `loop stream` box in the sequence view and are labelled `streams …`; C4 draws a targeted stream between services as `Return Data (stream)`.
+- **Section titles** show `[sites: …] [envs: …]` when the use case has those tags.
+- **C4 names the technology of a request**: `SQL (shared tables)` for a `SQL` item, `HTTP (bare address)` for an `ADDR` item, `Service API` otherwise. An `ADDR` request to an actor is now drawn as a relation to that actor, shown as an external system (C4 drew service-to-service requests only).
+
+### Fixed
+- **An actor of a kind outside `user`/`system`/`service` was named after its kind.** `actors { scheduler Ticker }` declared an actor named `scheduler`, so a second line of the same kind was a duplicate-name error and `Ticker` did not exist. The declared name is now the second identifier. Present in 2.23.0 and earlier.
+
 ## [2.23.0] — 2026-10-14
 
 **Why a minor version.** No exported `pkg/craft` identifier is removed or changes type. A `Step` can now hold a `Note`, so a consumer that assumes every step is an `Action` or a `Block` must handle the third case. `when X receives …` changes meaning (see **Changed**).
