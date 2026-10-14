@@ -1113,13 +1113,14 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 	return diags
 }
 
-// tabWidth is the tab stop used by peekVisualColumn: a tab advances the
-// column to the next multiple of tabWidth.
-const tabWidth = 4
+// TabWidth is the tab stop of the offside rule (peekVisualColumn): a tab
+// advances the column to the next multiple of TabWidth. The formatter reads
+// source columns with the same width, so it is exported.
+const TabWidth = 4
 
 // peekVisualColumn returns the 1-based column the offside rule uses for the
 // line that the next significant token starts: the line's indentation, with
-// tabs expanded to the next multiple of tabWidth. Comments are trivia, so
+// tabs expanded to the next multiple of TabWidth. Comments are trivia, so
 // `/* c */ else "b"` sits where its line starts, not where `else` does. It is
 // used only by the offside rule of block bodies; Token.Column (runes) stays
 // the column for everything else.
@@ -1137,7 +1138,7 @@ func (p *Parser) peekVisualColumn() int {
 	for _, r := range p.src[lineStart:tok.Offset] {
 		switch r {
 		case '\t':
-			col = (col/tabWidth + 1) * tabWidth
+			col = (col/TabWidth + 1) * TabWidth
 		case ' ':
 			col++
 		default:

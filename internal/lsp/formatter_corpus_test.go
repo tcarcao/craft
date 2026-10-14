@@ -244,6 +244,18 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 	}
 }
 
+// canonicalElsewhere names the corpus files that are deliberately not
+// canonical, each mapped (from the repository root) to the file holding its
+// canonical form. Formatting the key must produce that file byte for byte,
+// which is a stronger check than skipping it.
+//
+// branch_tabs.craft exists to test the parser's offside rule on tab-indented
+// blocks, so reformatting it to spaces would delete the case it covers. It is
+// alt_else.craft indented with tabs, so its canonical form is alt_else.craft.
+var canonicalElsewhere = map[string]string{
+	repoRoot + "/testdata/corpus/04_use_cases/branch_tabs.craft": "testdata/corpus/04_use_cases/alt_else.craft",
+}
+
 // TestFormatDocument_CanonicalCorpusIsByteIdentical asserts the literal
 // byte-identity property for every file in the repository, strictly: every
 // single one must come back unchanged from FormatDocument under the default
@@ -267,18 +279,6 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 // fixture will break this test. That is intended: it forces an explicit
 // decision (skip it here, or move it under testdata/broken/*) rather than
 // letting the corpus drift uncanonical in silence.
-// canonicalElsewhere names the corpus files that are deliberately not
-// canonical, each mapped (from the repository root) to the file holding its
-// canonical form. Formatting the key must produce that file byte for byte,
-// which is a stronger check than skipping it.
-//
-// branch_tabs.craft exists to test the parser's offside rule on tab-indented
-// blocks, so reformatting it to spaces would delete the case it covers. It is
-// alt_else.craft indented with tabs, so its canonical form is alt_else.craft.
-var canonicalElsewhere = map[string]string{
-	repoRoot + "/testdata/corpus/04_use_cases/branch_tabs.craft": "testdata/corpus/04_use_cases/alt_else.craft",
-}
-
 func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
 	for _, file := range allCraftFiles(t) {
 		t.Run(file, func(t *testing.T) {

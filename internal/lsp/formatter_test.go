@@ -2189,3 +2189,75 @@ func TestFormat_TrailingCommentsKeepTheirBranchBody(t *testing.T) {
 		})
 	}
 }
+
+// In a run of comments between a branch body and the next line, a comment is
+// never kept deeper than the comment before it in the run: once one leaves
+// the body, the rest of the run follows it. Without that, a comment kept in
+// the body after one that led the next scenario was written at the old
+// scenario's depth on the first pass and moved on the second.
+func TestFormat_CommentRunAtBranchEndIsIdempotent(t *testing.T) {
+	cases := map[string]struct{ in, want string }{
+		"before when": {
+			in:   "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n      // c1\n            // c4\n    when A does z\n}\n",
+			want: "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n\n    // c1\n    // c4\n    when A does z\n}\n",
+		},
+		"before scenario": {
+			in:   "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n      // c1\n            // c4\n    scenario \"n\"\n    when A does z\n}\n",
+			want: "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n\n    // c1\n    // c4\n    scenario \"n\"\n    when A does z\n}\n",
+		},
+		"block comments": {
+			in:   "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n      /* c1 */\n            /* c4 */\n    when A does z\n}\n",
+			want: "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n\n    /* c1 */\n    /* c4 */\n    when A does z\n}\n",
+		},
+		"before an outer step": {
+			in:   "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n        // c1\n            // c4\n        b ends\n}\n",
+			want: "use_case \"U\" {\n    when A does x\n        opt \"o\"\n            b does y\n        // c1\n        // c4\n        b ends\n}\n",
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := FormatDocument(c.in)
+			if got != c.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, c.want)
+			}
+			if again := FormatDocument(got); again != got {
+				t.Errorf("not idempotent:\n%s", again)
+			}
+			if before, after := stepOutline(t, c.in), stepOutline(t, got); before != after {
+				t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+			}
+		})
+	}
+}
+
+// A scenario name sits immediately above its `when`: a blank line between
+// them, or around a comment between them, is removed.
+func TestFormat_NoBlankLineInsideScenarioHead(t *testing.T) {
+	in := "use_case \"U\" {\n    scenario \"n\"\n\n    when O does it\n        x does y\n\n    scenario \"m\"\n\n    // note\n\n    when O does other\n        x does z\n}\n"
+	want := "use_case \"U\" {\n    scenario \"n\"\n    when O does it\n        x does y\n\n    scenario \"m\"\n    // note\n    when O does other\n        x does z\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
+// A tail comment at the body's column stays in the body even when the last
+// step is indented deeper than the body's first step. (The deeper step is a
+// continuation-free action; the parser accepts it as part of the body.)
+func TestFormat_TailCommentMeasuredAgainstBodyColumn(t *testing.T) {
+	in := "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n              x does b\n            // tail\n        x ends\n}\n"
+	want := "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            x does b\n            // tail\n        x ends\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+	if before, after := stepOutline(t, in), stepOutline(t, got); before != after {
+		t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}

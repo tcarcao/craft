@@ -388,9 +388,19 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	}
 
 	toks := node.AllTokens()
-	// tokIndex maps a token's offset to its index in toks. keepInBody builds
-	// it on first use, so a declaration with no blocks never pays for it.
-	var tokIndex map[int]int
+	idx := &tokenIndex{toks: toks}
+
+	// runCap is the state of the current comment run: the full-line
+	// comments written since the last real token. It is -1 at the start of
+	// a run (no bound), and each full-line comment sets it to the branch
+	// depth it was written at. keepInBody's answer is capped by it, so a
+	// comment is never kept deeper in a body than the comment before it,
+	// and once one comment of the run leaves the body (or leads the next
+	// scenario) the rest of the run stays out too. Without the cap, a
+	// comment kept in the body after one that led the next scenario was
+	// written at a depth the next pass could not reproduce. Every real
+	// token resets it.
+	runCap := -1
 	for i, tok := range toks {
 		if tok.Kind() == syntax.SyntaxKindEOF {
 			continue
@@ -419,17 +429,36 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// to remove.
 		startsOwnLine := prev == nil || strings.Contains(gap, "\n")
 
+		// A scenario name sits immediately above its `when`: a blank line
+		// after the name, or around a comment between the two, is dropped.
+		if prevReal != nil && startsOwnLine && strings.Count(gap, "\n") > 1 {
+			if p := prevReal.Parent(); p != nil && p.Kind() == syntax.SyntaxKindScenarioName {
+				gap = gap[strings.LastIndexByte(gap, '\n'):]
+			}
+		}
+
 		// A full-line comment after the last step of a branch body may be
 		// indented under that body even though the parser attached it to the
 		// dedented line below. keepInBody answers that; a comment it keeps in
 		// a body does not lead the next scenario.
 		blockDepth := branchDepth(tok)
 		keptInBody := false
-		if isCommentKind(tok.Kind()) && startsOwnLine && prevReal != nil && braceDepth == 1 {
-			if d := keepInBody(toks, i, *prevReal, &tokIndex); d > blockDepth {
+		fullLineComment := isCommentKind(tok.Kind()) && startsOwnLine
+		if fullLineComment && prevReal != nil && braceDepth == 1 {
+			d := keepInBody(toks, i, *prevReal, idx)
+			if runCap >= 0 && d > runCap {
+				d = runCap
+			}
+			if d > blockDepth {
 				blockDepth = d
 				keptInBody = true
 			}
+		}
+		switch {
+		case fullLineComment:
+			runCap = blockDepth
+		case !isCommentKind(tok.Kind()):
+			runCap = -1
 		}
 
 		leadsScenario := isCommentKind(tok.Kind()) && braceDepth == 1 &&
@@ -637,25 +666,22 @@ func opensScenario(tok syntax.SyntaxToken) bool {
 	return false
 }
 
-// sourceTabWidth is the tab stop the parser's offside rule uses (a tab
-// advances to the next multiple of 4). keepInBody compares source columns the
-// way the parser does, so it uses the same width.
-const sourceTabWidth = 4
-
 // keepInBody returns the branch depth at which the full-line comment toks[i]
 // stays, when it follows the last step of a branch body, or -1.
 //
 // The parser attaches a comment to the line below it, so a comment written
 // under the last step of a body, before a dedent, would follow the dedent
 // out of the body. The author's columns say otherwise: the comment is kept
-// in the deepest body (innermost first) holding prevReal whose step column
-// in the source it reaches. The caller uses the result only when it is
+// in the deepest body (innermost first) holding prevReal whose column in
+// the source it reaches. A body's column is that of its first step, which is
+// the column the parser's offside rule measures the body by, so a deeper
+// indented last step does not raise the bar. The caller uses the result only when it is
 // deeper than where the comment would go anyway, so this never pulls a
 // comment out of a body and never moves a step.
 //
 // It is idempotent: once formatted the comment sits exactly at its body's
 // step column, which still reaches that body and no deeper one.
-func keepInBody(toks []syntax.SyntaxToken, i int, prevReal syntax.SyntaxToken, tokIndex *map[int]int) int {
+func keepInBody(toks []syntax.SyntaxToken, i int, prevReal syntax.SyntaxToken, idx *tokenIndex) int {
 	if branchDepth(prevReal) == 0 {
 		return -1
 	}
@@ -671,17 +697,11 @@ func keepInBody(toks []syntax.SyntaxToken, i int, prevReal syntax.SyntaxToken, t
 			if below == nil || below.Kind() == syntax.SyntaxKindBranchHeader {
 				continue
 			}
-			first, ok := firstRealToken(*below)
+			first, ok := firstBodyToken(*n)
 			if !ok {
 				continue
 			}
-			if *tokIndex == nil {
-				*tokIndex = make(map[int]int, len(toks))
-				for k, t := range toks {
-					(*tokIndex)[int(t.Offset())] = k
-				}
-			}
-			k, ok := (*tokIndex)[int(first.Offset())]
+			k, ok := idx.of(first)
 			if !ok {
 				continue
 			}
@@ -691,6 +711,36 @@ func keepInBody(toks []syntax.SyntaxToken, i int, prevReal syntax.SyntaxToken, t
 		}
 	}
 	return -1
+}
+
+// tokenIndex finds a token's index in a declaration's token stream. The
+// offset map is built on first use, so a declaration with no blocks never
+// pays for it.
+type tokenIndex struct {
+	toks     []syntax.SyntaxToken
+	byOffset map[int]int
+}
+
+func (x *tokenIndex) of(t syntax.SyntaxToken) (int, bool) {
+	if x.byOffset == nil {
+		x.byOffset = make(map[int]int, len(x.toks))
+		for k, tk := range x.toks {
+			x.byOffset[int(tk.Offset())] = k
+		}
+	}
+	k, ok := x.byOffset[int(t.Offset())]
+	return k, ok
+}
+
+// firstBodyToken returns the first real token of a branch's first step.
+func firstBodyToken(branch syntax.SyntaxNode) (syntax.SyntaxToken, bool) {
+	for el := range branch.ChildrenIter() {
+		if n, ok := el.(syntax.SyntaxNode); ok &&
+			(n.Kind() == syntax.SyntaxKindAction || n.Kind() == syntax.SyntaxKindBlock) {
+			return firstRealToken(n)
+		}
+	}
+	return syntax.SyntaxToken{}, false
 }
 
 // firstRealToken returns the first token of n that is neither whitespace nor
@@ -712,7 +762,8 @@ func firstRealToken(n syntax.SyntaxNode) (syntax.SyntaxToken, bool) {
 }
 
 // lineIndentAt returns the source indentation of the line toks[i] is on, as
-// a visual column with tabs at sourceTabWidth, 0-based.
+// a visual column with tabs at syntax.TabWidth (as the parser's offside
+// rule counts them), 0-based.
 func lineIndentAt(toks []syntax.SyntaxToken, i int) int {
 	var parts []string
 	for j := i - 1; j >= 0; j-- {
@@ -728,7 +779,7 @@ func lineIndentAt(toks []syntax.SyntaxToken, i int) int {
 		for _, r := range parts[j] {
 			switch r {
 			case '\t':
-				col = (col/sourceTabWidth + 1) * sourceTabWidth
+				col = (col/syntax.TabWidth + 1) * syntax.TabWidth
 			case ' ':
 				col++
 			default:
