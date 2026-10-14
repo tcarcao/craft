@@ -165,11 +165,11 @@ const (
 // Block is an `alt` (one of several branches) or `opt` (one conditional
 // branch) inside a scenario.
 type Block struct {
-	ID       string         `json:"id"`
-	Kind     lang.BlockKind `json:"kind"`
-	Line     int            `json:"line,omitempty"`
-	Column   int            `json:"column,omitempty"`
-	Branches []Branch       `json:"branches"`
+	ID       string    `json:"id"`
+	Kind     BlockKind `json:"kind"`
+	Line     int       `json:"line,omitempty"`
+	Column   int       `json:"column,omitempty"`
+	Branches []Branch  `json:"branches"`
 }
 
 // Branch is one labelled path of a Block.
@@ -183,40 +183,29 @@ type Branch struct {
 // walk of Steps. The result holds copies; use EachAction to update in place.
 func (s Scenario) Actions() []Action {
 	var out []Action
-	var walk func([]Step)
-	walk = func(steps []Step) {
-		for _, st := range steps {
-			if st.Action != nil {
-				out = append(out, *st.Action)
-			}
-			if st.Block != nil {
-				for _, br := range st.Block.Branches {
-					walk(br.Steps)
-				}
-			}
-		}
-	}
-	walk(s.Steps)
+	eachAction(s.Steps, func(a *Action) { out = append(out, *a) })
 	return out
 }
 
 // EachAction calls fn with a pointer to every action of the scenario in
-// source order, so callers can update actions in place.
-func (s *Scenario) EachAction(fn func(*Action)) {
-	var walk func([]Step)
-	walk = func(steps []Step) {
-		for _, st := range steps {
-			if st.Action != nil {
-				fn(st.Action)
-			}
-			if st.Block != nil {
-				for i := range st.Block.Branches {
-					walk(st.Block.Branches[i].Steps)
-				}
+// source order, so callers can update actions in place. The receiver is a
+// value, but Steps holds *Action pointers shared with the original, so
+// mutations through fn reach the scenario's tree.
+func (s Scenario) EachAction(fn func(*Action)) {
+	eachAction(s.Steps, fn)
+}
+
+func eachAction(steps []Step, fn func(*Action)) {
+	for _, st := range steps {
+		if st.Action != nil {
+			fn(st.Action)
+		}
+		if st.Block != nil {
+			for i := range st.Block.Branches {
+				eachAction(st.Block.Branches[i].Steps, fn)
 			}
 		}
 	}
-	walk(s.Steps)
 }
 
 // Trigger describes what initiates a scenario.

@@ -43,17 +43,18 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
 	if sc1.Trigger.Actor != "Customer" {
 		t.Errorf("expected actor=Customer, got %q", sc1.Trigger.Actor)
 	}
-	if len(sc1.Actions()) != 2 {
-		t.Fatalf("expected 2 actions in sc1, got %d", len(sc1.Actions()))
+	acts := sc1.Actions()
+	if len(acts) != 2 {
+		t.Fatalf("expected 2 actions in sc1, got %d", len(acts))
 	}
-	if sc1.Actions()[0].ID != "action_2" {
-		t.Errorf("expected action_2, got %q", sc1.Actions()[0].ID)
+	if acts[0].ID != "action_2" {
+		t.Errorf("expected action_2, got %q", acts[0].ID)
 	}
-	if sc1.Actions()[0].Type != "sync_action" {
-		t.Errorf("expected sync_action, got %q", sc1.Actions()[0].Type)
+	if acts[0].Type != "sync_action" {
+		t.Errorf("expected sync_action, got %q", acts[0].Type)
 	}
-	if sc1.Actions()[1].Type != "async_action" {
-		t.Errorf("expected async_action, got %q", sc1.Actions()[1].Type)
+	if acts[1].Type != "async_action" {
+		t.Errorf("expected async_action, got %q", acts[1].Type)
 	}
 
 	sc2 := uc.Scenarios[1]

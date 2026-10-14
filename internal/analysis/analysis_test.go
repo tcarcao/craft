@@ -174,16 +174,17 @@ services {
 		return &model.Participant{Kind: model.ParticipantBoundedContext, ID: id, Service: svc}
 	}
 	sc := res.Doc.UseCases[0].Scenarios
+	acts := sc[0].Actions()
 	checks := []struct {
 		what      string
 		got, want *model.Participant
 	}{
 		{"external trigger subject", sc[0].Trigger.Subject, &model.Participant{Kind: model.ParticipantActor, ID: "Customer"}},
-		{"sync subject", sc[0].Actions()[0].From, bc("re/subscriptions", "BillingService")},
-		{"qualified sync target", sc[0].Actions()[0].To, bc("re/billing", "")},
-		{"data store target", sc[0].Actions()[1].To, &model.Participant{Kind: model.ParticipantDataStore, ID: "billing_db", Service: "BillingService"}},
-		{"return target", sc[0].Actions()[2].To, bc("re/subscriptions", "BillingService")},
-		{"async has no target", sc[0].Actions()[3].To, nil},
+		{"sync subject", acts[0].From, bc("re/subscriptions", "BillingService")},
+		{"qualified sync target", acts[0].To, bc("re/billing", "")},
+		{"data store target", acts[1].To, &model.Participant{Kind: model.ParticipantDataStore, ID: "billing_db", Service: "BillingService"}},
+		{"return target", acts[2].To, bc("re/subscriptions", "BillingService")},
+		{"async has no target", acts[3].To, nil},
 		{"domain-listen subject", sc[1].Trigger.Subject, bc("re/subscriptions", "BillingService")},
 	}
 	for _, c := range checks {
