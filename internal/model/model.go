@@ -4,7 +4,11 @@
 // re-exports them as the stable public API.
 package model
 
-import "github.com/tcarcao/craft/v2/internal/lang"
+import (
+	"strings"
+
+	"github.com/tcarcao/craft/v2/internal/lang"
+)
 
 // CraftDoc is the parser-agnostic canonical representation of a parsed .craft file.
 // It is re-exported from pkg/craft as the stable public API type; see that
@@ -311,6 +315,45 @@ type Branch struct {
 	Steps []Step `json:"steps"`
 }
 
+// EventList returns Events, or a one-element slice holding Event, or nil
+// when the trigger names no event.
+func (t Trigger) EventList() []string { return eventList(t.Events, t.Event) }
+
+// EventList returns Events, or a one-element slice holding Event, or nil
+// when the action names no event.
+func (a Action) EventList() []string { return eventList(a.Events, a.Event) }
+
+func eventList(events []string, event string) []string {
+	if len(events) > 0 {
+		return events
+	}
+	if event == "" {
+		return nil
+	}
+	return []string{event}
+}
+
+// OperationList returns Operations, or a one-element slice holding
+// *Operation, or nil when the action has no bracket.
+func (a Action) OperationList() []Operation {
+	if len(a.Operations) > 0 {
+		return a.Operations
+	}
+	if a.Operation == nil {
+		return nil
+	}
+	return []Operation{*a.Operation}
+}
+
+// Tables returns the table names of a SQL operation (its payload fields),
+// and nil for any other verb.
+func (o Operation) Tables() []string {
+	if o.Verb != lang.OpVerbSQL {
+		return nil
+	}
+	return strings.Fields(o.Payload)
+}
+
 // Actions returns every action of the scenario in source order: a depth-first
 // walk of Steps. Notes are skipped. The result holds copies; use EachAction to
 // update in place.
@@ -358,6 +401,10 @@ type Trigger struct {
 	// `listens "X"` form and for non-domain_listen triggers — Event still
 	// carries the value either way, for existing consumers.
 	Ref string `json:"ref,omitempty"`
+	// Events holds every event of a listens list, in source order, with the
+	// same text Event would hold for each. Nil for a single event: read Event.
+	// Event and Ref stay the first item.
+	Events []string `json:"events,omitempty"`
 	// Schedule is the expression of a `when cron "…"` or `when every "…"`
 	// trigger, unquoted. It is also set for a `listens` trigger with a
 	// trailing schedule.
@@ -448,16 +495,32 @@ type Action struct {
 	// return_action/internal_action — TargetContext/Event still carry the
 	// value either way, for existing consumers.
 	Ref string `json:"ref,omitempty"`
+	// Events holds every event of a "notifies one of" list, in source order;
+	// nil for a single event.
+	Events []string `json:"events,omitempty"`
 	// Operation is nil when the action carries no `[...]` annotation. It is a
 	// pointer with omitempty so an absent annotation emits no JSON key at all,
 	// keeping .craftjson goldens for unannotated files byte-identical.
 	Operation *Operation `json:"operation,omitempty"`
+	// Operations holds each item of a bracket that lists two or more, in
+	// order. Nil for a single-item bracket: read Operation, which keeps the
+	// whole bracket text.
+	Operations []Operation `json:"operations,omitempty"`
 	// Store is set on an async action whose ref is a store ref.
-	Store       *StoreRef `json:"store,omitempty"`
-	Connector   string    `json:"connector,omitempty"`
-	Phrase      string    `json:"phrase,omitempty"`
-	Description string    `json:"description"`
-	Line        int       `json:"line,omitempty"`
+	Store     *StoreRef `json:"store,omitempty"`
+	Connector string    `json:"connector,omitempty"`
+	Phrase    string    `json:"phrase,omitempty"`
+	// Stream is set on a `returns stream` action: a reply that repeats.
+	Stream bool `json:"stream,omitempty"`
+	// Answers is the ID of the request a stream answers (the asks whose
+	// call-stack frame the reply settles); "" when it answers the trigger's
+	// actor, the unobserved caller or nobody. Set only when Stream is true.
+	Answers string `json:"answers,omitempty"`
+	// Inferred is set when the bracket opens with `inferred`: the hop was
+	// inferred from names, configuration or convention, not read in code.
+	Inferred    bool   `json:"inferred,omitempty"`
+	Description string `json:"description"`
+	Line        int    `json:"line,omitempty"`
 	// Column is the 1-based UTF-16 column of the subject on Line.
 	Column int `json:"column,omitempty"`
 	// From is what the subject (Context) resolves to; To is what the target
@@ -495,7 +558,9 @@ type Domain struct {
 	BoundedContexts []string `json:"boundedContexts"`
 }
 
-// Actor is an entity (user, system, or service) that interacts with the system.
+// Actor is an entity outside the system that interacts with it: a person
+// (user), an external system or service, a scheduler, a tool or platform
+// infrastructure.
 type Actor struct {
 	Name string    `json:"name"`
 	Type ActorType `json:"type"`
@@ -506,9 +571,21 @@ type Actor struct {
 type ActorType string
 
 const (
-	ActorTypeUser    ActorType = "user"
-	ActorTypeSystem  ActorType = "system"
-	ActorTypeService ActorType = "service"
+	ActorTypeUser      ActorType = lang.ActorUser
+	ActorTypeSystem    ActorType = lang.ActorSystem
+	ActorTypeService   ActorType = lang.ActorService
+	ActorTypeScheduler ActorType = lang.ActorScheduler
+	ActorTypeTool      ActorType = lang.ActorTool
+	ActorTypeInfra     ActorType = lang.ActorInfra
+)
+
+// KnownActorTypes is user, system, service, scheduler, tool, infra.
+func KnownActorTypes() []string { return lang.KnownActorTypes() }
+
+// TagSites and TagEnvs are the scope tag keys the views print.
+const (
+	TagSites = lang.TagSites
+	TagEnvs  = lang.TagEnvs
 )
 
 // Diagnostic is a structured error/warning emitted by the v2 parser or sema

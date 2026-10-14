@@ -109,3 +109,28 @@ const (
 	ParticipantActor          ParticipantKind = "actor"
 	ParticipantDataStore      ParticipantKind = "data_store"
 )
+
+// Actor kinds. The actor-type slot is open (grammar ruling Q5): any other
+// identifier is legal and is drawn as a person.
+const (
+	ActorUser      = "user"
+	ActorSystem    = "system"
+	ActorService   = "service"
+	ActorScheduler = "scheduler" // a clock that starts work: cron, an in-process ticker
+	ActorTool      = "tool"      // a CLI, script or client a person runs; it, not the person, calls
+	ActorInfra     = "infra"     // platform machinery: pod start, probes, CI pipelines, monitors
+)
+
+// KnownActorTypes is user, system, service, scheduler, tool, infra, in that order.
+func KnownActorTypes() []string {
+	return []string{ActorUser, ActorSystem, ActorService, ActorScheduler, ActorTool, ActorInfra}
+}
+
+// OpInferred is the bracket-head marker of an inferred hop: `[inferred …]`.
+const OpInferred = "inferred"
+
+// Recognised tag keys (spec §3.3). Every other key is free text.
+const (
+	TagSites = "sites" // printed in the sequence and spine section titles
+	TagEnvs  = "envs"
+)

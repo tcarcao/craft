@@ -13,6 +13,9 @@
 //
 // Step is exactly one of Action, Block or Note (Note since v2.23.0); a
 // consumer that assumes Action-or-Block must handle a Note.
+//
+// Since v2.24.0 a listens trigger or a notifies may carry several events
+// (EventList), and an action several operations (OperationList).
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"
@@ -110,8 +113,20 @@ const (
 	OpVerbGRPC    = "GRPC"
 	OpVerbTOPIC   = "TOPIC"
 	OpVerbQUERY   = "QUERY"
+	OpVerbAddr    = "ADDR"
+	OpVerbSQL     = "SQL"
 
-	ActorTypeUser    = model.ActorTypeUser
-	ActorTypeSystem  = model.ActorTypeSystem
-	ActorTypeService = model.ActorTypeService
+	ActorTypeUser      = model.ActorTypeUser
+	ActorTypeSystem    = model.ActorTypeSystem
+	ActorTypeService   = model.ActorTypeService
+	ActorTypeScheduler = model.ActorTypeScheduler
+	ActorTypeTool      = model.ActorTypeTool
+	ActorTypeInfra     = model.ActorTypeInfra
+
+	TagSites = model.TagSites
+	TagEnvs  = model.TagEnvs
 )
+
+// KnownActorTypes lists the actor kinds Craft recognises, in presentation
+// order. Any other kind is legal and is drawn as a person.
+func KnownActorTypes() []string { return model.KnownActorTypes() }

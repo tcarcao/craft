@@ -122,3 +122,14 @@ func actionSteps(actions []craft.Action) []craft.Step {
 	}
 	return steps
 }
+
+func TestV224Exports(t *testing.T) {
+	_ = []craft.ActorType{craft.ActorTypeScheduler, craft.ActorTypeTool, craft.ActorTypeInfra}
+	_ = []string{craft.OpVerbAddr, craft.OpVerbSQL, craft.TagSites, craft.TagEnvs}
+	if len(craft.KnownActorTypes()) != 6 {
+		t.Error("KnownActorTypes")
+	}
+	var a craft.Action
+	_, _, _ = a.EventList(), a.OperationList(), craft.Operation{}.Tables()
+	_ = craft.Trigger{}.EventList()
+}

@@ -78,6 +78,12 @@ func IsGlossaryVerb(s string) bool {
 
 // ── operation-annotation protocol verbs ──────────────────────────────────────
 
+// OpVerbAddr and OpVerbSQL are the egress protocol verbs (spec §9.1).
+const (
+	OpVerbAddr = "ADDR" // egress to an address that has no operation id
+	OpVerbSQL  = "SQL"  // a direct read or write of another party's tables
+)
+
 // protocolVerbs are the leading words of a `[VERB payload]` annotation that
 // Craft recognises. Matching is exact and case-sensitive. Adding one is
 // non-breaking: an unrecognised leading word already parses as payload.

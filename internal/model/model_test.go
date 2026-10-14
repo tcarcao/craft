@@ -2,6 +2,7 @@ package model_test
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -180,5 +181,65 @@ func TestNewFields_AreOmittedWhenEmpty(t *testing.T) {
 		if strings.Contains(string(out), key) {
 			t.Errorf("%s must be omitted when empty: %s", key, out)
 		}
+	}
+}
+
+func TestEventList_FallsBackToEvent(t *testing.T) {
+	if got := (model.Trigger{Event: "a.A"}).EventList(); !slices.Equal(got, []string{"a.A"}) {
+		t.Errorf("single = %v", got)
+	}
+	if got := (model.Trigger{Event: "a.A", Events: []string{"a.A", "b.B"}}).EventList(); !slices.Equal(got, []string{"a.A", "b.B"}) {
+		t.Errorf("list = %v", got)
+	}
+	if got := (model.Trigger{}).EventList(); got != nil {
+		t.Errorf("none = %v", got)
+	}
+	if got := (model.Action{Event: "x.X"}).EventList(); !slices.Equal(got, []string{"x.X"}) {
+		t.Errorf("action = %v", got)
+	}
+}
+
+func TestOperationList(t *testing.T) {
+	op := &model.Operation{Text: "a, b"}
+	a := model.Action{Operation: op, Operations: []model.Operation{{Text: "a"}, {Text: "b"}}}
+	if got := a.OperationList(); len(got) != 2 || got[1].Text != "b" {
+		t.Errorf("list = %+v", got)
+	}
+	if got := (model.Action{Operation: op}).OperationList(); len(got) != 1 || got[0].Text != "a, b" {
+		t.Errorf("single = %+v", got)
+	}
+	if got := (model.Action{}).OperationList(); got != nil {
+		t.Errorf("none = %+v", got)
+	}
+}
+
+func TestOperationTables(t *testing.T) {
+	if got := (model.Operation{Verb: "SQL", Payload: "investment flat  city"}).Tables(); !slices.Equal(got, []string{"investment", "flat", "city"}) {
+		t.Errorf("SQL = %v", got)
+	}
+	if got := (model.Operation{Verb: "GET", Payload: "/x"}).Tables(); got != nil {
+		t.Errorf("GET = %v", got)
+	}
+}
+
+func TestV224Fields_AreOmittedWhenEmpty(t *testing.T) {
+	out, err := json.Marshal(model.Scenario{
+		Trigger: model.Trigger{Type: model.TriggerTypeDomainListen, Event: "a.A"},
+		Steps:   []model.Step{{Action: &model.Action{ID: "action_2", Type: model.ActionTypeReturn}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"events"`, `"operations"`, `"stream"`, `"answers"`, `"inferred"`} {
+		if strings.Contains(string(out), key) {
+			t.Errorf("%s must be omitted when empty: %s", key, out)
+		}
+	}
+}
+
+func TestKnownActorTypes(t *testing.T) {
+	want := []string{"user", "system", "service", "scheduler", "tool", "infra"}
+	if got := model.KnownActorTypes(); !slices.Equal(got, want) {
+		t.Errorf("got %v", got)
 	}
 }
