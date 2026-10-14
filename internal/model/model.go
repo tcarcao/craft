@@ -217,6 +217,30 @@ const (
 	JourneyEdgeContinues = lang.JourneyEdgeContinues
 )
 
+// JourneyMember is one use case of a journey spine.
+type JourneyMember struct {
+	UseCase   int    `json:"useCase"` // index into CraftDoc.UseCases
+	Name      string `json:"name"`
+	SourceURI string `json:"sourceUri,omitempty"`
+}
+
+// JourneyEdge connects two members: From's publish, store write or
+// continues link reaches To. From and To index Journey.Members.
+type JourneyEdge struct {
+	From  int             `json:"from"`
+	To    int             `json:"to"`
+	Kind  JourneyEdgeKind `json:"kind"`
+	Event string          `json:"event,omitempty"` // the event or store ref; "" for continues
+}
+
+// Journey is the spine of one journey slug: its members in spine order.
+type Journey struct {
+	Slug    string          `json:"slug"`
+	Members []JourneyMember `json:"members"`
+	Edges   []JourneyEdge   `json:"edges,omitempty"`
+	Cycle   bool            `json:"cycle,omitempty"`
+}
+
 // BlockKind is the kind of a branch block inside a scenario.
 type BlockKind = lang.BlockKind
 

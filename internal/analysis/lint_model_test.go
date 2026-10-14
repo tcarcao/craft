@@ -210,3 +210,45 @@ func TestLinks_LintRangeIsTheTitle(t *testing.T) {
 	}
 	t.Error("no unresolved-use-case")
 }
+
+func journeyUC(name, slug, body string) string {
+	return "use_case \"" + name + "\" {\n  tags {\n    journey: " + slug + "\n  }\n" + body + "}\n"
+}
+
+func TestLintModel_JourneyList(t *testing.T) {
+	got := modelDiags(t, journeyUC("A", "a, b", "  when S does\n    a does it\n"), "craft/lint/journey-list")
+	if len(got) != 1 {
+		t.Fatalf("%d journey-list warnings, want 1", len(got))
+	}
+	if got[0].Severity != model.SeverityWarning || got[0].Range.Start.Line != 2 || got[0].Range.Start.Character != 13 || got[0].Range.End.Character != 14 {
+		t.Errorf("diag = %+v", got[0])
+	}
+	if n := len(modelDiags(t, journeyUC("A", "a", "  when S does\n    a does it\n"), "craft/lint/journey-list")); n != 0 {
+		t.Errorf("one value: %d warnings, want 0", n)
+	}
+}
+
+func TestLintModel_JourneyUnconnected(t *testing.T) {
+	two := journeyUC("A", "seller-j", "  when S does\n    a does it\n") + journeyUC("B", "seller-j", "  when S does\n    b does it\n")
+	got := modelDiags(t, two, "craft/lint/journey-unconnected")
+	if len(got) != 2 {
+		t.Fatalf("%d journey-unconnected hints, want 2", len(got))
+	}
+	for i, line := range []int{2, 9} {
+		d := got[i]
+		if d.Severity != model.SeverityHint || d.Range.Start.Line != line || d.Range.Start.Character != 13 || d.Range.End.Character != 13+len("seller-j") {
+			t.Errorf("diag %d = %+v", i, d)
+		}
+		if !strings.Contains(d.Message, "`seller-j`") {
+			t.Errorf("message %q", d.Message)
+		}
+	}
+	one := journeyUC("A", "j", "  when S does\n    a does it\n")
+	chain := journeyUC("A", "j", "  when S does\n    a notifies e.A\n") + journeyUC("B", "j", "  when b listens e.A\n    b does it\n")
+	quoted := journeyUC("A", "\"j\"", "  when S does\n    a notifies e.A\n    continues \"B\"\n") + journeyUC("B", "\"j\"", "  when S does\n    b does it\n")
+	for name, src := range map[string]string{"one member": one, "chain": chain, "continues": quoted} {
+		if n := len(modelDiags(t, src, "craft/lint/journey-unconnected")); n != 0 {
+			t.Errorf("%s: %d hints, want 0", name, n)
+		}
+	}
+}

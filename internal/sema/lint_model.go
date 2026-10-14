@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/green"
+	"github.com/tcarcao/craft/v2/internal/journey"
 	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -20,13 +21,13 @@ import (
 // lints that point at a position the model does not keep, such as a tag
 // value (Part B); the v2.24 lints read the model only.
 func LintModel(doc *model.CraftDoc, perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
-	_, _ = perFileTrees, lis
 	if doc == nil {
 		return nil
 	}
 	var diags []model.Diagnostic
 	diags = append(diags, lintDuplicateScenarioBodies(doc)...)
 	diags = append(diags, lintLinks(doc)...)
+	diags = append(diags, lintJourneys(doc, perFileTrees, lis)...)
 	return diags
 }
 
@@ -367,4 +368,75 @@ func lintLinks(doc *model.CraftDoc) []model.Diagnostic {
 		}
 	}
 	return diags
+}
+
+// ── journeys ──────────────────────────────────────────────────────────────────
+// journey-list (warning): a use case whose journey tag lists two or more
+// values (spec §16). journey-unconnected (hint): a member of a journey with
+// two or more members that is the end of no spine edge (spec §17.3). Both
+// point at the journey tag's first value.
+
+func lintJourneys(doc *model.CraftDoc, perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	add := func(uc model.UseCase, code string, sev model.Severity, msg string) {
+		diags = append(diags, model.Diagnostic{Code: code, Message: msg, Severity: sev, SourceURI: uc.SourceURI,
+			Range: journeyValueRange(uc, perFileTrees, lis)})
+	}
+	for _, uc := range doc.UseCases {
+		if len(uc.TagValues[model.TagJourney]) > 1 {
+			add(uc, "craft/lint/journey-list", model.SeverityWarning,
+				"a use case belongs to one journey; BuildJourney uses the first value")
+		}
+	}
+	for _, slug := range journey.Slugs(doc) {
+		j := journey.Build(doc, slug)
+		if len(j.Members) < 2 {
+			continue
+		}
+		connected := make([]bool, len(j.Members))
+		for _, e := range j.Edges {
+			connected[e.From], connected[e.To] = true, true
+		}
+		for k, m := range j.Members {
+			if !connected[k] {
+				add(doc.UseCases[m.UseCase], "craft/lint/journey-unconnected", model.SeverityHint,
+					fmt.Sprintf("nothing in the model connects this use case to the rest of `%s`: add the notifies/listens pair, a continues link, or move it to its own journey", slug))
+			}
+		}
+	}
+	return diags
+}
+
+// journeyValueRange is the range of the first value of uc's journey tag: the
+// use case is found in its file's tree by its title line. The zero range when
+// the tree or the tag is not there.
+func journeyValueRange(uc model.UseCase, perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) model.Range {
+	root, ok := perFileTrees[uc.SourceURI]
+	li, hasLI := lis[uc.SourceURI]
+	if !ok || !hasLI {
+		return model.Range{}
+	}
+	for _, decl := range syntax.AsFile(root).UseCases() {
+		if decl.Line(li) != uc.Line {
+			continue
+		}
+		for _, tb := range decl.TagsBlocks() {
+			for _, ts := range tb.Tags() {
+				if k := ts.Key(); k == nil || k.Text() != model.TagJourney {
+					continue
+				}
+				rs := ts.ValueRanges()
+				if len(rs) == 0 {
+					return model.Range{}
+				}
+				sl, sc := li.LineCol16(rs[0].Start)
+				el, ec := li.LineCol16(rs[0].End)
+				return model.Range{
+					Start: model.Position{Line: lineToLSP(sl), Character: colToLSP(sc)},
+					End:   model.Position{Line: lineToLSP(el), Character: colToLSP(ec)},
+				}
+			}
+		}
+	}
+	return model.Range{}
 }

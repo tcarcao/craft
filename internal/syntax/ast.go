@@ -1398,6 +1398,29 @@ func (t TagStmt) Values() []string {
 	return out
 }
 
+// ValueRanges returns the text range of each of the tag's values, in
+// document order, as Values lists them: a quoted value spans its quotes, a
+// bare ref-shaped value its first to last token.
+func (t TagStmt) ValueRanges() []green.TextRange {
+	var out []green.TextRange
+	for el := range t.node.ChildrenIter() {
+		switch e := el.(type) {
+		case SyntaxNode:
+			if e.Kind() != SyntaxKindRef {
+				continue
+			}
+			if toks := e.Tokens(); len(toks) > 0 {
+				out = append(out, green.TextRange{Start: toks[0].Offset(), End: toks[len(toks)-1].TextRange().End})
+			}
+		case SyntaxToken:
+			if e.Kind() == SyntaxKindString {
+				out = append(out, e.TextRange())
+			}
+		}
+	}
+	return out
+}
+
 // ValueText returns the tag's value as a single string, joining a list with
 // ", ". This is the form model.UseCase.Tags carries, kept so consumers written
 // against the single-valued shape keep working; it cannot distinguish a
