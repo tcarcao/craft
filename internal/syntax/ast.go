@@ -1808,9 +1808,11 @@ func (t TriggerDecl) Connector() string {
 // `when User creates (1! & 2!)` into `when User creates ( 1 ! & 2 ! )`.
 //
 // This covers every trigger form: the subject slot holds the actor for an
-// external trigger, the context for a domain_listen one, and the `cron` /
-// `every` keyword for the scheduled forms, while an event trigger has only the
-// quoted literal and no tail.
+// external trigger, the context for a domain_listen or receive one, and the
+// `cron` / `every` keyword for the scheduled forms, while an event trigger has
+// only the quoted literal and no tail. The raw tail stops before a receive
+// trigger's operation annotation, which is appended in canonical form,
+// ` [<op>]` (one space before the bracket; the formatter aligns it).
 func (t TriggerDecl) SourceText() string {
 	elems := significantElements(t.node)
 	if len(elems) == 0 {

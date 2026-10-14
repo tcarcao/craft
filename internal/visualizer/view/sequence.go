@@ -350,8 +350,9 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	}
 	if it.Operation != nil && it.Operation.Text != "" {
 		// The operation is the step's wire contract; a sequence diagram
-		// is where a reader looks for it.
-		msg.Label += " [" + it.Operation.Text + "]"
+		// is where a reader looks for it. A trigger with no phrase is
+		// labelled by the operation alone.
+		msg.Label = strings.TrimSpace(msg.Label + " [" + it.Operation.Text + "]")
 	}
 	if msg.From != "" {
 		b.appear(msg.From)

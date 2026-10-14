@@ -1101,3 +1101,20 @@ use_case "Hand-off" {
 		t.Errorf("an on-stage writer does not deliver a store hand-off itself:\n%s", puml)
 	}
 }
+
+// A receives trigger with an operation and no phrase is labelled by the
+// operation alone, with no leading space.
+func TestSequence_ReceivesWithOnlyAnOperationHasNoLeadingSpace(t *testing.T) {
+	puml, mmd := sequenceSource(t, `domain ad {
+    graphql
+}
+use_case "Reindex" {
+    when graphql receives  [opOnly]
+        graphql reindexes the adverts
+}
+`)
+	requireLine(t, "plantuml", puml, "[-> graphql : [opOnly]")
+	if !strings.Contains(mmd, "graphql: [opOnly]\n") {
+		t.Errorf("mermaid label has a leading space:\n%s", mmd)
+	}
+}

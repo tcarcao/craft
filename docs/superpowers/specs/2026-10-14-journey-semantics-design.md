@@ -149,7 +149,7 @@ Rules. These are the v2.21 rules (§3.1 there) unless stated otherwise:
 | `craft/syntax/orphan-and` (new, error) | An `and` has no open `par` at its column. | Parsed as the first branch of a new `par` with that label. |
 | `craft/syntax/orphan-else` (message widened) | An `else` whose open block at its column is a `par`, `loop` or `opt`, or that has no block there. Message: "`else` continues an `alt` at the same column; a `par` continues with `and`". | Unchanged. |
 | `craft/syntax/empty-branch`, `craft/syntax/missing-label`, `craft/syntax/inconsistent-indent` | Same conditions as for alt/opt, now also for `par`, `and` and `loop`. | Unchanged. |
-| `craft/lint/single-branch-par` (new, warning) | A `par` with no `and` whose body has exactly one step that is not a note. Nothing in it runs concurrently. | n/a |
+| `craft/lint/single-branch-par` (new, warning) | A `par` with no `and` whose body has exactly one step that is not a note, or holds only notes. Nothing in it runs concurrently. | n/a |
 
 ### 4.3 Model
 `Block.Kind` gains `par` and `loop`, and `Block` gains one field:

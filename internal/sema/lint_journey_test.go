@@ -28,6 +28,10 @@ func TestLint_SingleBranchPar(t *testing.T) {
 	if n := lintCodes(t, nested, "craft/lint/single-branch-par"); n != 1 {
 		t.Errorf("nested one step: %d warnings, want 1", n)
 	}
+	notesOnly := "use_case \"U\" {\n  when O does\n    par \"lookups\"\n      note \"nothing runs here yet\"\n    x asks y for a\n}"
+	if n := lintCodes(t, notesOnly, "craft/lint/single-branch-par"); n != 1 {
+		t.Errorf("notes only: %d warnings, want 1", n)
+	}
 	for _, src := range []string{two, explicit} {
 		if n := lintCodes(t, src, "craft/lint/single-branch-par"); n != 0 {
 			t.Errorf("%d warnings, want 0:\n%s", n, src)

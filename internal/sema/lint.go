@@ -621,8 +621,8 @@ func LintCommunication(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSy
 }
 
 // ── single-branch-par ─────────────────────────────────────────────────────────
-// Warning: a par without `and` whose body has exactly one step: nothing in it
-// runs concurrently.
+// Warning: a par without `and` whose body has exactly one step that is not a
+// note, or only notes: nothing in it runs concurrently.
 
 func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
 	var diags []model.Diagnostic
@@ -636,13 +636,19 @@ func lintSingleBranchPar(perFileTrees map[string]syntax.SyntaxNode, lis map[stri
 					continue
 				}
 				brs := b.Branches()
-				if b.IsFanOut() && countNonNotes(brs[0].Steps()) == 1 {
+				// One step, or only notes: either way nothing runs alongside.
+				// An empty body is the parser's empty-branch error instead.
+				if n := countNonNotes(brs[0].Steps()); b.IsFanOut() && n <= 1 && len(brs[0].Steps()) > 0 {
+					msg := "this `par` has one step, so nothing in it runs concurrently; drop the `par` or add the steps that run alongside it"
+					if n == 0 {
+						msg = "this `par` holds only notes, so nothing in it runs concurrently; drop the `par` or add the steps that run alongside each other"
+					}
 					if tok := brs[0].HeaderToken(); tok != nil {
 						line, col := li.LineCol16(tok.Offset())
 						start := colToLSP(col)
 						diags = append(diags, model.Diagnostic{
 							Code:      "craft/lint/single-branch-par",
-							Message:   "this `par` has one step, so nothing in it runs concurrently; drop the `par` or add the steps that run alongside it",
+							Message:   msg,
 							Severity:  model.SeverityWarning,
 							SourceURI: uri,
 							Range: model.Range{
