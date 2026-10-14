@@ -73,9 +73,13 @@ type Request struct {
 	UseCases []string
 	// C4 must be set for ViewC4 and only for it.
 	C4 *C4Options
-	// Title, if set, heads the diagram: a PlantUML title, a Mermaid comment,
-	// or the markdown heading.
+	// Title, if set, heads the diagram: a PlantUML title, a Mermaid comment
+	// (front matter for a journey), or the markdown heading.
 	Title string
+	// Journey draws the spine of this journey slug (sequence only): its
+	// member use cases, in spine order, on one shared stage. Title defaults
+	// to "Journey: <slug>".
+	Journey string
 }
 
 // Output is a drawn diagram.
@@ -115,6 +119,16 @@ func (r *Renderer) Render(doc *craft.CraftDoc, req Request) (Output, error) {
 		return Output{Data: []byte(md), ContentType: "text/markdown; charset=utf-8", Ext: "md"}, nil
 	}
 	shown := doc
+	if req.Journey != "" {
+		j := craft.BuildJourney(doc, req.Journey)
+		if len(j.Members) == 0 {
+			return Output{}, fmt.Errorf("%w: no use case has journey %q", ErrUnsupported, req.Journey)
+		}
+		shown, its = spine(doc, its, j)
+		if req.Title == "" {
+			req.Title = "Journey: " + req.Journey
+		}
+	}
 	if len(req.UseCases) > 0 {
 		var missing []string
 		shown, missing = filterUseCases(doc, req.UseCases)
@@ -141,6 +155,9 @@ func (r *Renderer) Render(doc *craft.CraftDoc, req Request) (Output, error) {
 		title := req.Title
 		if title == "" {
 			title = defaultTitle(shown, req.View)
+		}
+		if req.Journey != "" {
+			src = withTitle(src, req)
 		}
 		md := "# " + title + "\n\n```mermaid\n" + src + "\n```\n"
 		return Output{Data: []byte(md), ContentType: "text/markdown; charset=utf-8", Ext: "md"}, nil
@@ -188,6 +205,14 @@ func validate(req Request) error {
 		}
 	default:
 		return fmt.Errorf("%w: unknown format %q", ErrUnsupported, req.Format)
+	}
+	if req.Journey != "" {
+		if req.View != ViewSequence {
+			return fmt.Errorf("%w: a journey is drawn as a sequence; ask for the sequence view", ErrUnsupported)
+		}
+		if len(req.UseCases) > 0 {
+			return fmt.Errorf("%w: `journey` draws a sequence over its own members; drop the use-case filter", ErrUnsupported)
+		}
 	}
 	if req.View == ViewC4 {
 		if req.C4 == nil {
@@ -242,7 +267,7 @@ func write(doc *craft.CraftDoc, its []interaction.Interaction, req Request) stri
 		}
 		return plantuml.Architecture(v)
 	case ViewSequence:
-		v := view.BuildSequence(doc, its)
+		v := view.BuildSequenceWith(doc, its, view.SequenceOptions{SharedStage: req.Journey != ""})
 		if req.Backend == Mermaid {
 			return mermaid.Sequence(v)
 		}
@@ -258,9 +283,13 @@ func write(doc *craft.CraftDoc, its []interaction.Interaction, req Request) stri
 
 // withTitle heads source with req.Title: a PlantUML `title` line, or a
 // Mermaid comment (Mermaid has no title directive for every diagram type).
+// A journey is always a sequence, which takes Mermaid front matter.
 func withTitle(src string, req Request) string {
 	if req.Title == "" {
 		return src
+	}
+	if req.Backend == Mermaid && req.Journey != "" {
+		return "---\ntitle: \"" + strings.ReplaceAll(req.Title, `"`, `'`) + "\"\n---\n" + src
 	}
 	if req.Backend == Mermaid {
 		return "%% " + req.Title + "\n" + src
@@ -284,6 +313,28 @@ func defaultTitle(doc *craft.CraftDoc, v View) string {
 		return "Sequence"
 	}
 	return "Domain"
+}
+
+// spine keeps a journey's members, in spine order, and renumbers the
+// interactions' UseCaseIndex to index the result. Interactions are derived
+// over the whole model first, so a listener still pairs with publishers
+// outside the spine.
+func spine(doc *craft.CraftDoc, its []interaction.Interaction, j craft.Journey) (*craft.CraftDoc, []interaction.Interaction) {
+	shown := *doc
+	shown.UseCases = make([]craft.UseCase, len(j.Members))
+	index := make(map[int]int, len(j.Members))
+	for k, m := range j.Members {
+		shown.UseCases[k] = doc.UseCases[m.UseCase]
+		index[m.UseCase] = k
+	}
+	var out []interaction.Interaction
+	for _, it := range its {
+		if k, ok := index[it.UseCaseIndex]; ok {
+			it.UseCaseIndex = k
+			out = append(out, it)
+		}
+	}
+	return &shown, out
 }
 
 // keepUseCases keeps the interactions of shown's use cases, a filtered copy

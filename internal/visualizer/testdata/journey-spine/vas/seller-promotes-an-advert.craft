@@ -1,0 +1,31 @@
+actors {
+    user Seller
+}
+
+domain vas {
+    frontendplatform
+    graphql
+    vasscheduler
+    nmf_monetization
+}
+
+use_case "Seller promotes an advert" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+
+    when Seller promotes an advert
+        frontendplatform asks graphql to book the promotion  [scheduleVas]
+        graphql asks vasscheduler to book it                 [createSchedule]
+        vasscheduler notifies com.olx.realestate_vas.VasScheduled
+        continues "Seller pays at the checkout"
+}
+
+use_case "Seller pays at the checkout" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+
+    when Seller pays at the checkout
+        frontendplatform asks graphql to pay  [payInvoice]
+}

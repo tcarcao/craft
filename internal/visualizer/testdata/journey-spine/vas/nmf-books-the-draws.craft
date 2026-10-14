@@ -1,0 +1,8 @@
+use_case "nMF books the draws of a scheduled VAS" {
+    tags {
+        journey: seller-promotes-an-advert
+    }
+
+    when nmf_monetization listens com.olx.realestate_vas.VasScheduled
+        nmf_monetization books one draw per day of the schedule
+}

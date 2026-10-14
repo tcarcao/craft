@@ -142,7 +142,23 @@ func BlockOps(prev, next []BranchRef) []BlockOp {
 	return ops
 }
 
-// BuildSequence lays out its as a sequence diagram. Use cases with no
+// SequenceOptions change how BuildSequenceWith lays out a sequence.
+type SequenceOptions struct {
+	// SharedStage keeps the stage across sections: a Listen whose publisher
+	// published that event in an earlier section is delivered directly, as
+	// from a publisher on stage in its own section (spec §17.4). A publisher
+	// outside the diagram, or one that publishes only later, keeps the
+	// inbound arrow. The journey spine sets it.
+	SharedStage bool
+}
+
+// BuildSequence lays out its with the default options; see
+// BuildSequenceWith.
+func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence {
+	return BuildSequenceWith(doc, its, SequenceOptions{})
+}
+
+// BuildSequenceWith lays out its as a sequence diagram. Use cases with no
 // interactions still get a (empty) section, so a filtered diagram shows what
 // was asked for. Each interaction's UseCaseIndex must index doc.UseCases.
 //
@@ -150,8 +166,8 @@ func BlockOps(prev, next []BranchRef) []BlockOp {
 // nothing still gets a MessageNone. Use cases that share a name are drawn in
 // the section of the last of them, in source order; the earlier sections stay
 // empty.
-func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence {
-	b := sequenceBuilder{ns: newNodeSet(doc), inbound: map[string]*inboundArrow{}}
+func BuildSequenceWith(doc *model.CraftDoc, its []interaction.Interaction, opts SequenceOptions) Sequence {
+	b := sequenceBuilder{ns: newNodeSet(doc), inbound: map[string]*inboundArrow{}, shared: opts.SharedStage, published: map[string]int{}}
 	byUseCase := map[string]int{}
 	for _, uc := range doc.UseCases {
 		byUseCase[uc.Name] = len(b.seq.Sections)
@@ -216,6 +232,31 @@ type sequenceBuilder struct {
 	inbound map[string]*inboundArrow
 	// onStage marks, per section, the participants already drawn in it.
 	onStage []map[string]bool
+	// shared is SequenceOptions.SharedStage; published maps
+	// "<publisher key>|<event>" to the first section that drew the publish.
+	shared    bool
+	published map[string]int
+}
+
+// staged reports whether from delivers event directly to a listener in
+// section idx: it is drawn in that section, or, with a shared stage, it
+// published event in a section drawn before.
+func (b *sequenceBuilder) staged(idx int, from interaction.Endpoint, event string) bool {
+	if from == interaction.External {
+		return false
+	}
+	if b.onStage[idx][from.Key] {
+		return true
+	}
+	sec, ok := b.published[from.Key+"|"+event]
+	return b.shared && ok && sec < idx
+}
+
+// publishes records that from publishes event in section idx.
+func (b *sequenceBuilder) publishes(idx int, from interaction.Endpoint, event string) {
+	if _, ok := b.published[from.Key+"|"+event]; !ok {
+		b.published[from.Key+"|"+event] = idx
+	}
 }
 
 // inboundArrow is an event drawn as arriving from outside a section, or a
@@ -275,7 +316,7 @@ func (b *sequenceBuilder) addRoster(idx int, listens []interaction.Interaction, 
 	var inboundItems []string
 	for _, it := range listens {
 		listener, schedule = it.To, it.Schedule
-		if it.From != interaction.External && onStage[it.From.Key] {
+		if b.staged(idx, it.From, it.Event) {
 			if _, seen := direct[it.From.Key]; !seen {
 				directOrder = append(directOrder, it.From)
 			}
@@ -316,6 +357,7 @@ func (b *sequenceBuilder) addOneOf(idx int, pubs []interaction.Interaction, titl
 	quoted := make([]string, len(pubs))
 	for i, it := range pubs {
 		quoted[i] = fmt.Sprintf("%q", it.Event)
+		b.publishes(idx, it.From, it.Event)
 	}
 	from := b.ns.add(pubs[0].From)
 	msg := Message{From: from, To: from, Kind: MessageAsync, Scenario: title, Branch: branchPath(pubs[0].Branch),
@@ -410,6 +452,7 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 		}
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.From), MessageAsync
 		msg.Label = "notifies \"" + it.Event + "\""
+		b.publishes(idx, it.From, it.Event)
 	case interaction.Listen:
 		if !it.Via.IsZero() {
 			// A store read: the reader polls the store, once per listening
@@ -426,7 +469,7 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 		// per listening scenario however many publishers it has. The
 		// arrow names those publishers but draws none of them: the section
 		// stays about its own use case.
-		if onStage[it.From.Key] {
+		if b.staged(idx, it.From, it.Event) {
 			msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageAsync
 			if it.Schedule != "" {
 				msg.Label = it.Label + ", " + it.Schedule
