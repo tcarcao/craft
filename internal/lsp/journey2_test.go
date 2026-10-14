@@ -162,3 +162,58 @@ func TestSemanticTokens_V224(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletion_V224(t *testing.T) {
+	items := completionAt(t, "actors {\n    \n}\n", 1, 4)
+	for _, k := range []string{"user", "system", "service", "scheduler", "tool", "infra"} {
+		if !hasLabel(items, k) {
+			t.Errorf("actors block lacks %q: %v", k, labelList(items))
+		}
+	}
+	items = completionAt(t, "actor \n", 0, 6)
+	if !hasLabel(items, "scheduler") {
+		t.Errorf("after `actor ` lacks scheduler: %v", labelList(items))
+	}
+	items = completionAt(t, rosterLSPSrc+"use_case \"N\" {\n    when seshat listens sns.cooked, \n        seshat does it\n}\n", 23, 36)
+	if !hasLabel(items, "sns.cooked") {
+		t.Errorf("listens list lacks published events: %v", labelList(items))
+	}
+	// A continuation line of a list offers the events too.
+	items = completionAt(t, rosterLSPSrc+"use_case \"N\" {\n    when seshat listens sns.a-changed,\n            \n        seshat does it\n}\n", 24, 12)
+	if !hasLabel(items, "sns.cooked") {
+		t.Errorf("listens continuation lacks published events: %v", labelList(items))
+	}
+	items = completionAt(t, "use_case \"N\" {\n    when O does\n        x returns \n}\n", 2, 18)
+	if !hasLabel(items, "stream") {
+		t.Errorf("after returns: %v", labelList(items))
+	}
+	requireSnippet(t, completionAt(t, "use_case \"N\" {\n    when O does\n        x notifies \n}\n", 2, 19), "one of", "one of ${1:event}, ${2:event}")
+	items = completionAt(t, "use_case \"N\" {\n    when O does\n        x asks y for it  []\n}\n", 2, 26)
+	for _, l := range []string{"inferred", "ADDR", "SQL", "POST"} {
+		if !hasLabel(items, l) {
+			t.Errorf("bracket head lacks %q: %v", l, labelList(items))
+		}
+	}
+	tags := "use_case \"A\" {\n    tags {\n        sites: imovirtualpt2, imovirtualpt\n    }\n    when O does\n        x does it\n}\nuse_case \"B\" {\n    tags {\n        sites: imovirtualpt2\n        \n    }\n    when O does\n        x does it\n}\n"
+	items = completionAt(t, tags, 10, 8)
+	requireSnippet(t, items, "sites", "sites: ${1:site}")
+	requireSnippet(t, items, "envs", "envs: ${1:env}")
+	withC := tags + "use_case \"C\" {\n    tags {\n        sites: \n    }\n    when O does\n        x does it\n}\n"
+	items = completionAt(t, withC, 17, 15)
+	if len(items) != 2 || items[0].Label != "imovirtualpt2" || items[1].Label != "imovirtualpt" {
+		t.Errorf("site values, most frequent first: %v", labelList(items))
+	}
+}
+
+func TestCompletion_BracketItemOffersTheRemainingSurfaceOperations(t *testing.T) {
+	for name, line := range map[string]string{
+		"closed":   "        advisorapp asks concierge for x  [getUserList, ]\n",
+		"unclosed": "        advisorapp asks concierge for x  [getUserList, \n",
+	} {
+		src := surfaceListLSPSrc[:len(surfaceListLSPSrc)-2] + line + "}\n"
+		items := completionAt(t, src, 14, 55)
+		if !hasLabel(items, "getUserLogs") || hasLabel(items, "getUserList") {
+			t.Errorf("%s: want getUserLogs only, got %v", name, labelList(items))
+		}
+	}
+}

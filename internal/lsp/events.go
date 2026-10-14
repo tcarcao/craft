@@ -415,3 +415,101 @@ func (s *Server) eventDefinition(file syntax.File, offset green.TextSize) ([]pro
 	}
 	return locs, len(locs) > 0
 }
+
+// publishedEventCompletions offers every event published in the model (the
+// items of each notifies), sorted, for an item of a listens or one-of list.
+// Store refs are left out: a list may not hold one.
+func publishedEventCompletions(ws *workspace.Workspace) *protocol.CompletionList {
+	seen := map[string]bool{}
+	if doc := ws.Doc(); doc != nil {
+		for _, uc := range doc.UseCases {
+			for _, sc := range uc.Scenarios {
+				for _, a := range sc.Actions() {
+					if a.Type != model.ActionTypeAsync {
+						continue
+					}
+					for _, ev := range a.EventList() {
+						if ev != "" && !strings.HasPrefix(ev, lang.StoreTransport+".") {
+							seen[ev] = true
+						}
+					}
+				}
+			}
+		}
+	}
+	var items []protocol.CompletionItem
+	for _, ev := range sortedKeys(seen) {
+		items = append(items, protocol.CompletionItem{Label: ev, Kind: protocol.CompletionItemKindEvent, Detail: "published in the model"})
+	}
+	return &protocol.CompletionList{Items: items}
+}
+
+// opItemCompletions offers the next item of an asks bracket: the target's
+// surface operations not yet in the bracket (spec §8.7), then the protocol
+// verbs.
+func opItemCompletions(ws *workspace.Workspace, root syntax.SyntaxNode, li green.LineIndex, cursorLine, cursorCol int) *protocol.CompletionList {
+	lineStart := li.OffsetFromUTF16(cursorLine+1, 0)
+	prefix := li.Src()[lineStart:li.OffsetFromUTF16(cursorLine+1, cursorCol)]
+	written := map[string]bool{}
+	if i := strings.LastIndexByte(prefix, '['); i >= 0 {
+		for _, it := range lang.SplitOperationItems(prefix[i+1:]) {
+			written[sema.CollapseOperation(it.Text)] = true
+		}
+	}
+	var items []protocol.CompletionItem
+	if target := syncTargetOnLine(syntax.AsFile(root), li, cursorLine+1); target != "" {
+		for _, it := range surfaceOpCompletions(ws, target) {
+			if !written[it.Label] {
+				items = append(items, it)
+			}
+		}
+	}
+	items = append(items, protocolVerbCompletions().Items...)
+	return &protocol.CompletionList{Items: items}
+}
+
+// tagKeyCompletions are the recognised scope tags, offered on a blank line of
+// a tags block (spec §5.4).
+func tagKeyCompletions() *protocol.CompletionList {
+	snip := protocol.InsertTextFormatSnippet
+	return &protocol.CompletionList{Items: []protocol.CompletionItem{
+		{Label: lang.TagSites, Kind: protocol.CompletionItemKindField, Detail: "the sites this use case runs on; printed in the sequence title",
+			InsertText: "sites: ${1:site}", InsertTextFormat: snip},
+		{Label: lang.TagEnvs, Kind: protocol.CompletionItemKindField, Detail: "the environments this use case runs in; printed in the sequence title",
+			InsertText: "envs: ${1:env}", InsertTextFormat: snip},
+	}}
+}
+
+// tagValueCompletions offers the values already used for the tag on the
+// cursor's line, most frequent first, then alphabetically, leaving out the
+// values already written on the line. This keeps one spelling per site.
+func tagValueCompletions(ws *workspace.Workspace, li green.LineIndex, cursorLine, cursorCol int) *protocol.CompletionList {
+	lineStart := li.OffsetFromUTF16(cursorLine+1, 0)
+	prefix := li.Src()[lineStart:li.OffsetFromUTF16(cursorLine+1, cursorCol)]
+	key, rest, _ := strings.Cut(strings.TrimSpace(prefix), ":")
+	written := map[string]bool{}
+	for _, v := range strings.Split(rest, ",") {
+		written[strings.TrimSpace(v)] = true
+	}
+	count := map[string]int{}
+	if doc := ws.Doc(); doc != nil {
+		for _, uc := range doc.UseCases {
+			for _, v := range uc.TagValues[key] {
+				if v != "" && !written[v] {
+					count[v]++
+				}
+			}
+		}
+	}
+	values := sortedKeys(count)
+	sort.SliceStable(values, func(i, j int) bool { return count[values[i]] > count[values[j]] })
+	var items []protocol.CompletionItem
+	for i, v := range values {
+		items = append(items, protocol.CompletionItem{
+			Label: v, Kind: protocol.CompletionItemKindValue,
+			Detail:   fmt.Sprintf("used by %d use case(s)", count[v]),
+			SortText: fmt.Sprintf("%04d", i),
+		})
+	}
+	return &protocol.CompletionList{Items: items}
+}

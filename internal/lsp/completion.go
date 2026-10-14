@@ -30,6 +30,12 @@ const (
 	ctxListensTail       // cursor after `when <name> listens <ref> `: suggest a schedule
 	ctxStoreName         // cursor after `notifies store.` / `listens store.`: suggest store names
 	ctxSurfaceBody       // a line of a surface body
+	ctxEventItem         // cursor at an item of a listens or notifies one of list
+	ctxReturnsHead       // cursor after `<subject> returns `: stream or a target
+	ctxNotifiesHead      // cursor after `<subject> notifies `: one of
+	ctxOpItem            // cursor after `, ` inside an asks bracket: another item
+	ctxTagKey            // a blank line of a tags block
+	ctxTagValue          // cursor after `sites: ` or `envs: `
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -68,6 +74,8 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 			return "domains"
 		case syntax.SyntaxKindActorsBlock:
 			return "actors"
+		case syntax.SyntaxKindTagsBlock:
+			return "tags"
 		case syntax.SyntaxKindUseCaseDecl, syntax.SyntaxKindScenario:
 			return "use_case"
 		case syntax.SyntaxKindExposureDecl:
@@ -167,6 +175,11 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 	lineStart := li.OffsetFromUTF16(cursorLine+1, 0)
 	linePrefix := li.Src()[lineStart:cursorOffset]
 
+	// After `, ` inside a closed bracket: the next item of an operation list.
+	if ann := findEnclosingOpAnnotation(root, cursorOffset); ann != nil && opItemRe.MatchString(linePrefix) {
+		return ctxOpItem
+	}
+
 	enclosing := treeEnclosingBlock(root, li, cursorLine, cursorCol)
 
 	// Tree-based service field detection (takes priority over regex).
@@ -207,6 +220,9 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 
 	switch enclosing {
 	case "":
+		if actorKindRe.MatchString(linePrefix) {
+			return ctxActorsBlock
+		}
 		return ctxTopLevel
 	case "service", "services":
 		return ctxServiceField
@@ -214,6 +230,14 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 		return ctxDomainBody
 	case "actors":
 		return ctxActorsBlock
+	case "tags":
+		if tagValueRe.MatchString(linePrefix) {
+			return ctxTagValue
+		}
+		if strings.TrimSpace(linePrefix) == "" {
+			return ctxTagKey
+		}
+		return ctxUnknown
 	case "surface":
 		if strings.TrimSpace(linePrefix) == "" || !strings.ContainsAny(strings.TrimSpace(linePrefix), " \t[") {
 			return ctxSurfaceBody
@@ -222,6 +246,22 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 	case "use_case":
 		if storeNameRe.MatchString(linePrefix) {
 			return ctxStoreName
+		}
+		if tagValueRe.MatchString(linePrefix) {
+			// `sites: ` with no value yet may not parse into the tags block.
+			return ctxTagValue
+		}
+		if eventListRe.MatchString(linePrefix) || continuesEventList(li, cursorLine, linePrefix) {
+			return ctxEventItem
+		}
+		if returnsHeadRe.MatchString(linePrefix) {
+			return ctxReturnsHead
+		}
+		if notifiesHeadRe.MatchString(linePrefix) {
+			return ctxNotifiesHead
+		}
+		if unclosedBracketRe.MatchString(linePrefix) && opItemRe.MatchString(linePrefix) && !bracketClosesLater(li.Src()[cursorOffset:]) {
+			return ctxOpItem
 		}
 		if unclosedBracketRe.MatchString(linePrefix) && !bracketClosesLater(li.Src()[cursorOffset:]) {
 			// `[` typed without its `]` does not parse as an annotation
@@ -259,6 +299,48 @@ var (
 	storeNameRe       = regexp.MustCompile(`\b(notifies|listens)\s+store\.[\w-]*$`)
 	unclosedBracketRe = regexp.MustCompile(`^\s*\S+\s+asks\s.*\[[^\]]*$`)
 )
+
+// v2.24 completion contexts (spec §4.6, §5.4, §6.6, §7.6, §8.7, §9.6).
+// eventListRe matches a listens or notifies-one-of list typed up to a new
+// item; eventListHeadRe the line a list starts on. opItemRe matches a bracket
+// typed up to a new item after `, `. tagValueRe matches a scope tag typed up
+// to a value; actorKindRe a top-level `actor ` typed up to its kind.
+var (
+	eventListRe     = regexp.MustCompile(`^\s*(when\s+\S+\s+listens\s+|\S+\s+notifies\s+one\s+of\s+)(\S+,\s*)+$`)
+	eventListHeadRe = regexp.MustCompile(`^\s*(when\s+\S+\s+listens\s+|\S+\s+notifies\s+one\s+of\s+)`)
+	returnsHeadRe   = regexp.MustCompile(`^\s*\S+\s+returns\s+$`)
+	notifiesHeadRe  = regexp.MustCompile(`^\s*\S+\s+notifies\s+$`)
+	opItemRe        = regexp.MustCompile(`\[[^\]]*,\s+$`)
+	tagValueRe      = regexp.MustCompile(`^\s*(sites|envs):\s*(\S+,\s*)*$`)
+	actorKindRe     = regexp.MustCompile(`^\s*actor\s+$`)
+)
+
+// continuesEventList reports whether a blank-prefixed line continues a list:
+// the lines above end in a comma back to a listens or notifies-one-of line.
+func continuesEventList(li green.LineIndex, cursorLine int, linePrefix string) bool {
+	if strings.TrimSpace(linePrefix) != "" {
+		return false
+	}
+	src := li.Src()
+	for l := cursorLine - 1; l >= 0; l-- {
+		start := int(li.OffsetFromUTF16(l+1, 0))
+		end := strings.IndexByte(src[start:], '\n')
+		if end < 0 {
+			end = len(src) - start
+		}
+		text := strings.TrimRight(src[start:start+end], " \t\r")
+		trimmed := strings.TrimSpace(text)
+		switch {
+		case trimmed == "" || strings.HasPrefix(trimmed, "//"):
+			continue
+		case !strings.HasSuffix(text, ","):
+			return false
+		case eventListHeadRe.MatchString(text):
+			return true
+		}
+	}
+	return false
+}
 
 // bracketClosesLater reports whether rest (the source after the cursor) has a
 // `]` before the end of its line.
@@ -348,6 +430,8 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return domainAndServiceSymbolCompletions(ws)
 	case ctxOpAnnotationVerb:
 		list := protocolVerbCompletions()
+		list.Items = append([]protocol.CompletionItem{{Label: lang.OpInferred, Kind: protocol.CompletionItemKindKeyword,
+			Detail: "the hop is inferred, not read in code"}}, list.Items...)
 		// An `asks` whose target has a surface also offers its operations.
 		if target := syncTargetOnLine(syntax.AsFile(root), f.LineIndex, cursorLine+1); target != "" {
 			list.Items = append(surfaceOpCompletions(ws, target), list.Items...)
@@ -355,6 +439,25 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return list
 	case ctxStoreName:
 		return storeNameCompletions(ws)
+	case ctxEventItem:
+		return publishedEventCompletions(ws)
+	case ctxReturnsHead:
+		list := domainAndServiceSymbolCompletions(ws)
+		list.Items = append([]protocol.CompletionItem{{Label: "stream", Kind: protocol.CompletionItemKindKeyword,
+			Detail: "a reply that repeats: drawn in a loop stream box"}}, list.Items...)
+		return list
+	case ctxNotifiesHead:
+		list := publishedEventCompletions(ws)
+		list.Items = append([]protocol.CompletionItem{{Label: "one of", Kind: protocol.CompletionItemKindKeyword,
+			Detail:     "publishes exactly one of these events per run, chosen at run time",
+			InsertText: "one of ${1:event}, ${2:event}", InsertTextFormat: protocol.InsertTextFormatSnippet}}, list.Items...)
+		return list
+	case ctxOpItem:
+		return opItemCompletions(ws, root, f.LineIndex, cursorLine, cursorCol)
+	case ctxTagKey:
+		return tagKeyCompletions()
+	case ctxTagValue:
+		return tagValueCompletions(ws, f.LineIndex, cursorLine, cursorCol)
 	case ctxSurfaceBody:
 		return surfaceBodyCompletions()
 	case ctxUseCaseAction:
@@ -519,11 +622,21 @@ func protocolVerbCompletions() *protocol.CompletionList {
 func domainBodyCompletions() *protocol.CompletionList {
 	return &protocol.CompletionList{IsIncomplete: false, Items: nil}
 }
+
+// actorKindDetails is the one-line description of each known actor kind.
+var actorKindDetails = map[string]string{
+	lang.ActorUser:      "a person",
+	lang.ActorSystem:    "an external system",
+	lang.ActorService:   "an external service",
+	lang.ActorScheduler: "a clock that starts work",
+	lang.ActorTool:      "a CLI, script or client a person runs",
+	lang.ActorInfra:     "platform machinery: pod start, probes, CI, monitors",
+}
+
 func actorTypeCompletions() *protocol.CompletionList {
-	items := []protocol.CompletionItem{
-		{Label: "user", Kind: protocol.CompletionItemKindKeyword, Detail: "human actor"},
-		{Label: "system", Kind: protocol.CompletionItemKindKeyword, Detail: "external system actor"},
-		{Label: "service", Kind: protocol.CompletionItemKindKeyword, Detail: "internal service actor"},
+	var items []protocol.CompletionItem
+	for _, k := range lang.KnownActorTypes() {
+		items = append(items, protocol.CompletionItem{Label: k, Kind: protocol.CompletionItemKindKeyword, Detail: actorKindDetails[k]})
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
 }
