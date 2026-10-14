@@ -1070,11 +1070,19 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 	hasWhen := true
 	if p.atScenarioName() {
 		scTok := p.peek()
-		p.builder.StartNode(SyntaxKindScenarioName)
+		nt := p.peekAt(2)
+		orphan := !(nt.Type == lexer.TokenIdent && nt.Value == "when")
+		if orphan {
+			// No `when` follows: the name is dropped. The tokens are wrapped
+			// in an error node so ScenarioDecl.Name() does not read them.
+			p.builder.StartNode(SyntaxKindError)
+		} else {
+			p.builder.StartNode(SyntaxKindScenarioName)
+		}
 		p.consumeAs(SyntaxKindKwScenario)
 		p.consumeAs(SyntaxKindString)
 		p.builder.FinishNode()
-		if nt := p.peek(); !(nt.Type == lexer.TokenIdent && nt.Value == "when") {
+		if orphan {
 			hasWhen = false
 			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/scenario-without-when",

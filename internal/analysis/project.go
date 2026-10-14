@@ -162,6 +162,13 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 			}
 		}
 		for _, sc := range uc.Scenarios() {
+			// An orphan `scenario "x"` (no `when`) is recovered as a scenario
+			// node without a `when` token. It is not a real scenario, so it is
+			// skipped before the counter moves: IDs of later scenarios are the
+			// same as if the orphan line were absent.
+			if sc.When() == nil {
+				continue
+			}
 			counter++
 			outSc := model.Scenario{
 				ID:      fmt.Sprintf("scenario_%d", counter),

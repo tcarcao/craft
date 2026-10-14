@@ -1627,3 +1627,17 @@ func TestParseTree_ScenarioIdentStillAnAction(t *testing.T) {
 		t.Fatalf("got %d actions, want 1", len(acts))
 	}
 }
+
+func TestParseTree_OrphanScenarioNameDropped(t *testing.T) {
+	src := "use_case \"U\" {\n  scenario \"orphan\"\n  b records it\n}"
+	g, _, diags := syntax.Parse(src)
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/scenario-without-when" {
+		t.Fatalf("diags = %v, want exactly scenario-without-when", diags)
+	}
+	scs := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()
+	for _, sc := range scs {
+		if sc.Name() != "" {
+			t.Errorf("Name() = %q, want empty for orphan", sc.Name())
+		}
+	}
+}
