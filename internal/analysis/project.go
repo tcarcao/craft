@@ -199,27 +199,37 @@ func projectSteps(steps []syntax.StepDecl, counter *int, li green.LineIndex) []m
 			out = append(out, model.Step{Action: &act})
 			continue
 		}
-		blk, ok := st.Block()
-		if !ok {
-			continue
+		if blk, ok := st.Block(); ok {
+			out = append(out, model.Step{Block: projectBlock(blk, counter, li)})
 		}
-		*counter++
-		mb := &model.Block{ID: fmt.Sprintf("block_%d", *counter), Kind: blk.Kind(), Branches: []model.Branch{}}
-		for i, br := range blk.Branches() {
-			mbr := model.Branch{Label: br.Label()}
-			if tok := br.HeaderToken(); tok != nil {
-				line, col := li.LineCol16(tok.Offset())
-				mbr.Line = line
-				if i == 0 {
-					mb.Line, mb.Column = line, col
-				}
-			}
-			mbr.Steps = projectSteps(br.Steps(), counter, li)
-			mb.Branches = append(mb.Branches, mbr)
-		}
-		out = append(out, model.Step{Block: mb})
+		// A step that is neither an action nor a block is unreachable by
+		// construction: the parser only builds step nodes of those two kinds.
+		// Should it ever happen, the node is dropped without consuming a
+		// counter value, and nothing panics.
 	}
 	return out
+}
+
+// projectBlock projects one alt/opt block. The block takes its number before
+// its branches, so it precedes the actions inside it in ID order.
+func projectBlock(b syntax.BlockDecl, counter *int, li green.LineIndex) *model.Block {
+	*counter++
+	mb := &model.Block{ID: fmt.Sprintf("block_%d", *counter), Kind: b.Kind(), Branches: []model.Branch{}}
+	for i, br := range b.Branches() {
+		mbr := model.Branch{Label: br.Label()}
+		// A branch without a header token keeps Line 0 (and, for the first
+		// branch, the block keeps Line/Column 0): there is no position to report.
+		if tok := br.HeaderToken(); tok != nil {
+			line, col := li.LineCol16(tok.Offset())
+			mbr.Line = line
+			if i == 0 {
+				mb.Line, mb.Column = line, col
+			}
+		}
+		mbr.Steps = projectSteps(br.Steps(), counter, li)
+		mb.Branches = append(mb.Branches, mbr)
+	}
+	return mb
 }
 
 func projectTrigger(sc syntax.ScenarioDecl, li green.LineIndex) model.Trigger {

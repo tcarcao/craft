@@ -282,14 +282,16 @@ func TestRunFmt_NeverWritesUnverifiedOutput(t *testing.T) {
 	}
 
 	copied := make([]string, 0, len(matches))
-	// TODO(Task 9): remove once the formatter handles alt/opt blocks. These
-	// fixtures are flattened by the formatter today, which breaks them.
+	// The formatter flattens block indentation today, which breaks these
+	// fixtures. Same rule and list as pendingBlockFormatter in
+	// internal/lsp/formatter_corpus_test.go: directory + basename.
+	// TODO(Task 9): remove once the formatter handles alt/opt blocks (both copies).
 	pending := map[string]bool{
 		"branches_full.craft": true, "alt_else.craft": true, "opt.craft": true,
 		"nested_blocks.craft": true, "branch_tabs.craft": true,
 	}
 	for i, src := range matches {
-		if pending[filepath.Base(src)] {
+		if pending[filepath.Base(src)] && strings.Contains(filepath.ToSlash(src), "corpus/04_use_cases/") {
 			continue
 		}
 		raw, err := os.ReadFile(src)

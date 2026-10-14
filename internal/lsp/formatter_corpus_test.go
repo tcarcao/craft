@@ -26,15 +26,11 @@ var skippedDirs = map[string]bool{
 	"vendor":       true,
 }
 
-// allCraftFiles walks the whole repository for .craft files.
-//
-// It walks rather than listing known directories on purpose. A hardcoded root
-// list silently stops covering a directory the moment someone adds one, and it
-// already had: cmd/server/test_actors.craft was outside the list, so the guard
-// was checking 95 of the repository's 96 files and nobody could tell.
 // pendingBlockFormatter lists the alt/opt block fixtures the formatter cannot
-// yet round-trip: it flattens block indentation, which breaks the file.
-// TODO(Task 9): remove once the formatter handles alt/opt blocks
+// yet round-trip: it flattens block indentation, which breaks the file. Keyed
+// by directory and basename. The same rule and list are copied in
+// cmd/craft/fmt_test.go (TestRunFmt_NeverWritesUnverifiedOutput).
+// TODO(Task 9): remove once the formatter handles alt/opt blocks (both copies).
 var pendingBlockFormatter = map[string]bool{
 	"branches_full.craft": true,
 	"alt_else.craft":      true,
@@ -43,6 +39,12 @@ var pendingBlockFormatter = map[string]bool{
 	"branch_tabs.craft":   true,
 }
 
+// allCraftFiles walks the whole repository for .craft files.
+//
+// It walks rather than listing known directories on purpose. A hardcoded root
+// list silently stops covering a directory the moment someone adds one, and it
+// already had: cmd/server/test_actors.craft was outside the list, so the guard
+// was checking 95 of the repository's 96 files and nobody could tell.
 func allCraftFiles(t *testing.T) []string {
 	t.Helper()
 	var files []string
