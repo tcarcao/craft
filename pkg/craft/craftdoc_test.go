@@ -133,3 +133,10 @@ func TestV224Exports(t *testing.T) {
 	_, _, _ = a.EventList(), a.OperationList(), craft.Operation{}.Tables()
 	_ = craft.Trigger{}.EventList()
 }
+
+func TestV225Exports(t *testing.T) {
+	_ = craft.Step{Link: &craft.Link{Kind: craft.LinkContinues, Target: &craft.UseCaseRef{Name: "x"}, Sources: []craft.Source{{Path: "a.go", Start: 1, End: 2}}}}
+	_ = []string{craft.TagJourney, craft.TagFormerlyTitled}
+	_ = []craft.JourneyEdgeKind{craft.JourneyEdgeEvent, craft.JourneyEdgeStore, craft.JourneyEdgeContinues}
+	_ = craft.LinkIncludes
+}

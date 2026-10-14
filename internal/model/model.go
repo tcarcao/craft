@@ -144,6 +144,8 @@ type UseCase struct {
 	// Notes are the use-case-level note and finding lines, written before the
 	// first scenario.
 	Notes []Note `json:"notes,omitempty"`
+	// Sources are the `//@` cites written before the first scenario.
+	Sources []Source `json:"sources,omitempty"`
 }
 
 // Scenario is one trigger and the steps it sets off, in source order.
@@ -156,12 +158,64 @@ type Scenario struct {
 	Steps   []Step  `json:"steps"`
 }
 
-// Step is exactly one of Action, Block or Note.
+// Step is exactly one of Action, Block, Note or Link.
 type Step struct {
 	Action *Action `json:"action,omitempty"`
 	Block  *Block  `json:"block,omitempty"`
 	Note   *Note   `json:"note,omitempty"`
+	Link   *Link   `json:"link,omitempty"`
 }
+
+// Source is one cite of a `//@` line (spec §14.2).
+type Source struct {
+	Repo  string `json:"repo,omitempty"` // as written; "" when the cite names none
+	Path  string `json:"path"`
+	Start int    `json:"start,omitempty"` // first cited line, 1-based; 0 when no line is cited
+	End   int    `json:"end,omitempty"`   // last cited line; equal to Start for one line
+	Text  string `json:"text,omitempty"`  // the text after " -- ", shared by the cites of its line
+	Line  int    `json:"line,omitempty"`  // the line of the //@ comment in the .craft file
+}
+
+// UseCaseRef names one use case of the workspace.
+type UseCaseRef struct {
+	Name      string `json:"name"`
+	SourceURI string `json:"sourceUri,omitempty"`
+}
+
+// LinkKind is the kind of a link step.
+type LinkKind = lang.LinkKind
+
+const (
+	LinkIncludes  = lang.LinkIncludes
+	LinkContinues = lang.LinkContinues
+)
+
+// Link is an `includes "<title>"` or `continues "<title>"` step. Like a
+// note, it is not an action: no interaction, no step number.
+type Link struct {
+	ID      string      `json:"id"`               // link_<n>
+	Kind    LinkKind    `json:"kind"`             // "includes" | "continues"
+	Title   string      `json:"title"`            // as written
+	Target  *UseCaseRef `json:"target,omitempty"` // nil when it does not resolve
+	Sources []Source    `json:"sources,omitempty"`
+	Line    int         `json:"line,omitempty"`
+	Column  int         `json:"column,omitempty"` // of the title string
+}
+
+// Tag keys with a meaning in v2.25 (see lang).
+const (
+	TagJourney        = lang.TagJourney
+	TagFormerlyTitled = lang.TagFormerlyTitled
+)
+
+// JourneyEdgeKind is what connects two members of a journey spine.
+type JourneyEdgeKind = lang.JourneyEdgeKind
+
+const (
+	JourneyEdgeEvent     = lang.JourneyEdgeEvent
+	JourneyEdgeStore     = lang.JourneyEdgeStore
+	JourneyEdgeContinues = lang.JourneyEdgeContinues
+)
 
 // BlockKind is the kind of a branch block inside a scenario.
 type BlockKind = lang.BlockKind
@@ -203,6 +257,8 @@ type Note struct {
 	Text   string   `json:"text"`         // unquoted
 	Line   int      `json:"line,omitempty"`
 	Column int      `json:"column,omitempty"`
+	// Sources are the `//@` cites under the note.
+	Sources []Source `json:"sources,omitempty"`
 }
 
 // StoreChange is the change of a store hand-off.
@@ -274,7 +330,7 @@ type SurfaceOperation struct {
 }
 
 // OpeningBlock returns the block the scenario opens with: its first step that
-// is not a note, when that step is a block. Nil otherwise.
+// is not a note or a link, when that step is a block. Nil otherwise.
 func (s Scenario) OpeningBlock() *Block {
 	if i := FirstStepIndex(s.Steps); i >= 0 {
 		return s.Steps[i].Block
@@ -282,12 +338,12 @@ func (s Scenario) OpeningBlock() *Block {
 	return nil
 }
 
-// FirstStepIndex returns the index of the first step that is not a note, or
-// -1 when there is none. It is "the first step" of a scenario or branch
+// FirstStepIndex returns the index of the first step that is not a note or a
+// link, or -1 when there is none. It is "the first step" of a scenario or branch
 // wherever opening rules apply (OpeningBlock, triggers).
 func FirstStepIndex(steps []Step) int {
 	for i, st := range steps {
-		if st.Note == nil {
+		if st.Note == nil && st.Link == nil {
 			return i
 		}
 	}
@@ -313,6 +369,8 @@ type Branch struct {
 	Label string `json:"label"`
 	Line  int    `json:"line,omitempty"`
 	Steps []Step `json:"steps"`
+	// Sources are the `//@` cites under the branch header.
+	Sources []Source `json:"sources,omitempty"`
 }
 
 // EventList returns Events, or a one-element slice holding Event, or nil
@@ -424,6 +482,8 @@ type Trigger struct {
 	// 1-based UTF-16 column of the subject (0 for an event trigger).
 	Line   int `json:"line,omitempty"`
 	Column int `json:"column,omitempty"`
+	// Sources are the `//@` cites under the trigger line.
+	Sources []Source `json:"sources,omitempty"`
 }
 
 // Participant is the resolved identity behind a name used in a use case. It is
@@ -528,6 +588,8 @@ type Action struct {
 	// when the name does not resolve, and To is nil for other action kinds.
 	From *Participant `json:"from,omitempty"`
 	To   *Participant `json:"to,omitempty"`
+	// Sources are the `//@` cites under the action line.
+	Sources []Source `json:"sources,omitempty"`
 }
 
 // ActionType classifies the interaction pattern of an action.

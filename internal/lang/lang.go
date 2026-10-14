@@ -134,3 +134,26 @@ const (
 	TagSites = "sites" // printed in the sequence and spine section titles
 	TagEnvs  = "envs"
 )
+
+// LinkKind is the kind of a link step (spec §12.3).
+type LinkKind string
+
+const (
+	LinkIncludes  LinkKind = "includes"  // the target's steps run here; this body goes on after
+	LinkContinues LinkKind = "continues" // the flow goes on in the target; ends this body
+)
+
+// Tag keys with a meaning in v2.25 (spec §16).
+const (
+	TagJourney        = "journey"         // the spine a use case belongs to
+	TagFormerlyTitled = "formerly_titled" // earlier titles, `;`-separated
+)
+
+// JourneyEdgeKind is what connects two members of a journey spine.
+type JourneyEdgeKind string
+
+const (
+	JourneyEdgeEvent     JourneyEdgeKind = "event"
+	JourneyEdgeStore     JourneyEdgeKind = "store"
+	JourneyEdgeContinues JourneyEdgeKind = "continues"
+)

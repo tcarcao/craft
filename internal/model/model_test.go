@@ -243,3 +243,33 @@ func TestKnownActorTypes(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestStepLink_IsNotAnActionAndNotTheFirstStep(t *testing.T) {
+	blk := &model.Block{ID: "block_4", Kind: model.BlockAlt}
+	sc := model.Scenario{Steps: []model.Step{
+		{Link: &model.Link{ID: "link_2", Kind: model.LinkIncludes, Title: "Site session preamble"}},
+		{Note: &model.Note{ID: "note_3"}},
+		{Block: blk},
+	}}
+	if sc.OpeningBlock() != blk {
+		t.Error("OpeningBlock must skip a leading link")
+	}
+	if len(sc.Actions()) != 0 {
+		t.Error("a link is not an action")
+	}
+}
+
+func TestV225Fields_AreOmittedWhenEmpty(t *testing.T) {
+	out, err := json.Marshal(model.UseCase{Name: "U", Scenarios: []model.Scenario{{
+		Trigger: model.Trigger{Type: model.TriggerTypeExternal},
+		Steps:   []model.Step{{Action: &model.Action{ID: "action_2"}}, {Note: &model.Note{}}},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"sources"`, `"link"`} {
+		if strings.Contains(string(out), key) {
+			t.Errorf("%s must be omitted when empty: %s", key, out)
+		}
+	}
+}

@@ -11,8 +11,9 @@
 // the JSON key "actions" to "steps" (see CHANGELOG). All known consumers are
 // internal.
 //
-// Step is exactly one of Action, Block or Note (Note since v2.23.0); a
-// consumer that assumes Action-or-Block must handle a Note.
+// Step is exactly one of Action, Block, Note or Link (Note since v2.23.0,
+// Link since v2.25.0); a consumer that assumes Action-or-Block must handle
+// the others.
 //
 // Since v2.24.0 a listens trigger or a notifies may carry several events
 // (EventList), and an action several operations (OperationList).
@@ -57,6 +58,11 @@ type (
 	SurfaceOpKind      = model.SurfaceOpKind
 	StoreRef           = model.StoreRef
 	StoreChange        = model.StoreChange
+	Source             = model.Source
+	Link               = model.Link
+	LinkKind           = model.LinkKind
+	UseCaseRef         = model.UseCaseRef
+	JourneyEdgeKind    = model.JourneyEdgeKind
 )
 
 const (
@@ -125,6 +131,16 @@ const (
 
 	TagSites = model.TagSites
 	TagEnvs  = model.TagEnvs
+
+	LinkIncludes  = model.LinkIncludes
+	LinkContinues = model.LinkContinues
+
+	TagJourney        = model.TagJourney
+	TagFormerlyTitled = model.TagFormerlyTitled
+
+	JourneyEdgeEvent     = model.JourneyEdgeEvent
+	JourneyEdgeStore     = model.JourneyEdgeStore
+	JourneyEdgeContinues = model.JourneyEdgeContinues
 )
 
 // KnownActorTypes lists the actor kinds Craft recognises, in presentation
