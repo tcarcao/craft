@@ -1,0 +1,151 @@
+{
+  "useCases": [
+    {
+      "name": "Seller pays an invoice",
+      "scenarios": [
+        {
+          "id": "scenario_2",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "pays",
+            "connector": "an",
+            "phrase": "invoice",
+            "description": "when Seller pays an invoice",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 12,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "frontendplatform",
+                "targetContext": "graphql",
+                "ref": "graphql",
+                "operation": {
+                  "payload": "payInvoice",
+                  "text": "payInvoice"
+                },
+                "connector": "to",
+                "phrase": "pay",
+                "description": "frontendplatform asks graphql to pay",
+                "line": 13,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "payments/frontendplatform"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "payments/graphql"
+                }
+              }
+            },
+            {
+              "note": {
+                "id": "note_4",
+                "kind": "note",
+                "text": "the gateway forwards the seller's session, not a service token",
+                "line": 14,
+                "column": 9
+              }
+            },
+            {
+              "action": {
+                "id": "action_5",
+                "type": "sync_action",
+                "context": "graphql",
+                "targetContext": "paymentgateway",
+                "ref": "paymentgateway",
+                "operation": {
+                  "verb": "POST",
+                  "payload": "/payments",
+                  "text": "POST /payments"
+                },
+                "connector": "to",
+                "phrase": "start the payment",
+                "description": "graphql asks paymentgateway to start the payment",
+                "line": 15,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "payments/graphql"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "payments/paymentgateway"
+                }
+              }
+            },
+            {
+              "note": {
+                "id": "note_6",
+                "kind": "finding",
+                "text": "no idempotency key: a client retry starts a second payment",
+                "line": 16,
+                "column": 9
+              }
+            },
+            {
+              "block": {
+                "id": "block_7",
+                "kind": "alt",
+                "line": 17,
+                "column": 9,
+                "branches": [
+                  {
+                    "label": "the payment provider is down",
+                    "line": 17,
+                    "steps": [
+                      {
+                        "note": {
+                          "id": "note_8",
+                          "kind": "note",
+                          "text": "nothing is retried",
+                          "line": 18,
+                          "column": 13
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "line": 9,
+      "notes": [
+        {
+          "id": "note_1",
+          "kind": "finding",
+          "text": "nothing retries a failed callback; a lost callback leaves the invoice open",
+          "line": 10,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "name": "payments",
+      "boundedContexts": [
+        "frontendplatform",
+        "graphql",
+        "paymentgateway"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 1
+    }
+  ]
+}

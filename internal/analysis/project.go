@@ -123,8 +123,9 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 	return doc
 }
 
-// projectUseCases numbers scenarios and actions from one counter shared across
-// the file (scenario_N / action_N). An incomplete action line still consumes
+// projectUseCases numbers scenarios, actions, blocks and notes from one counter
+// shared across the file (scenario_N / action_N / block_N / note_N), in source
+// order. An incomplete action line still consumes
 // two numbers, so the IDs of the actions after it do not depend on whether
 // it parsed.
 func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []model.UseCase {
@@ -161,6 +162,12 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 				outUC.TagValues = tagValues
 			}
 		}
+		// Use-case-level notes precede every scenario in source order, so they
+		// take their numbers first.
+		for _, n := range uc.Notes() {
+			counter++
+			outUC.Notes = append(outUC.Notes, projectNote(n, fmt.Sprintf("note_%d", counter), li))
+		}
 		for _, sc := range uc.Scenarios() {
 			// An orphan `scenario "x"` (no `when`) is recovered as a scenario
 			// node without a `when` token. It is not a real scenario, so it is
@@ -189,6 +196,12 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 func projectSteps(steps []syntax.StepDecl, counter *int, li green.LineIndex) []model.Step {
 	out := []model.Step{}
 	for _, st := range steps {
+		if n, ok := st.Note(); ok {
+			*counter++
+			note := projectNote(n, fmt.Sprintf("note_%d", *counter), li)
+			out = append(out, model.Step{Note: &note})
+			continue
+		}
 		if a, ok := st.Action(); ok {
 			if a.IsIncomplete() {
 				*counter += 2
@@ -202,10 +215,19 @@ func projectSteps(steps []syntax.StepDecl, counter *int, li green.LineIndex) []m
 		if blk, ok := st.Block(); ok {
 			out = append(out, model.Step{Block: projectBlock(blk, counter, li)})
 		}
-		// A step that is neither an action nor a block is unreachable by
-		// construction: the parser only builds step nodes of those two kinds.
+		// A step that is none of note, action or block is unreachable by
+		// construction: the parser only builds step nodes of those kinds.
 		// Should it ever happen, the node is dropped without consuming a
 		// counter value, and nothing panics.
+	}
+	return out
+}
+
+// projectNote projects one note or finding line. id is "" in a surface.
+func projectNote(n syntax.NoteDecl, id string, li green.LineIndex) model.Note {
+	out := model.Note{ID: id, Kind: n.Kind(), Text: n.Text()}
+	if tok := n.KeywordToken(); tok != nil {
+		out.Line, out.Column = li.LineCol16(tok.Offset())
 	}
 	return out
 }

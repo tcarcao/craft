@@ -1,0 +1,19 @@
+actor user Seller
+
+domain payments {
+    frontendplatform
+    graphql
+    paymentgateway
+}
+
+use_case "Seller pays an invoice" {
+    finding "nothing retries a failed callback; a lost callback leaves the invoice open"
+
+    when Seller pays an invoice
+        frontendplatform asks graphql to pay              [payInvoice]
+        note "the gateway forwards the seller's session, not a service token"
+        graphql asks paymentgateway to start the payment  [POST /payments]
+        finding "no idempotency key: a client retry starts a second payment"
+        alt "the payment provider is down"
+            note "nothing is retried"
+}
