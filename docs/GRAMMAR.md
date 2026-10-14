@@ -59,9 +59,22 @@ actor_def        = 'actor' actor_type actor_name NL* ;
 actors_def       = 'actors' '{' NL* actor_definition_list '}' NL* ;
 actor_definition_list = actor_definition (NL+ actor_definition)* NL* ;
 actor_definition = actor_type actor_name ;
-actor_type       = 'user' | 'system' | 'service' ;
+actor_type       = identifier ;       (* known kinds: user, system, service, scheduler, tool, infra *)
 actor_name       = identifier ;
 ```
+
+The actor-type slot accepts any identifier (grammar ruling Q5: tooling decides the known set). Six kinds are known (2.24 added the last three):
+
+| Kind | Meaning | Drawn as |
+|---|---|---|
+| `user` | a person | a person (`actor`) |
+| `system` | an external system | `boundary` |
+| `service` | a service outside the model | `control` |
+| `scheduler` (2.24) | a clock that starts work: cron, an in-process ticker | `boundary … <<scheduler>>`; Mermaid `participant … (scheduler)`; C4 `System_Ext`, "Scheduler" |
+| `tool` (2.24) | a CLI, script or client that a person runs; it, not the person, makes the calls | `boundary … <<tool>>`; Mermaid `participant … (tool)`; C4 `System_Ext`, "Operator tool" |
+| `infra` (2.24) | platform machinery: pod start, probes, CI pipelines, synthetic monitors | `boundary … <<infra>>`; Mermaid `participant … (infra)`; C4 `System_Ext`, "Platform infrastructure" |
+
+All kinds except `user` sit outside the system. Any other identifier stays legal, gets no diagnostic, and is drawn as a person.
 
 Examples:
 ```craft
@@ -70,7 +83,9 @@ actor system PaymentGateway
 
 actors {
   user Business_User
-  system CRON
+  scheduler CRON
+  tool OperatorTool
+  infra Pipeline
   service OrderAPI
 }
 ```
@@ -211,7 +226,9 @@ trigger      = 'when' domain_listen                NL+
              | 'when' external_trigger             NL+
              | 'when' quoted_event                 NL+ ;
 
-domain_listen   = name_slot 'listens' (quoted_event | ref) (('cron' | 'every') STRING)? ;
+domain_listen   = name_slot 'listens' event_list (('cron' | 'every') STRING)? ;
+event_list      = event_item (',' NL* event_item)* ;   (* 2.24; a continuation line is never a step *)
+event_item      = quoted_event | ref ;
 receive_trigger = name_slot 'receives' connector_word? phrase? op_annotation? ;
 
 external_trigger = actor verb connector_word? phrase? ;
@@ -225,10 +242,9 @@ action       = async_action    NL+
 
 sync_action     = domain 'asks' domain connector_word phrase
                 | domain 'asks' domain phrase ;
-async_action    = domain 'notifies' quoted_event ;
+async_action    = domain 'notifies' ( event_item | 'one' 'of' event_list ) op_annotation? ;
 internal_action = domain verb connector_word? phrase ;
-return_action   = domain 'returns' 'to' domain connector_word? phrase
-                | domain 'returns' connector_word? phrase ;
+return_action   = domain 'returns' 'stream'? ('to' domain)? connector_word? phrase? op_annotation? ;
 
 phrase       = (phrase_word | STRING)+ ;
 phrase_word  = identifier
@@ -244,7 +260,10 @@ quoted_event = STRING ;
 
 name_slot     = identifier | identifier '/' identifier ;  (* a name, or the qualified <domain>/<name> form *)
 ref           = identifier ;                              (* a bare event ref; IDENTIFIER admits `.`, e.g. store.sms_queue.inserted *)
-op_annotation = '[' ~[\r\n]+ ']' ;                         (* the last `[` on a line that ends in `]`; tokens after its first `]` are unexpected *)
+op_annotation = '[' 'inferred'? (op_item (', ' op_item)*)? ']' ;  (* the last `[` on a line that ends in `]`; tokens after its first `]` are unexpected *)
+op_item       = op_verb? payload ;                        (* 2.24: op_verb includes ADDR and SQL *)
+op_verb       = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+              | 'GRPC' | 'TOPIC' | 'QUERY' | 'ADDR' | 'SQL' ;
 name_list     = name_slot (',' name_slot)* ;
 tags_block    = 'tags' '{' NL* (identifier ':' tag_value NL+)* '}' NL+ ;
 ```
@@ -262,6 +281,18 @@ tags_block    = 'tags' '{' NL* (identifier ':' tag_value NL+)* '}' NL+ ;
 **Listens schedule (2.23).** A `listens` trigger takes an optional trailing schedule, `when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"` or `… every "5m"`, with the same rules as `when cron` / `when every` (`craft/sema/invalid-schedule`).
 
 **Store refs (2.23, no new grammar).** A bare (unquoted) ref whose first segment is `store` is a **store hand-off**: `notifies store.<name>.<change>` writes to a data store and `when <ctx> listens store.<name>.<change>` polls it. When the last segment is `inserted`, `updated` or `deleted` it is the change, and the segments before it (joined with `.`) are the store name; otherwise every segment after `store.` is the name and the change is empty (`craft/lint/store-without-change`). A ref that names no store (`store.inserted`, `store.`) is a plain event (`craft/lint/store-without-name`). The name resolves to a `data-stores:` entry when one matches; the views draw a database participant either way.
+
+**`listens` lists (2.24).** A `listens` trigger takes a comma list of events: `when seshat listens sns.mercury-advert-state-changed, sns.mercury-cooked`. The list means "any of these events starts this scenario"; the body is the same for each. A trailing comma continues the list on the next line, as tag lists do, and the parser consumes the continuation line inside the trigger, so it is never a step and the offside rule does not see it. Comments between continuation lines are trivia. A listens schedule goes after the last item. A comma with no item after it is `craft/syntax/unexpected-token`. A store ref may not stand in a list of two or more items (`craft/sema/store-ref-in-event-list`): a store hand-off names one store, so a poller of two stores is two scenarios. The model keeps the list in `Trigger.Events` (`Trigger.EventList()`); `Event` and `Ref` stay the first item.
+
+**`notifies one of` (2.24).** `X notifies one of a.A, b.B` publishes exactly one of the listed events per run, chosen at run time (an event type read from data, a routing table). The list wraps like a `listens` list. `one` is a keyword only directly after `notifies` and followed by `of` and an event item, so `notifies one` stays an event named `one`. A bare list without `one of` (`notifies a.A, b.B`) is `craft/syntax/unexpected-token`: to publish several events, write one `notifies` per event. A `notifies` event is one name: words after it (`sync notifies the owners team`) are `craft/syntax/unexpected-token` at the first of them. The model keeps the list in `Action.Events` (`Action.EventList()`).
+
+**`returns stream` (2.24).** `X returns stream [to Y] <phrase>` is a reply that repeats until it ends: the request stays an ordinary `asks`, and its answer is a `returns stream`. `stream` is a keyword only directly after `returns`. `Action.Stream` is true, and `Action.Answers` holds the ID of the `asks` the stream answers: the open request on the call stack (the frame an ordinary return pops), or, with `to Y`, the most recent open request from `Y` to the streamer, without popping it. It is empty when the stream answers the trigger's actor, the unobserved caller or nobody (`craft/lint/stream-without-caller` reports the last case).
+
+**Operation lists (2.24).** The body of an operation bracket splits into items at a comma that is followed by whitespace, at brace depth 0, outside a STRING: `[CreateApiKey, CreateUsagePlanKey]` is two items, and `[GET /nearest/paths/{latitude},{longitude}]` stays one (no space after the comma). Each item is read like a whole bracket: an optional protocol verb, then the payload. The items are one hop that uses several operations; craft does not say whether they are alternatives or a sequence, so say which in the phrase. Two hops to two parties are two `asks`. The model keeps every item in `Action.Operations` (`Action.OperationList()`); `Action.Operation` keeps the whole bracket, byte-identical to 2.23. An empty item (`[a, , b]`, `[a, ]`) is `craft/syntax/empty-op-annotation`.
+
+**`ADDR`, `SQL` and `inferred` (2.24).** `[SQL <table> …]` is a direct read or write of another party's tables, with no API between; the payload is the table names, separated by spaces (`Operation.Tables()`). `[ADDR <address>]` is egress to an address that has no operation id: a URL, a host, or the name of the setting that holds it; `Operation.Payload` holds it without quotes. Both are protocol verbs, so either can be one item of a list, and both are errors without a payload (`craft/syntax/empty-op-annotation`). `inferred` as the first word of a bracket marks the whole hop as inferred from names, configuration or convention, not read in code (`Action.Inferred`); it is not part of `Operation.Text`, and `[inferred]` alone leaves `Action.Operation` nil. `inferred` has no meaning in a `receives` trigger or a surface line, where it is an ordinary payload word.
+
+**Quote an address that starts with `//`.** A `//` opens a comment only after whitespace, so `[ADDR https://s3.example.com/x]` parses whole. `[ADDR //cdn.example.com/x]` does not: the comment cuts the bracket, and `craft/lint/unquoted-address` reports it. Write `[ADDR "//cdn.example.com/x"]`; quoting is always allowed.
 
 **Trigger disambiguation rule:** after `when`, the parser must look ahead to decide between the three trigger alternatives:
 1. If the next token is a STRING → `'when' quoted_event NL+` (event-on-its-own).
@@ -390,6 +421,19 @@ The 2.23 words are contextual in the same way:
 | `query`, `command` | at the start of a surface body line | an identifier |
 
 Only `receives` changes the meaning of input that parsed before; every other form was a syntax error before 2.23.
+
+The 2.24 words:
+
+| Word | Is a keyword only when | Otherwise |
+|---|---|---|
+| `,` in a `listens` slot | directly after an event item of a `listens` trigger | (was an error) |
+| `one`, `of` | `one` directly after `notifies`, followed by `of` and an event item | an identifier / a connector word |
+| `stream` | directly after `returns` | a phrase word |
+| `inferred` | the first word inside an operation bracket | a payload word |
+| `ADDR`, `SQL` | the first word of a bracket item (protocol verbs are matched this way, exact and case-sensitive) | a payload word |
+| `scheduler`, `tool`, `infra` | never keywords: the actor-type slot accepts any identifier (Q5) | an identifier |
+
+Three of these change the meaning of input that parsed before, with no known uses: `X returns stream …` was a return whose phrase starts with "stream"; `[inferred …]` was an operation whose payload starts with "inferred"; `[ADDR …]` and `[SQL …]` were operations with an empty verb and the word in the payload. `notifies one of a.B, c.D` used to parse as the event `one` plus a second, internal step `of a.B , c.D`. The `listens` list was a syntax error.
 
 ### 11.2 Connector words (part of `phrase_word`)
 

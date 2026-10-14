@@ -119,6 +119,65 @@ when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
 
 See [Use Cases](https://tcarcao.github.io/craft/language/use-cases) for the rules and the diagrams.
 
+## Rosters, dynamic publishes, operation lists, streams, egress (2.24)
+
+One handler that serves several events lists them in one `listens` trigger. A trailing comma continues the list:
+
+```craft
+use_case "seshat records a Mercury domain event in the transaction ledger" {
+    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed,
+            sns.mercury-message-received, sns.mercury-cooked
+        seshat writes one row per event
+}
+```
+
+The sequence diagram draws one inbound arrow for the list (`sns.mercury-advert-state-changed, … (+1 more) (from cooker)`). Two scenarios of one use case with the same steps get `craft/lint/duplicate-scenario-body`, which gives the folded trigger.
+
+A step that publishes one event chosen at run time names the set with `notifies one of`:
+
+```craft
+        nmf_monetization notifies one of nmfbus.FeatureEnabled, nmfbus.FeatureDisabled,
+                nmfbus.CreateAutoSchedule, nmfbus.SubAccountBundleUpdated
+```
+
+A comma list in one bracket is one hop that uses several operations:
+
+```craft
+        app-manager asks AwsApiGateway to create the key and bind it to the plan  [CreateApiKey, CreateUsagePlanKey]
+```
+
+`returns stream` is a reply that repeats; the sequence diagram draws it in a `loop stream` box:
+
+```craft
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+        graphql asks AiAssistant to stream the reply  [POST /api/v1/assistant/chat_streaming]
+        AiAssistant returns stream the reply as META, TOKEN and DONE events
+        graphql returns stream each event to the client
+}
+```
+
+`[SQL <tables>]` marks a direct use of another party's tables, `[ADDR <address>]` egress to an address with no operation id (quote an address that starts with `//`), and `inferred` as the first word of a bracket a hop that was not read in code (drawn grey with "(inferred)"):
+
+```craft
+        obidoanalytics asks front for the city, region and developer graph  [SQL investment flat city region developer]
+        obidoanalytics asks ObjectStore to take the refreshed snapshot     [ADDR "SNAPSHOT_DESTINATION"]
+        graphql asks ShaperAgent to initiate the chat                       [inferred POST /api/v1/assistant/initiate_chat]
+```
+
+Actors that are not people have their own kinds: `scheduler` (a clock), `tool` (a CLI or client a person runs) and `infra` (platform machinery). They draw as stereotyped boundaries (`<<scheduler>>`), not as persons:
+
+```craft
+actors {
+    scheduler Ticker
+    tool OperatorTool
+    infra Pipeline
+}
+```
+
+A use case's `sites` and `envs` tags appear in its sequence title: `== Rebuild a market's daily statistics [sites: imovirtualpt, otodompl] [envs: production] ==`.
+
 ## Surfaces
 
 A `surface` lists the operations a boundary offers, as queries (no side effect) and commands (state change):

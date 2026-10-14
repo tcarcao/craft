@@ -38,6 +38,8 @@ craft validate docs/payments.craft --format json
 craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 ```
 
+Every diagnostic code, with its severity and meaning, is listed in [`docs/DIAGNOSTICS.md`](https://github.com/tcarcao/craft/blob/main/docs/DIAGNOSTICS.md). Version 2.24 adds `craft/sema/store-ref-in-event-list` (error) and the warnings `craft/lint/duplicate-scenario-body`, `duplicate-event-in-list`, `duplicate-operation-in-list`, `one-of-single-event`, `stream-without-caller`, `egress-on-internal-step` and `unquoted-address`. `duplicate-scenario-body` reads the resolved model, so pass every file the use case depends on.
+
 ---
 
 ### `generate`
@@ -142,6 +144,8 @@ craft check docs/payments.craft
 craft check docs/payments.craft --lsp-json
 craft check docs/payments.craft --lsp-json | jq '.diagnostics'
 ```
+
+Since 2.24 the model carries optional keys for the new constructs, each present only when used: `events` on a trigger (a `listens` list) and on an action (`notifies one of`), `operations` on an action (an operation list), `stream` and `answers` on a `returns stream`, and `inferred` on an `[inferred …]` hop. `event`, `ref` and `operation` keep their 2.23 values, so a file that uses none of the new constructs gives the same JSON as before.
 
 ---
 

@@ -31,7 +31,8 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 // --- Actors: who interacts with the system ---
 <actor_def>          ::= "actor" <actor_type> <identifier>
 <actors_def>         ::= "actors" "{" (<actor_type> <identifier>)+ "}"
-<actor_type>         ::= "user" | "system" | "service"
+<actor_type>         ::= "user" | "system" | "service" | "scheduler" | "tool" | "infra"
+                       // any other identifier parses (drawn as a person); prefer the six known kinds
 
 // --- Domains: business capabilities with contexts ---
 // Children (bounded contexts) are NEWLINE-separated, not comma-separated
@@ -93,27 +94,31 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 // --- Use Cases: business scenarios with event-driven flows ---
 <use_case>           ::= "use_case" <string> "{" <scenario>+ "}"
 <scenario>           ::= <trigger> <action>+
-<trigger>            ::= "when" <bc_ref> "listens" <event_ref>
+<trigger>            ::= "when" <bc_ref> "listens" <event_list>
                        | "when" <identifier> <verb> <phrase>?
                        | "when" <event_ref>
 <action>             ::= <sync_action> | <async_action> | <internal_action> | <return_action>
 <sync_action>        ::= <bc_ref> "asks" <bc_ref> <phrase> <op_annotation>?
-<async_action>       ::= <bc_ref> "notifies" <event_ref> <op_annotation>?
+<async_action>       ::= <bc_ref> "notifies" (<event_ref> | "one" "of" <event_list>) <op_annotation>?
 <internal_action>    ::= <bc_ref> <verb> <phrase> <op_annotation>?
-<return_action>      ::= <bc_ref> "returns" ("to" <bc_ref>)? <phrase> <op_annotation>?
+<return_action>      ::= <bc_ref> "returns" "stream"? ("to" <bc_ref>)? <phrase> <op_annotation>?
+<event_list>         ::= <event_ref> ("," <newline>* <event_ref>)*   // v2.24; a trailing comma continues on the next line
 // bc_ref is the same production used by context_map endpoints (defined
 // above): bare or domain-qualified, no kind: prefix. A kind: prefix in any
 // of these slots is a craft/syntax/kind-prefix-in-target parse error.
 
 // --- Operation annotations: trailing bracket on any action (vNext) ---
-<op_annotation>      ::= "[" <op_body> "]"
-<op_body>            ::= (<protocol_verb> <ws>)? <payload>
+<op_annotation>      ::= "[" "inferred"? (<op_item> (", " <op_item>)*)? "]"   // v2.24: inferred, item lists
+<op_item>            ::= (<protocol_verb> <ws>)? <payload>
 <protocol_verb>      ::= "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
                        | "HEAD" | "OPTIONS" | "GRPC" | "TOPIC" | "QUERY"
+                       | "ADDR" | "SQL"                                       // v2.24
 <payload>            ::= <raw-text-up-to-closing-bracket>
 // The annotation is the LAST "[" on the line whose "]" is the line's final
 // token; a "[" that does not close at end of line stays ordinary prose. An
 // empty annotation "[]" is a craft/syntax/empty-op-annotation error.
+// Items split at a comma followed by whitespace, outside braces and strings:
+// "[GET /p/{lat},{lng}]" is one item. An ADDR address containing " //" must be quoted.
 
 // --- Terminals ---
 <connector>          ::= "a" | "an" | "the" | "as" | "to" | "from" | "in" | "on"
@@ -144,17 +149,22 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 
 ### Actors
 
-Actors represent entities that interact with the system. Three types:
+Actors represent entities that interact with the system. Six known kinds:
 - `user` — human users (e.g., Customer, Admin, Business_User)
-- `system` — external systems (e.g., CronA, PaymentGateway)
+- `system` — external systems (e.g., PaymentGateway)
 - `service` — internal services from other bounded contexts (e.g., Database, NotificationService)
+- `scheduler` (v2.24) — a clock that starts work (e.g., CRON, Ticker)
+- `tool` (v2.24) — a CLI, script or client a person runs; it, not the person, makes the calls (e.g., OperatorTool)
+- `infra` (v2.24) — platform machinery: pod start, probes, CI pipelines, synthetic monitors (e.g., Platform, Pipeline)
+
+Pick the kind that says what the initiator is; do not use `system` for a clock or a CI pipeline. The three new kinds draw as stereotyped boundaries (`<<scheduler>>`), and they need craft ≥ 2.24 (older versions misread the line).
 
 Single: `actor user Customer`
 Bulk:
 ```
 actors {
     user Business_User
-    system CronA
+    scheduler CRON
     service Database
 }
 ```
@@ -409,7 +419,14 @@ Formatting changes whitespace and nothing else. Since v2.17.0 this is structural
 | Code | Severity | When |
 |------|----------|------|
 | `craft/syntax/kind-prefix-in-target` | error | a `kind:` prefix in the subject of any action (`asks`, `notifies`, `returns`, or an internal action), the `asks` target, the `returns` target, or the `when ... listens` trigger context |
-| `craft/syntax/empty-op-annotation` | error | an action ends in `[]` |
+| `craft/syntax/empty-op-annotation` | error | an action ends in `[]`; or (v2.24) an operation list has an empty item, or `[ADDR]`/`[SQL]` has no payload |
+| `craft/sema/store-ref-in-event-list` | error | a `store.` ref in a `listens` or `notifies one of` list of two or more items |
+| `craft/lint/duplicate-scenario-body` | warning | two scenarios of one use case run the same steps; fold `listens` triggers into one list |
+| `craft/lint/duplicate-event-in-list` / `duplicate-operation-in-list` | warning | the same event twice in one list / the same operation twice in one bracket |
+| `craft/lint/one-of-single-event` | warning | `notifies one of` with a single event |
+| `craft/lint/stream-without-caller` | warning | a `returns stream` with no open request and no `to` target |
+| `craft/lint/egress-on-internal-step` | warning | `[ADDR …]`/`[SQL …]` on an internal step or a return; make it an `asks` |
+| `craft/lint/unquoted-address` | warning | a ` //` comment cut an `[ADDR …]` bracket; quote the address |
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at exactly four sites: the `sync_action` subject and target, the `async_action` subject, or the `domain_listen` trigger context. Qualify it as `<domain>/<name>`. Does **not** fire for an internal action's subject or a `returns` subject/target |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (empty segment, or more than two segments) in any of: any action's subject, the `asks` target, the `returns` target, or the trigger context |
 
@@ -453,6 +470,25 @@ use_case "Seeker reads an advert" {
 - `when <context> receives <phrase> [op]` starts a scenario at a boundary whose caller is not observed. Do not invent a caller actor.
 - `notifies store.<name>.<change>` / `when <context> listens store.<name>.<change>` (change `inserted`, `updated` or `deleted`) is a hand-off through a data store. A polling listener adds `cron "<expr>"` or `every "<interval>"` after the ref.
 - `surface <boundary> { callers: …  spec: "…"  query <phrase> [op]  command <phrase> [op] }` lists every operation a context, service or external actor offers; `craft generate --type surface` tabulates which use cases call each one, and `craft/lint/operation-not-in-surface` flags an `asks` to an operation the surface does not list.
+
+**Journey constructs (v2.24).** Use them instead of one scenario per event, prose comments or bracket workarounds:
+
+```craft
+use_case "seshat records a Mercury domain event in the transaction ledger" {
+    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed,
+            sns.mercury-message-received, sns.mercury-cooked
+        seshat writes one row per event
+        seshat notifies one of ledger.RowWritten, ledger.RowSkipped
+}
+```
+
+- **Roster trigger:** `when <ctx> listens a.A, b.B, …` — any of these events starts the scenario; the body is the same for each. A trailing comma continues the list (continuation 8 columns past `when`). No store ref in a list of two or more. Two scenarios with the same body get `craft/lint/duplicate-scenario-body`, which gives the folded trigger.
+- **`notifies one of a.A, b.B`** — exactly one of these events per run, chosen at run time. A bare `notifies a.A, b.B` is an error: to publish several, write one `notifies` per event. A `notifies` event is one name; words after it are an error.
+- **Operation list:** `[CreateApiKey, CreateUsagePlanKey]` — one hop that uses several operations. Say in the phrase whether they are alternatives or a sequence. Two hops to two parties are two `asks`.
+- **`X returns stream [to Y] <phrase>`** — a reply that repeats (token streaming, SSE). The request stays an `asks`; the stream answers it and is drawn in a `loop stream` box.
+- **`[SQL <tables>]`** — direct use of another party's tables. **`[ADDR <address>]`** — egress to an address with no operation id; quote it when it contains ` //` (`[ADDR "//cdn.example.com/x"]`). Write both on an `asks` (on an internal step or a return they get `craft/lint/egress-on-internal-step`); declare an external target as a `system` actor.
+- **`[inferred …]`** — the hop was inferred from names or config, not read in code (drawn grey, "(inferred)"). `[inferred]` alone: hop inferred, operation unknown. Use it instead of "probably"/"NOT TRACED" comments.
+- **`sites:` / `envs:` tags** scope the whole use case and are printed in the sequence title. Use `opt`/`alt` when only some steps differ by site.
 
 ### Deprecated: Quoted Event Strings
 

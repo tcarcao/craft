@@ -1,6 +1,6 @@
 # Actors
 
-Actors represent entities that interact with your system. There are three types: users, systems, and services.
+Actors represent entities that interact with your system. Six kinds are known: `user`, `system`, `service`, and (since 2.24) `scheduler`, `tool` and `infra`. Any other kind is still accepted and is drawn as a person.
 
 ## Actor Types
 
@@ -29,6 +29,34 @@ Internal services (actors from other bounded contexts):
 actor service AnalyticsService
 actor service AuditService
 ```
+
+### Scheduler, Tool, Infra (2.24)
+Initiators that are not people:
+
+```craft
+actors {
+  scheduler Ticker          // a clock that starts work: cron, an in-process ticker
+  tool OperatorTool         // a CLI, script or client a person runs; it makes the calls
+  infra Pipeline            // platform machinery: pod start, probes, CI pipelines, monitors
+}
+```
+
+They sit outside the system, like `system`, so a trigger from one draws an arrow. Diagrams draw them as stereotyped boundaries, not persons:
+
+| Kind | PlantUML | Mermaid sequence | C4 |
+|---|---|---|---|
+| `user` (and any unknown kind) | `actor` | `actor` | `Person`, "External user" |
+| `system` | `boundary` | `actor` | `System_Ext`, "External system" |
+| `service` | `control` | `actor` | `System_Ext`, "External service" |
+| `scheduler` | `boundary … <<scheduler>>` | `participant … (scheduler)` | `System_Ext`, "Scheduler" |
+| `tool` | `boundary … <<tool>>` | `participant … (tool)` | `System_Ext`, "Operator tool" |
+| `infra` | `boundary … <<infra>>` | `participant … (infra)` | `System_Ext`, "Platform infrastructure" |
+
+A `when cron` or `when every` trigger starts from the actor named `CRON`, whatever its kind, so `scheduler CRON` works.
+
+::: warning Needs craft 2.24
+Craft 2.23 and earlier read `scheduler CRON` (or any kind outside `user`/`system`/`service`) as an actor named after the kind, so a second `scheduler …` line was a duplicate-name error. Use the new kinds only with craft 2.24 or later.
+:::
 
 ## Single Actor Definition
 

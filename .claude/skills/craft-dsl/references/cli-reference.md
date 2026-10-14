@@ -33,6 +33,8 @@ craft validate docs/payments.craft --format json
 craft validate docs/**/*.craft --format json   # cross-file workspace analysis
 ```
 
+Every diagnostic code, with its severity and meaning, is listed in [`docs/DIAGNOSTICS.md`](https://github.com/tcarcao/craft/blob/main/docs/DIAGNOSTICS.md). Version 2.24 adds `craft/sema/store-ref-in-event-list` (error) and the warnings `craft/lint/duplicate-scenario-body`, `duplicate-event-in-list`, `duplicate-operation-in-list`, `one-of-single-event`, `stream-without-caller`, `egress-on-internal-step` and `unquoted-address`. `duplicate-scenario-body` reads the resolved model, so pass every file the use case depends on.
+
 **vNext diagnostic codes.** `craft validate` checks *local well-formedness only* — node-slug shape, `context_map` endpoint/pattern shape, and deprecated syntax. Cross-repo/cross-context resolution against real code is a hub concern, not `craft`'s.
 
 | Code | Severity | Meaning |
@@ -164,7 +166,7 @@ craft fmt <files...> [flags]
 
 Formats in place. Changes whitespace and nothing else: the formatter walks the syntax tree's token stream and writes every non-whitespace token back verbatim, exactly once, in document order, so it cannot drop or reorder content. Applies a 4-space indent by default, one statement per line, a blank line between top-level declarations and before each `when` after the first, and column-aligns trailing operation annotations and trailing `//` comments, each aligned across its own contiguous run (default scope `block`: a run ends at a blank line, a `{`, a `}`, or a comment-only line).
 
-Comments stay on the line the author put them, including a trailing comment at the end of an action line, though its column may shift to align with others in the same block. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved, and its continuation hangs at block indent plus `continuation_indent` (default 4) rather than resetting to block depth. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
+Comments stay on the line the author put them, including a trailing comment at the end of an action line, though its column may shift to align with others in the same block. Interior runs of spaces inside a statement collapse to one; a line break the author wrote inside a wrapped value is preserved, and its continuation hangs at block indent plus `continuation_indent` (default 4) rather than resetting to block depth. A wrapped `listens` list hangs its items 8 columns past `when`, and a wrapped `notifies one of` list 4 columns past the step's subject; the formatter never reorders list items. `arch` blocks are left byte-for-byte verbatim, since their component chains use free-form indentation the formatter does not own. Formatting is idempotent for every input.
 
 Indent width, continuation indent, and comment alignment scope are configurable per file via the nearest ancestor `.craftfmt` (TOML), or overridden per invocation with the flags below; a flag overrides only the field it names, and only when actually passed.
 
@@ -232,6 +234,8 @@ craft check docs/payments.craft
 craft check docs/payments.craft --lsp-json
 craft check docs/payments.craft --lsp-json | jq '.diagnostics'
 ```
+
+Since 2.24 the model carries optional keys for the new constructs, each present only when used: `events` on a trigger (a `listens` list) and on an action (`notifies one of`), `operations` on an action (an operation list), `stream` and `answers` on a `returns stream`, and `inferred` on an `[inferred …]` hop. `event`, `ref` and `operation` keep their 2.23 values, so a file that uses none of the new constructs gives the same JSON as before.
 
 ---
 

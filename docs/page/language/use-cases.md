@@ -100,6 +100,34 @@ when leadimporter listens sqs.lead-requests every "5m"
 
 The model keeps the schedule in `trigger.schedule` and `trigger.scheduleKind`, and the sequence label ends with `, cron * 10 * * 1-5`. This replaces a `polls` tag.
 
+#### Event lists (roster triggers, 2.24)
+
+When one handler serves several events, list them in one trigger instead of writing one scenario per event. A trailing comma continues the list on the next line:
+
+```craft
+use_case "seshat records a Mercury domain event in the transaction ledger" {
+    when seshat listens sns.mercury-advert-state-changed, sns.mercury-vas-state-changed,
+            sns.mercury-message-received, sns.mercury-cooked
+        seshat writes one row per event
+}
+```
+
+- The list means "any of these events starts this scenario". The body is the same for each; when it differs by event, write named scenarios.
+- A continuation line is part of the trigger, never a step. `craft fmt` hangs it 8 columns past `when` and never reorders items.
+- A schedule (`cron "…"` / `every "…"`) goes after the last item.
+- A store ref may not stand in a list of two or more items (`craft/sema/store-ref-in-event-list`): a store hand-off names one store.
+- The model keeps every item in `trigger.events`; `trigger.event` stays the first one.
+
+Each item pairs with its publishers on its own. In a sequence diagram, a publisher already in the section delivers its items itself; every other item arrives on **one** inbound arrow per trigger, capped at three items:
+
+```plantuml
+[-> seshat : sns.mercury-advert-state-changed, sns.mercury-vas-state-changed, sns.mercury-message-received (+1 more) (from cooker)
+```
+
+Flow and architecture views draw one queue edge per item, and C4 one `Event_Queue` delivery per item.
+
+Two scenarios of one use case that run the same steps get `craft/lint/duplicate-scenario-body`. When both are `listens` triggers of the same subject (no store ref, same schedule), the message gives the folded trigger: `fold them into one trigger: \`when seshat listens sns.a, sns.b\``. When they start differently (another initiator, schedule, `receives` operation or a store hand-off), it names the difference instead.
+
 ### Store Hand-offs
 
 When one context writes rows to a table that another context polls, write the hand-off as a **store ref**, `store.<name>.<change>`, where the change is `inserted`, `updated` or `deleted`. There is no new syntax: the writer `notifies` the ref and the reader `listens` to it.
@@ -255,6 +283,23 @@ The subject also accepts a qualified `<domain>/<name>` reference: `re/billing no
 
 **Use when:** Other domains might want to react, but the publisher doesn't need a response.
 
+#### `notifies one of` (2.24)
+
+A step that publishes exactly one event per run, chosen at run time (an event type read from data, a routing table), names the set:
+
+```craft
+use_case "nMF republishes a stored money record onto its bus" {
+    when nmf_monetization listens stream.user_event_store
+        nmf_monetization reads the detail-type off the stored column
+        nmf_monetization notifies one of nmfbus.FeatureEnabled, nmfbus.FeatureDisabled,
+                nmfbus.CreateAutoSchedule, nmfbus.SubAccountBundleUpdated
+}
+```
+
+Each item pairs with its listeners. The sequence diagram draws one message, `notifies one of "nmfbus.FeatureEnabled", "nmfbus.FeatureDisabled", "nmfbus.CreateAutoSchedule" (+1 more)`; the flow view draws one edge per item, labelled `one of: <event>`. The model keeps the items in `action.events`.
+
+A bare list, `notifies a.A, b.B`, is an error: to publish several events, write one `notifies` per event. A `notifies` event is one name, so `sync notifies the owners team` is an error too (write an internal step, `sync informs the owners team`). `notifies one of` with a single item gets `craft/lint/one-of-single-event`.
+
 ::: tip
 `notifies "Order Created"` (quoted string) still parses but is **deprecated** — `craft validate` emits a `craft/lint/deprecated-string-ref` warning and points at the typed-ref form.
 :::
@@ -298,6 +343,38 @@ Gateway returns to Payment the transaction result
 The subject and the `to` target both accept a qualified `<domain>/<name>` reference: `re/subscriptions returns to re/billing charge result`. A `kind:` prefix is not accepted in either slot.
 
 **Use when:** A domain returns data, especially in response to an `asks` action.
+
+#### `returns stream` (2.24)
+
+A reply that repeats until it ends (token streaming, server-sent events) is a `returns stream`. The request stays an ordinary `asks`:
+
+```craft
+actors {
+    user Seller
+    system AiAssistant
+}
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+        graphql asks AiAssistant to stream the reply  [POST /api/v1/assistant/chat_streaming]
+        AiAssistant returns stream the reply as META, TOKEN and DONE events
+        graphql returns stream each event to the client
+        frontendplatform appends every TOKEN delta to the message
+}
+```
+
+The sequence diagram draws each stream in its own box:
+
+```plantuml
+loop stream
+AiAssistant --> graphql : streams the reply as META, TOKEN and DONE events
+end
+loop stream
+graphql --> frontendplatform : streams each event to the client
+end
+```
+
+A stream answers the `asks` that opened it, by the same call-stack rule as any return; the model keeps that request's ID in `action.answers`. `returns stream to <reader>` names the reader instead. A stream with no open request and no `to` target gets `craft/lint/stream-without-caller`. The flow view labels the reply `streams …`, and C4 draws a targeted stream between services with the technology `Return Data (stream)`.
 
 ## How Names Resolve
 
@@ -483,12 +560,55 @@ Subscriptions asks Legacy for a reconciliation          [legacy-mainframe-txn-44
 
 The bracket is optional; lines without one are unaffected. Its contents are **hybrid**:
 
-- If the first whitespace-delimited token is a recognised protocol verb, the annotation is parsed as structure: a verb plus the remaining payload. The recognised set is `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `GRPC`, `TOPIC`, `QUERY`.
+- If the first whitespace-delimited token is a recognised protocol verb, the annotation is parsed as structure: a verb plus the remaining payload. The recognised set is `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, `GRPC`, `TOPIC`, `QUERY`, and (2.24) `ADDR` and `SQL`.
 - Otherwise, the entire bracket content is stored verbatim as an opaque payload, with no diagnostic. `[op1/op2/op3]` and `[legacy-mainframe-txn-44]` are equally valid annotations: an unrecognised leading word is payload, not an error.
 
 **Boundary rule:** the annotation is the **last** `[` on the line whose matching `]` is the line's final token. A `[` that does not close at the end of the line stays ordinary prose, so existing phrases are unaffected unless they end in a bracketed run.
 
 An empty annotation, `Subscriptions asks Billing for a fresh charge attempt []`, is a `craft/syntax/empty-op-annotation` error, not a silently dropped bracket.
+
+### Operation lists (2.24)
+
+One hop that uses several operations lists them in one bracket:
+
+```craft
+app-manager asks AwsApiGateway to create the key and bind it to the plan  [CreateApiKey, CreateUsagePlanKey]
+Partner asks ad/atlas-advert to save or delete the advert  [postAdvert, putAdvert, deleteAdvert]
+```
+
+- The bracket splits at a comma followed by whitespace, outside braces and strings: `[GET /nearest/paths/{latitude},{longitude}]` stays one item.
+- Each item is read like a whole bracket: an optional protocol verb, then the payload.
+- Craft does not say whether the items are alternatives or a sequence. Say which in the phrase ("to save or delete"). Two hops to two parties are two `asks`.
+- A route and the client method that calls it are not two operations: put the route in the bracket.
+- An empty item (`[a, , b]`) is `craft/syntax/empty-op-annotation`; a repeated item is `craft/lint/duplicate-operation-in-list`. `craft/lint/operation-not-in-surface` checks each item.
+- The model keeps every item in `action.operations`. `action.operation` keeps the whole bracket, as before.
+
+### Egress and inferred hops: `SQL`, `ADDR`, `inferred` (2.24)
+
+```craft
+actors {
+    system CRON
+    system ObjectStore
+}
+use_case "obido analytics refreshes the market structure" {
+    when cron "0 18 * * *"
+        obidoanalytics asks front for the city, region and developer graph  [SQL investment flat city region developer]
+        obidoanalytics asks ObjectStore to take the refreshed snapshot  [ADDR "SNAPSHOT_DESTINATION"]
+}
+```
+
+- **`[SQL <table> …]`**: a direct read or write of another party's tables, with no API between. The payload is the table names, separated by spaces.
+- **`[ADDR <address>]`**: egress to an address that has no operation id (a URL, a host, or the name of the setting that holds it). The label prints the address without quotes. **Quote an address that starts with `//`**: a `//` after a space starts a comment, which cuts the bracket (`craft/lint/unquoted-address`). Quoting is always allowed.
+- Both verbs need a payload (`[ADDR]` and `[SQL]` are `craft/syntax/empty-op-annotation`), and both name a call to another party, so write them on an `asks`: on an internal step or a return they get `craft/lint/egress-on-internal-step`.
+- C4 names the technology: `SQL (shared tables)` for a `SQL` request between services, and `HTTP (bare address)` for an `ADDR` request. An `ADDR` request to an actor is drawn as a relation to that actor, shown as an external system.
+
+`inferred` as the first word of a bracket marks a hop that was inferred from names, configuration or convention, not read in code:
+
+```craft
+graphql asks ShaperAgent to initiate the chat  [inferred POST /api/v1/assistant/initiate_chat]
+```
+
+It applies to the whole action. `[inferred]` alone says the hop is inferred and its operation unknown. The sequence diagram draws it grey with a suffix, `graphql -[#999999]> ShaperAgent : to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)` (Mermaid has no per-arrow colour and prints the suffix only); flow and C4 labels gain ` (inferred)` too. In a `receives` trigger or a surface line, `inferred` is an ordinary payload word.
 
 ::: warning Braces in a phrase disable the annotation on that line
 A balanced `{...}` in the phrase and a trailing annotation cannot both appear on one line:
@@ -544,7 +664,15 @@ tags {
 }
 ```
 
-The block goes before the first `when`. Keys are not interpreted by Craft: a repeated key is last-write-wins and emits `craft/sema/duplicate-tag`.
+The block goes before the first `when`. Keys are not interpreted by Craft, except `sites` and `envs` (below). A repeated key is last-write-wins and emits `craft/sema/duplicate-tag`.
+
+**`sites` and `envs` (2.24).** These two keys say on which sites or environments the whole use case runs. The sequence diagram appends them to the section title, each part only when its tag is present, values in authored order:
+
+```plantuml
+== Rebuild a market's daily statistics [sites: imovirtualpt, otodompl, storiaro] [envs: production] ==
+```
+
+Use a tag when the whole use case is scoped; use `opt "…"` when one step runs only on some sites, and `alt "…"` or named scenarios when the steps differ. Craft does not check the values; the hub does.
 
 ### Tags in `craft check` output
 
@@ -584,7 +712,17 @@ Use-case actions and triggers can emit these:
 | `craft/lint/store-without-change` | warning | a store ref does not end in `inserted`, `updated` or `deleted`. |
 | `craft/lint/store-without-name` | warning | a ref starts with `store.` but names no store. |
 | `craft/lint/repeated-request` | warning | two subjects in one step list make the same request to the same target. |
-| `craft/lint/operation-not-in-surface` | warning | an `asks` names an operation that the target's [surface](#surfaces) does not list. |
+| `craft/lint/operation-not-in-surface` | warning | an `asks` names an operation that the target's [surface](#surfaces) does not list (each item of an operation list is checked). |
+| `craft/syntax/empty-op-annotation` (2.24) | error | also an empty item of an operation list (`[a, , b]`), or `[ADDR]`/`[SQL]` with no payload. |
+| `craft/syntax/unexpected-token` (2.24) | error | also a comma with no event after it in a `listens` or `notifies one of` list, a bare list after `notifies`, or words after a `notifies` event. |
+| `craft/sema/store-ref-in-event-list` | error | a store ref in a `listens` or `notifies one of` list of two or more items. |
+| `craft/lint/duplicate-event-in-list` | warning | the same event twice in one list. |
+| `craft/lint/duplicate-operation-in-list` | warning | the same operation twice in one bracket. |
+| `craft/lint/duplicate-scenario-body` | warning | two scenarios of one use case run the same steps. |
+| `craft/lint/one-of-single-event` | warning | `notifies one of` names a single event. |
+| `craft/lint/stream-without-caller` | warning | a `returns stream` answers no open request and names no reader. |
+| `craft/lint/egress-on-internal-step` | warning | an internal step or a return has an `ADDR` or `SQL` item. |
+| `craft/lint/unquoted-address` | warning | a `//` comment cut an `[ADDR …]` bracket. |
 
 ## Surfaces
 
