@@ -1,0 +1,22 @@
+C4Container
+    title Container Diagram - Architecture (boundaries mode)
+    Person(Seller, "Seller", "External user")
+    System_Boundary(Billing_boundary, "Billing") {
+        Container_Boundary(Billing_nmf_monetization_Domain_boundary, "nmf_monetization Domain") {
+            Container(nmf_monetization, "nmf_monetization", "Go Application", "nmf_monetization [Context]")
+        }
+    }
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(SellerPlatform_boundary, "SellerPlatform") {
+        Container_Boundary(SellerPlatform_frontendplatform_Domain_boundary, "frontendplatform Domain") {
+            Container(frontendplatform, "frontendplatform", "TypeScript Application", "frontendplatform [Context]")
+        }
+        Container_Boundary(SellerPlatform_graphql_Domain_boundary, "graphql Domain") {
+            Container(graphql, "graphql", "TypeScript Application", "graphql [Context]")
+        }
+    }
+    Rel(Seller, frontendplatform, "Triggers")
+    Rel(graphql, Event_Queue, "nmfbus.AddOnPurchased", "Event Publishing")
+    Rel(Event_Queue, nmf_monetization, "nmfbus.AddOnPurchased", "Event Delivery")

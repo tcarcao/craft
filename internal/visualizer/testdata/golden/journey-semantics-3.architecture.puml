@@ -1,0 +1,48 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Subdomain styling with frames
+skinparam frame {
+  BackgroundColor #E6F3FF
+  BorderColor #4A90E2
+  BorderThickness 2
+  FontColor black
+  FontSize 12
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4169E1
+  BorderThickness 3
+  FontColor #000080
+  FontSize 14
+  FontStyle bold
+}
+
+' Service boundaries
+rectangle "Billing" as Billing {
+  frame "nmf_monetization" as nmf_monetization
+}
+rectangle "SellerPlatform" as SellerPlatform {
+  frame "frontendplatform" as frontendplatform
+  frame "graphql" as graphql
+}
+
+' Domain queues
+queue "graphql events" as graphql_events
+
+' Subdomain connections
+graphql_events --> nmf_monetization
+frontendplatform --> graphql
+graphql --> graphql_events
+
+@enduml

@@ -1,0 +1,12 @@
+flowchart LR
+    subgraph Billing["Billing"]
+        nmf_monetization["nmf_monetization"]
+    end
+    subgraph SellerPlatform["SellerPlatform"]
+        frontendplatform["frontendplatform"]
+        graphql["graphql"]
+    end
+    graphql_events[("graphql events")]
+    graphql_events --> nmf_monetization
+    frontendplatform --> graphql
+    graphql --> graphql_events

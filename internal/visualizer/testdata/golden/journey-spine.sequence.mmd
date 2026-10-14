@@ -1,0 +1,21 @@
+---
+title: "Journey: seller-promotes-an-advert"
+---
+sequenceDiagram
+    actor Seller as Seller
+    participant frontendplatform as frontendplatform
+    participant graphql as graphql
+    participant vasscheduler as vasscheduler
+    participant nmf_monetization as nmf_monetization
+    Note over Seller,nmf_monetization: Seller promotes an advert
+    Seller->>frontendplatform: promotes an advert
+    frontendplatform->>graphql: to book the promotion [scheduleVas]
+    graphql->>vasscheduler: to book it [createSchedule]
+    vasscheduler-)vasscheduler: notifies "com.olx.realestate_vas.VasScheduled"
+    Note over vasscheduler: continues: Seller pays at the checkout
+    Note over Seller,nmf_monetization: nMF books the draws of a scheduled VAS
+    vasscheduler-)nmf_monetization: com.olx.realestate_vas.VasScheduled
+    nmf_monetization->>nmf_monetization: books one draw per day of the schedule
+    Note over Seller,nmf_monetization: Seller pays at the checkout
+    Seller->>frontendplatform: pays at the checkout
+    frontendplatform->>graphql: to pay [payInvoice]

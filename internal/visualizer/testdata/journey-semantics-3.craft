@@ -1,0 +1,64 @@
+// The v2.25 constructs: //@ source cites (§14.1), which draw nothing, and
+// includes/continues links (§15.1), which draw ref frames (PlantUML) and
+// notes (Mermaid) in the sequence view and nothing elsewhere.
+actors {
+    user Seller
+    system Siren
+}
+
+domain billing {
+    nmf_monetization
+}
+
+domain seller {
+    frontendplatform
+    graphql
+}
+
+services {
+    Billing {
+        contexts: nmf_monetization
+        language: golang
+    }
+    SellerPlatform {
+        contexts: frontendplatform, graphql
+        language: typescript
+    }
+}
+
+use_case "nMF mails the seller about an add-on event" {
+    when nmf_monetization listens nmfbus.AddOnPurchased
+        //@ re-monetization-framework functions/eb_email_sender/eb_email_sender.go:5 -- one rule, eight detail-types
+        nmf_monetization picks the mail resolver from the event type alone
+        //@ eb_email_sender.go:5-40
+        nmf_monetization asks Siren to send the purchase mail  [POST /api/v1/event]
+        //@ pkg/siren/siren.go:63-115 -- a 423 for a suppressed address counts as delivered
+}
+
+use_case "Seller buys an add-on" {
+    when Seller buys an add-on
+        frontendplatform asks graphql to buy the add-on  [buyAddOn]
+        graphql notifies nmfbus.AddOnPurchased
+}
+
+use_case "Site session preamble" {
+    when Seller opens the site
+        frontendplatform asks graphql for the session  [session]
+}
+
+use_case "Seller asks the assistant a question" {
+    when Seller asks the assistant a question
+        includes "Site session preamble"
+        frontendplatform asks graphql to stream the answer  [assistantStream]
+}
+
+use_case "Seller promotes an advert" {
+    when Seller promotes an advert
+        frontendplatform asks graphql for the promotion offers  [promotionOffers]
+        continues "Seller pays at the checkout"
+}
+
+use_case "Seller pays at the checkout" {
+    when Seller pays at the checkout
+        frontendplatform asks graphql to pay  [payInvoice]
+}

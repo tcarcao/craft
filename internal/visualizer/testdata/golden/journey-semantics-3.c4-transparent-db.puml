@@ -1,0 +1,39 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/javascript>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (transparent mode)
+
+Person(Seller, "Seller", "External user")
+
+System_Boundary(Billing_boundary, "Billing") {
+    Container(Billing_Application, "Billing Application", "Go Application", "Core business logic for Billing domains: nmf_monetization", $sprite="go")
+}
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(SellerPlatform_boundary, "SellerPlatform") {
+    Container(SellerPlatform_Application, "SellerPlatform Application", "TypeScript Application", "Core business logic for SellerPlatform domains: frontendplatform, graphql", $sprite="javascript")
+}
+
+Rel(Seller, SellerPlatform_Application, "Triggers")
+Rel(SellerPlatform_Application, Event_Queue, "nmfbus.AddOnPurchased", "Event Publishing")
+Rel(Event_Queue, Billing_Application, "nmfbus.AddOnPurchased", "Event Delivery")
+
+@enduml

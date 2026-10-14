@@ -1,0 +1,37 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/javascript>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+Enterprise_Boundary(SellerPlatform_boundary, "SellerPlatform") {
+    Container_Boundary(SellerPlatform_frontendplatform_Domain_boundary, "frontendplatform Domain") {
+        Container_Ext(frontendplatform, "frontendplatform", "TypeScript Application", "frontendplatform [Context]", $sprite="javascript")
+    }
+    Container_Boundary(SellerPlatform_graphql_Domain_boundary, "graphql Domain") {
+        Container_Ext(graphql, "graphql", "TypeScript Application", "graphql [Context]", $sprite="javascript")
+    }
+}
+
+System_Boundary(Billing_boundary, "Billing") {
+    Container_Boundary(Billing_nmf_monetization_Domain_boundary, "nmf_monetization Domain") {
+        Container(nmf_monetization, "nmf_monetization", "Go Application", "nmf_monetization [Context]", $sprite="go")
+    }
+}
+
+
+@enduml

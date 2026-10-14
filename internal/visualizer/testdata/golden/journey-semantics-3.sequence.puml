@@ -1,0 +1,46 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+participant "nmf_monetization" as nmf_monetization
+boundary "Siren" as Siren
+actor "Seller" as Seller
+participant "frontendplatform" as frontendplatform
+participant "graphql" as graphql
+
+== nMF mails the seller about an add-on event ==
+
+[-> nmf_monetization : nmfbus.AddOnPurchased (from graphql)
+nmf_monetization -> nmf_monetization : picks the mail resolver from the event type alone
+nmf_monetization -> Siren : to send the purchase mail [POST /api/v1/event]
+
+== Seller buys an add-on ==
+
+Seller -> frontendplatform : buys an add-on
+frontendplatform -> graphql : to buy the add-on [buyAddOn]
+graphql ->> graphql : notifies "nmfbus.AddOnPurchased"
+
+== Site session preamble ==
+
+Seller -> frontendplatform : opens the site
+frontendplatform -> graphql : for the session [session]
+
+== Seller asks the assistant a question ==
+
+Seller -> frontendplatform : asks the assistant a question
+ref over Seller, frontendplatform : Site session preamble
+frontendplatform -> graphql : to stream the answer [assistantStream]
+
+== Seller promotes an advert ==
+
+Seller -> frontendplatform : promotes an advert
+frontendplatform -> graphql : for the promotion offers [promotionOffers]
+ref over frontendplatform, graphql : continues: Seller pays at the checkout
+
+== Seller pays at the checkout ==
+
+Seller -> frontendplatform : pays at the checkout
+frontendplatform -> graphql : to pay [payInvoice]
+
+@enduml

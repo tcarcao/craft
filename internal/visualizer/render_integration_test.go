@@ -690,6 +690,54 @@ func TestJourneySemantics2_PlantUMLRenders(t *testing.T) {
 	}
 }
 
+func journeySemantics3Doc(t *testing.T) *craft.CraftDoc {
+	t.Helper()
+	src, err := os.ReadFile("testdata/journey-semantics-3.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	return analysis.Workspace([]analysis.FileResult{analysis.File("journey-semantics-3.craft", string(src))}).Doc
+}
+
+// TestJourneySemantics3_MermaidSequenceRenders proves mermaid-cli accepts the
+// v2.25 fixture: link notes (`Note over A,B: ref: …`) in the sequence view,
+// and flow, architecture and C4 views of a model with //@ cites.
+func TestJourneySemantics3_MermaidSequenceRenders(t *testing.T) {
+	doc := journeySemantics3Doc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			src, err := renderMermaid(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			if v == visualizer.ViewSequence && !strings.Contains(src, ": ref: Site session preamble\n") {
+				t.Fatalf("expected an includes note in the sequence source:\n%s", src)
+			}
+			assertMermaidRenders(t, src)
+		})
+	}
+}
+
+// TestJourneySemantics3_PlantUMLRenders renders every view of the
+// journey-semantics-3 fixture on the strict PlantUML server, above all the
+// two-participant `ref over A, B : …` frames of the links.
+func TestJourneySemantics3_PlantUMLRenders(t *testing.T) {
+	endpoint := plantUMLEndpoint(t)
+	doc := journeySemantics3Doc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			puml, _, err := renderPUML(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			if v == visualizer.ViewSequence && !strings.Contains(string(puml), "ref over Seller, frontendplatform : Site session preamble\n") {
+				t.Fatalf("expected a two-participant ref frame:\n%s", puml)
+			}
+			assertRendersClean(t, endpoint, string(puml))
+		})
+	}
+}
+
 // assertMermaidRenders runs mermaid-cli on src in a container and fails when
 // mmdc exits non-zero or writes an empty SVG. It skips when no container
 // runtime is available, like plantUMLEndpoint.

@@ -21,7 +21,7 @@ func goldenModels(t *testing.T) map[string]string {
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no corpus models found: %v", err)
 	}
-	files = append(files, "testdata/vas.craft", "testdata/journey-semantics.craft", "testdata/journey-semantics-2.craft")
+	files = append(files, "testdata/vas.craft", "testdata/journey-semantics.craft", "testdata/journey-semantics-2.craft", "testdata/journey-semantics-3.craft")
 	out := map[string]string{}
 	for _, f := range files {
 		out[strings.TrimSuffix(filepath.Base(f), ".craft")] = f
@@ -102,6 +102,31 @@ func TestGolden(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestGolden_JourneySpine renders the spine of spineDoc (the spec §17.4
+// example) in both backends into testdata/golden/journey-spine.sequence.*.
+// Run with -update to rewrite them.
+func TestGolden_JourneySpine(t *testing.T) {
+	for ext, backend := range map[string]Backend{"puml": PlantUML, "mmd": Mermaid} {
+		t.Run(ext, func(t *testing.T) {
+			got := renderSpine(t, spineDoc(t, nil), backend, "seller-promotes-an-advert")
+			golden := filepath.Join("testdata", "golden", "journey-spine.sequence."+ext)
+			if *updateGolden {
+				if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			want, err := os.ReadFile(golden)
+			if err != nil {
+				t.Fatalf("missing golden (run with -update): %v", err)
+			}
+			if got != string(want) {
+				t.Errorf("output differs from %s (run with -update and review the diff)\n--- got ---\n%s", golden, got)
+			}
+		})
 	}
 }
 

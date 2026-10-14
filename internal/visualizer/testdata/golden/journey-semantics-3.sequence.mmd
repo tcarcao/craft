@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant nmf_monetization as nmf_monetization
+    actor Siren as Siren
+    actor Seller as Seller
+    participant frontendplatform as frontendplatform
+    participant graphql as graphql
+    participant External as External
+    Note over nmf_monetization,graphql: nMF mails the seller about an add-on event
+    External->>nmf_monetization: nmfbus.AddOnPurchased (from graphql)
+    nmf_monetization->>nmf_monetization: picks the mail resolver from the event type alone
+    nmf_monetization->>Siren: to send the purchase mail [POST /api/v1/event]
+    Note over nmf_monetization,graphql: Seller buys an add-on
+    Seller->>frontendplatform: buys an add-on
+    frontendplatform->>graphql: to buy the add-on [buyAddOn]
+    graphql-)graphql: notifies "nmfbus.AddOnPurchased"
+    Note over nmf_monetization,graphql: Site session preamble
+    Seller->>frontendplatform: opens the site
+    frontendplatform->>graphql: for the session [session]
+    Note over nmf_monetization,graphql: Seller asks the assistant a question
+    Seller->>frontendplatform: asks the assistant a question
+    Note over Seller,frontendplatform: ref: Site session preamble
+    frontendplatform->>graphql: to stream the answer [assistantStream]
+    Note over nmf_monetization,graphql: Seller promotes an advert
+    Seller->>frontendplatform: promotes an advert
+    frontendplatform->>graphql: for the promotion offers [promotionOffers]
+    Note over frontendplatform,graphql: continues: Seller pays at the checkout
+    Note over nmf_monetization,graphql: Seller pays at the checkout
+    Seller->>frontendplatform: pays at the checkout
+    frontendplatform->>graphql: to pay [payInvoice]

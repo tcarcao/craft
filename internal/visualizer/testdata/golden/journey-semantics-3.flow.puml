@@ -1,0 +1,55 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "frontendplatform" as frontendplatform
+frame "graphql" as graphql
+frame "nmf_monetization" as nmf_monetization
+
+' Actors
+actor "Seller" as Seller
+boundary "Siren" as Siren
+
+' Domain queues
+queue "graphql events" as graphql_events
+
+' Workflow flows
+graphql_events --> nmf_monetization : 1. nmfbus.AddOnPurchased
+nmf_monetization -> nmf_monetization : 2. picks the mail resolver from the event type alone
+nmf_monetization ->> Siren : 3. to send the purchase mail
+Seller --> frontendplatform : 4. buys an add-on
+frontendplatform ->> graphql : 5. to buy the add-on
+graphql ->> graphql_events : 6. nmfbus.AddOnPurchased
+Seller --> frontendplatform : 7. opens the site
+frontendplatform ->> graphql : 8. for the session
+Seller --> frontendplatform : 9. asks the assistant a question
+frontendplatform ->> graphql : 10. to stream the answer
+Seller --> frontendplatform : 11. promotes an advert
+frontendplatform ->> graphql : 12. for the promotion offers
+Seller --> frontendplatform : 13. pays at the checkout
+frontendplatform ->> graphql : 14. to pay
+
+@enduml

@@ -1,0 +1,15 @@
+C4Container
+    title Container Diagram - Architecture (transparent mode)
+    Person(Seller, "Seller", "External user")
+    System_Boundary(Billing_boundary, "Billing") {
+        Container(Billing_Application, "Billing Application", "Go Application", "Core business logic for Billing domains: nmf_monetization")
+    }
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(SellerPlatform_boundary, "SellerPlatform") {
+        Container(SellerPlatform_Application, "SellerPlatform Application", "TypeScript Application", "Core business logic for SellerPlatform domains: frontendplatform, graphql")
+    }
+    Rel(Seller, SellerPlatform_Application, "Triggers")
+    Rel(SellerPlatform_Application, Event_Queue, "nmfbus.AddOnPurchased", "Event Publishing")
+    Rel(Event_Queue, Billing_Application, "nmfbus.AddOnPurchased", "Event Delivery")
