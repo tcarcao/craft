@@ -105,6 +105,11 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 		default:
 			continue
 		}
+		if it.Operation != nil && it.Operation.Text != "" {
+			// The operation is the step's wire contract; a sequence diagram
+			// is where a reader looks for it.
+			msg.Label += " [" + it.Operation.Text + "]"
+		}
 		if msg.From != "" {
 			appear(msg.From)
 			onStage[idx][msg.From] = true

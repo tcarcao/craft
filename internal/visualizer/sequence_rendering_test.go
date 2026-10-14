@@ -56,3 +56,22 @@ use_case "Advisor reads a seeker file" {
 	requireLine(t, "plantuml", puml, "note over Advisor : opens a seeker file")
 	requireLine(t, "mermaid", mmd, "Note over Advisor: opens a seeker file")
 }
+
+// An action's operation annotation is the wire contract of that step, so the
+// sequence diagram shows it after the label.
+func TestSequence_OperationAnnotationIsDrawn(t *testing.T) {
+	puml, mmd := sequenceSource(t, `actor user Seeker
+domain web {
+    frontendplatform
+    graphql
+}
+use_case "Seeker opens an advert" {
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert  [ad]
+        graphql notifies "AdvertViewed"                [TOPIC web.advert-viewed]
+}
+`)
+	requireLine(t, "plantuml", puml, "frontendplatform -> graphql : for the advert [ad]")
+	requireLine(t, "mermaid", mmd, "frontendplatform->>graphql: for the advert [ad]")
+	requireLine(t, "plantuml", puml, `graphql ->> graphql : notifies "AdvertViewed" [TOPIC web.advert-viewed]`)
+}
