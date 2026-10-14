@@ -15,15 +15,17 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "return_action",
-              "context": "Offering",
-              "phrase": "available offering",
-              "description": "Offering returns available offering",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "return_action",
+                "context": "Offering",
+                "phrase": "available offering",
+                "description": "Offering returns available offering",
+                "line": 3,
+                "column": 9
+              }
             }
           ]
         },
@@ -38,27 +40,31 @@
             "line": 5,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_4",
-              "type": "internal_action",
-              "context": "Order",
-              "verb": "creates",
-              "connector": "a",
-              "phrase": "draft Order",
-              "description": "Order creates a draft Order",
-              "line": 6,
-              "column": 9
+              "action": {
+                "id": "action_4",
+                "type": "internal_action",
+                "context": "Order",
+                "verb": "creates",
+                "connector": "a",
+                "phrase": "draft Order",
+                "description": "Order creates a draft Order",
+                "line": 6,
+                "column": 9
+              }
             },
             {
-              "id": "action_5",
-              "type": "return_action",
-              "context": "Order",
-              "connector": "the",
-              "phrase": "url of the payment providers",
-              "description": "Order returns url of the payment providers",
-              "line": 7,
-              "column": 9
+              "action": {
+                "id": "action_5",
+                "type": "return_action",
+                "context": "Order",
+                "connector": "the",
+                "phrase": "url of the payment providers",
+                "description": "Order returns url of the payment providers",
+                "line": 7,
+                "column": 9
+              }
             }
           ]
         },
@@ -74,25 +80,29 @@
             "line": 9,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_7",
-              "type": "internal_action",
-              "context": "PaymentProvider",
-              "verb": "confirms",
-              "phrase": "payment",
-              "description": "PaymentProvider confirms payment",
-              "line": 10,
-              "column": 9
+              "action": {
+                "id": "action_7",
+                "type": "internal_action",
+                "context": "PaymentProvider",
+                "verb": "confirms",
+                "phrase": "payment",
+                "description": "PaymentProvider confirms payment",
+                "line": 10,
+                "column": 9
+              }
             },
             {
-              "id": "action_8",
-              "type": "async_action",
-              "context": "PaymentProvider",
-              "event": "PaymentCompleted",
-              "description": "PaymentProvider notifies \"PaymentCompleted\"",
-              "line": 11,
-              "column": 9
+              "action": {
+                "id": "action_8",
+                "type": "async_action",
+                "context": "PaymentProvider",
+                "event": "PaymentCompleted",
+                "description": "PaymentProvider notifies \"PaymentCompleted\"",
+                "line": 11,
+                "column": 9
+              }
             }
           ]
         },
@@ -106,17 +116,19 @@
             "line": 14,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_10",
-              "type": "internal_action",
-              "context": "Order",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "Order as Paid",
-              "description": "Order marks the Order as Paid",
-              "line": 15,
-              "column": 9
+              "action": {
+                "id": "action_10",
+                "type": "internal_action",
+                "context": "Order",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "Order as Paid",
+                "description": "Order marks the Order as Paid",
+                "line": 15,
+                "column": 9
+              }
             }
           ]
         }
@@ -137,49 +149,57 @@
             "line": 19,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_12",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "reserve a VAS",
-              "description": "VASScheduling asks Wallet to reserve a VAS",
-              "line": 20,
-              "column": 9
+              "action": {
+                "id": "action_12",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "reserve a VAS",
+                "description": "VASScheduling asks Wallet to reserve a VAS",
+                "line": 20,
+                "column": 9
+              }
             },
             {
-              "id": "action_13",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "creates",
-              "connector": "an",
-              "phrase": "unconfirmed VAS reservation",
-              "description": "Wallet creates an unconfirmed VAS reservation",
-              "line": 21,
-              "column": 9
+              "action": {
+                "id": "action_13",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "creates",
+                "connector": "an",
+                "phrase": "unconfirmed VAS reservation",
+                "description": "Wallet creates an unconfirmed VAS reservation",
+                "line": 21,
+                "column": 9
+              }
             },
             {
-              "id": "action_14",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Addition Request Approved",
-              "description": "Wallet notifies \"VAS Addition Request Approved\"",
-              "line": 22,
-              "column": 9
+              "action": {
+                "id": "action_14",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Addition Request Approved",
+                "description": "Wallet notifies \"VAS Addition Request Approved\"",
+                "line": 22,
+                "column": 9
+              }
             },
             {
-              "id": "action_15",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "drafts",
-              "connector": "a",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling drafts a VAS schedule",
-              "line": 23,
-              "column": 9
+              "action": {
+                "id": "action_15",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "drafts",
+                "connector": "a",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling drafts a VAS schedule",
+                "line": 23,
+                "column": 9
+              }
             }
           ]
         },
@@ -193,47 +213,55 @@
             "line": 25,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_17",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "OrderManagement",
-              "ref": "OrderManagement",
-              "connector": "to",
-              "phrase": "create an Order",
-              "description": "VASScheduling asks OrderManagement to create an Order",
-              "line": 26,
-              "column": 9
+              "action": {
+                "id": "action_17",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "OrderManagement",
+                "ref": "OrderManagement",
+                "connector": "to",
+                "phrase": "create an Order",
+                "description": "VASScheduling asks OrderManagement to create an Order",
+                "line": 26,
+                "column": 9
+              }
             },
             {
-              "id": "action_18",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order Created",
-              "description": "OrderManagement notifies \"Order Created\"",
-              "line": 27,
-              "column": 9
+              "action": {
+                "id": "action_18",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order Created",
+                "description": "OrderManagement notifies \"Order Created\"",
+                "line": 27,
+                "column": 9
+              }
             },
             {
-              "id": "action_19",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "Order as payment deferred",
-              "description": "OrderManagement marks the Order as payment deferred",
-              "line": 28,
-              "column": 9
+              "action": {
+                "id": "action_19",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "Order as payment deferred",
+                "description": "OrderManagement marks the Order as payment deferred",
+                "line": 28,
+                "column": 9
+              }
             },
             {
-              "id": "action_20",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order payment deferred",
-              "description": "OrderManagement notifies \"Order payment deferred\"",
-              "line": 29,
-              "column": 9
+              "action": {
+                "id": "action_20",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order payment deferred",
+                "description": "OrderManagement notifies \"Order payment deferred\"",
+                "line": 29,
+                "column": 9
+              }
             }
           ]
         },
@@ -247,39 +275,45 @@
             "line": 31,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_22",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "WalletItemAddition",
-              "ref": "WalletItemAddition",
-              "connector": "to",
-              "phrase": "fulfil the addition request",
-              "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
-              "line": 32,
-              "column": 9
+              "action": {
+                "id": "action_22",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "WalletItemAddition",
+                "ref": "WalletItemAddition",
+                "connector": "to",
+                "phrase": "fulfil the addition request",
+                "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
+                "line": 32,
+                "column": 9
+              }
             },
             {
-              "id": "action_23",
-              "type": "sync_action",
-              "context": "WalletItemAddition",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "add VAS",
-              "description": "WalletItemAddition asks Wallet to add VAS",
-              "line": 33,
-              "column": 9
+              "action": {
+                "id": "action_23",
+                "type": "sync_action",
+                "context": "WalletItemAddition",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "add VAS",
+                "description": "WalletItemAddition asks Wallet to add VAS",
+                "line": 33,
+                "column": 9
+              }
             },
             {
-              "id": "action_24",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS added",
-              "description": "Wallet notifies \"VAS added\"",
-              "line": 34,
-              "column": 9
+              "action": {
+                "id": "action_24",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS added",
+                "description": "Wallet notifies \"VAS added\"",
+                "line": 34,
+                "column": 9
+              }
             }
           ]
         },
@@ -293,27 +327,31 @@
             "line": 36,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_26",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "OrderManagement",
-              "ref": "OrderManagement",
-              "connector": "to",
-              "phrase": "mark the Order as fulfiled",
-              "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
-              "line": 37,
-              "column": 9
+              "action": {
+                "id": "action_26",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "OrderManagement",
+                "ref": "OrderManagement",
+                "connector": "to",
+                "phrase": "mark the Order as fulfiled",
+                "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
+                "line": 37,
+                "column": 9
+              }
             },
             {
-              "id": "action_27",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order completed",
-              "description": "OrderManagement notifies \"Order completed\"",
-              "line": 38,
-              "column": 9
+              "action": {
+                "id": "action_27",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order completed",
+                "description": "OrderManagement notifies \"Order completed\"",
+                "line": 38,
+                "column": 9
+              }
             }
           ]
         }
@@ -334,49 +372,57 @@
             "line": 42,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_29",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "reserve a VAS",
-              "description": "VASScheduling asks Wallet to reserve a VAS",
-              "line": 43,
-              "column": 9
+              "action": {
+                "id": "action_29",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "reserve a VAS",
+                "description": "VASScheduling asks Wallet to reserve a VAS",
+                "line": 43,
+                "column": 9
+              }
             },
             {
-              "id": "action_30",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "reserves",
-              "connector": "a",
-              "phrase": "VAS",
-              "description": "Wallet reserves a VAS",
-              "line": 44,
-              "column": 9
+              "action": {
+                "id": "action_30",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "reserves",
+                "connector": "a",
+                "phrase": "VAS",
+                "description": "Wallet reserves a VAS",
+                "line": 44,
+                "column": 9
+              }
             },
             {
-              "id": "action_31",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Reserved",
-              "description": "Wallet notifies \"VAS Reserved\"",
-              "line": 45,
-              "column": 9
+              "action": {
+                "id": "action_31",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Reserved",
+                "description": "Wallet notifies \"VAS Reserved\"",
+                "line": 45,
+                "column": 9
+              }
             },
             {
-              "id": "action_32",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "creates",
-              "connector": "a",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling creates a VAS schedule",
-              "line": 46,
-              "column": 9
+              "action": {
+                "id": "action_32",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "creates",
+                "connector": "a",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling creates a VAS schedule",
+                "line": 46,
+                "column": 9
+              }
             }
           ]
         }
@@ -398,48 +444,56 @@
             "line": 50,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_34",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "cancel the VAS reservation",
-              "description": "VASScheduling asks Wallet to cancel the VAS reservation",
-              "line": 51,
-              "column": 9
+              "action": {
+                "id": "action_34",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "cancel the VAS reservation",
+                "description": "VASScheduling asks Wallet to cancel the VAS reservation",
+                "line": 51,
+                "column": 9
+              }
             },
             {
-              "id": "action_35",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "cancels",
-              "phrase": "VAS reservation",
-              "description": "Wallet cancels VAS reservation",
-              "line": 52,
-              "column": 9
+              "action": {
+                "id": "action_35",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "cancels",
+                "phrase": "VAS reservation",
+                "description": "Wallet cancels VAS reservation",
+                "line": 52,
+                "column": 9
+              }
             },
             {
-              "id": "action_36",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Reservation Canceled",
-              "description": "Wallet notifies \"VAS Reservation Canceled\"",
-              "line": 53,
-              "column": 9
+              "action": {
+                "id": "action_36",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Reservation Canceled",
+                "description": "Wallet notifies \"VAS Reservation Canceled\"",
+                "line": 53,
+                "column": 9
+              }
             },
             {
-              "id": "action_37",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "cancels",
-              "connector": "the",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling cancels the VAS schedule",
-              "line": 54,
-              "column": 9
+              "action": {
+                "id": "action_37",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "cancels",
+                "connector": "the",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling cancels the VAS schedule",
+                "line": 54,
+                "column": 9
+              }
             }
           ]
         }
@@ -461,25 +515,29 @@
             "line": 58,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_39",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "removes",
-              "phrase": "VAS",
-              "description": "Wallet removes VAS",
-              "line": 59,
-              "column": 9
+              "action": {
+                "id": "action_39",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "removes",
+                "phrase": "VAS",
+                "description": "Wallet removes VAS",
+                "line": 59,
+                "column": 9
+              }
             },
             {
-              "id": "action_40",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Expired",
-              "description": "Wallet notifies \"VAS Expired\"",
-              "line": 60,
-              "column": 9
+              "action": {
+                "id": "action_40",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Expired",
+                "description": "Wallet notifies \"VAS Expired\"",
+                "line": 60,
+                "column": 9
+              }
             }
           ]
         }
@@ -501,46 +559,54 @@
             "line": 66,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_42",
-              "type": "internal_action",
-              "context": "OrderMgmt",
-              "verb": "creates",
-              "connector": "an",
-              "phrase": "\"Order with two items to fulfil: VAS and VAS Subscription\"",
-              "description": "OrderMgmt creates an \"Order with two items to fulfil: VAS and VAS Subscription\"",
-              "line": 67,
-              "column": 9
+              "action": {
+                "id": "action_42",
+                "type": "internal_action",
+                "context": "OrderMgmt",
+                "verb": "creates",
+                "connector": "an",
+                "phrase": "\"Order with two items to fulfil: VAS and VAS Subscription\"",
+                "description": "OrderMgmt creates an \"Order with two items to fulfil: VAS and VAS Subscription\"",
+                "line": 67,
+                "column": 9
+              }
             },
             {
-              "id": "action_43",
-              "type": "async_action",
-              "context": "OrderMgmt",
-              "event": "Order Created",
-              "description": "OrderMgmt notifies \"Order Created\"",
-              "line": 68,
-              "column": 9
+              "action": {
+                "id": "action_43",
+                "type": "async_action",
+                "context": "OrderMgmt",
+                "event": "Order Created",
+                "description": "OrderMgmt notifies \"Order Created\"",
+                "line": 68,
+                "column": 9
+              }
             },
             {
-              "id": "action_44",
-              "type": "internal_action",
-              "context": "OrderMgmt",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "Order as payment deferred",
-              "description": "OrderMgmt marks the Order as payment deferred",
-              "line": 69,
-              "column": 9
+              "action": {
+                "id": "action_44",
+                "type": "internal_action",
+                "context": "OrderMgmt",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "Order as payment deferred",
+                "description": "OrderMgmt marks the Order as payment deferred",
+                "line": 69,
+                "column": 9
+              }
             },
             {
-              "id": "action_45",
-              "type": "async_action",
-              "context": "OrderMgmt",
-              "event": "Order payment deferred",
-              "description": "OrderMgmt notifies \"Order payment deferred\"",
-              "line": 70,
-              "column": 9
+              "action": {
+                "id": "action_45",
+                "type": "async_action",
+                "context": "OrderMgmt",
+                "event": "Order payment deferred",
+                "description": "OrderMgmt notifies \"Order payment deferred\"",
+                "line": 70,
+                "column": 9
+              }
             }
           ]
         },
@@ -554,38 +620,44 @@
             "line": 72,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_47",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "VASMgmt",
-              "ref": "VASMgmt",
-              "connector": "to",
-              "phrase": "schedule the VAS",
-              "description": "OrderFulfilment asks VASMgmt to schedule the VAS",
-              "line": 73,
-              "column": 9
+              "action": {
+                "id": "action_47",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "VASMgmt",
+                "ref": "VASMgmt",
+                "connector": "to",
+                "phrase": "schedule the VAS",
+                "description": "OrderFulfilment asks VASMgmt to schedule the VAS",
+                "line": 73,
+                "column": 9
+              }
             },
             {
-              "id": "action_48",
-              "type": "internal_action",
-              "context": "VASMgmt",
-              "verb": "schedules",
-              "connector": "the",
-              "phrase": "VAS for future application",
-              "description": "VASMgmt schedules the VAS for future application",
-              "line": 74,
-              "column": 9
+              "action": {
+                "id": "action_48",
+                "type": "internal_action",
+                "context": "VASMgmt",
+                "verb": "schedules",
+                "connector": "the",
+                "phrase": "VAS for future application",
+                "description": "VASMgmt schedules the VAS for future application",
+                "line": 74,
+                "column": 9
+              }
             },
             {
-              "id": "action_49",
-              "type": "async_action",
-              "context": "VASMgmt",
-              "event": "VAS scheduled",
-              "description": "VASMgmt notifies \"VAS scheduled\"",
-              "line": 75,
-              "column": 9
+              "action": {
+                "id": "action_49",
+                "type": "async_action",
+                "context": "VASMgmt",
+                "event": "VAS scheduled",
+                "description": "VASMgmt notifies \"VAS scheduled\"",
+                "line": 75,
+                "column": 9
+              }
             }
           ]
         },
@@ -599,40 +671,46 @@
             "line": 77,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_51",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "Subscription",
-              "ref": "Subscription",
-              "connector": "to",
-              "phrase": "create a VAS Subscription",
-              "description": "OrderFulfilment asks Subscription to create a VAS Subscription",
-              "line": 78,
-              "column": 9
+              "action": {
+                "id": "action_51",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "Subscription",
+                "ref": "Subscription",
+                "connector": "to",
+                "phrase": "create a VAS Subscription",
+                "description": "OrderFulfilment asks Subscription to create a VAS Subscription",
+                "line": 78,
+                "column": 9
+              }
             },
             {
-              "id": "action_52",
-              "type": "internal_action",
-              "context": "Subscription",
-              "verb": "creates",
-              "connector": "a",
-              "phrase": "VAS Subscription with the details",
-              "description": "Subscription creates a VAS Subscription with the details",
-              "line": 79,
-              "column": 9
+              "action": {
+                "id": "action_52",
+                "type": "internal_action",
+                "context": "Subscription",
+                "verb": "creates",
+                "connector": "a",
+                "phrase": "VAS Subscription with the details",
+                "description": "Subscription creates a VAS Subscription with the details",
+                "line": 79,
+                "column": 9
+              }
             },
             {
-              "id": "action_53",
-              "type": "internal_action",
-              "context": "OrderFulfilment",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "vas subscription item as Fulfiled",
-              "description": "OrderFulfilment marks the vas subscription item as Fulfiled",
-              "line": 80,
-              "column": 9
+              "action": {
+                "id": "action_53",
+                "type": "internal_action",
+                "context": "OrderFulfilment",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "vas subscription item as Fulfiled",
+                "description": "OrderFulfilment marks the vas subscription item as Fulfiled",
+                "line": 80,
+                "column": 9
+              }
             }
           ]
         }
@@ -654,26 +732,30 @@
             "line": 84,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_55",
-              "type": "internal_action",
-              "context": "VASMgmt",
-              "verb": "schedules",
-              "connector": "a",
-              "phrase": "VAS for future application",
-              "description": "VASMgmt schedules a VAS for future application",
-              "line": 85,
-              "column": 9
+              "action": {
+                "id": "action_55",
+                "type": "internal_action",
+                "context": "VASMgmt",
+                "verb": "schedules",
+                "connector": "a",
+                "phrase": "VAS for future application",
+                "description": "VASMgmt schedules a VAS for future application",
+                "line": 85,
+                "column": 9
+              }
             },
             {
-              "id": "action_56",
-              "type": "async_action",
-              "context": "VASMgmt",
-              "event": "VAS scheduled with subscription included",
-              "description": "VASMgmt notifies \"VAS scheduled with subscription included\"",
-              "line": 86,
-              "column": 9
+              "action": {
+                "id": "action_56",
+                "type": "async_action",
+                "context": "VASMgmt",
+                "event": "VAS scheduled with subscription included",
+                "description": "VASMgmt notifies \"VAS scheduled with subscription included\"",
+                "line": 86,
+                "column": 9
+              }
             }
           ]
         },
@@ -687,17 +769,19 @@
             "line": 88,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_58",
-              "type": "internal_action",
-              "context": "Subscription",
-              "verb": "creates",
-              "connector": "a",
-              "phrase": "VAS Subscription with the details",
-              "description": "Subscription creates a VAS Subscription with the details",
-              "line": 89,
-              "column": 9
+              "action": {
+                "id": "action_58",
+                "type": "internal_action",
+                "context": "Subscription",
+                "verb": "creates",
+                "connector": "a",
+                "phrase": "VAS Subscription with the details",
+                "description": "Subscription creates a VAS Subscription with the details",
+                "line": 89,
+                "column": 9
+              }
             }
           ]
         }
@@ -719,26 +803,30 @@
             "line": 93,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_60",
-              "type": "internal_action",
-              "context": "VASMgmt",
-              "verb": "applies",
-              "connector": "a",
-              "phrase": "VAS and stores details until when its valid",
-              "description": "VASMgmt applies a VAS and stores details until when its valid",
-              "line": 94,
-              "column": 9
+              "action": {
+                "id": "action_60",
+                "type": "internal_action",
+                "context": "VASMgmt",
+                "verb": "applies",
+                "connector": "a",
+                "phrase": "VAS and stores details until when its valid",
+                "description": "VASMgmt applies a VAS and stores details until when its valid",
+                "line": 94,
+                "column": 9
+              }
             },
             {
-              "id": "action_61",
-              "type": "async_action",
-              "context": "VASMgmt",
-              "event": "VAS Applied",
-              "description": "VASMgmt notifies \"VAS Applied\"",
-              "line": 95,
-              "column": 9
+              "action": {
+                "id": "action_61",
+                "type": "async_action",
+                "context": "VASMgmt",
+                "event": "VAS Applied",
+                "description": "VASMgmt notifies \"VAS Applied\"",
+                "line": 95,
+                "column": 9
+              }
             }
           ]
         }
@@ -760,26 +848,30 @@
             "line": 99,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_63",
-              "type": "internal_action",
-              "context": "VASMgmt",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "VAS as expired",
-              "description": "VASMgmt marks the VAS as expired",
-              "line": 100,
-              "column": 9
+              "action": {
+                "id": "action_63",
+                "type": "internal_action",
+                "context": "VASMgmt",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "VAS as expired",
+                "description": "VASMgmt marks the VAS as expired",
+                "line": 100,
+                "column": 9
+              }
             },
             {
-              "id": "action_64",
-              "type": "async_action",
-              "context": "VASMgmt",
-              "event": "VAS expired",
-              "description": "VASMgmt notifies \"VAS expired\"",
-              "line": 101,
-              "column": 9
+              "action": {
+                "id": "action_64",
+                "type": "async_action",
+                "context": "VASMgmt",
+                "event": "VAS expired",
+                "description": "VASMgmt notifies \"VAS expired\"",
+                "line": 101,
+                "column": 9
+              }
             }
           ]
         },
@@ -793,48 +885,56 @@
             "line": 103,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_66",
-              "type": "internal_action",
-              "context": "Subscription",
-              "verb": "checks",
-              "phrase": "if VAS has active associated subscription",
-              "description": "Subscription checks if VAS has active associated subscription",
-              "line": 104,
-              "column": 9
+              "action": {
+                "id": "action_66",
+                "type": "internal_action",
+                "context": "Subscription",
+                "verb": "checks",
+                "phrase": "if VAS has active associated subscription",
+                "description": "Subscription checks if VAS has active associated subscription",
+                "line": 104,
+                "column": 9
+              }
             },
             {
-              "id": "action_67",
-              "type": "sync_action",
-              "context": "Subscription",
-              "targetContext": "VASMgmt",
-              "ref": "VASMgmt",
-              "connector": "to",
-              "phrase": "\"schedule/apply a new VAS\"",
-              "description": "Subscription asks VASMgmt to \"schedule/apply a new VAS\"",
-              "line": 105,
-              "column": 9
+              "action": {
+                "id": "action_67",
+                "type": "sync_action",
+                "context": "Subscription",
+                "targetContext": "VASMgmt",
+                "ref": "VASMgmt",
+                "connector": "to",
+                "phrase": "\"schedule/apply a new VAS\"",
+                "description": "Subscription asks VASMgmt to \"schedule/apply a new VAS\"",
+                "line": 105,
+                "column": 9
+              }
             },
             {
-              "id": "action_68",
-              "type": "internal_action",
-              "context": "Subscription",
-              "verb": "renews",
-              "connector": "the",
-              "phrase": "VAS Subscription with the VAS",
-              "description": "Subscription renews the VAS Subscription with the VAS",
-              "line": 106,
-              "column": 9
+              "action": {
+                "id": "action_68",
+                "type": "internal_action",
+                "context": "Subscription",
+                "verb": "renews",
+                "connector": "the",
+                "phrase": "VAS Subscription with the VAS",
+                "description": "Subscription renews the VAS Subscription with the VAS",
+                "line": 106,
+                "column": 9
+              }
             },
             {
-              "id": "action_69",
-              "type": "async_action",
-              "context": "Susbscription",
-              "event": "VAS Subscription Renewed",
-              "description": "Susbscription notifies \"VAS Subscription Renewed\"",
-              "line": 107,
-              "column": 9
+              "action": {
+                "id": "action_69",
+                "type": "async_action",
+                "context": "Susbscription",
+                "event": "VAS Subscription Renewed",
+                "description": "Susbscription notifies \"VAS Subscription Renewed\"",
+                "line": 107,
+                "column": 9
+              }
             }
           ]
         }
@@ -856,17 +956,19 @@
             "line": 111,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_71",
-              "type": "internal_action",
-              "context": "Subscription",
-              "verb": "cancels",
-              "connector": "the",
-              "phrase": "subscription",
-              "description": "Subscription cancels the subscription",
-              "line": 112,
-              "column": 9
+              "action": {
+                "id": "action_71",
+                "type": "internal_action",
+                "context": "Subscription",
+                "verb": "cancels",
+                "connector": "the",
+                "phrase": "subscription",
+                "description": "Subscription cancels the subscription",
+                "line": 112,
+                "column": 9
+              }
             }
           ]
         }

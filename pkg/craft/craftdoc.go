@@ -26,6 +26,10 @@ type (
 	Trigger            = model.Trigger
 	TriggerType        = model.TriggerType
 	Action             = model.Action
+	Step               = model.Step
+	Block              = model.Block
+	Branch             = model.Branch
+	BlockKind          = model.BlockKind
 	ActionType         = model.ActionType
 	Operation          = model.Operation
 	Participant        = model.Participant
@@ -44,6 +48,9 @@ const (
 	TriggerTypeExternal     = model.TriggerTypeExternal
 	TriggerTypeEvent        = model.TriggerTypeEvent
 	TriggerTypeDomainListen = model.TriggerTypeDomainListen
+
+	BlockAlt = model.BlockAlt
+	BlockOpt = model.BlockOpt
 
 	ActionTypeSync     = model.ActionTypeSync
 	ActionTypeAsync    = model.ActionTypeAsync

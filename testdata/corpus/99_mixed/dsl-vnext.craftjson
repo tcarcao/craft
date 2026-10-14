@@ -26,33 +26,37 @@
             "line": 15,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "sync_action",
-              "context": "Subscriptions",
-              "targetContext": "re/billing",
-              "ref": "re/billing",
-              "operation": {
-                "verb": "POST",
-                "payload": "/v1/charges",
-                "text": "POST /v1/charges"
-              },
-              "connector": "for",
-              "phrase": "a fresh charge attempt (1! \u0026 2!)",
-              "description": "Subscriptions asks re/billing for a fresh charge attempt (1! \u0026 2!)",
-              "line": 16,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "Subscriptions",
+                "targetContext": "re/billing",
+                "ref": "re/billing",
+                "operation": {
+                  "verb": "POST",
+                  "payload": "/v1/charges",
+                  "text": "POST /v1/charges"
+                },
+                "connector": "for",
+                "phrase": "a fresh charge attempt (1! \u0026 2!)",
+                "description": "Subscriptions asks re/billing for a fresh charge attempt (1! \u0026 2!)",
+                "line": 16,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "async_action",
-              "context": "Subscriptions",
-              "event": "vas.VasFulfilled",
-              "ref": "vas.VasFulfilled",
-              "description": "Subscriptions notifies \"vas.VasFulfilled\"",
-              "line": 17,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "Subscriptions",
+                "event": "vas.VasFulfilled",
+                "ref": "vas.VasFulfilled",
+                "description": "Subscriptions notifies \"vas.VasFulfilled\"",
+                "line": 17,
+                "column": 9
+              }
             }
           ]
         }

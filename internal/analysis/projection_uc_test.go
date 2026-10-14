@@ -43,17 +43,17 @@ func TestProject_UseCase_ExternalTrigger(t *testing.T) {
 	if sc1.Trigger.Actor != "Customer" {
 		t.Errorf("expected actor=Customer, got %q", sc1.Trigger.Actor)
 	}
-	if len(sc1.Actions) != 2 {
-		t.Fatalf("expected 2 actions in sc1, got %d", len(sc1.Actions))
+	if len(sc1.Actions()) != 2 {
+		t.Fatalf("expected 2 actions in sc1, got %d", len(sc1.Actions()))
 	}
-	if sc1.Actions[0].ID != "action_2" {
-		t.Errorf("expected action_2, got %q", sc1.Actions[0].ID)
+	if sc1.Actions()[0].ID != "action_2" {
+		t.Errorf("expected action_2, got %q", sc1.Actions()[0].ID)
 	}
-	if sc1.Actions[0].Type != "sync_action" {
-		t.Errorf("expected sync_action, got %q", sc1.Actions[0].Type)
+	if sc1.Actions()[0].Type != "sync_action" {
+		t.Errorf("expected sync_action, got %q", sc1.Actions()[0].Type)
 	}
-	if sc1.Actions[1].Type != "async_action" {
-		t.Errorf("expected async_action, got %q", sc1.Actions[1].Type)
+	if sc1.Actions()[1].Type != "async_action" {
+		t.Errorf("expected async_action, got %q", sc1.Actions()[1].Type)
 	}
 
 	sc2 := uc.Scenarios[1]
@@ -83,7 +83,7 @@ func TestProject_ActionOperation(t *testing.T) {
 }`
 	g, _, _ := syntax.Parse(src)
 	doc := projectFile(syntax.Root(g), "")
-	actions := doc.UseCases[0].Scenarios[0].Actions
+	actions := doc.UseCases[0].Scenarios[0].Actions()
 
 	if actions[0].Operation == nil {
 		t.Fatal("action 0: expected Operation to be set")
@@ -115,7 +115,7 @@ func TestProject_ActionOperation_OmittedWhenAbsent(t *testing.T) {
 	src := "use_case \"X\" {\n  when U does x\n    A asks B for c\n}"
 	g, _, _ := syntax.Parse(src)
 	doc := projectFile(syntax.Root(g), "")
-	b, err := json.Marshal(doc.UseCases[0].Scenarios[0].Actions[0])
+	b, err := json.Marshal(doc.UseCases[0].Scenarios[0].Actions()[0])
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestProject_ActionOperation_EmptyBracketsRejected(t *testing.T) {
 	}
 
 	doc := projectFile(syntax.Root(g), "")
-	action := doc.UseCases[0].Scenarios[0].Actions[0]
+	action := doc.UseCases[0].Scenarios[0].Actions()[0]
 	if action.Operation != nil {
 		t.Errorf("expected nil Operation for `[]`, got %+v", action.Operation)
 	}
@@ -169,7 +169,7 @@ func TestProject_UseCase_DescriptionExcludesAnnotation(t *testing.T) {
 		t.Fatalf("unexpected parse diagnostics: %v", diags)
 	}
 	doc := projectFile(syntax.Root(g), "")
-	action := doc.UseCases[0].Scenarios[0].Actions[0]
+	action := doc.UseCases[0].Scenarios[0].Actions()[0]
 	if got := action.Description; got != "A asks B for a fresh charge" {
 		t.Errorf("Description = %q, want %q (the annotation must not leak into the label)",
 			got, "A asks B for a fresh charge")

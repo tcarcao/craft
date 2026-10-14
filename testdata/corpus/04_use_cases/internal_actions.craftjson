@@ -14,45 +14,53 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "SyncService",
-              "verb": "fetches",
-              "phrase": "remote data",
-              "description": "SyncService fetches remote data",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "SyncService",
+                "verb": "fetches",
+                "phrase": "remote data",
+                "description": "SyncService fetches remote data",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "internal_action",
-              "context": "SyncService",
-              "verb": "transforms",
-              "phrase": "data format",
-              "description": "SyncService transforms data format",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "internal_action",
+                "context": "SyncService",
+                "verb": "transforms",
+                "phrase": "data format",
+                "description": "SyncService transforms data format",
+                "line": 4,
+                "column": 9
+              }
             },
             {
-              "id": "action_4",
-              "type": "internal_action",
-              "context": "SyncService",
-              "verb": "persists",
-              "phrase": "updated records",
-              "description": "SyncService persists updated records",
-              "line": 5,
-              "column": 9
+              "action": {
+                "id": "action_4",
+                "type": "internal_action",
+                "context": "SyncService",
+                "verb": "persists",
+                "phrase": "updated records",
+                "description": "SyncService persists updated records",
+                "line": 5,
+                "column": 9
+              }
             },
             {
-              "id": "action_5",
-              "type": "async_action",
-              "context": "SyncService",
-              "event": "Sync Completed",
-              "description": "SyncService notifies \"Sync Completed\"",
-              "line": 6,
-              "column": 9
+              "action": {
+                "id": "action_5",
+                "type": "async_action",
+                "context": "SyncService",
+                "event": "Sync Completed",
+                "description": "SyncService notifies \"Sync Completed\"",
+                "line": 6,
+                "column": 9
+              }
             }
           ]
         }

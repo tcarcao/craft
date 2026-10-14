@@ -166,7 +166,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 			outSc := model.Scenario{
 				ID:      fmt.Sprintf("scenario_%d", counter),
 				Trigger: projectTrigger(sc, li),
-				Actions: []model.Action{},
+				Steps:   []model.Step{},
 			}
 			for _, action := range sc.Actions() {
 				if action.IsIncomplete() {
@@ -174,7 +174,8 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 					continue
 				}
 				counter++
-				outSc.Actions = append(outSc.Actions, projectAction(action, fmt.Sprintf("action_%d", counter), li))
+				a := projectAction(action, fmt.Sprintf("action_%d", counter), li)
+				outSc.Steps = append(outSc.Steps, model.Step{Action: &a})
 			}
 			outUC.Scenarios = append(outUC.Scenarios, outSc)
 		}

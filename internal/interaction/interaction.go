@@ -88,7 +88,7 @@ func Derive(doc *model.CraftDoc) []Interaction {
 	publishers := map[string][]Endpoint{}
 	for _, uc := range doc.UseCases {
 		for _, sc := range uc.Scenarios {
-			for _, a := range sc.Actions {
+			for _, a := range sc.Actions() {
 				if a.Type == lang.ActionAsync && a.Context != "" && a.Event != "" {
 					publishers[a.Event] = appendEndpoint(publishers[a.Event], endpoint(a.Context, a.From))
 				}
@@ -125,8 +125,8 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 			break
 		}
 		actor := endpoint(t.Actor, t.Subject)
-		if len(sc.Actions) > 0 && sc.Actions[0].Context != "" {
-			first := sc.Actions[0]
+		if len(sc.Actions()) > 0 && sc.Actions()[0].Context != "" {
+			first := sc.Actions()[0]
 			it := base
 			it.Kind, it.From, it.To = Trigger, actor, endpoint(first.Context, first.From)
 			callStack = append(callStack, frame{caller: actor, callee: it.To})
@@ -153,7 +153,7 @@ func deriveScenario(uc model.UseCase, sc model.Scenario, publishers map[string][
 		}
 	}
 
-	for i, a := range sc.Actions {
+	for i, a := range sc.Actions() {
 		if a.Context == "" {
 			continue
 		}

@@ -14,37 +14,43 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "sync_action",
-              "context": "AccountService",
-              "targetContext": "BalanceService",
-              "ref": "BalanceService",
-              "connector": "to",
-              "phrase": "get current balance",
-              "description": "AccountService asks BalanceService to get current balance",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "AccountService",
+                "targetContext": "BalanceService",
+                "ref": "BalanceService",
+                "connector": "to",
+                "phrase": "get current balance",
+                "description": "AccountService asks BalanceService to get current balance",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "return_action",
-              "context": "BalanceService",
-              "phrase": "balance information",
-              "description": "BalanceService returns balance information",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "return_action",
+                "context": "BalanceService",
+                "phrase": "balance information",
+                "description": "BalanceService returns balance information",
+                "line": 4,
+                "column": 9
+              }
             },
             {
-              "id": "action_4",
-              "type": "return_action",
-              "context": "AccountService",
-              "targetContext": "Customer",
-              "phrase": "balance details",
-              "description": "AccountService returns balance details to Customer",
-              "line": 5,
-              "column": 9
+              "action": {
+                "id": "action_4",
+                "type": "return_action",
+                "context": "AccountService",
+                "targetContext": "Customer",
+                "phrase": "balance details",
+                "description": "AccountService returns balance details to Customer",
+                "line": 5,
+                "column": 9
+              }
             }
           ]
         }

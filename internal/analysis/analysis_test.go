@@ -179,11 +179,11 @@ services {
 		got, want *model.Participant
 	}{
 		{"external trigger subject", sc[0].Trigger.Subject, &model.Participant{Kind: model.ParticipantActor, ID: "Customer"}},
-		{"sync subject", sc[0].Actions[0].From, bc("re/subscriptions", "BillingService")},
-		{"qualified sync target", sc[0].Actions[0].To, bc("re/billing", "")},
-		{"data store target", sc[0].Actions[1].To, &model.Participant{Kind: model.ParticipantDataStore, ID: "billing_db", Service: "BillingService"}},
-		{"return target", sc[0].Actions[2].To, bc("re/subscriptions", "BillingService")},
-		{"async has no target", sc[0].Actions[3].To, nil},
+		{"sync subject", sc[0].Actions()[0].From, bc("re/subscriptions", "BillingService")},
+		{"qualified sync target", sc[0].Actions()[0].To, bc("re/billing", "")},
+		{"data store target", sc[0].Actions()[1].To, &model.Participant{Kind: model.ParticipantDataStore, ID: "billing_db", Service: "BillingService"}},
+		{"return target", sc[0].Actions()[2].To, bc("re/subscriptions", "BillingService")},
+		{"async has no target", sc[0].Actions()[3].To, nil},
 		{"domain-listen subject", sc[1].Trigger.Subject, bc("re/subscriptions", "BillingService")},
 	}
 	for _, c := range checks {
@@ -202,7 +202,7 @@ func TestWorkspace_AmbiguousParticipantStaysUnresolved(t *testing.T) {
 	res := workspaceOf(map[string]string{
 		"a.craft": "domain re {\n    billing\n}\ndomain ops {\n    billing\n}\nuse_case \"U\" {\n    when billing starts\n        billing charges card\n}\n",
 	})
-	a := res.Doc.UseCases[0].Scenarios[0].Actions[0]
+	a := res.Doc.UseCases[0].Scenarios[0].Actions()[0]
 	if a.From != nil {
 		t.Errorf("ambiguous subject resolved to %+v; want nil", a.From)
 	}

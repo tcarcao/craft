@@ -26,11 +26,11 @@ func minimalDoc() *craft.CraftDoc {
 					Actor: "User",
 					Verb:  "does",
 				},
-				Actions: []craft.Action{{
+				Steps: actionSteps([]craft.Action{{
 					Type:    craft.ActionTypeInternal,
 					Context: "Ctx",
 					Phrase:  "thing",
-				}},
+				}}),
 			}},
 		}},
 		Actors: []craft.Actor{{Name: "User", Type: craft.ActorTypeUser}},
@@ -150,10 +150,10 @@ func TestDomainArchitectureDiagram_NoSelfLoops(t *testing.T) {
 				Trigger: craft.Trigger{
 					Type: craft.TriggerTypeExternal, Actor: "User", Verb: "x",
 				},
-				Actions: []craft.Action{
+				Steps: actionSteps([]craft.Action{
 					{Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "thinks"},
 					{Type: craft.ActionTypeSync, Context: "BC1", TargetContext: "BC2", Phrase: "asks"},
-				},
+				}),
 			}},
 		}},
 		Actors: []craft.Actor{{Name: "User", Type: craft.ActorTypeUser}},
@@ -200,11 +200,11 @@ func TestC4Diagram_IncludesCRONActor(t *testing.T) {
 					Actor: "CRON",
 					Verb:  "fires",
 				},
-				Actions: []craft.Action{{
+				Steps: actionSteps([]craft.Action{{
 					Type:    craft.ActionTypeInternal,
 					Context: "Scheduler",
 					Phrase:  "ticks",
-				}},
+				}}),
 			}},
 		}},
 		Actors: []craft.Actor{{Name: "CRON", Type: craft.ActorTypeSystem}},
@@ -234,18 +234,18 @@ func TestC4Diagram_ActorOnlyConnectsToTriggeredDomains(t *testing.T) {
 					Trigger: craft.Trigger{
 						Type: craft.TriggerTypeExternal, Actor: "Actor1", Verb: "calls",
 					},
-					Actions: []craft.Action{{
+					Steps: actionSteps([]craft.Action{{
 						Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "do",
-					}},
+					}}),
 				},
 				{
 					ID: "s2",
 					Trigger: craft.Trigger{
 						Type: craft.TriggerTypeExternal, Actor: "Actor2", Verb: "calls",
 					},
-					Actions: []craft.Action{{
+					Steps: actionSteps([]craft.Action{{
 						Type: craft.ActionTypeInternal, Context: "BC2", Phrase: "do",
-					}},
+					}}),
 				},
 			},
 		}},
@@ -291,12 +291,12 @@ func TestC4Diagram_EventsAllRendered(t *testing.T) {
 					Trigger: craft.Trigger{
 						Type: craft.TriggerTypeExternal, Actor: "Timer", Verb: "fires",
 					},
-					Actions: []craft.Action{
+					Steps: actionSteps([]craft.Action{
 						// Two distinct events between the SAME pair BC1→EQ — this
 						// is what the (From,To)-only dedup collapses today.
 						{Type: craft.ActionTypeAsync, Context: "BC1", Event: "EventX"},
 						{Type: craft.ActionTypeAsync, Context: "BC1", Event: "EventZ"},
-					},
+					}),
 				}},
 			},
 			{
@@ -308,9 +308,9 @@ func TestC4Diagram_EventsAllRendered(t *testing.T) {
 						Context: "BC2",
 						Event:   "EventX",
 					},
-					Actions: []craft.Action{
+					Steps: actionSteps([]craft.Action{
 						{Type: craft.ActionTypeAsync, Context: "BC2", Event: "EventY"},
-					},
+					}),
 				}},
 			},
 			{
@@ -322,9 +322,9 @@ func TestC4Diagram_EventsAllRendered(t *testing.T) {
 						Context: "BC2",
 						Event:   "EventZ",
 					},
-					Actions: []craft.Action{
+					Steps: actionSteps([]craft.Action{
 						{Type: craft.ActionTypeInternal, Context: "BC2", Phrase: "handles z"},
-					},
+					}),
 				}},
 			},
 			{
@@ -336,9 +336,9 @@ func TestC4Diagram_EventsAllRendered(t *testing.T) {
 						Context: "BC1",
 						Event:   "EventY",
 					},
-					Actions: []craft.Action{
+					Steps: actionSteps([]craft.Action{
 						{Type: craft.ActionTypeInternal, Context: "BC1", Phrase: "handles"},
-					},
+					}),
 				}},
 			},
 		},

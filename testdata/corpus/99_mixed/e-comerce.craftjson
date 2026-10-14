@@ -67,41 +67,45 @@
             "line": 27,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "sync_action",
-              "context": "WalletItemPurchase",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "initiate a VAS addition",
-              "description": "WalletItemPurchase asks Wallet to initiate a VAS addition",
-              "line": 28,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/WalletItemPurchase",
-                "service": "WalletService"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "WalletItemPurchase",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "initiate a VAS addition",
+                "description": "WalletItemPurchase asks Wallet to initiate a VAS addition",
+                "line": 28,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/WalletItemPurchase",
+                  "service": "WalletService"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_3",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Addition Request Approved",
-              "description": "Wallet notifies \"VAS Addition Request Approved\"",
-              "line": 29,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Addition Request Approved",
+                "description": "Wallet notifies \"VAS Addition Request Approved\"",
+                "line": 29,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             }
           ]
@@ -121,71 +125,79 @@
             "line": 31,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_5",
-              "type": "sync_action",
-              "context": "WalletItemPurchase",
-              "targetContext": "OrderManagement",
-              "ref": "OrderManagement",
-              "connector": "to",
-              "phrase": "create an Order",
-              "description": "WalletItemPurchase asks OrderManagement to create an Order",
-              "line": 32,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/WalletItemPurchase",
-                "service": "WalletService"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_5",
+                "type": "sync_action",
+                "context": "WalletItemPurchase",
+                "targetContext": "OrderManagement",
+                "ref": "OrderManagement",
+                "connector": "to",
+                "phrase": "create an Order",
+                "description": "WalletItemPurchase asks OrderManagement to create an Order",
+                "line": 32,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/WalletItemPurchase",
+                  "service": "WalletService"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_6",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order Created",
-              "description": "OrderManagement notifies \"Order Created\"",
-              "line": 33,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_6",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order Created",
+                "description": "OrderManagement notifies \"Order Created\"",
+                "line": 33,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_7",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "Order as payment deferred",
-              "description": "OrderManagement marks the Order as payment deferred",
-              "line": 34,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_7",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "Order as payment deferred",
+                "description": "OrderManagement marks the Order as payment deferred",
+                "line": 34,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_8",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order payment deferred",
-              "description": "OrderManagement notifies \"Order payment deferred\"",
-              "line": 35,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_8",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order payment deferred",
+                "description": "OrderManagement notifies \"Order payment deferred\"",
+                "line": 35,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             }
           ]
@@ -205,63 +217,69 @@
             "line": 37,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_10",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "WalletItemAddition",
-              "ref": "WalletItemAddition",
-              "connector": "to",
-              "phrase": "fulfil the addition request",
-              "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
-              "line": 38,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderFulfilment",
-                "service": "Order Service"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/WalletItemAddition",
-                "service": "WalletService"
+              "action": {
+                "id": "action_10",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "WalletItemAddition",
+                "ref": "WalletItemAddition",
+                "connector": "to",
+                "phrase": "fulfil the addition request",
+                "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
+                "line": 38,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderFulfilment",
+                  "service": "Order Service"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/WalletItemAddition",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_11",
-              "type": "sync_action",
-              "context": "WalletItemAddition",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "add VAS",
-              "description": "WalletItemAddition asks Wallet to add VAS",
-              "line": 39,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/WalletItemAddition",
-                "service": "WalletService"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_11",
+                "type": "sync_action",
+                "context": "WalletItemAddition",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "add VAS",
+                "description": "WalletItemAddition asks Wallet to add VAS",
+                "line": 39,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/WalletItemAddition",
+                  "service": "WalletService"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_12",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS added",
-              "description": "Wallet notifies \"VAS added\"",
-              "line": 40,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_12",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS added",
+                "description": "Wallet notifies \"VAS added\"",
+                "line": 40,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             }
           ]
@@ -281,41 +299,45 @@
             "line": 42,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_14",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "OrderManagement",
-              "ref": "OrderManagement",
-              "connector": "to",
-              "phrase": "mark the Order as fulfiled",
-              "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
-              "line": 43,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderFulfilment",
-                "service": "Order Service"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_14",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "OrderManagement",
+                "ref": "OrderManagement",
+                "connector": "to",
+                "phrase": "mark the Order as fulfiled",
+                "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
+                "line": 43,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderFulfilment",
+                  "service": "Order Service"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_15",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order completed",
-              "description": "OrderManagement notifies \"Order completed\"",
-              "line": 44,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_15",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order completed",
+                "description": "OrderManagement notifies \"Order completed\"",
+                "line": 44,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             }
           ]
@@ -337,73 +359,81 @@
             "line": 48,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_17",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "reserve a VAS",
-              "description": "VASScheduling asks Wallet to reserve a VAS",
-              "line": 49,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_17",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "reserve a VAS",
+                "description": "VASScheduling asks Wallet to reserve a VAS",
+                "line": 49,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_18",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "creates",
-              "connector": "an",
-              "phrase": "unconfirmed VAS reservation",
-              "description": "Wallet creates an unconfirmed VAS reservation",
-              "line": 50,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_18",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "creates",
+                "connector": "an",
+                "phrase": "unconfirmed VAS reservation",
+                "description": "Wallet creates an unconfirmed VAS reservation",
+                "line": 50,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_19",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Addition Request Approved",
-              "description": "Wallet notifies \"VAS Addition Request Approved\"",
-              "line": 51,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_19",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Addition Request Approved",
+                "description": "Wallet notifies \"VAS Addition Request Approved\"",
+                "line": 51,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_20",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "drafts",
-              "connector": "a",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling drafts a VAS schedule",
-              "line": 52,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
+              "action": {
+                "id": "action_20",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "drafts",
+                "connector": "a",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling drafts a VAS schedule",
+                "line": 52,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                }
               }
             }
           ]
@@ -423,71 +453,79 @@
             "line": 54,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_22",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "OrderManagement",
-              "ref": "OrderManagement",
-              "connector": "to",
-              "phrase": "create an Order",
-              "description": "VASScheduling asks OrderManagement to create an Order",
-              "line": 55,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_22",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "OrderManagement",
+                "ref": "OrderManagement",
+                "connector": "to",
+                "phrase": "create an Order",
+                "description": "VASScheduling asks OrderManagement to create an Order",
+                "line": 55,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_23",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order Created",
-              "description": "OrderManagement notifies \"Order Created\"",
-              "line": 56,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_23",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order Created",
+                "description": "OrderManagement notifies \"Order Created\"",
+                "line": 56,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_24",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "marks",
-              "connector": "the",
-              "phrase": "Order as payment deferred",
-              "description": "OrderManagement marks the Order as payment deferred",
-              "line": 57,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_24",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "marks",
+                "connector": "the",
+                "phrase": "Order as payment deferred",
+                "description": "OrderManagement marks the Order as payment deferred",
+                "line": 57,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_25",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order payment deferred",
-              "description": "OrderManagement notifies \"Order payment deferred\"",
-              "line": 58,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_25",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order payment deferred",
+                "description": "OrderManagement notifies \"Order payment deferred\"",
+                "line": 58,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             }
           ]
@@ -507,63 +545,69 @@
             "line": 60,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_27",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "WalletItemAddition",
-              "ref": "WalletItemAddition",
-              "connector": "to",
-              "phrase": "fulfil the addition request",
-              "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
-              "line": 61,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderFulfilment",
-                "service": "Order Service"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/WalletItemAddition",
-                "service": "WalletService"
+              "action": {
+                "id": "action_27",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "WalletItemAddition",
+                "ref": "WalletItemAddition",
+                "connector": "to",
+                "phrase": "fulfil the addition request",
+                "description": "OrderFulfilment asks WalletItemAddition to fulfil the addition request",
+                "line": 61,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderFulfilment",
+                  "service": "Order Service"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/WalletItemAddition",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_28",
-              "type": "sync_action",
-              "context": "WalletItemAddition",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "add VAS",
-              "description": "WalletItemAddition asks Wallet to add VAS",
-              "line": 62,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/WalletItemAddition",
-                "service": "WalletService"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_28",
+                "type": "sync_action",
+                "context": "WalletItemAddition",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "add VAS",
+                "description": "WalletItemAddition asks Wallet to add VAS",
+                "line": 62,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/WalletItemAddition",
+                  "service": "WalletService"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_29",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS added",
-              "description": "Wallet notifies \"VAS added\"",
-              "line": 63,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_29",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS added",
+                "description": "Wallet notifies \"VAS added\"",
+                "line": 63,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             }
           ]
@@ -583,41 +627,45 @@
             "line": 65,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_31",
-              "type": "sync_action",
-              "context": "OrderFulfilment",
-              "targetContext": "OrderManagement",
-              "ref": "OrderManagement",
-              "connector": "to",
-              "phrase": "mark the Order as fulfiled",
-              "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
-              "line": 66,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderFulfilment",
-                "service": "Order Service"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_31",
+                "type": "sync_action",
+                "context": "OrderFulfilment",
+                "targetContext": "OrderManagement",
+                "ref": "OrderManagement",
+                "connector": "to",
+                "phrase": "mark the Order as fulfiled",
+                "description": "OrderFulfilment asks OrderManagement to mark the Order as fulfiled",
+                "line": 66,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderFulfilment",
+                  "service": "Order Service"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             },
             {
-              "id": "action_32",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "Order completed",
-              "description": "OrderManagement notifies \"Order completed\"",
-              "line": 67,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/OrderManagement",
-                "service": "Order Service"
+              "action": {
+                "id": "action_32",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "Order completed",
+                "description": "OrderManagement notifies \"Order completed\"",
+                "line": 67,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/OrderManagement",
+                  "service": "Order Service"
+                }
               }
             }
           ]
@@ -639,73 +687,81 @@
             "line": 71,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_34",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "reserve a VAS",
-              "description": "VASScheduling asks Wallet to reserve a VAS",
-              "line": 72,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_34",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "reserve a VAS",
+                "description": "VASScheduling asks Wallet to reserve a VAS",
+                "line": 72,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_35",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "reserves",
-              "connector": "a",
-              "phrase": "VAS",
-              "description": "Wallet reserves a VAS",
-              "line": 73,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_35",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "reserves",
+                "connector": "a",
+                "phrase": "VAS",
+                "description": "Wallet reserves a VAS",
+                "line": 73,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_36",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Reserved",
-              "description": "Wallet notifies \"VAS Reserved\"",
-              "line": 74,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_36",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Reserved",
+                "description": "Wallet notifies \"VAS Reserved\"",
+                "line": 74,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_37",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "creates",
-              "connector": "a",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling creates a VAS schedule",
-              "line": 75,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
+              "action": {
+                "id": "action_37",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "creates",
+                "connector": "a",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling creates a VAS schedule",
+                "line": 75,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                }
               }
             }
           ]
@@ -728,72 +784,80 @@
             "line": 79,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_39",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "cancel the VAS reservation",
-              "description": "VASScheduling asks Wallet to cancel the VAS reservation",
-              "line": 80,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
-              },
-              "to": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_39",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "cancel the VAS reservation",
+                "description": "VASScheduling asks Wallet to cancel the VAS reservation",
+                "line": 80,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_40",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "cancels",
-              "phrase": "VAS reservation",
-              "description": "Wallet cancels VAS reservation",
-              "line": 81,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_40",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "cancels",
+                "phrase": "VAS reservation",
+                "description": "Wallet cancels VAS reservation",
+                "line": 81,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_41",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Reservation Canceled",
-              "description": "Wallet notifies \"VAS Reservation Canceled\"",
-              "line": 82,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_41",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Reservation Canceled",
+                "description": "Wallet notifies \"VAS Reservation Canceled\"",
+                "line": 82,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_42",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "cancels",
-              "connector": "the",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling cancels the VAS schedule",
-              "line": 83,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/VASScheduling",
-                "service": "service-re-go-vas"
+              "action": {
+                "id": "action_42",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "cancels",
+                "connector": "the",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling cancels the VAS schedule",
+                "line": 83,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/VASScheduling",
+                  "service": "service-re-go-vas"
+                }
               }
             }
           ]
@@ -816,34 +880,38 @@
             "line": 87,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_44",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "removes",
-              "phrase": "VAS",
-              "description": "Wallet removes VAS",
-              "line": 88,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_44",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "removes",
+                "phrase": "VAS",
+                "description": "Wallet removes VAS",
+                "line": 88,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             },
             {
-              "id": "action_45",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Expired",
-              "description": "Wallet notifies \"VAS Expired\"",
-              "line": 89,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Monetization/Wallet",
-                "service": "WalletService"
+              "action": {
+                "id": "action_45",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Expired",
+                "description": "Wallet notifies \"VAS Expired\"",
+                "line": 89,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Monetization/Wallet",
+                  "service": "WalletService"
+                }
               }
             }
           ]

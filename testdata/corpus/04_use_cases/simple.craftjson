@@ -14,25 +14,29 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "validates",
-              "phrase": "email format",
-              "description": "Authentication validates email format",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "validates",
+                "phrase": "email format",
+                "description": "Authentication validates email format",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "async_action",
-              "context": "Authentication",
-              "event": "User Registered",
-              "description": "Authentication notifies \"User Registered\"",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "Authentication",
+                "event": "User Registered",
+                "description": "Authentication notifies \"User Registered\"",
+                "line": 4,
+                "column": 9
+              }
             }
           ]
         }

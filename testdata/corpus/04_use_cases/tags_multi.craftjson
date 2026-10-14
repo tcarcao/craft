@@ -14,15 +14,17 @@
             "line": 8,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "async_action",
-              "context": "Billing",
-              "event": "Account Created",
-              "description": "Billing notifies \"Account Created\"",
-              "line": 9,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "async_action",
+                "context": "Billing",
+                "event": "Account Created",
+                "description": "Billing notifies \"Account Created\"",
+                "line": 9,
+                "column": 9
+              }
             }
           ]
         }

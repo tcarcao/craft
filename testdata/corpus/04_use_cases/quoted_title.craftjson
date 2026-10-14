@@ -14,16 +14,18 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "UserService",
-              "verb": "creates",
-              "phrase": "account",
-              "description": "UserService creates account",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "UserService",
+                "verb": "creates",
+                "phrase": "account",
+                "description": "UserService creates account",
+                "line": 3,
+                "column": 9
+              }
             }
           ]
         }

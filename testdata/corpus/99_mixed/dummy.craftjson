@@ -15,48 +15,56 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "sync_action",
-              "context": "VASScheduling",
-              "targetContext": "Wallet",
-              "ref": "Wallet",
-              "connector": "to",
-              "phrase": "cancel the VAS reservation",
-              "description": "VASScheduling asks Wallet to cancel the VAS reservation",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "VASScheduling",
+                "targetContext": "Wallet",
+                "ref": "Wallet",
+                "connector": "to",
+                "phrase": "cancel the VAS reservation",
+                "description": "VASScheduling asks Wallet to cancel the VAS reservation",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "internal_action",
-              "context": "Wallet",
-              "verb": "cancels",
-              "phrase": "VAS reservation",
-              "description": "Wallet cancels VAS reservation",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "internal_action",
+                "context": "Wallet",
+                "verb": "cancels",
+                "phrase": "VAS reservation",
+                "description": "Wallet cancels VAS reservation",
+                "line": 4,
+                "column": 9
+              }
             },
             {
-              "id": "action_4",
-              "type": "async_action",
-              "context": "Wallet",
-              "event": "VAS Reservation Canceled",
-              "description": "Wallet notifies \"VAS Reservation Canceled\"",
-              "line": 5,
-              "column": 9
+              "action": {
+                "id": "action_4",
+                "type": "async_action",
+                "context": "Wallet",
+                "event": "VAS Reservation Canceled",
+                "description": "Wallet notifies \"VAS Reservation Canceled\"",
+                "line": 5,
+                "column": 9
+              }
             },
             {
-              "id": "action_5",
-              "type": "internal_action",
-              "context": "VASScheduling",
-              "verb": "cancels",
-              "connector": "the",
-              "phrase": "VAS schedule",
-              "description": "VASScheduling cancels the VAS schedule",
-              "line": 6,
-              "column": 9
+              "action": {
+                "id": "action_5",
+                "type": "internal_action",
+                "context": "VASScheduling",
+                "verb": "cancels",
+                "connector": "the",
+                "phrase": "VAS schedule",
+                "description": "VASScheduling cancels the VAS schedule",
+                "line": 6,
+                "column": 9
+              }
             }
           ]
         }
@@ -78,17 +86,19 @@
             "line": 10,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_7",
-              "type": "internal_action",
-              "context": "VASMgmt",
-              "verb": "applies",
-              "connector": "a",
-              "phrase": "VAS and stores details until when its valid",
-              "description": "VASMgmt applies a VAS and stores details until when its valid",
-              "line": 11,
-              "column": 9
+              "action": {
+                "id": "action_7",
+                "type": "internal_action",
+                "context": "VASMgmt",
+                "verb": "applies",
+                "connector": "a",
+                "phrase": "VAS and stores details until when its valid",
+                "description": "VASMgmt applies a VAS and stores details until when its valid",
+                "line": 11,
+                "column": 9
+              }
             }
           ]
         }

@@ -11,26 +11,30 @@
             "description": "when \"Order Placed\"",
             "line": 2
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "notification",
-              "verb": "sends",
-              "phrase": "confirmation email",
-              "description": "notification sends confirmation email",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "notification",
+                "verb": "sends",
+                "phrase": "confirmation email",
+                "description": "notification sends confirmation email",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "internal_action",
-              "context": "analytics",
-              "verb": "tracks",
-              "phrase": "order event",
-              "description": "analytics tracks order event",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "internal_action",
+                "context": "analytics",
+                "verb": "tracks",
+                "phrase": "order event",
+                "description": "analytics tracks order event",
+                "line": 4,
+                "column": 9
+              }
             }
           ]
         }

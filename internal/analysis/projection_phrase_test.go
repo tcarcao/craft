@@ -27,7 +27,7 @@ func TestProject_ActionPhrase_TightPunctuation_NoInsertedSpaces(t *testing.T) {
 	if len(doc.UseCases) != 1 || len(doc.UseCases[0].Scenarios) != 1 {
 		t.Fatalf("unexpected projection shape: %+v", doc.UseCases)
 	}
-	actions := doc.UseCases[0].Scenarios[0].Actions
+	actions := doc.UseCases[0].Scenarios[0].Actions()
 	if len(actions) != 1 {
 		t.Fatalf("expected 1 action, got %d", len(actions))
 	}

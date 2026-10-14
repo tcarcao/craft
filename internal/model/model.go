@@ -138,11 +138,85 @@ type UseCase struct {
 	TagValues map[string][]string `json:"tagValues,omitempty"`
 }
 
-// Scenario is a specific path through a use case.
+// Scenario is one trigger and the steps it sets off, in source order.
 type Scenario struct {
-	ID      string   `json:"id"`
-	Trigger Trigger  `json:"trigger"`
-	Actions []Action `json:"actions"`
+	ID string `json:"id"`
+	// Name is the label written in `scenario "…"` before the trigger; "" when
+	// the scenario is unnamed.
+	Name    string  `json:"name,omitempty"`
+	Trigger Trigger `json:"trigger"`
+	Steps   []Step  `json:"steps"`
+}
+
+// Step is exactly one of Action or Block.
+type Step struct {
+	Action *Action `json:"action,omitempty"`
+	Block  *Block  `json:"block,omitempty"`
+}
+
+// BlockKind is the kind of a branch block inside a scenario.
+type BlockKind = lang.BlockKind
+
+const (
+	BlockAlt = lang.BlockAlt
+	BlockOpt = lang.BlockOpt
+)
+
+// Block is an `alt` (one of several branches) or `opt` (one conditional
+// branch) inside a scenario.
+type Block struct {
+	ID       string         `json:"id"`
+	Kind     lang.BlockKind `json:"kind"`
+	Line     int            `json:"line,omitempty"`
+	Column   int            `json:"column,omitempty"`
+	Branches []Branch       `json:"branches"`
+}
+
+// Branch is one labelled path of a Block.
+type Branch struct {
+	Label string `json:"label"`
+	Line  int    `json:"line,omitempty"`
+	Steps []Step `json:"steps"`
+}
+
+// Actions returns every action of the scenario in source order: a depth-first
+// walk of Steps. The result holds copies; use EachAction to update in place.
+func (s Scenario) Actions() []Action {
+	var out []Action
+	var walk func([]Step)
+	walk = func(steps []Step) {
+		for _, st := range steps {
+			if st.Action != nil {
+				out = append(out, *st.Action)
+			}
+			if st.Block != nil {
+				for _, br := range st.Block.Branches {
+					walk(br.Steps)
+				}
+			}
+		}
+	}
+	walk(s.Steps)
+	return out
+}
+
+// EachAction calls fn with a pointer to every action of the scenario in
+// source order, so callers can update actions in place.
+func (s *Scenario) EachAction(fn func(*Action)) {
+	var walk func([]Step)
+	walk = func(steps []Step) {
+		for _, st := range steps {
+			if st.Action != nil {
+				fn(st.Action)
+			}
+			if st.Block != nil {
+				for i := range st.Block.Branches {
+					walk(st.Block.Branches[i].Steps)
+				}
+			}
+		}
+	}
+	walk(s.Steps)
 }
 
 // Trigger describes what initiates a scenario.

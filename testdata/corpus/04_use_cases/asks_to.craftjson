@@ -14,39 +14,45 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "sync_action",
-              "context": "PaymentService",
-              "targetContext": "AccountService",
-              "ref": "AccountService",
-              "connector": "to",
-              "phrase": "verify source account",
-              "description": "PaymentService asks AccountService to verify source account",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "PaymentService",
+                "targetContext": "AccountService",
+                "ref": "AccountService",
+                "connector": "to",
+                "phrase": "verify source account",
+                "description": "PaymentService asks AccountService to verify source account",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "sync_action",
-              "context": "PaymentService",
-              "targetContext": "AccountService",
-              "ref": "AccountService",
-              "connector": "to",
-              "phrase": "verify destination account",
-              "description": "PaymentService asks AccountService to verify destination account",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "PaymentService",
+                "targetContext": "AccountService",
+                "ref": "AccountService",
+                "connector": "to",
+                "phrase": "verify destination account",
+                "description": "PaymentService asks AccountService to verify destination account",
+                "line": 4,
+                "column": 9
+              }
             },
             {
-              "id": "action_4",
-              "type": "async_action",
-              "context": "AccountService",
-              "event": "Transfer Completed",
-              "description": "AccountService notifies \"Transfer Completed\"",
-              "line": 5,
-              "column": 9
+              "action": {
+                "id": "action_4",
+                "type": "async_action",
+                "context": "AccountService",
+                "event": "Transfer Completed",
+                "description": "AccountService notifies \"Transfer Completed\"",
+                "line": 5,
+                "column": 9
+              }
             }
           ]
         }

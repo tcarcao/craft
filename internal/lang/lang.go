@@ -22,6 +22,14 @@ const (
 	TriggerDomainListen TriggerKind = "domain_listen" // when Ctx listens "E"
 )
 
+// BlockKind is the kind of a branch block inside a scenario.
+type BlockKind string
+
+const (
+	BlockAlt BlockKind = "alt" // exactly one of several branches runs
+	BlockOpt BlockKind = "opt" // the single branch runs only under its condition
+)
+
 // ParticipantKind is what a name in a use case resolves to.
 type ParticipantKind string
 

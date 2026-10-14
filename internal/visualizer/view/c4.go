@@ -218,7 +218,7 @@ func (b *c4Builder) userScenarios(fn func(sc model.Scenario)) {
 // context of each user scenario, otherwise every context it touches.
 func (b *c4Builder) findEntries() {
 	b.userScenarios(func(sc model.Scenario) {
-		for _, a := range sc.Actions {
+		for _, a := range sc.Actions() {
 			if a.Context == "" {
 				continue
 			}

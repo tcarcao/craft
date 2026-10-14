@@ -44,7 +44,7 @@ func TestCraftDocRoundTrip(t *testing.T) {
 							Phrase:      "an order",
 							Description: "Customer submits a new order",
 						},
-						Actions: []craft.Action{
+						Steps: actionSteps([]craft.Action{
 							{
 								ID:          "validate-cart",
 								Type:        craft.ActionTypeSync,
@@ -61,7 +61,7 @@ func TestCraftDocRoundTrip(t *testing.T) {
 								Description: "Emit OrderPlaced event",
 								Line:        21,
 							},
-						},
+						}),
 					},
 				},
 			},
@@ -112,4 +112,13 @@ func TestCraftDocRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(original, roundTripped) {
 		t.Errorf("round-trip mismatch:\n  original:     %+v\n  round-tripped: %+v", original, roundTripped)
 	}
+}
+
+// actionSteps wraps flat actions as scenario steps.
+func actionSteps(actions []craft.Action) []craft.Step {
+	steps := make([]craft.Step, len(actions))
+	for i := range actions {
+		steps[i] = craft.Step{Action: &actions[i]}
+	}
+	return steps
 }

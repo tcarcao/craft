@@ -31,13 +31,12 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 			case lang.TriggerDomainListen:
 				sc.Trigger.Subject = resolve(sc.Trigger.Context)
 			}
-			for k := range sc.Actions {
-				a := &sc.Actions[k]
+			sc.EachAction(func(a *model.Action) {
 				a.From = resolve(a.Context)
 				if a.Type == lang.ActionSync || a.Type == lang.ActionReturn {
 					a.To = resolve(a.TargetContext)
 				}
-			}
+			})
 		}
 	}
 

@@ -20,9 +20,9 @@ func TestC4_FocusContextKeepsHostingServiceInternal(t *testing.T) {
 			Scenarios: []craft.Scenario{{
 				ID:      "s1",
 				Trigger: craft.Trigger{Type: craft.TriggerTypeExternal, Actor: "Customer", Verb: "places"},
-				Actions: []craft.Action{{
+				Steps: actionSteps([]craft.Action{{
 					Type: craft.ActionTypeSync, Context: "Ordering", Verb: "asks", TargetContext: "Invoicing",
-				}},
+				}}),
 			}},
 		}},
 	}
@@ -40,4 +40,13 @@ func TestC4_FocusContextKeepsHostingServiceInternal(t *testing.T) {
 	if strings.Contains(out, `System_Ext(Orders`) {
 		t.Errorf("Orders rendered external despite hosting the focused context:\n%s", out)
 	}
+}
+
+// actionSteps wraps flat actions as scenario steps.
+func actionSteps(actions []craft.Action) []craft.Step {
+	steps := make([]craft.Step, len(actions))
+	for i := range actions {
+		steps[i] = craft.Step{Action: &actions[i]}
+	}
+	return steps
 }

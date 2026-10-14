@@ -14,25 +14,29 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "OrderService",
-              "verb": "validates",
-              "phrase": "order details",
-              "description": "OrderService validates order details",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "OrderService",
+                "verb": "validates",
+                "phrase": "order details",
+                "description": "OrderService validates order details",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "async_action",
-              "context": "OrderService",
-              "event": "Order Placed",
-              "description": "OrderService notifies \"Order Placed\"",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "OrderService",
+                "event": "Order Placed",
+                "description": "OrderService notifies \"Order Placed\"",
+                "line": 4,
+                "column": 9
+              }
             }
           ]
         },
@@ -46,25 +50,29 @@
             "line": 6,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_5",
-              "type": "internal_action",
-              "context": "Inventory",
-              "verb": "checks",
-              "phrase": "stock availability",
-              "description": "Inventory checks stock availability",
-              "line": 7,
-              "column": 9
+              "action": {
+                "id": "action_5",
+                "type": "internal_action",
+                "context": "Inventory",
+                "verb": "checks",
+                "phrase": "stock availability",
+                "description": "Inventory checks stock availability",
+                "line": 7,
+                "column": 9
+              }
             },
             {
-              "id": "action_6",
-              "type": "async_action",
-              "context": "Inventory",
-              "event": "Stock Reserved",
-              "description": "Inventory notifies \"Stock Reserved\"",
-              "line": 8,
-              "column": 9
+              "action": {
+                "id": "action_6",
+                "type": "async_action",
+                "context": "Inventory",
+                "event": "Stock Reserved",
+                "description": "Inventory notifies \"Stock Reserved\"",
+                "line": 8,
+                "column": 9
+              }
             }
           ]
         }

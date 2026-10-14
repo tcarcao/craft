@@ -84,7 +84,7 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 				conSeen[sc.Trigger.Event] = true
 				sum.EventsConsumed = append(sum.EventsConsumed, sc.Trigger.Event)
 			}
-			for _, a := range sc.Actions {
+			for _, a := range sc.Actions() {
 				if a.Type == craft.ActionTypeAsync && a.Event != "" && !pubSeen[a.Event] {
 					pubSeen[a.Event] = true
 					sum.EventsPublished = append(sum.EventsPublished, a.Event)

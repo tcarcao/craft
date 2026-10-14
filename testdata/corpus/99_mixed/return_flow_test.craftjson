@@ -14,68 +14,80 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "PaymentService",
-              "verb": "validates",
-              "phrase": "payment data",
-              "description": "PaymentService validates payment data",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "PaymentService",
+                "verb": "validates",
+                "phrase": "payment data",
+                "description": "PaymentService validates payment data",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "sync_action",
-              "context": "PaymentService",
-              "targetContext": "BankGateway",
-              "ref": "BankGateway",
-              "connector": "to",
-              "phrase": "process payment",
-              "description": "PaymentService asks BankGateway to process payment",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "PaymentService",
+                "targetContext": "BankGateway",
+                "ref": "BankGateway",
+                "connector": "to",
+                "phrase": "process payment",
+                "description": "PaymentService asks BankGateway to process payment",
+                "line": 4,
+                "column": 9
+              }
             },
             {
-              "id": "action_4",
-              "type": "return_action",
-              "context": "BankGateway",
-              "phrase": "payment result",
-              "description": "BankGateway returns payment result",
-              "line": 5,
-              "column": 9
+              "action": {
+                "id": "action_4",
+                "type": "return_action",
+                "context": "BankGateway",
+                "phrase": "payment result",
+                "description": "BankGateway returns payment result",
+                "line": 5,
+                "column": 9
+              }
             },
             {
-              "id": "action_5",
-              "type": "sync_action",
-              "context": "PaymentService",
-              "targetContext": "NotificationService",
-              "ref": "NotificationService",
-              "connector": "to",
-              "phrase": "send confirmation",
-              "description": "PaymentService asks NotificationService to send confirmation",
-              "line": 6,
-              "column": 9
+              "action": {
+                "id": "action_5",
+                "type": "sync_action",
+                "context": "PaymentService",
+                "targetContext": "NotificationService",
+                "ref": "NotificationService",
+                "connector": "to",
+                "phrase": "send confirmation",
+                "description": "PaymentService asks NotificationService to send confirmation",
+                "line": 6,
+                "column": 9
+              }
             },
             {
-              "id": "action_6",
-              "type": "return_action",
-              "context": "NotificationService",
-              "phrase": "delivery status",
-              "description": "NotificationService returns delivery status",
-              "line": 7,
-              "column": 9
+              "action": {
+                "id": "action_6",
+                "type": "return_action",
+                "context": "NotificationService",
+                "phrase": "delivery status",
+                "description": "NotificationService returns delivery status",
+                "line": 7,
+                "column": 9
+              }
             },
             {
-              "id": "action_7",
-              "type": "return_action",
-              "context": "PaymentService",
-              "targetContext": "User",
-              "phrase": "final confirmation",
-              "description": "PaymentService returns final confirmation to User",
-              "line": 8,
-              "column": 9
+              "action": {
+                "id": "action_7",
+                "type": "return_action",
+                "context": "PaymentService",
+                "targetContext": "User",
+                "phrase": "final confirmation",
+                "description": "PaymentService returns final confirmation to User",
+                "line": 8,
+                "column": 9
+              }
             }
           ]
         }
@@ -96,78 +108,92 @@
             "line": 12,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_9",
-              "type": "sync_action",
-              "context": "ReportService",
-              "targetContext": "DatabaseService",
-              "ref": "DatabaseService",
-              "connector": "for",
-              "phrase": "data",
-              "description": "ReportService asks DatabaseService for data",
-              "line": 13,
-              "column": 9
+              "action": {
+                "id": "action_9",
+                "type": "sync_action",
+                "context": "ReportService",
+                "targetContext": "DatabaseService",
+                "ref": "DatabaseService",
+                "connector": "for",
+                "phrase": "data",
+                "description": "ReportService asks DatabaseService for data",
+                "line": 13,
+                "column": 9
+              }
             },
             {
-              "id": "action_10",
-              "type": "sync_action",
-              "context": "DatabaseService",
-              "targetContext": "CacheService",
-              "ref": "CacheService",
-              "connector": "to",
-              "phrase": "check cache",
-              "description": "DatabaseService asks CacheService to check cache",
-              "line": 14,
-              "column": 9
+              "action": {
+                "id": "action_10",
+                "type": "sync_action",
+                "context": "DatabaseService",
+                "targetContext": "CacheService",
+                "ref": "CacheService",
+                "connector": "to",
+                "phrase": "check cache",
+                "description": "DatabaseService asks CacheService to check cache",
+                "line": 14,
+                "column": 9
+              }
             },
             {
-              "id": "action_11",
-              "type": "return_action",
-              "context": "CacheService",
-              "phrase": "cache miss",
-              "description": "CacheService returns cache miss",
-              "line": 15,
-              "column": 9
+              "action": {
+                "id": "action_11",
+                "type": "return_action",
+                "context": "CacheService",
+                "phrase": "cache miss",
+                "description": "CacheService returns cache miss",
+                "line": 15,
+                "column": 9
+              }
             },
             {
-              "id": "action_12",
-              "type": "internal_action",
-              "context": "DatabaseService",
-              "verb": "queries",
-              "phrase": "main database",
-              "description": "DatabaseService queries main database",
-              "line": 16,
-              "column": 9
+              "action": {
+                "id": "action_12",
+                "type": "internal_action",
+                "context": "DatabaseService",
+                "verb": "queries",
+                "phrase": "main database",
+                "description": "DatabaseService queries main database",
+                "line": 16,
+                "column": 9
+              }
             },
             {
-              "id": "action_13",
-              "type": "return_action",
-              "context": "DatabaseService",
-              "phrase": "report data",
-              "description": "DatabaseService returns report data",
-              "line": 17,
-              "column": 9
+              "action": {
+                "id": "action_13",
+                "type": "return_action",
+                "context": "DatabaseService",
+                "phrase": "report data",
+                "description": "DatabaseService returns report data",
+                "line": 17,
+                "column": 9
+              }
             },
             {
-              "id": "action_14",
-              "type": "internal_action",
-              "context": "ReportService",
-              "verb": "formats",
-              "connector": "the",
-              "phrase": "data",
-              "description": "ReportService formats the data",
-              "line": 18,
-              "column": 9
+              "action": {
+                "id": "action_14",
+                "type": "internal_action",
+                "context": "ReportService",
+                "verb": "formats",
+                "connector": "the",
+                "phrase": "data",
+                "description": "ReportService formats the data",
+                "line": 18,
+                "column": 9
+              }
             },
             {
-              "id": "action_15",
-              "type": "return_action",
-              "context": "ReportService",
-              "phrase": "formatted report",
-              "description": "ReportService returns formatted report",
-              "line": 19,
-              "column": 9
+              "action": {
+                "id": "action_15",
+                "type": "return_action",
+                "context": "ReportService",
+                "phrase": "formatted report",
+                "description": "ReportService returns formatted report",
+                "line": 19,
+                "column": 9
+              }
             }
           ]
         }

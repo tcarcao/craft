@@ -169,83 +169,93 @@
             "line": 99,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "validates",
-              "phrase": "email format",
-              "description": "Authentication validates email format",
-              "line": 100,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "validates",
+                "phrase": "email format",
+                "description": "Authentication validates email format",
+                "line": 100,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_3",
-              "type": "sync_action",
-              "context": "Authentication",
-              "targetContext": "user_db",
-              "ref": "user_db",
-              "connector": "to",
-              "phrase": "check email uniqueness",
-              "description": "Authentication asks user_db to check email uniqueness",
-              "line": 101,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "Authentication",
+                "targetContext": "user_db",
+                "ref": "user_db",
+                "connector": "to",
+                "phrase": "check email uniqueness",
+                "description": "Authentication asks user_db to check email uniqueness",
+                "line": 101,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_4",
-              "type": "internal_action",
-              "context": "Profile",
-              "verb": "creates",
-              "phrase": "user profile",
-              "description": "Profile creates user profile",
-              "line": 102,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Profile",
-                "service": "UserService"
+              "action": {
+                "id": "action_4",
+                "type": "internal_action",
+                "context": "Profile",
+                "verb": "creates",
+                "phrase": "user profile",
+                "description": "Profile creates user profile",
+                "line": 102,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Profile",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_5",
-              "type": "sync_action",
-              "context": "Profile",
-              "targetContext": "user_db",
-              "ref": "user_db",
-              "connector": "to",
-              "phrase": "store profile data",
-              "description": "Profile asks user_db to store profile data",
-              "line": 103,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Profile",
-                "service": "UserService"
+              "action": {
+                "id": "action_5",
+                "type": "sync_action",
+                "context": "Profile",
+                "targetContext": "user_db",
+                "ref": "user_db",
+                "connector": "to",
+                "phrase": "store profile data",
+                "description": "Profile asks user_db to store profile data",
+                "line": 103,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Profile",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_6",
-              "type": "async_action",
-              "context": "Authentication",
-              "event": "UserRegistered",
-              "description": "Authentication notifies \"UserRegistered\"",
-              "line": 104,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_6",
+                "type": "async_action",
+                "context": "Authentication",
+                "event": "UserRegistered",
+                "description": "Authentication notifies \"UserRegistered\"",
+                "line": 104,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             }
           ]
@@ -265,52 +275,58 @@
             "line": 106,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_8",
-              "type": "internal_action",
-              "context": "Preferences",
-              "verb": "creates",
-              "phrase": "default preferences",
-              "description": "Preferences creates default preferences",
-              "line": 107,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Preferences",
-                "service": "UserService"
+              "action": {
+                "id": "action_8",
+                "type": "internal_action",
+                "context": "Preferences",
+                "verb": "creates",
+                "phrase": "default preferences",
+                "description": "Preferences creates default preferences",
+                "line": 107,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Preferences",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_9",
-              "type": "sync_action",
-              "context": "Preferences",
-              "targetContext": "user_db",
-              "ref": "user_db",
-              "connector": "to",
-              "phrase": "save preferences",
-              "description": "Preferences asks user_db to save preferences",
-              "line": 108,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Preferences",
-                "service": "UserService"
+              "action": {
+                "id": "action_9",
+                "type": "sync_action",
+                "context": "Preferences",
+                "targetContext": "user_db",
+                "ref": "user_db",
+                "connector": "to",
+                "phrase": "save preferences",
+                "description": "Preferences asks user_db to save preferences",
+                "line": 108,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Preferences",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_10",
-              "type": "internal_action",
-              "context": "EmailNotifier",
-              "verb": "sends",
-              "phrase": "welcome email",
-              "description": "EmailNotifier sends welcome email",
-              "line": 109,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/EmailNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_10",
+                "type": "internal_action",
+                "context": "EmailNotifier",
+                "verb": "sends",
+                "phrase": "welcome email",
+                "description": "EmailNotifier sends welcome email",
+                "line": 109,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/EmailNotifier",
+                  "service": "NotificationService"
+                }
               }
             }
           ]
@@ -336,49 +352,55 @@
             "line": 118,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_12",
-              "type": "return_action",
-              "context": "Catalog",
-              "phrase": "product details",
-              "description": "Catalog returns product details",
-              "line": 119,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Catalog",
-                "service": "ProductService"
+              "action": {
+                "id": "action_12",
+                "type": "return_action",
+                "context": "Catalog",
+                "phrase": "product details",
+                "description": "Catalog returns product details",
+                "line": 119,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Catalog",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_13",
-              "type": "internal_action",
-              "context": "Pricing",
-              "verb": "calculates",
-              "phrase": "current price",
-              "description": "Pricing calculates current price",
-              "line": 120,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Pricing",
-                "service": "ProductService"
+              "action": {
+                "id": "action_13",
+                "type": "internal_action",
+                "context": "Pricing",
+                "verb": "calculates",
+                "phrase": "current price",
+                "description": "Pricing calculates current price",
+                "line": 120,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Pricing",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_14",
-              "type": "internal_action",
-              "context": "Inventory",
-              "verb": "checks",
-              "phrase": "availability",
-              "description": "Inventory checks availability",
-              "line": 121,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Inventory",
-                "service": "ProductService"
+              "action": {
+                "id": "action_14",
+                "type": "internal_action",
+                "context": "Inventory",
+                "verb": "checks",
+                "phrase": "availability",
+                "description": "Inventory checks availability",
+                "line": 121,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Inventory",
+                  "service": "ProductService"
+                }
               }
             }
           ]
@@ -398,81 +420,91 @@
             "line": 123,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_16",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "creates",
-              "phrase": "draft order",
-              "description": "OrderManagement creates draft order",
-              "line": 124,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_16",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "creates",
+                "phrase": "draft order",
+                "description": "OrderManagement creates draft order",
+                "line": 124,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_17",
-              "type": "sync_action",
-              "context": "OrderManagement",
-              "targetContext": "order_db",
-              "ref": "order_db",
-              "connector": "to",
-              "phrase": "save draft",
-              "description": "OrderManagement asks order_db to save draft",
-              "line": 125,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_17",
+                "type": "sync_action",
+                "context": "OrderManagement",
+                "targetContext": "order_db",
+                "ref": "order_db",
+                "connector": "to",
+                "phrase": "save draft",
+                "description": "OrderManagement asks order_db to save draft",
+                "line": 125,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_18",
-              "type": "internal_action",
-              "context": "Inventory",
-              "verb": "reserves",
-              "phrase": "stock",
-              "description": "Inventory reserves stock",
-              "line": 126,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Inventory",
-                "service": "ProductService"
+              "action": {
+                "id": "action_18",
+                "type": "internal_action",
+                "context": "Inventory",
+                "verb": "reserves",
+                "phrase": "stock",
+                "description": "Inventory reserves stock",
+                "line": 126,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Inventory",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_19",
-              "type": "internal_action",
-              "context": "Pricing",
-              "verb": "applies",
-              "phrase": "discounts",
-              "description": "Pricing applies discounts",
-              "line": 127,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Pricing",
-                "service": "ProductService"
+              "action": {
+                "id": "action_19",
+                "type": "internal_action",
+                "context": "Pricing",
+                "verb": "applies",
+                "phrase": "discounts",
+                "description": "Pricing applies discounts",
+                "line": 127,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Pricing",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_20",
-              "type": "return_action",
-              "context": "OrderManagement",
-              "phrase": "cart summary",
-              "description": "OrderManagement returns cart summary",
-              "line": 128,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_20",
+                "type": "return_action",
+                "context": "OrderManagement",
+                "phrase": "cart summary",
+                "description": "OrderManagement returns cart summary",
+                "line": 128,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             }
           ]
@@ -492,66 +524,74 @@
             "line": 130,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_22",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "validates",
-              "phrase": "order",
-              "description": "OrderManagement validates order",
-              "line": 131,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_22",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "validates",
+                "phrase": "order",
+                "description": "OrderManagement validates order",
+                "line": 131,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_23",
-              "type": "internal_action",
-              "context": "Payment",
-              "verb": "processes",
-              "phrase": "payment",
-              "description": "Payment processes payment",
-              "line": 132,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Payment",
-                "service": "OrderService"
+              "action": {
+                "id": "action_23",
+                "type": "internal_action",
+                "context": "Payment",
+                "verb": "processes",
+                "phrase": "payment",
+                "description": "Payment processes payment",
+                "line": 132,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Payment",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_24",
-              "type": "sync_action",
-              "context": "Payment",
-              "targetContext": "payment_gateway",
-              "ref": "payment_gateway",
-              "connector": "to",
-              "phrase": "charge card",
-              "description": "Payment asks payment_gateway to charge card",
-              "line": 133,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Payment",
-                "service": "OrderService"
+              "action": {
+                "id": "action_24",
+                "type": "sync_action",
+                "context": "Payment",
+                "targetContext": "payment_gateway",
+                "ref": "payment_gateway",
+                "connector": "to",
+                "phrase": "charge card",
+                "description": "Payment asks payment_gateway to charge card",
+                "line": 133,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Payment",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_25",
-              "type": "async_action",
-              "context": "Payment",
-              "event": "PaymentCompleted",
-              "description": "Payment notifies \"PaymentCompleted\"",
-              "line": 134,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Payment",
-                "service": "OrderService"
+              "action": {
+                "id": "action_25",
+                "type": "async_action",
+                "context": "Payment",
+                "event": "PaymentCompleted",
+                "description": "Payment notifies \"PaymentCompleted\"",
+                "line": 134,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Payment",
+                  "service": "OrderService"
+                }
               }
             }
           ]
@@ -571,81 +611,91 @@
             "line": 136,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_27",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "marks",
-              "phrase": "order as paid",
-              "description": "OrderManagement marks order as paid",
-              "line": 137,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_27",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "marks",
+                "phrase": "order as paid",
+                "description": "OrderManagement marks order as paid",
+                "line": 137,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_28",
-              "type": "internal_action",
-              "context": "Inventory",
-              "verb": "confirms",
-              "phrase": "stock allocation",
-              "description": "Inventory confirms stock allocation",
-              "line": 138,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Inventory",
-                "service": "ProductService"
+              "action": {
+                "id": "action_28",
+                "type": "internal_action",
+                "context": "Inventory",
+                "verb": "confirms",
+                "phrase": "stock allocation",
+                "description": "Inventory confirms stock allocation",
+                "line": 138,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Inventory",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_29",
-              "type": "internal_action",
-              "context": "Shipping",
-              "verb": "creates",
-              "phrase": "shipment",
-              "description": "Shipping creates shipment",
-              "line": 139,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Shipping",
-                "service": "OrderService"
+              "action": {
+                "id": "action_29",
+                "type": "internal_action",
+                "context": "Shipping",
+                "verb": "creates",
+                "phrase": "shipment",
+                "description": "Shipping creates shipment",
+                "line": 139,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Shipping",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_30",
-              "type": "sync_action",
-              "context": "Shipping",
-              "targetContext": "shipping_provider",
-              "ref": "shipping_provider",
-              "connector": "to",
-              "phrase": "schedule pickup",
-              "description": "Shipping asks shipping_provider to schedule pickup",
-              "line": 140,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Shipping",
-                "service": "OrderService"
+              "action": {
+                "id": "action_30",
+                "type": "sync_action",
+                "context": "Shipping",
+                "targetContext": "shipping_provider",
+                "ref": "shipping_provider",
+                "connector": "to",
+                "phrase": "schedule pickup",
+                "description": "Shipping asks shipping_provider to schedule pickup",
+                "line": 140,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Shipping",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_31",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "OrderConfirmed",
-              "description": "OrderManagement notifies \"OrderConfirmed\"",
-              "line": 141,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_31",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "OrderConfirmed",
+                "description": "OrderManagement notifies \"OrderConfirmed\"",
+                "line": 141,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             }
           ]
@@ -665,35 +715,39 @@
             "line": 143,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_33",
-              "type": "internal_action",
-              "context": "EmailNotifier",
-              "verb": "sends",
-              "phrase": "order confirmation",
-              "description": "EmailNotifier sends order confirmation",
-              "line": 144,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/EmailNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_33",
+                "type": "internal_action",
+                "context": "EmailNotifier",
+                "verb": "sends",
+                "phrase": "order confirmation",
+                "description": "EmailNotifier sends order confirmation",
+                "line": 144,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/EmailNotifier",
+                  "service": "NotificationService"
+                }
               }
             },
             {
-              "id": "action_34",
-              "type": "internal_action",
-              "context": "SMSNotifier",
-              "verb": "sends",
-              "phrase": "tracking notification",
-              "description": "SMSNotifier sends tracking notification",
-              "line": 145,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/SMSNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_34",
+                "type": "internal_action",
+                "context": "SMSNotifier",
+                "verb": "sends",
+                "phrase": "tracking notification",
+                "description": "SMSNotifier sends tracking notification",
+                "line": 145,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/SMSNotifier",
+                  "service": "NotificationService"
+                }
               }
             }
           ]
@@ -719,51 +773,57 @@
             "line": 154,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_36",
-              "type": "internal_action",
-              "context": "Inventory",
-              "verb": "fetches",
-              "phrase": "stock levels",
-              "description": "Inventory fetches stock levels",
-              "line": 155,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Inventory",
-                "service": "ProductService"
+              "action": {
+                "id": "action_36",
+                "type": "internal_action",
+                "context": "Inventory",
+                "verb": "fetches",
+                "phrase": "stock levels",
+                "description": "Inventory fetches stock levels",
+                "line": 155,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Inventory",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_37",
-              "type": "sync_action",
-              "context": "Inventory",
-              "targetContext": "inventory_system",
-              "ref": "inventory_system",
-              "connector": "to",
-              "phrase": "get current stock",
-              "description": "Inventory asks inventory_system to get current stock",
-              "line": 156,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Inventory",
-                "service": "ProductService"
+              "action": {
+                "id": "action_37",
+                "type": "sync_action",
+                "context": "Inventory",
+                "targetContext": "inventory_system",
+                "ref": "inventory_system",
+                "connector": "to",
+                "phrase": "get current stock",
+                "description": "Inventory asks inventory_system to get current stock",
+                "line": 156,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Inventory",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_38",
-              "type": "async_action",
-              "context": "Inventory",
-              "event": "StockLevelsUpdated",
-              "description": "Inventory notifies \"StockLevelsUpdated\"",
-              "line": 157,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Inventory",
-                "service": "ProductService"
+              "action": {
+                "id": "action_38",
+                "type": "async_action",
+                "context": "Inventory",
+                "event": "StockLevelsUpdated",
+                "description": "Inventory notifies \"StockLevelsUpdated\"",
+                "line": 157,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Inventory",
+                  "service": "ProductService"
+                }
               }
             }
           ]
@@ -783,51 +843,57 @@
             "line": 159,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_40",
-              "type": "internal_action",
-              "context": "Catalog",
-              "verb": "updates",
-              "phrase": "product availability",
-              "description": "Catalog updates product availability",
-              "line": 160,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Catalog",
-                "service": "ProductService"
+              "action": {
+                "id": "action_40",
+                "type": "internal_action",
+                "context": "Catalog",
+                "verb": "updates",
+                "phrase": "product availability",
+                "description": "Catalog updates product availability",
+                "line": 160,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Catalog",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_41",
-              "type": "sync_action",
-              "context": "Catalog",
-              "targetContext": "product_db",
-              "ref": "product_db",
-              "connector": "to",
-              "phrase": "update stock status",
-              "description": "Catalog asks product_db to update stock status",
-              "line": 161,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Catalog",
-                "service": "ProductService"
+              "action": {
+                "id": "action_41",
+                "type": "sync_action",
+                "context": "Catalog",
+                "targetContext": "product_db",
+                "ref": "product_db",
+                "connector": "to",
+                "phrase": "update stock status",
+                "description": "Catalog asks product_db to update stock status",
+                "line": 161,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Catalog",
+                  "service": "ProductService"
+                }
               }
             },
             {
-              "id": "action_42",
-              "type": "async_action",
-              "context": "Catalog",
-              "event": "CatalogUpdated",
-              "description": "Catalog notifies \"CatalogUpdated\"",
-              "line": 162,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Product/Catalog",
-                "service": "ProductService"
+              "action": {
+                "id": "action_42",
+                "type": "async_action",
+                "context": "Catalog",
+                "event": "CatalogUpdated",
+                "description": "Catalog notifies \"CatalogUpdated\"",
+                "line": 162,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Product/Catalog",
+                  "service": "ProductService"
+                }
               }
             }
           ]
@@ -847,37 +913,41 @@
             "line": 164,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_44",
-              "type": "internal_action",
-              "context": "PushNotifier",
-              "verb": "sends",
-              "phrase": "restock notifications",
-              "description": "PushNotifier sends restock notifications",
-              "line": 165,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/PushNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_44",
+                "type": "internal_action",
+                "context": "PushNotifier",
+                "verb": "sends",
+                "phrase": "restock notifications",
+                "description": "PushNotifier sends restock notifications",
+                "line": 165,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/PushNotifier",
+                  "service": "NotificationService"
+                }
               }
             },
             {
-              "id": "action_45",
-              "type": "sync_action",
-              "context": "PushNotifier",
-              "targetContext": "notification_queue",
-              "ref": "notification_queue",
-              "connector": "to",
-              "phrase": "queue messages",
-              "description": "PushNotifier asks notification_queue to queue messages",
-              "line": 166,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/PushNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_45",
+                "type": "sync_action",
+                "context": "PushNotifier",
+                "targetContext": "notification_queue",
+                "ref": "notification_queue",
+                "connector": "to",
+                "phrase": "queue messages",
+                "description": "PushNotifier asks notification_queue to queue messages",
+                "line": 166,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/PushNotifier",
+                  "service": "NotificationService"
+                }
               }
             }
           ]
@@ -903,81 +973,91 @@
             "line": 175,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_47",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "fetches",
-              "phrase": "order details",
-              "description": "OrderManagement fetches order details",
-              "line": 176,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_47",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "fetches",
+                "phrase": "order details",
+                "description": "OrderManagement fetches order details",
+                "line": 176,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_48",
-              "type": "sync_action",
-              "context": "OrderManagement",
-              "targetContext": "order_db",
-              "ref": "order_db",
-              "connector": "to",
-              "phrase": "retrieve order",
-              "description": "OrderManagement asks order_db to retrieve order",
-              "line": 177,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_48",
+                "type": "sync_action",
+                "context": "OrderManagement",
+                "targetContext": "order_db",
+                "ref": "order_db",
+                "connector": "to",
+                "phrase": "retrieve order",
+                "description": "OrderManagement asks order_db to retrieve order",
+                "line": 177,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_49",
-              "type": "internal_action",
-              "context": "Payment",
-              "verb": "retrieves",
-              "phrase": "payment history",
-              "description": "Payment retrieves payment history",
-              "line": 178,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Payment",
-                "service": "OrderService"
+              "action": {
+                "id": "action_49",
+                "type": "internal_action",
+                "context": "Payment",
+                "verb": "retrieves",
+                "phrase": "payment history",
+                "description": "Payment retrieves payment history",
+                "line": 178,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Payment",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_50",
-              "type": "internal_action",
-              "context": "Shipping",
-              "verb": "retrieves",
-              "phrase": "shipment status",
-              "description": "Shipping retrieves shipment status",
-              "line": 179,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/Shipping",
-                "service": "OrderService"
+              "action": {
+                "id": "action_50",
+                "type": "internal_action",
+                "context": "Shipping",
+                "verb": "retrieves",
+                "phrase": "shipment status",
+                "description": "Shipping retrieves shipment status",
+                "line": 179,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/Shipping",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_51",
-              "type": "return_action",
-              "context": "OrderManagement",
-              "phrase": "complete order view",
-              "description": "OrderManagement returns complete order view",
-              "line": 180,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_51",
+                "type": "return_action",
+                "context": "OrderManagement",
+                "phrase": "complete order view",
+                "description": "OrderManagement returns complete order view",
+                "line": 180,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             }
           ]
@@ -997,51 +1077,57 @@
             "line": 182,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_53",
-              "type": "internal_action",
-              "context": "OrderManagement",
-              "verb": "validates",
-              "phrase": "changes",
-              "description": "OrderManagement validates changes",
-              "line": 183,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_53",
+                "type": "internal_action",
+                "context": "OrderManagement",
+                "verb": "validates",
+                "phrase": "changes",
+                "description": "OrderManagement validates changes",
+                "line": 183,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_54",
-              "type": "sync_action",
-              "context": "OrderManagement",
-              "targetContext": "order_db",
-              "ref": "order_db",
-              "connector": "to",
-              "phrase": "update order",
-              "description": "OrderManagement asks order_db to update order",
-              "line": 184,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_54",
+                "type": "sync_action",
+                "context": "OrderManagement",
+                "targetContext": "order_db",
+                "ref": "order_db",
+                "connector": "to",
+                "phrase": "update order",
+                "description": "OrderManagement asks order_db to update order",
+                "line": 184,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             },
             {
-              "id": "action_55",
-              "type": "async_action",
-              "context": "OrderManagement",
-              "event": "OrderUpdated",
-              "description": "OrderManagement notifies \"OrderUpdated\"",
-              "line": 185,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Order/OrderManagement",
-                "service": "OrderService"
+              "action": {
+                "id": "action_55",
+                "type": "async_action",
+                "context": "OrderManagement",
+                "event": "OrderUpdated",
+                "description": "OrderManagement notifies \"OrderUpdated\"",
+                "line": 185,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Order/OrderManagement",
+                  "service": "OrderService"
+                }
               }
             }
           ]
@@ -1061,20 +1147,22 @@
             "line": 187,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_57",
-              "type": "internal_action",
-              "context": "EmailNotifier",
-              "verb": "sends",
-              "phrase": "update notification to customer",
-              "description": "EmailNotifier sends update notification to customer",
-              "line": 188,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/EmailNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_57",
+                "type": "internal_action",
+                "context": "EmailNotifier",
+                "verb": "sends",
+                "phrase": "update notification to customer",
+                "description": "EmailNotifier sends update notification to customer",
+                "line": 188,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/EmailNotifier",
+                  "service": "NotificationService"
+                }
               }
             }
           ]
@@ -1100,67 +1188,75 @@
             "line": 198,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_59",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "validates",
-              "phrase": "email",
-              "description": "Authentication validates email",
-              "line": 199,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_59",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "validates",
+                "phrase": "email",
+                "description": "Authentication validates email",
+                "line": 199,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_60",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "generates",
-              "phrase": "reset token",
-              "description": "Authentication generates reset token",
-              "line": 200,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_60",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "generates",
+                "phrase": "reset token",
+                "description": "Authentication generates reset token",
+                "line": 200,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_61",
-              "type": "sync_action",
-              "context": "Authentication",
-              "targetContext": "user_db",
-              "ref": "user_db",
-              "connector": "to",
-              "phrase": "store token",
-              "description": "Authentication asks user_db to store token",
-              "line": 201,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_61",
+                "type": "sync_action",
+                "context": "Authentication",
+                "targetContext": "user_db",
+                "ref": "user_db",
+                "connector": "to",
+                "phrase": "store token",
+                "description": "Authentication asks user_db to store token",
+                "line": 201,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_62",
-              "type": "internal_action",
-              "context": "EmailNotifier",
-              "verb": "sends",
-              "phrase": "reset email",
-              "description": "EmailNotifier sends reset email",
-              "line": 202,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/EmailNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_62",
+                "type": "internal_action",
+                "context": "EmailNotifier",
+                "verb": "sends",
+                "phrase": "reset email",
+                "description": "EmailNotifier sends reset email",
+                "line": 202,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/EmailNotifier",
+                  "service": "NotificationService"
+                }
               }
             }
           ]
@@ -1180,66 +1276,74 @@
             "line": 204,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_64",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "validates",
-              "phrase": "reset token",
-              "description": "Authentication validates reset token",
-              "line": 205,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_64",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "validates",
+                "phrase": "reset token",
+                "description": "Authentication validates reset token",
+                "line": 205,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_65",
-              "type": "sync_action",
-              "context": "Authentication",
-              "targetContext": "user_db",
-              "ref": "user_db",
-              "connector": "to",
-              "phrase": "verify token",
-              "description": "Authentication asks user_db to verify token",
-              "line": 206,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_65",
+                "type": "sync_action",
+                "context": "Authentication",
+                "targetContext": "user_db",
+                "ref": "user_db",
+                "connector": "to",
+                "phrase": "verify token",
+                "description": "Authentication asks user_db to verify token",
+                "line": 206,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_66",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "updates",
-              "phrase": "password",
-              "description": "Authentication updates password",
-              "line": 207,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_66",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "updates",
+                "phrase": "password",
+                "description": "Authentication updates password",
+                "line": 207,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_67",
-              "type": "async_action",
-              "context": "Authentication",
-              "event": "PasswordChanged",
-              "description": "Authentication notifies \"PasswordChanged\"",
-              "line": 208,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_67",
+                "type": "async_action",
+                "context": "Authentication",
+                "event": "PasswordChanged",
+                "description": "Authentication notifies \"PasswordChanged\"",
+                "line": 208,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             }
           ]
@@ -1259,20 +1363,22 @@
             "line": 210,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_69",
-              "type": "internal_action",
-              "context": "EmailNotifier",
-              "verb": "sends",
-              "phrase": "confirmation email",
-              "description": "EmailNotifier sends confirmation email",
-              "line": 211,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "Notification/EmailNotifier",
-                "service": "NotificationService"
+              "action": {
+                "id": "action_69",
+                "type": "internal_action",
+                "context": "EmailNotifier",
+                "verb": "sends",
+                "phrase": "confirmation email",
+                "description": "EmailNotifier sends confirmation email",
+                "line": 211,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Notification/EmailNotifier",
+                  "service": "NotificationService"
+                }
               }
             }
           ]
@@ -1297,34 +1403,38 @@
             "line": 220,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_71",
-              "type": "internal_action",
-              "context": "Authentication",
-              "verb": "validates",
-              "phrase": "credentials",
-              "description": "Authentication validates credentials",
-              "line": 221,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_71",
+                "type": "internal_action",
+                "context": "Authentication",
+                "verb": "validates",
+                "phrase": "credentials",
+                "description": "Authentication validates credentials",
+                "line": 221,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             },
             {
-              "id": "action_72",
-              "type": "return_action",
-              "context": "Authentication",
-              "phrase": "access token",
-              "description": "Authentication returns access token",
-              "line": 222,
-              "column": 9,
-              "from": {
-                "kind": "bounded_context",
-                "id": "User/Authentication",
-                "service": "UserService"
+              "action": {
+                "id": "action_72",
+                "type": "return_action",
+                "context": "Authentication",
+                "phrase": "access token",
+                "description": "Authentication returns access token",
+                "line": 222,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "User/Authentication",
+                  "service": "UserService"
+                }
               }
             }
           ]

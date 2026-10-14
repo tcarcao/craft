@@ -14,25 +14,29 @@
             "line": 2,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_2",
-              "type": "internal_action",
-              "context": "AuthService",
-              "verb": "validates",
-              "phrase": "credentials",
-              "description": "AuthService validates credentials",
-              "line": 3,
-              "column": 9
+              "action": {
+                "id": "action_2",
+                "type": "internal_action",
+                "context": "AuthService",
+                "verb": "validates",
+                "phrase": "credentials",
+                "description": "AuthService validates credentials",
+                "line": 3,
+                "column": 9
+              }
             },
             {
-              "id": "action_3",
-              "type": "async_action",
-              "context": "AuthService",
-              "event": "User Logged In",
-              "description": "AuthService notifies \"User Logged In\"",
-              "line": 4,
-              "column": 9
+              "action": {
+                "id": "action_3",
+                "type": "async_action",
+                "context": "AuthService",
+                "event": "User Logged In",
+                "description": "AuthService notifies \"User Logged In\"",
+                "line": 4,
+                "column": 9
+              }
             }
           ]
         }
@@ -53,25 +57,29 @@
             "line": 8,
             "column": 10
           },
-          "actions": [
+          "steps": [
             {
-              "id": "action_5",
-              "type": "internal_action",
-              "context": "AuthService",
-              "verb": "invalidates",
-              "phrase": "session",
-              "description": "AuthService invalidates session",
-              "line": 9,
-              "column": 9
+              "action": {
+                "id": "action_5",
+                "type": "internal_action",
+                "context": "AuthService",
+                "verb": "invalidates",
+                "phrase": "session",
+                "description": "AuthService invalidates session",
+                "line": 9,
+                "column": 9
+              }
             },
             {
-              "id": "action_6",
-              "type": "async_action",
-              "context": "AuthService",
-              "event": "User Logged Out",
-              "description": "AuthService notifies \"User Logged Out\"",
-              "line": 10,
-              "column": 9
+              "action": {
+                "id": "action_6",
+                "type": "async_action",
+                "context": "AuthService",
+                "event": "User Logged Out",
+                "description": "AuthService notifies \"User Logged Out\"",
+                "line": 10,
+                "column": 9
+              }
             }
           ]
         }
