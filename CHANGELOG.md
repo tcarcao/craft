@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.21.0] — 2026-10-14
 
 **Why a minor version.** This release is v2.21.0 inside `/v2` even though it is source-breaking: `Scenario.Actions` stops being a field. We chose not to cut `/v3` because every consumer of `pkg/craft` is internal and moves in the same release window. If you consume `pkg/craft` from outside, read **Breaking** first.
 
