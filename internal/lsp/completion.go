@@ -407,6 +407,13 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 	root := syntax.Root(f.Green)
 	ctx := detectContext(root, f.LineIndex, cursorLine, cursorCol)
 
+	// '"' is a trigger character only for the title of a link step: typing
+	// any other opening quote (a use_case title, a scenario name) stays quiet.
+	if c := params.Context; c != nil && c.TriggerKind == protocol.CompletionTriggerKindTriggerCharacter &&
+		c.TriggerCharacter == `"` && ctx != ctxLinkTitle {
+		return nil
+	}
+
 	switch ctx {
 	case ctxTopLevel:
 		return topLevelKeywordCompletions()

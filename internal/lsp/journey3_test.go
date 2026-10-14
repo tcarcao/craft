@@ -240,6 +240,60 @@ func TestLinks_TitleCompletion(t *testing.T) {
 	}
 }
 
+// Typing the opening quote after includes/continues pops the title list:
+// '"' is a completion trigger character. Elsewhere the quote triggers
+// nothing, so typing a use_case title or a tag value stays quiet.
+func TestLinks_TitleCompletionOnQuote(t *testing.T) {
+	src := strings.Replace(linksLSPSrc, `        includes "Site session preamble"`, `        includes "`, 1)
+	src = strings.Replace(src, `use_case "Seller asks the assistant a question" {`, `use_case "Seller asks the assistant a question" {
+    when Seller types "`, 1)
+	c := newWorkspaceClient(t, linksRoot, "", wsFile{linksURI, src})
+	complete := func(line, char int) []string {
+		p, _ := json.Marshal(map[string]any{
+			"textDocument": map[string]any{"uri": linksURI},
+			"position":     map[string]any{"line": line, "character": char},
+			"context":      map[string]any{"triggerKind": 2, "triggerCharacter": `"`},
+		})
+		var list struct {
+			Items []struct {
+				Label string `json:"label"`
+			} `json:"items"`
+		}
+		if raw := c.call("textDocument/completion", p); string(raw) != "null" {
+			if err := json.Unmarshal(raw, &list); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var labels []string
+		for _, it := range list.Items {
+			labels = append(labels, it.Label)
+		}
+		return labels
+	}
+	want := []string{"Seller asks the assistant a question", "Seller pays at the checkout", "Seller promotes an advert", "Site session preamble"}
+	if got := complete(12, 18); !slices.Equal(got, want) {
+		t.Errorf("titles after includes \" = %v, want %v", got, want)
+	}
+	if got := complete(10, 22); len(got) != 0 {
+		t.Errorf("a quote outside a link triggered %v", got)
+	}
+
+	_, initResp := newBranchClient(t, "")
+	var res struct {
+		Capabilities struct {
+			CompletionProvider struct {
+				TriggerCharacters []string `json:"triggerCharacters"`
+			} `json:"completionProvider"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(initResp, &res); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(res.Capabilities.CompletionProvider.TriggerCharacters, `"`) {
+		t.Errorf("trigger characters = %v, want '\"' among them", res.Capabilities.CompletionProvider.TriggerCharacters)
+	}
+}
+
 const formerSrc = `use_case "Pay at the till" {
     tags {
         formerly_titled: Pay
