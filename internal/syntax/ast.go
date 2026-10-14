@@ -1416,14 +1416,140 @@ func (s ScenarioDecl) Trigger() TriggerDecl {
 	return TriggerDecl{}
 }
 
-// Actions returns all action nodes in this scenario.
+// Actions returns every action of this scenario in source order, including
+// the actions inside alt/opt blocks at any depth (a depth-first walk of
+// Steps). Use Steps when the block structure matters.
 func (s ScenarioDecl) Actions() []ActionDecl {
-	var result []ActionDecl
-	for _, n := range s.node.ChildNodes(SyntaxKindAction) {
-		result = append(result, ActionDecl{node: n})
+	return flattenActions(steps(s.node), nil)
+}
+
+// Steps returns the scenario's top-level steps in source order.
+func (s ScenarioDecl) Steps() []StepDecl { return steps(s.node) }
+
+// flattenActions appends every action in sts, descending into blocks, to out.
+func flattenActions(sts []StepDecl, out []ActionDecl) []ActionDecl {
+	for _, st := range sts {
+		if a, ok := st.Action(); ok {
+			out = append(out, a)
+			continue
+		}
+		if b, ok := st.Block(); ok {
+			for _, br := range b.Branches() {
+				out = flattenActions(br.Steps(), out)
+			}
+		}
+	}
+	return out
+}
+
+// steps lists n's Action and Block child nodes, in order, as steps.
+func steps(n SyntaxNode) []StepDecl {
+	var result []StepDecl
+	for el := range n.ChildrenIter() {
+		c, ok := el.(SyntaxNode)
+		if !ok {
+			continue
+		}
+		if k := c.Kind(); k == SyntaxKindAction || k == SyntaxKindBlock {
+			result = append(result, StepDecl{node: c})
+		}
 	}
 	return result
 }
+
+// StepDecl is one step of a scenario or branch: a SyntaxKindAction or a
+// SyntaxKindBlock node.
+type StepDecl struct{ node SyntaxNode }
+
+// Action returns the step as an action, if it is one.
+func (s StepDecl) Action() (ActionDecl, bool) {
+	if s.node.Kind() != SyntaxKindAction {
+		return ActionDecl{}, false
+	}
+	return ActionDecl{node: s.node}, true
+}
+
+// Block returns the step as an alt/opt block, if it is one.
+func (s StepDecl) Block() (BlockDecl, bool) {
+	if s.node.Kind() != SyntaxKindBlock {
+		return BlockDecl{}, false
+	}
+	return BlockDecl{node: s.node}, true
+}
+
+// Node returns the underlying syntax node.
+func (s StepDecl) Node() SyntaxNode { return s.node }
+
+// BlockDecl is a typed view over a SyntaxKindBlock node: an alt (one or more
+// branches, the first headed by `alt`, or by an orphan `else` recovered as an
+// alt) or an opt (one branch).
+type BlockDecl struct{ node SyntaxNode }
+
+// Kind returns lang.BlockOpt when the first branch is headed by `opt`, and
+// lang.BlockAlt otherwise.
+func (b BlockDecl) Kind() lang.BlockKind {
+	if brs := b.Branches(); len(brs) > 0 && brs[0].Keyword() == "opt" {
+		return lang.BlockOpt
+	}
+	return lang.BlockAlt
+}
+
+// Branches returns the block's branches in source order.
+func (b BlockDecl) Branches() []BranchDecl {
+	var result []BranchDecl
+	for _, n := range b.node.ChildNodes(SyntaxKindBranch) {
+		result = append(result, BranchDecl{node: n})
+	}
+	return result
+}
+
+// Node returns the underlying syntax node.
+func (b BlockDecl) Node() SyntaxNode { return b.node }
+
+// BranchDecl is a typed view over a SyntaxKindBranch node: a BranchHeader
+// followed by the branch's steps.
+type BranchDecl struct{ node SyntaxNode }
+
+// HeaderToken returns the branch's keyword token (KwAlt, KwOpt or KwElse).
+func (b BranchDecl) HeaderToken() *SyntaxToken {
+	h := b.node.ChildNode(SyntaxKindBranchHeader)
+	if h == nil {
+		return nil
+	}
+	return h.ChildToken(SyntaxKindKwAlt, SyntaxKindKwOpt, SyntaxKindKwElse)
+}
+
+// Keyword returns "alt", "opt" or "else".
+func (b BranchDecl) Keyword() string {
+	switch t := b.HeaderToken(); {
+	case t == nil:
+		return ""
+	case t.Kind() == SyntaxKindKwOpt:
+		return "opt"
+	case t.Kind() == SyntaxKindKwElse:
+		return "else"
+	default:
+		return "alt"
+	}
+}
+
+// Label returns the header's unquoted label, or "" when it is missing.
+func (b BranchDecl) Label() string {
+	h := b.node.ChildNode(SyntaxKindBranchHeader)
+	if h == nil {
+		return ""
+	}
+	if t := h.ChildToken(SyntaxKindString); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
+// Steps returns the branch's steps in source order.
+func (b BranchDecl) Steps() []StepDecl { return steps(b.node) }
+
+// Node returns the underlying syntax node.
+func (b BranchDecl) Node() SyntaxNode { return b.node }
 
 // TriggerDecl is a typed view over a SyntaxKindTrigger node.
 type TriggerDecl struct{ node SyntaxNode }

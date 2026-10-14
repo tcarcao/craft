@@ -1,0 +1,7 @@
+use_case "U" {
+    when O does
+        opt "a"
+            x does it
+        else "b"
+            x does more
+}

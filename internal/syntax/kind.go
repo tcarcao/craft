@@ -117,6 +117,13 @@ const (
 	// at the start of a use_case body line when the next token is a string.
 	SyntaxKindKwScenario
 
+	// SyntaxKindKwAlt/KwOpt/KwElse are the contextual keywords that head a
+	// branch block inside a scenario: recognised only at the start of an
+	// action line when followed by a string or nothing else on the line.
+	SyntaxKindKwAlt
+	SyntaxKindKwOpt
+	SyntaxKindKwElse
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -164,4 +171,12 @@ const (
 
 	// SyntaxKindScenarioName wraps `scenario "<label>"` at the head of a scenario.
 	SyntaxKindScenarioName
+
+	// SyntaxKindBlock is an alt or opt block step: one or more Branch children.
+	SyntaxKindBlock
+	// SyntaxKindBranch is one branch of a block: a BranchHeader followed by
+	// its steps (Action and nested Block nodes).
+	SyntaxKindBranch
+	// SyntaxKindBranchHeader wraps `alt|opt|else "<label>"`.
+	SyntaxKindBranchHeader
 )

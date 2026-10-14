@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/inconsistent-indent",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 4,
+        "character": 12
+      },
+      "end": {
+        "line": 4,
+        "character": 13
+      }
+    }
+  }
+]

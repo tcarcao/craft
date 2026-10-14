@@ -1,0 +1,6 @@
+use_case "U" {
+    when O does
+        alt "a"
+                x does it
+            x does more
+}

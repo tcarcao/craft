@@ -253,3 +253,44 @@ func TestSemanticTokens_ScenarioKeyword(t *testing.T) {
 		t.Errorf("`scenario` as a context name must not be a flow keyword")
 	}
 }
+
+// TestSemanticTokens_BlockKeywords checks that `alt`, `else` and `opt` block
+// headers are highlighted as flow keywords, while an `alt` used as an action
+// subject is not.
+func TestSemanticTokens_BlockKeywords(t *testing.T) {
+	const uri = "file:///test.craft"
+	src := "use_case \"U\" {\n  when O does\n    alt \"a\"\n      x does it\n    else \"b\"\n      opt \"c\"\n        x does more\n    alt asks b to replay\n}\n"
+	s := &Server{ws: workspace.New(nil)}
+	s.ws.Open(uri, src)
+	res, err := s.SemanticTokensFull(context.Background(), &protocol.SemanticTokensParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+	})
+	if err != nil {
+		t.Fatalf("SemanticTokensFull: %v", err)
+	}
+	flow := uint32(0)
+	for i, n := range semanticTokenLegend {
+		if n == "craft-flow-keyword" {
+			flow = uint32(i)
+		}
+	}
+	typeAt := map[[2]uint32]uint32{}
+	var line, char uint32
+	for i := 0; i+4 < len(res.Data); i += 5 {
+		if d := res.Data[i]; d > 0 {
+			line += d
+			char = res.Data[i+1]
+		} else {
+			char += res.Data[i+1]
+		}
+		typeAt[[2]uint32{line, char}] = res.Data[i+3]
+	}
+	for _, pos := range [][2]uint32{{2, 4}, {4, 4}, {5, 6}} {
+		if got, ok := typeAt[pos]; !ok || got != flow {
+			t.Errorf("header keyword at %v: type %d (present=%v), want flow keyword %d", pos, got, ok, flow)
+		}
+	}
+	if got, ok := typeAt[[2]uint32{7, 4}]; ok && got == flow {
+		t.Errorf("`alt` as an action subject must not be a flow keyword")
+	}
+}

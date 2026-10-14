@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/orphan-else",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 4,
+        "character": 8
+      },
+      "end": {
+        "line": 4,
+        "character": 12
+      }
+    }
+  }
+]

@@ -1106,18 +1106,206 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 		diags = append(diags, d...)
 	}
 
-	// Parse actions until we see `when` (next scenario), `}` (end of use_case), or EOF.
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace {
-		tok := p.peek()
-		// `when` starts the next scenario — stop here.
-		if tok.Type == lexer.TokenIdent && (tok.Value == "when" || p.atScenarioName()) {
-			break
-		}
-		d := p.parseAction()
-		diags = append(diags, d...)
-	}
+	// Parse steps until we see `when` (next scenario), `}` (end of use_case), or EOF.
+	diags = append(diags, p.parseSteps(0)...)
 
 	p.builder.FinishNode()
+	return diags
+}
+
+// tabWidth is the tab stop used by visualColumn: a tab advances the column to
+// the next multiple of tabWidth.
+const tabWidth = 4
+
+// visualColumn returns tok's 1-based column on its line with tabs expanded to
+// the next multiple of tabWidth. It is used only by the offside rule of block
+// bodies; tok.Column (runes) stays the column for everything else.
+func (p *Parser) visualColumn(tok lexer.Token) int {
+	if tok.Type == lexer.TokenEOF || tok.Offset < 0 || tok.Offset > len(p.src) {
+		return tok.Column
+	}
+	lineStart := strings.LastIndexByte(p.src[:tok.Offset], '\n') + 1
+	col := 0
+	for _, r := range p.src[lineStart:tok.Offset] {
+		if r == '\t' {
+			col = (col/tabWidth + 1) * tabWidth
+		} else {
+			col++
+		}
+	}
+	return col + 1
+}
+
+// atLineStart reports whether only spaces and tabs precede tok on its line.
+func (p *Parser) atLineStart(tok lexer.Token) bool {
+	if tok.Offset < 0 || tok.Offset > len(p.src) {
+		return false
+	}
+	lineStart := strings.LastIndexByte(p.src[:tok.Offset], '\n') + 1
+	return strings.Trim(p.src[lineStart:tok.Offset], " \t") == ""
+}
+
+// isHeader reports whether the next tokens are a block header: the contextual
+// keyword `alt`, `opt` or `else` at the start of a line, followed by a string
+// label or by nothing else on its line (a missing label). Any other token
+// after the keyword makes the line an ordinary action whose subject is named
+// alt/opt/else, so those words stay valid names.
+func (p *Parser) isHeader() (string, bool) {
+	tok := p.peek()
+	if tok.Type != lexer.TokenIdent {
+		return "", false
+	}
+	switch tok.Value {
+	case "alt", "opt", "else":
+	default:
+		return "", false
+	}
+	if !p.atLineStart(tok) {
+		return "", false
+	}
+	next := p.peekAt(1)
+	if next.Type == lexer.TokenString || next.Type == lexer.TokenEOF || next.Line != tok.Line {
+		return tok.Value, true
+	}
+	return "", false
+}
+
+// atStep reports whether the next token can start a step of the current
+// scenario: anything but `when`, a `scenario "…"` line, `}` or EOF.
+func (p *Parser) atStep() bool {
+	tok := p.peek()
+	switch tok.Type {
+	case lexer.TokenEOF, lexer.TokenRBrace:
+		return false
+	case lexer.TokenIdent:
+		return tok.Value != "when" && !p.atScenarioName()
+	}
+	return true
+}
+
+// parseSteps parses the steps (actions and blocks) of a scenario or of a
+// branch body.
+//
+// minCol is the visual column of the enclosing branch header, or 0 at the
+// scenario level. Inside a branch the offside rule applies: the body is every
+// following line whose first token is right of minCol, and it ends at the
+// first line at or left of it. At the scenario level indentation is
+// insignificant. Either way the steps end at `when`, `scenario "…"`, `}` or
+// EOF, however deeply those are indented.
+//
+// Comments are trivia: peek skips them, so they never end a body.
+func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
+	var diags []model.Diagnostic
+	bodyCol := 0 // column of the branch's first body line; 0 until seen
+	for p.atStep() {
+		tok := p.peek()
+		col := p.visualColumn(tok)
+		if col <= minCol {
+			break
+		}
+		if minCol > 0 {
+			if bodyCol == 0 {
+				bodyCol = col
+			} else if col < bodyCol && p.atLineStart(tok) {
+				diags = append(diags, model.Diagnostic{
+					Code:     "craft/syntax/inconsistent-indent",
+					Message:  "this line is indented less than the steps above it but more than its block header; align it with one of them",
+					Severity: model.SeverityError,
+					Range:    tokenRange(tok),
+				})
+			}
+		}
+		if kw, ok := p.isHeader(); ok {
+			if kw == "else" {
+				// No alt at this column is open (an else at an open alt's
+				// column is taken by parseBlock's loop before control gets
+				// back here), or the open block is an opt.
+				diags = append(diags, model.Diagnostic{
+					Code:     "craft/syntax/orphan-else",
+					Message:  "`else` must sit at the same column as an `alt` above it (an `opt` has no else)",
+					Severity: model.SeverityError,
+					Range:    tokenRange(tok),
+				})
+			}
+			diags = append(diags, p.parseBlock(kw, col)...)
+			continue
+		}
+		diags = append(diags, p.parseAction()...)
+	}
+	return diags
+}
+
+// parseBlock parses an alt or opt block whose first header is at visual
+// column col. kw is the first header's keyword; an orphan `else` is parsed as
+// the first branch of a new alt. An alt (or an orphan else) takes every
+// following `else` header at exactly col as a further branch; an opt has one
+// branch.
+func (p *Parser) parseBlock(kw string, col int) []model.Diagnostic {
+	p.builder.StartNode(SyntaxKindBlock)
+	diags := p.parseBranch(kw, col)
+	if kw != "opt" {
+		for {
+			next, ok := p.isHeader()
+			if !ok || next != "else" || p.visualColumn(p.peek()) != col {
+				break
+			}
+			diags = append(diags, p.parseBranch("else", col)...)
+		}
+	}
+	p.builder.FinishNode()
+	return diags
+}
+
+// parseBranch parses one `alt|opt|else "<label>"` header and its body, the
+// lines right of the header's column col.
+func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindBranch)
+	p.builder.StartNode(SyntaxKindBranchHeader)
+
+	kind := SyntaxKindKwAlt
+	switch kw {
+	case "opt":
+		kind = SyntaxKindKwOpt
+	case "else":
+		kind = SyntaxKindKwElse
+	}
+	kwTok := p.consumeAs(kind)
+
+	if t := p.peek(); t.Type == lexer.TokenString && t.Line == kwTok.Line {
+		p.consumeAs(SyntaxKindString)
+	} else {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/missing-label",
+			Message:  "`alt`/`opt`/`else` needs a quoted label, e.g. `alt \"payment fails\"`",
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+	}
+
+	// Anything else on the header line after the label is not part of it.
+	if t := p.peek(); t.Line == kwTok.Line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace {
+		diags = append(diags, p.diagUnexpected(t, "end of line after the block label"))
+		p.builder.StartNode(SyntaxKindErrorNode)
+		for t := p.peek(); t.Line == kwTok.Line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace; t = p.peek() {
+			p.consume()
+		}
+		p.builder.FinishNode()
+	}
+	p.builder.FinishNode() // BranchHeader
+
+	if !p.atStep() || p.visualColumn(p.peek()) <= col {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/empty-branch",
+			Message:  fmt.Sprintf("`%s \"…\"` has no steps: indent its steps under it", kw),
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+	} else {
+		diags = append(diags, p.parseSteps(col)...)
+	}
+
+	p.builder.FinishNode() // Branch
 	return diags
 }
 
