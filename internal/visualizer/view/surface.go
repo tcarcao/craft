@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
 
@@ -34,8 +35,9 @@ type SurfaceRow struct {
 const unobservedSuffix = " (unobserved caller)"
 
 // BuildSurfaces computes coverage (spec §8.4): an entry is used by every use
-// case with a Request to the surface's boundary whose operation text equals the
-// entry's (whitespace collapsed); a receives trigger on the boundary with that
+// case with a Request to the surface's boundary whose operation text, or one
+// item of whose operation list, equals the entry's (whitespace collapsed;
+// ADDR and SQL items are egress and use no entry); a receives trigger on the boundary with that
 // operation counts as "<use case> (unobserved caller)". A surface on a service
 // also covers requests to the service's contexts that have no surface of
 // their own (model.SurfaceBoundary). Tables are ordered by subject, ignoring
@@ -64,12 +66,23 @@ func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces 
 		if !ok {
 			continue
 		}
-		k := usageKey{boundary, collapse(it.Operation.Text)}
-		switch {
-		case it.Kind == interaction.Request:
-			add(k, it.UseCase)
-		case it.Kind == interaction.Trigger && it.From == interaction.Unobserved:
-			add(k, it.UseCase+unobservedSuffix)
+		// An operation list uses each of its items; an ADDR or SQL item
+		// is egress and uses no entry.
+		ops := it.Operations
+		if len(ops) == 0 {
+			ops = []model.Operation{*it.Operation}
+		}
+		for _, op := range ops {
+			if op.Verb == lang.OpVerbAddr || op.Verb == lang.OpVerbSQL {
+				continue
+			}
+			k := usageKey{boundary, collapse(op.Text)}
+			switch {
+			case it.Kind == interaction.Request:
+				add(k, it.UseCase)
+			case it.Kind == interaction.Trigger && it.From == interaction.Unobserved:
+				add(k, it.UseCase+unobservedSuffix)
+			}
 		}
 	}
 

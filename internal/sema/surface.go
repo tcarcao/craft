@@ -203,7 +203,8 @@ func kindPhrase(k lang.ParticipantKind) string {
 
 // ── operation-not-in-surface ─────────────────────────────────────────────────
 // Warning: an `asks <target> … [op]` whose target has a surface that does not
-// list op. A context without a surface of its own is covered by the surface of
+// list op; ADDR and SQL items are egress and are not checked. A context
+// without a surface of its own is covered by the surface of
 // the service that deploys it (model.SurfaceBoundary). It is the op-name check of spec §8.2, done on the tree because the
 // range is the `[op]` bracket, which interactions do not carry.
 
@@ -275,7 +276,8 @@ func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 					}
 					items := lang.SplitOperationItems(a.OpText())
 					if len(items) < 2 {
-						if !s.ops[text] {
+						// ADDR and SQL are egress: no surface lists them.
+						if !s.ops[text] && !lang.IsEgressItem(text) {
 							report(text, annotationRange(a.OpAnnotation(), li, true))
 						}
 						continue
@@ -283,7 +285,7 @@ func lintOperationNotInSurface(perFileTrees map[string]syntax.SyntaxNode, ws Wor
 					// An operation list (spec §8.4): one warning per item the
 					// surface does not list, at the item.
 					for _, it := range items {
-						if item := CollapseOperation(it.Text); item != "" && !s.ops[item] {
+						if item := CollapseOperation(it.Text); item != "" && !s.ops[item] && !lang.IsEgressItem(item) {
 							report(item, opItemRange(a.OpAnnotation(), it, li))
 						}
 					}

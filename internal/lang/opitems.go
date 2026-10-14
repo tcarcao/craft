@@ -55,6 +55,14 @@ func ParseOperationItem(text string) (verb, payload string) {
 	return head, payload
 }
 
+// IsEgressItem reports whether an operation item is egress (`ADDR …` or
+// `SQL …`): a hop to an address or to tables, not an operation of the
+// target's surface.
+func IsEgressItem(text string) bool {
+	verb, _ := ParseOperationItem(text)
+	return verb == OpVerbAddr || verb == OpVerbSQL
+}
+
 // UnquoteAddress drops the quotes of a quoted ADDR address.
 func UnquoteAddress(s string) string {
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {

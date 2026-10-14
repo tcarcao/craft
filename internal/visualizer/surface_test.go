@@ -159,3 +159,34 @@ func TestSurface_OrdersSubjectsCaseInsensitively(t *testing.T) {
 		t.Errorf("tables not ordered case-insensitively:\n%s", got)
 	}
 }
+
+// A request with an operation list uses each listed operation; its ADDR and
+// SQL items are egress and use none.
+func TestSurface_OperationListCoversEachItem(t *testing.T) {
+	src := `domain p {
+    partner
+    seshat
+}
+surface seshat {
+    query a transaction  [getTransaction]
+    query its trace  [getTrace]
+}
+use_case "Partner traces a transaction" {
+    when partner listens x.Y
+        partner asks seshat for the transaction and its trace  [getTransaction, ADDR https://seshat.example.com/x, SQL transactions]
+}
+`
+	out, err := New(nil).Render(resolvedDoc(t, src), Request{View: ViewSurface, Backend: Mermaid, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out.Data)
+	for _, want := range []string{
+		"| `getTransaction` | query | a transaction | Partner traces a transaction |\n",
+		"| `getTrace` | query | its trace | — |\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}

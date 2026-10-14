@@ -338,3 +338,37 @@ func TestLint_DuplicateOperationInList(t *testing.T) {
 		t.Errorf("ok: %d", n)
 	}
 }
+
+// An ADDR or SQL item is egress, not an operation of the target's surface:
+// the surface check skips it, alone or in a list (spec §9.1).
+func TestLint_OperationNotInSurfaceSkipsEgress(t *testing.T) {
+	head := "domain p {\n  partner\n  seshat\n}\nsurface seshat {\n  query a transaction  [getTransaction]\n}\nuse_case \"U\" {\n  when O does\n"
+	cases := []struct {
+		name, step string
+		want       []string
+	}{
+		{"addr", "    partner asks seshat for the trace  [ADDR https://seshat.example.com/v1/trace]\n", nil},
+		{"quoted addr", "    partner asks seshat for the trace  [ADDR \"//seshat.example.com/trace\"]\n", nil},
+		{"sql", "    partner asks seshat for the rows  [SQL transactions]\n", nil},
+		{"inferred addr", "    partner asks seshat for the trace  [inferred ADDR https://seshat.example.com/x]\n", nil},
+		{"list with a real op", "    partner asks seshat for both  [getTransaction, ADDR https://seshat.example.com/x, SQL transactions]\n", nil},
+		{"list with a missing op", "    partner asks seshat for both  [getTrace, ADDR https://seshat.example.com/x]\n", []string{"[getTrace]"}},
+	}
+	for _, c := range cases {
+		var got []string
+		for _, d := range analyzeSingleFileForTest(t, head+c.step+"}") {
+			if d.Code == "craft/lint/operation-not-in-surface" {
+				got = append(got, d.Message)
+			}
+		}
+		if len(got) != len(c.want) {
+			t.Errorf("%s: %q, want %d warnings", c.name, got, len(c.want))
+			continue
+		}
+		for i, w := range c.want {
+			if !strings.Contains(got[i], w) {
+				t.Errorf("%s: %q lacks %s", c.name, got[i], w)
+			}
+		}
+	}
+}
