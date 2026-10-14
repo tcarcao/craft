@@ -298,3 +298,194 @@ func TestJourneySemanticTokens(t *testing.T) {
 	rec := semanticTokensAt(t, journeyReceivesSrc)
 	check(rec, 5, 17, flowKeyword, "receives")
 }
+
+const journeySurfaceSrc = `actors {
+    user Advisor
+    user Seeker
+}
+domain obido {
+    advisorapp
+    concierge
+}
+surface concierge {
+    callers: Advisor
+    spec: "obidozoe/docs/openapi.yaml"
+    note "every route takes the shared HTTP Basic pair plus a bidder identity header"
+    finding "a read-only credential is refused only at persistence, after the write ran"
+    query the seeker list, unpaged, newest first, filtered by a typed status  [getUserList]
+    query the seeker audit trail                                             [getUserLogs]
+    command delete a seeker's account                                        [deleteAccount]
+}
+use_case "Advisor works a task" {
+    when Advisor opens the task list
+        advisorapp asks concierge for the seekers  [getUserList]
+}
+use_case "Seeker removes their concierge account" {
+    when concierge receives an account deletion  [deleteAccount]
+        concierge forgets the seeker
+}
+`
+
+const journeyStoreSrc = `actors {
+    system CRON
+    system Siren
+}
+domain billing {
+    invoicing
+    smsdispatch
+}
+services {
+    messaging {
+        contexts: invoicing, smsdispatch
+        data-stores: sms_queue
+    }
+}
+use_case "Invoicing queues a payment reminder" {
+    when cron "0 9 * * 1-5"
+        invoicing finds the invoices due in three days
+        invoicing notifies store.sms_queue.inserted
+}
+use_case "The queued reminder is sent" {
+    when smsdispatch listens store.sms_queue.inserted cron "* 10 * * 1-5"
+        smsdispatch claims the unsent rows
+        smsdispatch asks Siren to send the SMS  [sendSmsNotificationEvent]
+}
+`
+
+func TestSurfaceOutlineAndFolding(t *testing.T) {
+	const kindInterface, kindMethod = 11, 6
+	c, _ := newBranchClient(t, journeySurfaceSrc)
+	p, _ := json.Marshal(map[string]any{"textDocument": map[string]any{"uri": c.uri}})
+	var syms []struct {
+		Name     string `json:"name"`
+		Kind     int    `json:"kind"`
+		Detail   string `json:"detail"`
+		Children []struct {
+			Name   string `json:"name"`
+			Kind   int    `json:"kind"`
+			Detail string `json:"detail"`
+		} `json:"children"`
+	}
+	if err := json.Unmarshal(c.call("textDocument/documentSymbol", p), &syms); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, s := range syms {
+		if s.Detail != "surface" {
+			continue
+		}
+		found = true
+		if s.Name != "surface concierge" || s.Kind != kindInterface {
+			t.Errorf("surface symbol = %q kind %d", s.Name, s.Kind)
+		}
+		var got []string
+		for _, ch := range s.Children {
+			if ch.Kind != kindMethod {
+				t.Errorf("%s kind = %d, want Method", ch.Name, ch.Kind)
+			}
+			got = append(got, ch.Name+"/"+ch.Detail)
+		}
+		if g := strings.Join(got, " "); g != "getUserList/query getUserLogs/query deleteAccount/command" {
+			t.Errorf("surface children = %s", g)
+		}
+	}
+	if !found {
+		t.Fatalf("no surface symbol in %+v", syms)
+	}
+	var ranges []struct {
+		StartLine int `json:"startLine"`
+		EndLine   int `json:"endLine"`
+	}
+	if err := json.Unmarshal(c.call("textDocument/foldingRange", p), &ranges); err != nil {
+		t.Fatal(err)
+	}
+	folded := false
+	for _, r := range ranges {
+		folded = folded || (r.StartLine == 8 && r.EndLine == 16)
+	}
+	if !folded {
+		t.Errorf("no fold over the surface block (8-16): %v", ranges)
+	}
+}
+
+func TestSurfaceHoverAndDefinition(t *testing.T) {
+	c, _ := newBranchClient(t, journeySurfaceSrc)
+	if got, want := hoverText(c, 8, 10), "surface of concierge: 3 operations (2 query, 1 command); callers: Advisor"; got != want {
+		t.Errorf("subject hover = %q, want %q", got, want)
+	}
+	if got, want := hoverText(c, 19, 54), "query: the seeker list, unpaged, newest first, filtered by a typed status"; got != want {
+		t.Errorf("bracket hover = %q, want %q", got, want)
+	}
+	var locs []struct {
+		Range struct {
+			Start struct{ Line, Character int } `json:"start"`
+		} `json:"range"`
+	}
+	if err := json.Unmarshal(c.at("textDocument/definition", 19, 54), &locs); err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 1 || locs[0].Range.Start.Line != 13 {
+		t.Errorf("definition = %+v, want the getUserList line (13)", locs)
+	}
+}
+
+func TestSurfaceCompletion(t *testing.T) {
+	closed := strings.Replace(journeySurfaceSrc, "[getUserList]\n}", "[getUserList]\n        advisorapp asks concierge for x  []\n}", 1)
+	unclosed := strings.Replace(journeySurfaceSrc, "[getUserList]\n}", "[getUserList]\n        advisorapp asks concierge for x  [\n}", 1)
+	for name, src := range map[string]string{"closed": closed, "unclosed": unclosed} {
+		items := completionAt(t, src, 20, 42)
+		for _, op := range []string{"getUserList", "getUserLogs", "deleteAccount"} {
+			if !hasLabel(items, op) {
+				t.Errorf("%s: missing %q in %v", name, op, labelList(items))
+			}
+		}
+	}
+
+	top := completionAt(t, journeySurfaceSrc, 25, 0)
+	requireSnippet(t, top, "surface", "surface ${1:boundary} {\n    callers: ${2:unknown}\n    query ${3:what it answers}  [${4:operation}]\n}")
+	// A blank line before a surface is its leading trivia, not its body.
+	before := completionAt(t, strings.Replace(journeySurfaceSrc, "}\nsurface", "}\n\nsurface", 1), 8, 0)
+	if hasLabel(before, "query") {
+		t.Errorf("a blank line before a surface offers its body keywords: %v", labelList(before))
+	}
+
+	body := strings.Replace(journeySurfaceSrc, "    callers: Advisor\n", "    callers: Advisor\n    \n", 1)
+	items := completionAt(t, body, 10, 4)
+	for _, l := range []string{"query", "command", "callers:", "spec:", "note", "finding"} {
+		if !hasLabel(items, l) {
+			t.Errorf("surface body: missing %q in %v", l, labelList(items))
+		}
+	}
+	if hasLabel(items, "when") {
+		t.Errorf("surface body offers use-case keywords: %v", labelList(items))
+	}
+}
+
+func TestStoreRefHoverDefinitionCompletion(t *testing.T) {
+	c, _ := newBranchClient(t, journeyStoreSrc)
+	want := "store hand-off: sms_queue, change inserted; written by invoicing; polled by smsdispatch"
+	if got := hoverText(c, 17, 30); got != want {
+		t.Errorf("notifies hover = %q, want %q", got, want)
+	}
+	if got := hoverText(c, 20, 32); got != want {
+		t.Errorf("listens hover = %q, want %q", got, want)
+	}
+	var locs []struct {
+		Range struct {
+			Start struct{ Line, Character int } `json:"start"`
+		} `json:"range"`
+	}
+	if err := json.Unmarshal(c.at("textDocument/definition", 17, 30), &locs); err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 1 || locs[0].Range.Start.Line != 11 || locs[0].Range.Start.Character != 21 {
+		t.Errorf("definition = %+v, want the data-stores entry (11:21)", locs)
+	}
+
+	src := strings.Replace(journeyStoreSrc, "        invoicing notifies store.sms_queue.inserted\n",
+		"        invoicing notifies store.sms_queue.inserted\n        invoicing notifies store.\n", 1)
+	items := completionAt(t, src, 18, 33)
+	if !hasLabel(items, "sms_queue") {
+		t.Errorf("missing sms_queue after `notifies store.`: %v", labelList(items))
+	}
+}

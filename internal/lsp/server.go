@@ -363,6 +363,12 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	rm := s.ws.ResolutionMap()
 	wsSym := s.ws.WorkspaceSymbols()
 
+	// An `asks` bracket goes to its surface operation; a store ref to its
+	// `data-stores:` entry.
+	if loc, ok := s.journeyDefinition(file, f.LineIndex, cursorLine, int(params.Position.Character)); ok {
+		return []protocol.Location{loc}, nil
+	}
+
 	// Walk services: match cursor against each context reference line so that
 	// go-to-definition fires when the cursor is on a `contexts:` entry.
 	for _, svc := range file.Services() {
@@ -871,6 +877,9 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: expStartLine}, End: protocol.Position{Line: expStartLine}},
 			Range:          protocol.Range{Start: protocol.Position{Line: expStartLine}, End: protocol.Position{Line: expEndLine}},
 		})
+	}
+	for _, sym := range surfaceSymbols(file, f.LineIndex) {
+		syms = append(syms, sym)
 	}
 	return syms, nil
 }
@@ -1395,6 +1404,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 			Kind:      protocol.RegionFoldingRange,
 		})
 	}
+	ranges = append(ranges, surfaceFoldingRanges(file, li)...)
 
 	return ranges, nil
 }
@@ -1600,6 +1610,11 @@ func (s *Server) Hover(_ context.Context, params *protocol.HoverParams) (*protoc
 	// otherwise describe the trigger subject on a `receives` line.
 	cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))
 	if val, ok := keywordHover(syntax.Root(f.Green), cursorOffset); ok {
+		return &protocol.Hover{
+			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
+		}, nil
+	}
+	if val, ok := s.journeyHover(file, f.LineIndex, cursorLine, int(params.Position.Character), cursorOffset); ok {
 		return &protocol.Hover{
 			Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 		}, nil

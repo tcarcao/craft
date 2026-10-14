@@ -166,3 +166,11 @@ func TestDetectContext_CommentBraceFix(t *testing.T) {
 		t.Errorf("detectContext with comment brace: got %v, want ctxDomainBody", got)
 	}
 }
+
+func TestDetectContext_UnclosedBracketOnAnAsk(t *testing.T) {
+	src := "use_case \"X\" {\n  when U does x\n    A asks B for c [\n}"
+	g, li, _ := syntax.Parse(src)
+	if got := detectContext(syntax.Root(g), li, 2, 20); got != ctxOpAnnotationVerb {
+		t.Errorf("detectContext: got %d, want ctxOpAnnotationVerb", got)
+	}
+}

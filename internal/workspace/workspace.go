@@ -49,6 +49,7 @@ type Workspace struct {
 		ws    sema.WorkspaceSymbols
 		rm    sema.ResolutionMap
 		diags map[string][]craft.Diagnostic // keyed by source-file URI
+		doc   *craft.CraftDoc               // merged, resolved document of all files
 	}
 
 	// recompute debounces background cross-file resolution via time.AfterFunc.
@@ -156,6 +157,14 @@ func (w *Workspace) ResolutionMap() sema.ResolutionMap {
 	return w.resolution.rm
 }
 
+// Doc returns the merged, resolved document of every file, as of the last
+// resolution; nil before the first one.
+func (w *Workspace) Doc() *craft.CraftDoc {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.resolution.doc
+}
+
 // WorkspaceDiagnostics returns the cross-file diagnostics for a specific URI,
 // produced by the last AnalyzeWorkspace run. Returns nil if none.
 func (w *Workspace) WorkspaceDiagnostics(uri string) []craft.Diagnostic {
@@ -191,6 +200,7 @@ func (w *Workspace) recomputeResolution() {
 	res := analysis.Workspace(results)
 	w.resolution.ws = res.Symbols
 	w.resolution.rm = res.Resolution
+	w.resolution.doc = res.Doc
 
 	// Index the workspace-level diagnostics by source file URI so
 	// publishDiagnostics can merge them into the per-file payload.

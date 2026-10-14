@@ -28,6 +28,8 @@ const (
 	ctxOpAnnotationVerb  // cursor at an operation annotation's head: suggest protocol verbs
 	ctxTriggerVerb       // cursor after `when <name> `: suggest listens/receives
 	ctxListensTail       // cursor after `when <name> listens <ref> `: suggest a schedule
+	ctxStoreName         // cursor after `notifies store.` / `listens store.`: suggest store names
+	ctxSurfaceBody       // a line of a surface body
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -72,6 +74,13 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 			return "expose"
 		case syntax.SyntaxKindArchDecl:
 			return "arch"
+		case syntax.SyntaxKindSurfaceDecl:
+			// Blank lines before a declaration are its leading trivia: only
+			// a cursor past the `{` is in the body.
+			if lb := node.ChildToken(syntax.SyntaxKindLBrace); lb != nil && offset >= lb.TextRange().End {
+				return "surface"
+			}
+			return ""
 		case syntax.SyntaxKindFile:
 			return ""
 		}
@@ -205,7 +214,21 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 		return ctxDomainBody
 	case "actors":
 		return ctxActorsBlock
+	case "surface":
+		if strings.TrimSpace(linePrefix) == "" || !strings.ContainsAny(strings.TrimSpace(linePrefix), " \t[") {
+			return ctxSurfaceBody
+		}
+		return ctxUnknown
 	case "use_case":
+		if storeNameRe.MatchString(linePrefix) {
+			return ctxStoreName
+		}
+		if unclosedBracketRe.MatchString(linePrefix) && !bracketClosesLater(li.Src()[cursorOffset:]) {
+			// `[` typed without its `]` does not parse as an annotation
+			// yet. With a `]` later on the line it does, and only its head
+			// (handled above) offers completions.
+			return ctxOpAnnotationVerb
+		}
 		if listensTailRe.MatchString(linePrefix) {
 			return ctxListensTail
 		}
@@ -228,10 +251,23 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 
 // triggerVerbRe matches a trigger line typed up to its verb slot, and
 // listensTailRe one typed up to the schedule tail of a `listens` trigger.
+// storeNameRe matches a store ref typed up to its name, and
+// unclosedBracketRe an `asks` line whose last `[` is still open.
 var (
-	triggerVerbRe = regexp.MustCompile(`^\s*when\s+\S+\s+$`)
-	listensTailRe = regexp.MustCompile(`^\s*when\s+\S+\s+listens\s+\S+\s+$`)
+	triggerVerbRe     = regexp.MustCompile(`^\s*when\s+\S+\s+$`)
+	listensTailRe     = regexp.MustCompile(`^\s*when\s+\S+\s+listens\s+\S+\s+$`)
+	storeNameRe       = regexp.MustCompile(`\b(notifies|listens)\s+store\.[\w-]*$`)
+	unclosedBracketRe = regexp.MustCompile(`^\s*\S+\s+asks\s.*\[[^\]]*$`)
 )
+
+// bracketClosesLater reports whether rest (the source after the cursor) has a
+// `]` before the end of its line.
+func bracketClosesLater(rest string) bool {
+	if i := strings.IndexByte(rest, '\n'); i >= 0 {
+		rest = rest[:i]
+	}
+	return strings.Contains(rest, "]")
+}
 
 // fieldBeforeCursor returns the field name if linePrefix looks like "  fieldname:  "
 // (single word followed by colon, optional trailing spaces). Returns "", false otherwise.
@@ -311,7 +347,16 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 	case ctxUseCaseActionVerb:
 		return domainAndServiceSymbolCompletions(ws)
 	case ctxOpAnnotationVerb:
-		return protocolVerbCompletions()
+		list := protocolVerbCompletions()
+		// An `asks` whose target has a surface also offers its operations.
+		if target := syncTargetOnLine(syntax.AsFile(root), f.LineIndex, cursorLine+1); target != "" {
+			list.Items = append(surfaceOpCompletions(ws, target), list.Items...)
+		}
+		return list
+	case ctxStoreName:
+		return storeNameCompletions(ws)
+	case ctxSurfaceBody:
+		return surfaceBodyCompletions()
 	case ctxUseCaseAction:
 		return allSymbolCompletions(ws)
 	case ctxExposeField:
@@ -379,6 +424,13 @@ func topLevelKeywordCompletions() *protocol.CompletionList {
 			Kind:             protocol.CompletionItemKindKeyword,
 			Detail:           "declare a use case with scenarios",
 			InsertText:       "use_case \"${1:Name}\" {\n\twhen ${2:Actor} ${3:initiates} ${4:action}\n\t\t${5:Context} ${6:validates} ${7:request}\n}",
+			InsertTextFormat: snip,
+		},
+		{
+			Label:            "surface",
+			Kind:             protocol.CompletionItemKindKeyword,
+			Detail:           "declare the operations a boundary offers",
+			InsertText:       "surface ${1:boundary} {\n    callers: ${2:unknown}\n    query ${3:what it answers}  [${4:operation}]\n}",
 			InsertTextFormat: snip,
 		},
 		{
