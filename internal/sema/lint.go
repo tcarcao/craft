@@ -720,22 +720,35 @@ func lintReceivesOnActor(perFileTrees map[string]syntax.SyntaxNode, ws Workspace
 	return diags
 }
 
-// ── store-without-change ──────────────────────────────────────────────────────
+// ── store-without-change, store-without-name ──────────────────────────────────
 // Warning: a store ref (store.<name>[.<change>]) whose last segment is not a
-// change, in a `notifies` or a `listens` trigger.
+// change, in a `notifies` or a `listens` trigger (store-without-change); or a
+// ref that starts with `store.` but names no store, such as `store.inserted`,
+// which falls back to a plain event (store-without-name).
 
 func lintStoreWithoutChange(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
 	var diags []model.Diagnostic
 	for _, uri := range sortedTreeURIs(perFileTrees) {
 		li := lis[uri]
 		check := func(ref string, line, col int) {
-			if _, change, ok := lang.ParseStoreRef(ref); !ok || change != "" {
+			_, change, ok := lang.ParseStoreRef(ref)
+			var code, msg string
+			switch {
+			case !ok && strings.HasPrefix(ref, lang.StoreTransport+"."):
+				// `store.inserted` or a bare `store.`: it reads as a hand-off
+				// but parses as a plain event.
+				code = "craft/lint/store-without-name"
+				msg = fmt.Sprintf("store ref `%s` names no store, so it is drawn as a plain event; write `store.<name>.<change>`, e.g. `store.sms_queue.inserted`", ref)
+			case ok && change == "":
+				code = "craft/lint/store-without-change"
+				msg = fmt.Sprintf("store ref `%s` names no change; end it with `.inserted`, `.updated` or `.deleted`", ref)
+			default:
 				return
 			}
 			start := colToLSP(col)
 			diags = append(diags, model.Diagnostic{
-				Code:      "craft/lint/store-without-change",
-				Message:   fmt.Sprintf("store ref `%s` names no change; end it with `.inserted`, `.updated` or `.deleted`", ref),
+				Code:      code,
+				Message:   msg,
 				Severity:  model.SeverityWarning,
 				SourceURI: uri,
 				Range: model.Range{

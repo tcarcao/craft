@@ -1,6 +1,7 @@
 package visualizer
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -1116,5 +1117,67 @@ use_case "Reindex" {
 	requireLine(t, "plantuml", puml, "[-> graphql : [opOnly]")
 	if !strings.Contains(mmd, "graphql: [opOnly]\n") {
 		t.Errorf("mermaid label has a leading space:\n%s", mmd)
+	}
+}
+
+// A store hand-off whose store is not drawn as a database (undeclared, or
+// databases hidden) is a direct writer → reader dependency, never an event
+// queue delivery.
+func TestC4_StoreHandOffWithoutADatabaseIsASharedStore(t *testing.T) {
+	const src = `domain billing {
+    invoicing
+    smsdispatch
+}
+services {
+    billingsvc {
+        contexts: invoicing
+        data-stores: sms_queue
+    }
+    smssvc {
+        contexts: smsdispatch
+    }
+}
+use_case "Invoicing queues a payment reminder" {
+    when cron "0 9 * * 1-5"
+        invoicing notifies store.sms_queue.inserted
+        invoicing notifies store.outbox.updated
+}
+use_case "The queued reminder is sent" {
+    when smsdispatch listens store.sms_queue.inserted
+        smsdispatch claims the unsent rows
+}
+use_case "The outbox is drained" {
+    when smsdispatch listens store.outbox.updated
+        smsdispatch drains the outbox
+}
+`
+	doc := resolvedDoc(t, src)
+	for _, tc := range []struct {
+		name string
+		opts view.C4Options
+		want string
+	}{
+		{"undeclared store, databases shown", view.C4Options{ShowDatabases: true}, "app:billingsvc>app:smssvc outbox updated"},
+		{"databases hidden", view.C4Options{}, "app:billingsvc>app:smssvc outbox updated|app:billingsvc>app:smssvc sms_queue inserted"},
+	} {
+		c4 := view.BuildC4(doc, interaction.Derive(doc), tc.opts)
+		var shared []string
+		for _, r := range c4.Relations {
+			if r.To == "Event_Queue" || r.From == "Event_Queue" {
+				t.Errorf("%s: a store hand-off is never routed through the event queue: %+v", tc.name, r)
+			}
+			if r.Technology == "Shared store" {
+				shared = append(shared, r.From+">"+r.To+" "+r.Label)
+			}
+		}
+		slices.Sort(shared)
+		if got := strings.Join(shared, "|"); got != tc.want {
+			t.Errorf("%s: shared-store relations = %q, want %q", tc.name, got, tc.want)
+		}
+		for _, s := range c4.Systems {
+			if s.ID == "Event_System" {
+				t.Errorf("%s: no event queue is drawn when every publish is a store hand-off", tc.name)
+			}
+		}
 	}
 }

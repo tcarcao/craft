@@ -400,7 +400,7 @@ func layerIcon(name string) string {
 // wantsEventQueue: the queue is drawn when a service in focus publishes.
 func (b *c4Builder) wantsEventQueue() bool {
 	for _, it := range b.its {
-		if it.Kind != interaction.Publish || b.storeDrawn(it) {
+		if it.Kind != interaction.Publish || !it.Via.IsZero() {
 			continue
 		}
 		if !b.hasFocus {
@@ -508,8 +508,16 @@ func (b *c4Builder) relateServices() {
 				b.relate(b.containerOf(it.From), b.containerOf(it.Via), strings.TrimSpace("writes "+storeChange(it.Event)), "Database Query")
 			}
 		case interaction.Listen:
-			if b.storeDrawn(it) {
+			switch {
+			case b.storeDrawn(it):
 				b.relate(b.containerOf(it.To), b.containerOf(it.Via), "polls", "Database Query")
+			case !it.Via.IsZero():
+				// No database container to route through (an undeclared
+				// store, or databases hidden): the shared store is still a
+				// real dependency, so draw it writer → reader.
+				if from, to := b.containerOf(it.From), b.containerOf(it.To); from != to {
+					b.relate(from, to, strings.TrimSpace(it.Via.Name+" "+storeChange(it.Event)), "Shared store")
+				}
 			}
 		}
 	}
@@ -523,8 +531,9 @@ func (b *c4Builder) relateServices() {
 }
 
 // storeDrawn reports whether it is a store hand-off drawn as a relation to a
-// database container (a declared data store, with databases shown); such a
-// hand-off is not also routed through the event queue.
+// database container (a declared data store, with databases shown). Any other
+// store hand-off is drawn as a "Shared store" relation from writer to reader.
+// Neither kind is routed through the event queue.
 func (b *c4Builder) storeDrawn(it interaction.Interaction) bool {
 	return !it.Via.IsZero() && b.containerOf(it.Via) != ""
 }
@@ -542,12 +551,12 @@ func (b *c4Builder) relateEvents() {
 		return
 	}
 	for _, it := range b.its {
-		if it.Kind == interaction.Publish && !b.storeDrawn(it) {
+		if it.Kind == interaction.Publish && it.Via.IsZero() {
 			b.relate(b.containerOf(it.From), eventQueueID, it.Event, "Event Publishing")
 		}
 	}
 	for _, it := range b.its {
-		if it.Kind == interaction.Listen && !b.storeDrawn(it) {
+		if it.Kind == interaction.Listen && it.Via.IsZero() {
 			b.relate(eventQueueID, b.containerOf(it.To), it.Event, "Event Delivery")
 		}
 	}

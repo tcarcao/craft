@@ -511,10 +511,14 @@ type StoreRef struct {
 - `craft/sema/invalid-schedule` also checks a listens tail, with the same rules and range as in v2.22.
 - `craft/lint/store-without-change` (new, warning): a store ref with no recognised change. The message
   names the three changes.
+- `craft/lint/store-without-name` (new, warning): a ref that starts with `store.` but names no store
+  (`store.inserted`, a bare `store.`). It is not a store ref, so it is drawn as a plain event; the
+  message says so and shows the `store.<name>.<change>` form.
 - `dead-event` and `event-not-past-tense` apply to store refs as to any event. The changes are past
   participles, so the second lint is quiet.
 - The context-map lints (`LintCommunication`) still see a `Listen` from writer to reader. Two contexts
-  that share a store are a real dependency.
+  that share a store are a real dependency, and C4 draws it as one (§7.5): a store hand-off is never
+  routed through the event queue, declared store or not.
 
 ### 7.4 Interaction semantics
 - `Interaction` gains `Via Endpoint`: the store for a store hand-off, zero otherwise. The store endpoint
@@ -607,9 +611,11 @@ sequenceDiagram
   `polls <change>`). These replace the writer's event queue node for store refs.
 - **Architecture:** the same store node and the same unlabeled edges. A resolved store sits inside its
   owning service's group, and an unresolved one is ungrouped.
-- **C4:** when the store resolves to a declared data store and `--show-databases` is set, a
-  `Rel(writer, db, "writes <change>")` and a `Rel(reader, db, "polls")`, through the existing
-  `Database Query` path. Otherwise nothing changes.
+- **C4:** a store hand-off never goes through `Event_Queue`. When the store resolves to a declared
+  data store and `--show-databases` is set, a `Rel(writer, db, "writes <change>")` and a
+  `Rel(reader, db, "polls")`, through the existing `Database Query` path. Otherwise (an undeclared
+  store, or databases hidden) a `Rel(writer, reader, "<store> <change>", "Shared store")` per writer
+  and reader in different containers.
 
 ### 7.6 Formatter, LSP
 - **Formatter:** the listens tail is written with single spaces, `listens <ref> cron "<expr>"`.

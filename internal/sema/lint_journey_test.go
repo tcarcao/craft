@@ -98,3 +98,23 @@ func TestLint_OperationNotInSurface(t *testing.T) {
 		}
 	}
 }
+
+func TestLint_StoreWithoutName(t *testing.T) {
+	src := "domain d {\n  a\n  b\n}\nuse_case \"U\" {\n  when O does\n    a notifies store.inserted\n    a notifies store.leads.inserted\n  when b listens store.deleted\n    b does it\n    b notifies store.\n}"
+	var got []string
+	for _, d := range analyzeSingleFileForTest(t, src) {
+		switch d.Code {
+		case "craft/lint/store-without-name":
+			r := d.Range
+			got = append(got, fmt.Sprintf("%d:%d-%d", r.Start.Line, r.Start.Character, r.End.Character))
+			if d.Severity != "warning" || !strings.Contains(d.Message, "names no store") {
+				t.Errorf("diag = %+v", d)
+			}
+		case "craft/lint/store-without-change":
+			t.Errorf("unexpected %+v", d)
+		}
+	}
+	if s := strings.Join(got, " "); s != "6:15-29 8:17-30 10:15-21" {
+		t.Errorf("ranges = %s, want 6:15-29 8:17-30 10:15-21", s)
+	}
+}
