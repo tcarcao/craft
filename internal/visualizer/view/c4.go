@@ -588,6 +588,12 @@ func (b *c4Builder) actor(name string) C4Actor {
 			a.Element, a.Description = C4ExternalSystem, "External system"
 		case model.ActorTypeService:
 			a.Element, a.Description = C4ExternalSystem, "External service"
+		case model.ActorTypeScheduler:
+			a.Element, a.Description = C4ExternalSystem, "Scheduler"
+		case model.ActorTypeTool:
+			a.Element, a.Description = C4ExternalSystem, "Operator tool"
+		case model.ActorTypeInfra:
+			a.Element, a.Description = C4ExternalSystem, "Platform infrastructure"
 		}
 		break
 	}

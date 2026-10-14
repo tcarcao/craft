@@ -86,14 +86,26 @@ func wrap(label string, limit int) string {
 	return strings.Join(words[:mid], " ") + `\n` + strings.Join(words[mid:], " ")
 }
 
+// actorElement is the PlantUML element of an actor kind. Every kind outside
+// the system that is not a person keeps the boundary shape (spec §6.5).
 func actorElement(t model.ActorType) string {
 	switch t {
-	case model.ActorTypeSystem:
+	case model.ActorTypeSystem, model.ActorTypeScheduler, model.ActorTypeTool, model.ActorTypeInfra:
 		return "boundary"
 	case model.ActorTypeService:
 		return "control"
 	}
 	return "actor"
+}
+
+// actorStereotype names a scheduler, tool or infra actor on its declaration
+// line (` <<scheduler>>`); "" for every other kind.
+func actorStereotype(t model.ActorType) string {
+	switch t {
+	case model.ActorTypeScheduler, model.ActorTypeTool, model.ActorTypeInfra:
+		return " <<" + string(t) + ">>"
+	}
+	return ""
 }
 
 const header = "@startuml\nleft to right direction\nskinparam backgroundColor white\nskinparam defaultFontName SansSerif\n\n"
@@ -117,7 +129,7 @@ func Flow(f view.Flow) string {
 	if len(f.Actors) > 0 {
 		b.WriteString("' Actors\n")
 		for _, n := range f.Actors {
-			fmt.Fprintf(&b, "%s \"%s\" as %s\n", actorElement(n.ActorType), text(n.Label), al.declare(n.ID, n.Label))
+			fmt.Fprintf(&b, "%s \"%s\" as %s%s\n", actorElement(n.ActorType), text(n.Label), al.declare(n.ID, n.Label), actorStereotype(n.ActorType))
 		}
 		b.WriteString("\n")
 	}
@@ -214,14 +226,14 @@ func Sequence(s view.Sequence) string {
 	al := newAliases()
 	b.WriteString("@startuml\nskinparam backgroundColor white\nskinparam defaultFontName SansSerif\nskinparam sequenceMessageAlign center\n\n")
 	for _, p := range s.Participants {
-		kind := "participant"
+		kind, stereo := "participant", ""
 		switch p.Kind {
 		case view.NodeActor:
-			kind = actorElement(p.ActorType)
+			kind, stereo = actorElement(p.ActorType), actorStereotype(p.ActorType)
 		case view.NodeStore:
 			kind = "database"
 		}
-		fmt.Fprintf(&b, "%s \"%s\" as %s\n", kind, text(p.Label), al.declare(p.ID, p.Label))
+		fmt.Fprintf(&b, "%s \"%s\" as %s%s\n", kind, text(p.Label), al.declare(p.ID, p.Label), stereo)
 	}
 	if len(s.Participants) > 0 {
 		b.WriteString("\n")

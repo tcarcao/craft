@@ -1181,3 +1181,56 @@ use_case "The outbox is drained" {
 		}
 	}
 }
+
+const actorKindsSrc = `actors {
+    scheduler Ticker
+    tool OperatorTool
+    user Operator
+}
+domain vas {
+    vasscheduler
+    account
+}
+use_case "The activation sweep starts due schedules" {
+    when Ticker fires the vasscheduler activation sweep
+        vasscheduler starts every schedule that is due
+}
+use_case "Operator exports agency portfolio values" {
+    when Operator runs the portfolio export
+        OperatorTool asks account for the agency owner members  [backofficeMembersList]
+}
+`
+
+func TestSequence_ActorKindsAreStereotypedBoundaries(t *testing.T) {
+	puml, mmd := sequenceSource(t, actorKindsSrc)
+	for _, want := range []string{
+		`boundary "Ticker" as Ticker <<scheduler>>`,
+		`boundary "OperatorTool" as OperatorTool <<tool>>`,
+		`actor "Operator" as Operator`,
+		"Ticker -> vasscheduler : fires the vasscheduler activation sweep",
+		"Operator -> OperatorTool : runs the portfolio export",
+	} {
+		requireLine(t, "plantuml", puml, want)
+	}
+	for _, want := range []string{
+		"participant Ticker as Ticker (scheduler)",
+		"participant OperatorTool as OperatorTool (tool)",
+		"actor Operator as Operator",
+	} {
+		requireLine(t, "mermaid", mmd, want)
+	}
+}
+
+func TestFlowAndC4_ActorKinds(t *testing.T) {
+	doc := resolvedDoc(t, actorKindsSrc)
+	flow, _, err := renderSource(doc, ViewFlow, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireLine(t, "flow", string(flow), `boundary "Ticker" as Ticker <<scheduler>>`)
+	c4, _, err := renderSource(doc, ViewC4, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireLine(t, "c4", string(c4), `System_Ext(Ticker, "Ticker", "Scheduler")`)
+}

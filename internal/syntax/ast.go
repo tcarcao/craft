@@ -589,8 +589,19 @@ func (a ActorDecl) ActorTypeToken() *SyntaxToken {
 	return nil
 }
 
-// Name returns the identifier token for the actor's name.
+// Name returns the identifier token for the actor's name. For an
+// open-taxonomy kind (`scheduler Ticker`) the kind is an ident too, so the
+// name is the ident after it.
 func (a ActorDecl) Name() *SyntaxToken {
+	if typ := a.ActorTypeToken(); typ != nil {
+		tokens := a.node.Tokens()
+		for i, tok := range tokens {
+			if tok.Offset() == typ.Offset() && i+1 < len(tokens) {
+				t := tokens[i+1]
+				return &t
+			}
+		}
+	}
 	return a.node.ChildToken(SyntaxKindIdent)
 }
 

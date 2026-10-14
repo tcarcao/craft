@@ -192,3 +192,16 @@ func TestLint_OperationNotInSurface_ServiceSurfaceCoversItsContexts(t *testing.T
 		t.Errorf("warnings = %q", got)
 	}
 }
+
+func TestLint_UnusedActorTreatsNewKindsLikeSystem(t *testing.T) {
+	for _, kind := range []string{"scheduler", "tool", "infra"} {
+		unused := "actors {\n  " + kind + " X\n}\n"
+		used := unused + "use_case \"U\" {\n  when X starts it\n    a does b\n}\n"
+		if n := lintCodes(t, unused, "craft/lint/unused-actor"); n != 1 {
+			t.Errorf("%s unused: %d", kind, n)
+		}
+		if n := lintCodes(t, used, "craft/lint/unused-actor"); n != 0 {
+			t.Errorf("%s used: %d", kind, n)
+		}
+	}
+}

@@ -1079,3 +1079,18 @@ func TestActionDecl_SourceText_EscapedEventSurvives(t *testing.T) {
 		t.Errorf("SourceText() = %q, want %q", got, line)
 	}
 }
+
+func TestActorDecl_OpenKindNameIsTheSecondIdent(t *testing.T) {
+	for _, src := range []string{"actors {\n    scheduler Ticker\n}", "actor scheduler Ticker"} {
+		actors := syntax.AsFile(astParse(src)).Actors()
+		if len(actors) != 1 {
+			t.Fatalf("%q: %d actors", src, len(actors))
+		}
+		if n := actors[0].Name(); n == nil || n.Text() != "Ticker" {
+			t.Errorf("%q: name = %v, want Ticker", src, n)
+		}
+		if k := actors[0].ActorTypeValue(); k != "scheduler" {
+			t.Errorf("%q: kind = %q", src, k)
+		}
+	}
+}

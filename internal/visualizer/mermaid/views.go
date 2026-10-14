@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tcarcao/craft/v2/internal/lang"
+	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 )
 
@@ -80,6 +81,12 @@ func Sequence(s view.Sequence) string {
 		switch p.Kind {
 		case view.NodeActor:
 			kind = "actor"
+			switch p.ActorType {
+			case model.ActorTypeScheduler, model.ActorTypeTool, model.ActorTypeInfra:
+				// Not people: a box, with the kind in text (Mermaid has no
+				// stereotypes), as a store is marked "(store)".
+				kind, label = "participant", label+" ("+string(p.ActorType)+")"
+			}
 		case view.NodeStore:
 			// Mermaid's sequence syntax has no portable database shape.
 			label += " (store)"
