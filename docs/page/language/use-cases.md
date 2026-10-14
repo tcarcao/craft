@@ -204,6 +204,75 @@ A data store is a valid target, so `Authentication asks user_db to check email u
 
 A bounded context belongs to one service. Listing it in two services' `contexts:` raises `craft/sema/bc-in-multiple-services` (warning), and the first declaration keeps it.
 
+## Branches and Named Scenarios
+
+A scenario is a straight line of steps. Two constructs let it say more: `alt` and `opt` blocks inside a scenario, and an optional `scenario "name"` line before `when`.
+
+```craft
+use_case "Resolve a subscriber's billing cycle range" {
+    scenario "daily snapshot"
+    when CRON fires the daily snapshot schedule
+        plan asks nmf_monetization for the billing cycle range  [getUserBillingCycleRange]
+        alt "nMF has a cycle for the timestamp"
+            plan returns the cycle start, end and last day
+        else "nMF answers 404"
+            plan answers not-found without retrying
+        else "nMF is unhealthy"
+            plan retries once after 100 ms
+            opt "the retry also fails"
+                plan answers a server error
+        plan logs the run
+}
+```
+
+Blocks use the offside rule: a header (`alt`, `else`, `opt`) owns every following line indented deeper than itself. There are no braces and no `end`. `else` must sit at the same column as its `alt`. Labels are required and quoted. `craft fmt` writes the canonical layout.
+
+### When to use which
+
+- **`alt`** for different outcomes of one step: nMF answers OK, 404 or 5xx. Exactly one branch runs. Add one `else` per further outcome.
+- **`opt`** for a step, or a few steps, that run only under a condition. It has no `else`.
+- **`scenario "name"`** for different ways into the use case: the same use case started by a cron job and by a user. Each way in is its own `when`.
+
+Do not restart a flow from its trigger to describe an outcome. Use `alt`, and the steps that led to the branch point stay in the diagram.
+
+### In diagrams
+
+A sequence diagram draws native blocks. The use case above renders as:
+
+```plantuml
+@startuml
+
+control "CRON" as CRON
+participant "plan" as plan
+participant "nmf_monetization" as nmf_monetization
+
+== Resolve a subscriber's billing cycle range ==
+
+CRON -> plan : fires the daily snapshot schedule
+plan -> nmf_monetization : for the billing cycle range [getUserBillingCycleRange]
+alt nMF has a cycle for the timestamp
+plan --> CRON : returns the cycle start, end and last day
+else nMF answers 404
+plan -> plan : answers not-found without retrying
+else nMF is unhealthy
+plan -> plan : retries once after 100 ms
+opt the retry also fails
+plan -> plan : answers a server error
+end
+end
+plan -> plan : logs the run
+
+@enduml
+```
+
+When a use case has several scenarios, each is drawn in a frame titled `<n>: <name>` (or the trigger text when it has no name). A flow diagram prefixes each step in a branch with its label, for example `4. [nMF answers 404] answers not-found without retrying`.
+
+### Lint
+
+`craft validate` warns with `craft/lint/indistinguishable-scenarios` when two scenarios in one use case have the same trigger text and at least one has no name. Fix it with `alt` if they are outcomes, or with `scenario` names if they are separate entries.
+
+`scenario`, `alt`, `opt` and `else` stay valid names for actors and contexts. They are keywords only at the start of a line and only before a quoted label. Syntax errors for blocks are listed in the [diagnostics codebook](https://github.com/tcarcao/craft/blob/main/docs/DIAGNOSTICS.md).
+
 ## Operation Annotations
 
 Any action (`asks`, `notifies`, `returns`, or an internal action) may end with a bracketed **operation annotation** describing the actual wire call it corresponds to:

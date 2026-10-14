@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+**Why a minor version.** This release is v2.21.0 inside `/v2` even though it is source-breaking: `Scenario.Actions` stops being a field. We chose not to cut `/v3` because every consumer of `pkg/craft` is internal and moves in the same release window. If you consume `pkg/craft` from outside, read **Breaking** first.
+
+### Breaking
+- **`Scenario.Actions` is now a method.** A scenario's body is a tree: `Scenario.Steps []Step`, where a `Step` is an `Action` or a `Block`. `Scenario.Actions()` returns the flat list in source order. Migration: `sc.Actions` becomes `sc.Actions()`. To update actions in place, use `EachAction`, because `Actions()` returns copies.
+- **JSON: `actions` is now `steps`.** Each entry is `{"action": …}` or `{"block": …}`. Goldens and any stored `craft check` output must be regenerated.
+- **A subject-only action line is a syntax error.** `x` alone on a line used to parse as an action without a verb. It now reports `craft/syntax/unexpected-token`.
+- **The document outline gains a scenario level.** Every use case now shows its scenarios as children, with branches nested below them.
+
+### Added
+- **`alt` / `else` / `opt` blocks** inside a scenario, with a quoted label and indentation (offside rule) for the body. Blocks nest. See `docs/GRAMMAR.md` §8.
+- **Scenario names**: an optional `scenario "<name>"` line before `when`. `scenario`, `alt`, `opt` and `else` stay valid identifiers.
+- **Syntax diagnostics**: `craft/syntax/empty-branch`, `inconsistent-indent`, `orphan-else`, `missing-label` and `scenario-without-when`, plus `unexpected-token` for tokens after a label and for a verbless action line.
+- **`craft/lint/indistinguishable-scenarios`** (warning): two scenarios with the same trigger text where one has no name.
+- **Language server**: scenario and block outline, folding per block, hover on a header (`alt block: N branches`), and completion snippets for `scenario`, `alt`, `else` and `opt`.
+- **`Interaction.Branch []BranchRef`** gives the path of blocks around an interaction, and `UseCaseIndex` its use case. Each branch of an `alt` starts from the call stack at the `alt`; after a block the stack is restored.
+- **Model and `pkg/craft` types**: `Step`, `Block`, `Branch`, `BlockKind` (`alt`, `opt`), `Scenario.Name`, `Scenario.Actions()`, `EachAction`.
+
+### Changed — diagrams
+- **Sequence diagrams draw native `alt` / `else` / `opt` / `end` blocks** (PlantUML and Mermaid) inside the scenario frame. A branch with no drawable message keeps its header.
+- **Scenario frames are titled `<n>: <name>`** when the scenario has a name, else `<n>: <trigger>` as before.
+- **Flow diagrams prefix a step in a branch** with its label: `N. [branch label] text`.
+- Architecture and C4 views are unchanged.
+
+### Changed — formatter
+- Canonical block indentation: a block body is 4 spaces deeper than its header, and `else` aligns with its `alt`.
+- Tabs become spaces, and a blank line is written before `scenario`.
+- A trailing comment stays with the branch it is indented under.
+- `craft fmt` refuses a file with a block-structure error, so it never moves a line between blocks.
+
 ## [2.20.0] — 2026-10-14
 
 **Why a minor version.** No exported `pkg/craft` identifier is removed or changes type. Behaviour does change: `Parse` now reports cross-reference and lint diagnostics, `ParseFiles` keeps one copy of a service or domain declared in several files, and `craft generate` draws all its inputs as one model and refuses a model with errors. Read the entries below before upgrading.

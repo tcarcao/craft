@@ -20,6 +20,11 @@ Each entry lists:
 | `craft/syntax/unclosed-block` | error | A `{` was never closed before EOF | `unclosed actors block (missing \`}\`)` | S3 |
 | `craft/syntax/not-yet-implemented` | warning | A construct is recognised by the grammar but not yet supported by parser v2. The tool is behind; the file is fine | `a trailing [operation] annotation is not recognised on a line whose phrase contains braces` | S3 |
 | `craft/syntax/skipped-construct` | error | A token could not be placed at all, and the region top-level recovery discarded because of it is absent from the model | `unexpected "when" at top level: lines 6-8 were skipped and are not part of the model` | 2.17.2 |
+| `craft/syntax/empty-branch` | error | An `alt`, `opt` or `else` header has no body line. The block is kept with an empty branch | `\`alt "…"\` has no steps: indent its steps under it` | 2.21 |
+| `craft/syntax/inconsistent-indent` | error | A line sits left of its block's first body line but right of the header. It joins the innermost block whose header is left of it | `this line is indented less than the steps above it but more than its block header; align it with one of them` | 2.21 |
+| `craft/syntax/orphan-else` | error | An `else` has no open `alt` at its column, or its block is an `opt`. Parsed as a new `alt` with that label | `\`else\` must sit at the same column as an \`alt\` above it (an \`opt\` has no else)` | 2.21 |
+| `craft/syntax/missing-label` | error | `alt`, `opt` or `else` stands alone on its line. Treated as a header with an empty label | `\`alt\`/\`opt\`/\`else\` needs a quoted label, e.g. \`alt "payment fails"\`` | 2.21 |
+| `craft/syntax/scenario-without-when` | error | A `scenario "…"` line is not followed by `when`. The name is dropped | `\`scenario "…"\` must be followed by a \`when\` line` | 2.21 |
 
 > **`not-yet-implemented` vs `skipped-construct`.** The two used to share a code, which put a file whose content was being thrown away at the same severity as `event "X" is published but never consumed`. They are opposites: `not-yet-implemented` says the file is fine and the parser will catch up, so it stays advisory; `skipped-construct` says a region of the file is gone from the model and every consumer (`check`, `inspect`, `generate`, LSP) will agree it never existed, so it fails `validate` without `--strict`. Its range spans the whole discarded region, not just the token that triggered recovery.
 
@@ -46,6 +51,7 @@ Style and consistency warnings produced by `sema.LintWorkspace`. These mirror th
 |------|----------|---------|-----------------|--------|
 | `craft/lint/dead-event` | warning | An event is published via `notifies` but never consumed by any `when … listens` or event trigger in the workspace | `event "Order Processing" is published but never consumed` | S9 |
 | `craft/lint/unused-actor` | warning | An actor is declared but never appears as the subject of an external trigger (`when <Actor> …`) | `actor "Admin" is defined but never used as a trigger subject` | S9 |
+| `craft/lint/indistinguishable-scenarios` | warning | Two scenarios in one use case have identical trigger text and at least one has no `scenario "…"` name. Use `alt` for different outcomes, or `scenario` names for different ways in | `scenario repeats the trigger "when CRON fires nightly"; use alt "…" for different outcomes, or scenario "…" names for different ways in` | 2.21 |
 | `craft/lint/event-not-past-tense` | warning | An event name does not appear to use past tense (does not contain a word ending in `-ed` or `-en`) | `event "Order Processing" does not appear to use past tense` | S9 |
 
 ---

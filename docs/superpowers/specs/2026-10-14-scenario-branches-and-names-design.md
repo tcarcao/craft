@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14
 **Owner:** Tiago Carção
-**Status:** Approved in design review; awaiting written-spec review
+**Status:** Implemented on feat/scenario-branches
 **Release:** v2.21.0, a **breaking** change inside the `/v2` module path (decided; see §8)
 **Drives:** re-arch-central journey assessment (`docs/journey-assessment/`), gaps G2 (conditional
 steps / branches) and G3 (named scenarios). Retires the corpus convention "scenarios are comments".
@@ -248,9 +248,9 @@ explains the change and the one-line migration (`sc.Actions` → `sc.Actions()`)
   as the acceptance example.
 
 ## 10. Decisions
-1. Branch kinds `alt` + `opt` now; `par` and `loop` later in the same shape. *(approved)*
-2. Header with a quoted label plus the offside rule: no braces, no `end`. *(approved)*
-3. An optional `scenario "<name>"` line before `when`, plus the `indistinguishable-scenarios` lint. *(approved)*
-4. A tree model: `Scenario.Steps` with Step = Action | Block, and `Actions()` as a convenience. *(approved)*
-5. v2.21.0, breaking within `/v2`. *(approved)*
-6. tree-sitter highlights the headers but does not model nesting. *(approved in Section 3)*
+1. Branch kinds `alt` + `opt` now; `par` and `loop` later in the same shape. *(approved, implemented)*
+2. Header with a quoted label plus the offside rule: no braces, no `end`. *(approved, implemented)*
+3. An optional `scenario "<name>"` line before `when`, plus the `indistinguishable-scenarios` lint. *(approved, implemented)*
+4. A tree model: `Scenario.Steps` with Step = Action | Block, and `Actions()` as a convenience. *(approved, implemented)*
+5. v2.21.0, breaking within `/v2`. *(approved, implemented)*
+6. tree-sitter highlights the headers but does not model nesting. *(approved, implemented)*

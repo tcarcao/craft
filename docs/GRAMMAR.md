@@ -190,7 +190,13 @@ This is the richest construct in the language and the primary source of parser c
 
 ```ebnf
 use_case     = 'use_case' STRING '{' NL* scenario* '}' NL* ;
-scenario     = trigger action_block ;
+scenario      = scenario_name? trigger step* ;   (* trigger includes 'when' and its NL+ *)
+scenario_name = 'scenario' STRING NL+ ;
+step          = action | block ;
+block         = alt_block | opt_block ;
+alt_block     = 'alt' STRING NL+ body ('else' STRING NL+ body)* ;
+opt_block     = 'opt' STRING NL+ body ;
+body          = step+ ;        (* offside rule: every line deeper than its header's column *)
 
 trigger      = 'when' domain 'listens' quoted_event NL+
              | 'when' external_trigger             NL+
@@ -224,6 +230,10 @@ verb   = identifier ;
 
 quoted_event = STRING ;
 ```
+
+**Offside rule.** A block header's body is every following line whose first token sits in a column greater than the header's. The body ends at the first line at or left of the header's column, or at `when`, `scenario` or `}`. An `else` must start at exactly the column of its `alt`. Blocks nest to any depth. For the comparison a tab advances to the next multiple of 4, and comments are trivia: a comment line never closes a body. Outside a block body, indentation stays insignificant.
+
+**Contextual keywords.** `scenario`, `alt`, `opt` and `else` are keywords only at the start of a line and only when a STRING follows. A line such as `alt asks billing for a quote` is still an ordinary action whose subject is named `alt`. A header with no label is an error (`craft/syntax/missing-label`) and is parsed as a header with an empty label.
 
 **Trigger disambiguation rule:** after `when`, the parser must look ahead to decide between the three trigger alternatives:
 1. If the next token is a STRING → `'when' quoted_event NL+` (event-on-its-own).
@@ -312,6 +322,8 @@ All of the following appear in the `identifier` production (§9) and can therefo
 | `data-stores` | Service property | Any `identifier` position (note the hyphen — special lexing) |
 | `language` | Service property | Any `identifier` position |
 | `deployment` | Service property | Any `identifier` position |
+
+`scenario`, `alt`, `opt` and `else` are also contextual (see the offside rule in §8). They remain identifiers: each is recognised as a keyword only at the start of a use-case-body line and only when followed by a STRING, and an action always needs a verb after its subject.
 
 ### 11.2 Connector words (part of `phrase_word`)
 
