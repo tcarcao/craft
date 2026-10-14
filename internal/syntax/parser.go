@@ -1155,18 +1155,14 @@ func (p *Parser) peekAtLineStart() bool {
 	if tok.Offset < 0 || tok.Offset > len(p.src) {
 		return false
 	}
-	for j := p.pos - 1; j >= 0; j-- {
-		prev := p.tokens[j]
-		switch prev.Type {
-		case lexer.TokenLineComment, lexer.TokenBlockComment, lexer.TokenDocComment:
-			continue
-		}
-		if prev.End < 0 || prev.End > tok.Offset {
-			return false
-		}
-		return strings.Contains(p.src[prev.End:tok.Offset], "\n")
+	prev := p.lastConsumed()
+	if prev.Type == lexer.TokenEOF {
+		return true // nothing consumed yet
 	}
-	return true
+	if prev.End < 0 || prev.End > tok.Offset {
+		return false
+	}
+	return strings.Contains(p.src[prev.End:tok.Offset], "\n")
 }
 
 // isHeader reports whether the next tokens are a block header: the contextual

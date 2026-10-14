@@ -363,12 +363,28 @@ func longBodyLineSrc(n int) string {
 		strings.Repeat("\"s\" ", n) + "\n}"
 }
 
+// bestParseTime returns the fastest of three parses of src.
+func bestParseTime(src string) time.Duration {
+	best := time.Duration(1<<63 - 1)
+	for range 3 {
+		start := time.Now()
+		syntax.Parse(src)
+		if d := time.Since(start); d < best {
+			best = d
+		}
+	}
+	return best
+}
+
+// Linear parsing takes about 4x as long for 4x the tokens; quadratic about
+// 16x. A ratio, not an absolute bound, keeps this stable on slow machines.
 func TestBlocks_LongLineIsNotQuadratic(t *testing.T) {
-	src := longBodyLineSrc(20000)
-	start := time.Now()
-	syntax.Parse(src)
-	if d := time.Since(start); d > 200*time.Millisecond {
-		t.Errorf("parse of a %d-byte body line took %v, want < 200ms", len(src), d)
+	const n = 5000
+	small := bestParseTime(longBodyLineSrc(n))
+	large := bestParseTime(longBodyLineSrc(4 * n))
+	if large >= 10*small {
+		t.Errorf("parse time grew %.1fx for 4x the tokens (%v -> %v), want < 10x (linear is ~4x)",
+			float64(large)/float64(small), small, large)
 	}
 }
 
