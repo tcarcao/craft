@@ -80,14 +80,25 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 		pubSeen := map[string]bool{}
 		conSeen := map[string]bool{}
 		for _, sc := range uc.Scenarios {
-			if (sc.Trigger.Type == craft.TriggerTypeEvent || sc.Trigger.Type == craft.TriggerTypeDomainListen) && sc.Trigger.Event != "" && !conSeen[sc.Trigger.Event] {
-				conSeen[sc.Trigger.Event] = true
-				sum.EventsConsumed = append(sum.EventsConsumed, sc.Trigger.Event)
+			// EventList, not Event: a `listens` list and a `notifies one of`
+			// carry every item there; Event holds the first only.
+			if sc.Trigger.Type == craft.TriggerTypeEvent || sc.Trigger.Type == craft.TriggerTypeDomainListen {
+				for _, ev := range sc.Trigger.EventList() {
+					if !conSeen[ev] {
+						conSeen[ev] = true
+						sum.EventsConsumed = append(sum.EventsConsumed, ev)
+					}
+				}
 			}
 			for _, a := range sc.Actions() {
-				if a.Type == craft.ActionTypeAsync && a.Event != "" && !pubSeen[a.Event] {
-					pubSeen[a.Event] = true
-					sum.EventsPublished = append(sum.EventsPublished, a.Event)
+				if a.Type != craft.ActionTypeAsync {
+					continue
+				}
+				for _, ev := range a.EventList() {
+					if !pubSeen[ev] {
+						pubSeen[ev] = true
+						sum.EventsPublished = append(sum.EventsPublished, ev)
+					}
 				}
 			}
 		}

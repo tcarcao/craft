@@ -3440,7 +3440,7 @@ func scopeMatches(values []string, want string) bool {
   - **Event-bus records** (`platform-ops/event-bus-atlas-delivery.craft`): the 12 `records:` entries replace the `eventbus.Event` placeholder in a `listens` list (the placeholder is itself one of the 12) and the tag is dropped. 0 errors, warnings unchanged (the event-not-past-tense hit for `eventbus.CreateAutoSchedule` moves here from the vas file, as the lint reports each event at its first occurrence). Arrow: `[-> eventbus : eventbus.Event, eventbus.ExportToOlxSuccess, eventbus.ExportToOlxFailure (+9 more) (from advertdiscount, midgard, nmf_monetization, +2 more)`; before, a bare `eventbus.Event` with no publisher.
   - **Streams** (`seller-tooling/ai-assistant-chat.craft`): the relay step became `AiAssistant returns stream the reply as META, TOKEN and DONE events` + `graphql returns stream each upstream event to the client as META, TOKEN or DONE`. 0 errors, no new warning (no `stream-without-caller`), `fmt --check` clean; the sequence draws two `loop stream` boxes, `AiAssistant --> graphql` and `graphql --> frontendplatform`.
   - Renders: `<scratchpad>/a22/render/` (ledger, event-bus and ai-chat sequence; ledger domain).
-- Found on the way: `craft inspect`'s `events_published`/`events_consumed` read only `Event`, so a `listens` list or a `notifies one of` reports its first item only (`cmd/craft/inspect.go:83-90`). Not fixed here.
+- Found on the way: `craft inspect`'s `events_published`/`events_consumed` read only `Event`, so a `listens` list or a `notifies one of` reported its first item only (`cmd/craft/inspect.go:83-90`). Fixed before the release: both read `EventList()` (`TestInspectCmd_EventListsReportEveryItem`).
 
 ---
 
