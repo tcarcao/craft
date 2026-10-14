@@ -81,13 +81,18 @@ type Interaction struct {
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
 	// Branch is the path from the outermost block inward to the branch the
-	// action sits in; nil outside blocks.
+	// action sits in; nil outside blocks. Trigger and Listen interactions
+	// always have a nil Branch, even when the action they reach sits in a
+	// block. Each interaction owns its slice.
 	Branch []BranchRef
 }
 
 // BranchRef locates an interaction inside one branch of a block.
 type BranchRef struct {
-	Block string // model.Block.ID
+	// Block is the model.Block.ID. It is unique within the block's source
+	// file, so within a scenario consumers compare it to detect a change of
+	// block.
+	Block string
 	Kind  lang.BlockKind
 	Label string
 	Index int // 0-based branch index within the block
@@ -181,31 +186,32 @@ type walker struct {
 	out       []Interaction
 }
 
-// walk visits steps that sit at path. Every branch of an alt starts from the
-// call stack as it was at the alt; an opt body continues from it. After any
-// block the stack is restored to its state at the block's start, because which
-// branch ran is unknown.
+// walk visits steps that sit at path.
 func (w *walker) walk(steps []model.Step, path []BranchRef) {
 	for _, st := range steps {
 		switch {
 		case st.Block != nil:
-			b := st.Block
-			saved := append([]frame(nil), w.callStack...)
-			for i, br := range b.Branches {
-				if b.Kind == lang.BlockAlt || i == 0 {
-					w.callStack = append([]frame(nil), saved...)
-				}
-				// A fresh, clipped slice: interactions never share a backing
-				// array with room to grow.
-				inner := slices.Clip(append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}))
-				w.walk(br.Steps, inner)
-			}
-			w.callStack = saved
+			w.walkBlock(st.Block, path)
 		case st.Action != nil:
 			w.step++
 			w.action(*st.Action, path)
 		}
 	}
+}
+
+// walkBlock visits each branch of b. Every branch of an alt starts from the
+// call stack as it was at the alt; an opt body continues from it. After the
+// block the stack is restored to its state at the block's start, because which
+// branch ran is unknown.
+func (w *walker) walkBlock(b *model.Block, path []BranchRef) {
+	saved := slices.Clone(w.callStack)
+	for i, br := range b.Branches {
+		if b.Kind == lang.BlockAlt || i == 0 {
+			w.callStack = slices.Clone(saved)
+		}
+		w.walk(br.Steps, append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}))
+	}
+	w.callStack = saved
 }
 
 // action derives the interaction of the w.step-th action, if it has one.
@@ -215,7 +221,7 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 	}
 	it := w.base
 	it.Step = w.step
-	it.Branch = path
+	it.Branch = slices.Clone(path)
 	it.From = endpoint(a.Context, a.From)
 	it.Label = label(a)
 	it.Operation = a.Operation

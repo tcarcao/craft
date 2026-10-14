@@ -316,6 +316,11 @@ use_case "Checkout" {
 	if its[0].Kind != interaction.Trigger || its[0].To.Name != "Billing" {
 		t.Errorf("trigger = %+v", its[0])
 	}
+	// The trigger comes from outside the scenario's steps, so it sits in no
+	// branch even though the action it reaches does.
+	if its[0].Branch != nil {
+		t.Errorf("trigger branch = %+v, want nil", its[0].Branch)
+	}
 }
 
 // Each alt branch starts from the call stack as it was at the alt, and the
@@ -378,5 +383,64 @@ use_case "Ship" {
 	}
 	if listen == nil || listen.From.Name != "Billing" || listen.To.Name != "Shipping" || listen.Event != "Payment Settled" || listen.Branch != nil {
 		t.Errorf("listen = %+v", listen)
+	}
+}
+
+// Each interaction owns its Branch slice: changing one never shows in another,
+// not even in a sibling from the same branch.
+func TestDerive_BranchSlicesAreNotShared(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        alt "the card is accepted"
+            Ordering validates the basket
+            Ordering asks Billing to charge the card
+}
+`})
+	first, second := &its[1], &its[2]
+	if len(first.Branch) != 1 || len(second.Branch) != 1 {
+		t.Fatalf("branches = %+v / %+v", first.Branch, second.Branch)
+	}
+	first.Branch[0].Label = "changed"
+	first.Branch = append(first.Branch, interaction.BranchRef{Label: "extra"})
+	if got := second.Branch; len(got) != 1 || got[0].Label != "the card is accepted" {
+		t.Errorf("second branch = %+v, want it untouched", got)
+	}
+}
+
+// Two alts in sequence, one with an empty branch: each interaction carries the
+// path of its own block, and the stack after the first alt is the one from
+// before it. The call to Bank sits in the last branch, so nothing resets the
+// stack after it: leaking it would send Bank's return to Billing; restored,
+// Bank answers the latest other caller, Ordering.
+func TestDerive_SequentialAltsAndAnEmptyBranch(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+        alt "the bank is skipped"
+        else "the bank is asked"
+            Billing asks Bank for authorization
+        alt "the bank answers"
+            Bank returns the decision
+        else "billing answers"
+            Billing returns the receipt
+        Ordering returns the confirmation
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {}
+2 request Billing->Bank {alt:the bank is asked#1}
+3 response Bank->Ordering {alt:the bank answers#0}
+4 response Billing->Ordering {alt:billing answers#1}
+5 response Ordering->Customer {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if len(its) == 6 && its[2].Branch[0].Block == its[3].Branch[0].Block {
+		t.Errorf("both alts have block %q, want distinct IDs", its[2].Branch[0].Block)
+	}
+	if len(its) == 6 && its[3].Branch[0].Block != its[4].Branch[0].Block {
+		t.Errorf("branches of one alt have blocks %q and %q", its[3].Branch[0].Block, its[4].Branch[0].Block)
 	}
 }
