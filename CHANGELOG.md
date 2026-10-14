@@ -11,6 +11,10 @@
 - **Sequence diagrams** draw a scheduled trigger from `CRON` with the label `cron 0 7 * * 1-5` or `every 5m`, not from an invented `cron` participant.
 - **`craft/lint/unused-actor`** no longer reports a declared `CRON` actor when a scheduled trigger exists.
 
+### Changed — diagrams
+- **An event from another use case names its publisher.** The inbound arrow of a sequence diagram (`[-> consumer : event`, Mermaid `External->>consumer`) is labelled `event (from <publisher>)`, several sorted by display name and capped at 3 with `+N more`. An event with no publisher in the model keeps its bare label. No participant is added.
+- **A trigger reaches every branch when its scenario opens with a block.** The trigger is drawn inside each branch, to that branch's first action (recursing into a nested opening block); a branch with no action gets none. `Interaction.Branch` (internal) is now set on such triggers, and each branch's call stack starts with its own trigger frame. Flow diagrams prefix these triggers with their branch label.
+
 ## [2.21.0] — 2026-10-14
 
 **Why a minor version.** This release is v2.21.0 inside `/v2` even though it is source-breaking: `Scenario.Actions` stops being a field. We chose not to cut `/v3` because every consumer of `pkg/craft` is internal and moves in the same release window. If you consume `pkg/craft` from outside, read **Breaking** first.
