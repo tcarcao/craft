@@ -34,8 +34,8 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 	add := func(from, to string, style EdgeStyle, label string) {
 		// The flow has no boxes, so an edge inside a block names its
 		// innermost branch instead.
-		// Trigger and listen interactions are never prefixed: their Branch is
-		// nil by construction (see interaction.Interaction.Branch).
+		// Listens are never prefixed, and a trigger only when its scenario
+		// opens with a block (see interaction.Interaction.Branch).
 		if len(branch) > 0 {
 			label = "[" + branch[len(branch)-1].Label + "] " + label
 		}

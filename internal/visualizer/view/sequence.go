@@ -250,10 +250,25 @@ type scenarioLayout struct {
 	step    int // actions seen so far, numbered as interaction numbers them
 }
 
-// emit draws the interactions of the step-th action (0: the trigger).
+// emit draws the interactions of the step-th action (0: the trigger and
+// listens). A trigger that sits in a branch (its scenario opens with a block)
+// is drawn by emitTriggers when the walk enters that branch instead.
 func (l *scenarioLayout) emit(step int) {
 	for _, it := range l.bySteps[step] {
+		if step == 0 && it.Branch != nil {
+			continue
+		}
 		l.b.add(l.idx, it, l.title)
+	}
+}
+
+// emitTriggers draws the triggers that reach the branch at path, so they open
+// that branch, before its first message.
+func (l *scenarioLayout) emitTriggers(path []BranchRef) {
+	for _, it := range l.bySteps[0] {
+		if it.Kind == interaction.Trigger && it.Branch != nil && slices.Equal(branchPath(it.Branch), path) {
+			l.b.add(l.idx, it, l.title)
+		}
 	}
 }
 
@@ -275,6 +290,7 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 			for i, br := range st.Block.Branches {
 				inner := append(slices.Clone(path), BranchRef{Block: st.Block.ID, Kind: st.Block.Kind, Label: br.Label, Index: i})
 				before := len(sec.Messages)
+				l.emitTriggers(inner)
 				l.walk(br.Steps, inner)
 				if len(sec.Messages) == before {
 					sec.Messages = append(sec.Messages, Message{Kind: MessageNone, Scenario: l.title, Branch: inner})

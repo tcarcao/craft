@@ -87,9 +87,10 @@ type Interaction struct {
 	// as opposed to one sent back to the caller found on the call stack.
 	Targeted bool
 	// Branch is the path from the outermost block inward to the branch the
-	// action sits in; nil outside blocks. Trigger and Listen interactions
-	// always have a nil Branch, even when the action they reach sits in a
-	// block. Each interaction owns its slice.
+	// action sits in; nil outside blocks. Listen always has a nil Branch; a
+	// Trigger has one only when its scenario opens with a block, which gets
+	// one trigger per branch, each reaching that branch's first action. Each
+	// interaction owns its slice.
 	Branch []BranchRef
 }
 
@@ -138,8 +139,11 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 
 	// The call stack answers "who does an untargeted return go back to". It
 	// starts with the actor that triggered the scenario, calling the subject of
-	// the first action.
+	// the first action. A scenario that opens with a block is triggered into
+	// each branch instead (see walker.trigger); the stack keeps the frame of
+	// the first action in source order for what follows the block.
 	var callStack []frame
+	var trigger *Interaction
 
 	switch t.Type {
 	case lang.TriggerExternal:
@@ -149,14 +153,19 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			break
 		}
 		actor := endpoint(t.Actor, t.Subject)
+		it := base
+		it.Kind, it.From = Trigger, actor
+		it.Label = triggerLabel(t)
+		it.Site = triggerSite
+		it.Site.Length = utf16Len(t.Actor)
 		if len(actions) > 0 && actions[0].Context != "" {
-			first := actions[0]
-			it := base
-			it.Kind, it.From, it.To = Trigger, actor, endpoint(first.Context, first.From)
-			callStack = append(callStack, frame{caller: actor, callee: it.To})
-			it.Label = triggerLabel(t)
-			it.Site = triggerSite
-			it.Site.Length = utf16Len(t.Actor)
+			first := endpoint(actions[0].Context, actions[0].From)
+			callStack = append(callStack, frame{caller: actor, callee: first})
+			if len(sc.Steps) > 0 && sc.Steps[0].Block != nil {
+				trigger = &it
+				break
+			}
+			it.To = first
 			out = append(out, it)
 		}
 	case lang.TriggerDomainListen:
@@ -177,8 +186,8 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 		}
 	}
 
-	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, out: out}
-	w.walk(sc.Steps, nil)
+	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, trigger: trigger, out: out}
+	w.walk(sc.Steps, nil, trigger != nil)
 	return w.out
 }
 
@@ -197,17 +206,25 @@ type walker struct {
 	base      Interaction
 	uri       string
 	callStack []frame
-	step      int
-	out       []Interaction
+	// trigger, when set, is the trigger of a scenario that opens with a
+	// block, To unset: each branch the scenario opens with gets a copy.
+	trigger *Interaction
+	step    int
+	out     []Interaction
 }
 
-// walk visits steps that sit at path.
-func (w *walker) walk(steps []model.Step, path []BranchRef) {
-	for _, st := range steps {
+// walk visits steps that sit at path. opening is true when the steps are where
+// the scenario opens: the first step of the scenario, or of a branch of a
+// block that opens it. Each branch the trigger reaches gets its own trigger.
+func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) {
+	for i, st := range steps {
 		switch {
 		case st.Block != nil:
-			w.walkBlock(st.Block, path)
+			w.walkBlock(st.Block, path, opening && i == 0)
 		case st.Action != nil:
+			if opening && i == 0 {
+				w.branchTrigger(*st.Action, path)
+			}
 			// Keep in step with scenarioLayout.walk in
 			// visualizer/view/sequence.go: both number actions in the same
 			// order. TestSequenceStepsMatchInteractionSteps guards the pairing.
@@ -217,17 +234,30 @@ func (w *walker) walk(steps []model.Step, path []BranchRef) {
 	}
 }
 
+// branchTrigger draws the scenario's trigger into the branch at path, to a,
+// that branch's first action. The branch's call stack starts with it alone.
+func (w *walker) branchTrigger(a model.Action, path []BranchRef) {
+	if w.trigger == nil || a.Context == "" {
+		return
+	}
+	it := *w.trigger
+	it.To = endpoint(a.Context, a.From)
+	it.Branch = slices.Clone(path)
+	w.callStack = []frame{{caller: it.From, callee: it.To}}
+	w.out = append(w.out, it)
+}
+
 // walkBlock visits each branch of b. Every branch of an alt starts from the
 // call stack as it was at the alt; an opt body continues from it. After the
 // block the stack is restored to its state at the block's start, because which
 // branch ran is unknown.
-func (w *walker) walkBlock(b *model.Block, path []BranchRef) {
+func (w *walker) walkBlock(b *model.Block, path []BranchRef, opening bool) {
 	saved := slices.Clone(w.callStack)
 	for i, br := range b.Branches {
 		if b.Kind == lang.BlockAlt || i == 0 {
 			w.callStack = slices.Clone(saved)
 		}
-		w.walk(br.Steps, append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}))
+		w.walk(br.Steps, append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}), opening)
 	}
 	w.callStack = saved
 }

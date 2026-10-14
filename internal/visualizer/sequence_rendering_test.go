@@ -554,3 +554,83 @@ func TestFlow_EdgesInsideABranchCarryTheBranchLabel(t *testing.T) {
 		}
 	}
 }
+
+// A scenario that opens with a block is triggered into every branch: each
+// branch's trigger is drawn inside that branch, before its messages. A
+// trigger whose actor takes the branch's first step itself is still a note.
+const openingBlockSrc = `actor user Seeker
+domain web {
+    frontendplatform
+    mobile
+    search
+}
+use_case "Seeker searches" {
+    when Seeker opens the search page
+        alt "on the web"
+            frontendplatform asks search for listings
+        else "in the app"
+            mobile asks search for listings
+        else "offline"
+            Seeker reads the cached results
+        search records the query
+}
+`
+
+func TestSequence_TriggerIsDrawnInsideEachOpeningBranchPlantUML(t *testing.T) {
+	puml, _ := sequenceSource(t, openingBlockSrc)
+	want := `== Seeker searches ==
+
+alt on the web
+Seeker -> frontendplatform : opens the search page
+frontendplatform -> search : for listings
+else in the app
+Seeker -> mobile : opens the search page
+mobile -> search : for listings
+else offline
+note over Seeker : opens the search page
+Seeker -> Seeker : reads the cached results
+end
+search -> search : records the query
+
+@enduml`
+	if !strings.HasSuffix(puml, want) {
+		t.Errorf("plantuml:\n--- got\n%s\n--- want suffix\n%s", puml, want)
+	}
+}
+
+func TestSequence_TriggerIsDrawnInsideEachOpeningBranchMermaid(t *testing.T) {
+	_, mmd := sequenceSource(t, openingBlockSrc)
+	want := `    alt on the web
+    Seeker->>frontendplatform: opens the search page
+    frontendplatform->>search: for listings
+    else in the app
+    Seeker->>mobile: opens the search page
+    mobile->>search: for listings
+    else offline
+    Note over Seeker: opens the search page
+    Seeker->>Seeker: reads the cached results
+    end
+    search->>search: records the query
+`
+	if !strings.Contains(mmd, want) {
+		t.Errorf("mermaid:\n--- got\n%s\n--- want\n%s", mmd, want)
+	}
+}
+
+// In the flow view, which has no boxes, a trigger into a branch names its
+// branch like any other edge inside a block.
+func TestFlow_TriggerIntoABranchCarriesTheBranchLabel(t *testing.T) {
+	doc := resolvedDoc(t, openingBlockSrc)
+	for _, backend := range []Backend{PlantUML, Mermaid} {
+		out, _, err := renderSource(doc, ViewFlow, backend)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(out)
+		for _, want := range []string{"[on the web] opens the search page", "[in the app] opens the search page"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("%v: no %q:\n%s", backend, want, s)
+			}
+		}
+	}
+}

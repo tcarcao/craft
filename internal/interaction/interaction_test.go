@@ -302,8 +302,9 @@ use_case "Checkout" {
 	}
 }
 
-// The trigger reaches the first action in source order, even inside a block.
-func TestDerive_TriggerTargetsFirstActionInsideABlock(t *testing.T) {
+// A scenario that opens with a block is triggered into every branch: one
+// trigger per branch, to that branch's first action, carrying its path.
+func TestDerive_TriggerReachesEveryBranchOfAnOpeningBlock(t *testing.T) {
 	its := derive(t, map[string]string{"a.craft": structure + `
 use_case "Checkout" {
     when Customer places an order
@@ -311,15 +312,99 @@ use_case "Checkout" {
             Billing applies the voucher
         else "without"
             Ordering charges the card
+        Ordering confirms the order
 }
 `})
-	if its[0].Kind != interaction.Trigger || its[0].To.Name != "Billing" {
-		t.Errorf("trigger = %+v", its[0])
+	want := `0 trigger Customer->Billing {alt:with a voucher#0}
+1 internal Billing->Billing {alt:with a voucher#0}
+0 trigger Customer->Ordering {alt:without#1}
+2 internal Ordering->Ordering {alt:without#1}
+3 internal Ordering->Ordering {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
-	// The trigger comes from outside the scenario's steps, so it sits in no
-	// branch even though the action it reaches does.
-	if its[0].Branch != nil {
-		t.Errorf("trigger branch = %+v, want nil", its[0].Branch)
+	if len(its) == 5 && its[0].Branch[0].Block != its[2].Branch[0].Block {
+		t.Errorf("triggers sit in blocks %q and %q, want one block", its[0].Branch[0].Block, its[2].Branch[0].Block)
+	}
+	for _, i := range []int{0, 2} {
+		if i < len(its) && (its[i].Label != "places an order" || its[i].Site.Line == 0) {
+			t.Errorf("trigger %d = %+v, want the scenario's label and site", i, its[i])
+		}
+	}
+}
+
+// A branch that opens with a block recurses: its trigger goes to each inner
+// branch. A branch with no action gets no trigger.
+func TestDerive_TriggerRecursesIntoNestedOpeningBlocksAndSkipsEmptyBranches(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        alt "nothing to do"
+        else "online"
+            opt "with a voucher"
+                Billing applies the voucher
+            Ordering charges the card
+        else "by phone"
+            Shipping books a courier
+}
+`})
+	want := `0 trigger Customer->Billing {alt:online#1 > opt:with a voucher#0}
+1 internal Billing->Billing {alt:online#1 > opt:with a voucher#0}
+2 internal Ordering->Ordering {alt:online#1}
+0 trigger Customer->Shipping {alt:by phone#2}
+3 internal Shipping->Shipping {alt:by phone#2}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// Each branch's call stack starts with that branch's own trigger frame. In the
+// second branch Ordering's return answers the actor through that frame, past
+// the call Shipping left open; with the first branch's frame instead,
+// Ordering would be nobody's callee and its return would go to Shipping.
+// After the block the stack is restored as before it, so a later return by
+// the first branch's subject still answers the actor.
+func TestDerive_EachBranchStartsWithItsTriggerFrame(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        alt "online"
+            Billing asks Bank for authorization
+        else "by phone"
+            Ordering validates the order
+            Shipping asks Billing for a fee
+            Ordering returns the confirmation
+        Billing returns the receipt
+}
+`})
+	want := `0 trigger Customer->Billing {alt:online#0}
+1 request Billing->Bank {alt:online#0}
+0 trigger Customer->Ordering {alt:by phone#1}
+2 internal Ordering->Ordering {alt:by phone#1}
+3 request Shipping->Billing {alt:by phone#1}
+4 response Ordering->Customer {alt:by phone#1}
+5 response Billing->Customer {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// A scenario that opens with an action keeps its single trigger, outside any
+// branch, even when a block follows.
+func TestDerive_TriggerBeforeABlockHasNoBranch(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Ordering validates the basket
+        alt "with a voucher"
+            Billing applies the voucher
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 internal Ordering->Ordering {}
+2 internal Billing->Billing {alt:with a voucher#0}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
 
