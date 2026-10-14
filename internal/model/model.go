@@ -18,6 +18,7 @@ type CraftDoc struct {
 	Actors        []Actor        `json:"actors,omitempty"`
 	ContextMap    []Edge         `json:"contextMap,omitempty"`
 	Glossary      []TermRelation `json:"glossary,omitempty"`
+	Surfaces      []Surface      `json:"surfaces,omitempty"`
 }
 
 // Edge is one authored relationship edge from a context_map block, connecting
@@ -136,6 +137,9 @@ type UseCase struct {
 	// one-element slice — so a consumer can read this field uniformly rather
 	// than testing which of the two to use. nil exactly when Tags is nil.
 	TagValues map[string][]string `json:"tagValues,omitempty"`
+	// Notes are the use-case-level note and finding lines, written before the
+	// first scenario.
+	Notes []Note `json:"notes,omitempty"`
 }
 
 // Scenario is one trigger and the steps it sets off, in source order.
@@ -148,28 +152,115 @@ type Scenario struct {
 	Steps   []Step  `json:"steps"`
 }
 
-// Step is exactly one of Action or Block.
+// Step is exactly one of Action, Block or Note.
 type Step struct {
 	Action *Action `json:"action,omitempty"`
 	Block  *Block  `json:"block,omitempty"`
+	Note   *Note   `json:"note,omitempty"`
 }
 
 // BlockKind is the kind of a branch block inside a scenario.
 type BlockKind = lang.BlockKind
 
 const (
-	BlockAlt = lang.BlockAlt
-	BlockOpt = lang.BlockOpt
+	BlockAlt  = lang.BlockAlt
+	BlockOpt  = lang.BlockOpt
+	BlockPar  = lang.BlockPar
+	BlockLoop = lang.BlockLoop
 )
 
-// Block is an `alt` (one of several branches) or `opt` (one conditional
-// branch) inside a scenario.
+// Block is a branch block inside a scenario: an `alt` (one of several
+// branches), an `opt` (one conditional branch), a `par` (every branch runs,
+// concurrently) or a `loop` (one branch that repeats).
 type Block struct {
 	ID       string    `json:"id"`
 	Kind     BlockKind `json:"kind"`
 	Line     int       `json:"line,omitempty"`
 	Column   int       `json:"column,omitempty"`
 	Branches []Branch  `json:"branches"`
+	// Split is true for a par written without `and`: each Branch holds one step
+	// of the header's body, and every Branch carries the header's Label.
+	Split bool `json:"split,omitempty"`
+}
+
+// NoteKind is the kind of a note statement (note or finding).
+type NoteKind = lang.NoteKind
+
+const (
+	NoteKindNote    = lang.NoteText
+	NoteKindFinding = lang.NoteFinding
+)
+
+// Note is a `note "…"` or `finding "…"` line. It is not an action: it gets no
+// interaction and does not advance step numbers.
+type Note struct {
+	ID     string   `json:"id,omitempty"` // "note_<n>" inside a use case; "" in a surface
+	Kind   NoteKind `json:"kind"`         // "note" | "finding"
+	Text   string   `json:"text"`         // unquoted
+	Line   int      `json:"line,omitempty"`
+	Column int      `json:"column,omitempty"`
+}
+
+// StoreChange is the change of a store hand-off.
+type StoreChange = lang.StoreChange
+
+const (
+	StoreInserted = lang.StoreInserted
+	StoreUpdated  = lang.StoreUpdated
+	StoreDeleted  = lang.StoreDeleted
+)
+
+// StoreRef is a store hand-off parsed from a store.<name>.<change> ref.
+type StoreRef struct {
+	Name   string      `json:"name"`
+	Change StoreChange `json:"change,omitempty"`
+	// Participant is the data store the name resolves to (a `data-stores:`
+	// entry, rulings 9 and 11); nil when it does not resolve.
+	Participant *Participant `json:"participant,omitempty"`
+}
+
+// SurfaceOpKind is the kind of a surface operation (query or command).
+type SurfaceOpKind = lang.SurfaceOpKind
+
+const (
+	SurfaceQuery   = lang.SurfaceQuery
+	SurfaceCommand = lang.SurfaceCommand
+)
+
+// UnknownCaller is the `callers:` value that says no caller was observed.
+const UnknownCaller = lang.UnknownCaller
+
+// Surface lists the operations one boundary offers (`surface <boundary> { … }`).
+type Surface struct {
+	Subject     string             `json:"subject"`               // as written
+	Participant *Participant       `json:"participant,omitempty"` // resolved boundary
+	Callers     []string           `json:"callers,omitempty"`     // as written; "unknown" kept literally
+	Spec        string             `json:"spec,omitempty"`
+	Notes       []Note             `json:"notes,omitempty"`
+	Operations  []SurfaceOperation `json:"operations"`
+	SourceURI   string             `json:"sourceUri,omitempty"`
+	Line        int                `json:"line,omitempty"`
+}
+
+// SurfaceOperation is one `query`/`command` line of a surface.
+type SurfaceOperation struct {
+	Kind      SurfaceOpKind `json:"kind"` // "query" | "command"
+	Connector string        `json:"connector,omitempty"`
+	Phrase    string        `json:"phrase"`
+	Operation Operation     `json:"operation"` // same parsing as an action's bracket
+	Line      int           `json:"line,omitempty"`
+}
+
+// OpeningBlock returns the block the scenario opens with: its first step that
+// is not a note, when that step is a block. Nil otherwise.
+func (s Scenario) OpeningBlock() *Block {
+	for _, st := range s.Steps {
+		if st.Note != nil {
+			continue
+		}
+		return st.Block
+	}
+	return nil
 }
 
 // Branch is one labelled path of a Block.
@@ -180,7 +271,8 @@ type Branch struct {
 }
 
 // Actions returns every action of the scenario in source order: a depth-first
-// walk of Steps. The result holds copies; use EachAction to update in place.
+// walk of Steps. Notes are skipped. The result holds copies; use EachAction to
+// update in place.
 func (s Scenario) Actions() []Action {
 	var out []Action
 	eachAction(s.Steps, func(a *Action) { out = append(out, *a) })
@@ -226,11 +318,16 @@ type Trigger struct {
 	// carries the value either way, for existing consumers.
 	Ref string `json:"ref,omitempty"`
 	// Schedule is the expression of a `when cron "…"` or `when every "…"`
-	// trigger, unquoted.
+	// trigger, unquoted. It is also set for a `listens` trigger with a
+	// trailing schedule.
 	Schedule string `json:"schedule,omitempty"`
 	// ScheduleKind is "cron" or "every" for a scheduled trigger, "" otherwise.
 	ScheduleKind ScheduleKind `json:"scheduleKind,omitempty"`
-	Description  string       `json:"description"`
+	// Operation is the `[...]` bracket of a `receives` trigger; nil otherwise.
+	Operation *Operation `json:"operation,omitempty"`
+	// Store is set on a `listens` trigger whose ref is a store ref.
+	Store       *StoreRef `json:"store,omitempty"`
+	Description string    `json:"description"`
 	// Subject is what the trigger's actor (external) or context (domain
 	// listen) resolves to across the whole model. Nil when it does not
 	// resolve, and for event triggers.
@@ -279,6 +376,7 @@ const (
 	TriggerTypeExternal     = lang.TriggerExternal
 	TriggerTypeEvent        = lang.TriggerEvent
 	TriggerTypeDomainListen = lang.TriggerDomainListen
+	TriggerTypeReceive      = lang.TriggerReceive
 )
 
 // Operation is the trailing `[...]` operation annotation on an action line, for
@@ -312,11 +410,13 @@ type Action struct {
 	// Operation is nil when the action carries no `[...]` annotation. It is a
 	// pointer with omitempty so an absent annotation emits no JSON key at all,
 	// keeping .craftjson goldens for unannotated files byte-identical.
-	Operation   *Operation `json:"operation,omitempty"`
-	Connector   string     `json:"connector,omitempty"`
-	Phrase      string     `json:"phrase,omitempty"`
-	Description string     `json:"description"`
-	Line        int        `json:"line,omitempty"`
+	Operation *Operation `json:"operation,omitempty"`
+	// Store is set on an async action whose ref is a store ref.
+	Store       *StoreRef `json:"store,omitempty"`
+	Connector   string    `json:"connector,omitempty"`
+	Phrase      string    `json:"phrase,omitempty"`
+	Description string    `json:"description"`
+	Line        int       `json:"line,omitempty"`
 	// Column is the 1-based UTF-16 column of the subject on Line.
 	Column int `json:"column,omitempty"`
 	// From is what the subject (Context) resolves to; To is what the target

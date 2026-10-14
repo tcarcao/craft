@@ -10,6 +10,9 @@
 // One exception: v2.21.0 changes Scenario.Actions from a field to a method and
 // the JSON key "actions" to "steps" (see CHANGELOG). All known consumers are
 // internal.
+//
+// Step is exactly one of Action, Block or Note (Note since v2.23.0); a
+// consumer that assumes Action-or-Block must handle a Note.
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"
@@ -44,6 +47,13 @@ type (
 	Actor              = model.Actor
 	ActorType          = model.ActorType
 	TermRelation       = model.TermRelation
+	Note               = model.Note
+	NoteKind           = model.NoteKind
+	Surface            = model.Surface
+	SurfaceOperation   = model.SurfaceOperation
+	SurfaceOpKind      = model.SurfaceOpKind
+	StoreRef           = model.StoreRef
+	StoreChange        = model.StoreChange
 )
 
 const (
@@ -53,9 +63,24 @@ const (
 	TriggerTypeExternal     = model.TriggerTypeExternal
 	TriggerTypeEvent        = model.TriggerTypeEvent
 	TriggerTypeDomainListen = model.TriggerTypeDomainListen
+	TriggerTypeReceive      = model.TriggerTypeReceive
 
-	BlockAlt = model.BlockAlt
-	BlockOpt = model.BlockOpt
+	BlockAlt  = model.BlockAlt
+	BlockOpt  = model.BlockOpt
+	BlockPar  = model.BlockPar
+	BlockLoop = model.BlockLoop
+
+	NoteKindNote    = model.NoteKindNote
+	NoteKindFinding = model.NoteKindFinding
+
+	SurfaceQuery   = model.SurfaceQuery
+	SurfaceCommand = model.SurfaceCommand
+
+	StoreInserted = model.StoreInserted
+	StoreUpdated  = model.StoreUpdated
+	StoreDeleted  = model.StoreDeleted
+
+	UnknownCaller = model.UnknownCaller
 
 	ScheduleCron  = model.ScheduleCron
 	ScheduleEvery = model.ScheduleEvery

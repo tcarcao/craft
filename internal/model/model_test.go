@@ -136,3 +136,49 @@ func TestScenario_JSONShape(t *testing.T) {
 		t.Error("branch missing label key")
 	}
 }
+
+func TestStepNote_IsNotAnAction(t *testing.T) {
+	note := model.Step{Note: &model.Note{ID: "note_3", Kind: model.NoteKindFinding, Text: "no retry"}}
+	sc := model.Scenario{Steps: []model.Step{
+		note,
+		{Action: &model.Action{ID: "action_4"}},
+		{Block: &model.Block{ID: "block_5", Kind: model.BlockPar, Split: true, Branches: []model.Branch{
+			{Label: "x", Steps: []model.Step{{Note: &model.Note{ID: "note_6"}}}},
+			{Label: "x", Steps: []model.Step{{Action: &model.Action{ID: "action_7"}}}},
+		}}},
+	}}
+	var got []string
+	for _, a := range sc.Actions() {
+		got = append(got, a.ID)
+	}
+	if j := strings.Join(got, " "); j != "action_4 action_7" {
+		t.Errorf("Actions() = %q", j)
+	}
+}
+
+func TestScenarioOpeningBlock_SkipsLeadingNotes(t *testing.T) {
+	blk := &model.Block{ID: "block_3", Kind: model.BlockLoop}
+	sc := model.Scenario{Steps: []model.Step{{Note: &model.Note{}}, {Block: blk}}}
+	if sc.OpeningBlock() != blk {
+		t.Error("OpeningBlock should skip the leading note")
+	}
+	sc = model.Scenario{Steps: []model.Step{{Note: &model.Note{}}, {Action: &model.Action{}}, {Block: blk}}}
+	if sc.OpeningBlock() != nil {
+		t.Error("a scenario that opens with an action has no opening block")
+	}
+}
+
+func TestNewFields_AreOmittedWhenEmpty(t *testing.T) {
+	out, err := json.Marshal(model.CraftDoc{UseCases: []model.UseCase{{Name: "U", Scenarios: []model.Scenario{{
+		ID: "scenario_1", Trigger: model.Trigger{Type: model.TriggerTypeExternal},
+		Steps: []model.Step{{Action: &model.Action{ID: "action_2"}}, {Block: &model.Block{ID: "block_3", Kind: model.BlockAlt}}},
+	}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"notes"`, `"note"`, `"split"`, `"store"`, `"surfaces"`, `"operation"`} {
+		if strings.Contains(string(out), key) {
+			t.Errorf("%s must be omitted when empty: %s", key, out)
+		}
+	}
+}

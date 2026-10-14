@@ -20,6 +20,7 @@ const (
 	TriggerExternal     TriggerKind = "external"      // when Actor does …
 	TriggerEvent        TriggerKind = "event"         // when "E"
 	TriggerDomainListen TriggerKind = "domain_listen" // when Ctx listens "E"
+	TriggerReceive      TriggerKind = "receive"       // when <ctx> receives <phrase> [op]
 )
 
 // ScheduleKind is the form of a scheduled trigger: `when cron "…"` or
@@ -39,9 +40,42 @@ const SchedulerActor = "CRON"
 type BlockKind string
 
 const (
-	BlockAlt BlockKind = "alt" // exactly one of several branches runs
-	BlockOpt BlockKind = "opt" // the single branch runs only under its condition
+	BlockAlt  BlockKind = "alt"  // exactly one of several branches runs
+	BlockOpt  BlockKind = "opt"  // the single branch runs only under its condition
+	BlockPar  BlockKind = "par"  // every branch runs, concurrently
+	BlockLoop BlockKind = "loop" // the single branch repeats while its condition holds
 )
+
+// NoteKind is the kind of a note statement.
+type NoteKind string
+
+const (
+	NoteText    NoteKind = "note"    // context for the reader
+	NoteFinding NoteKind = "finding" // a defect, risk or negative fact the hub lists
+)
+
+// SurfaceOpKind is the kind of a surface operation line.
+type SurfaceOpKind string
+
+const (
+	SurfaceQuery   SurfaceOpKind = "query"   // no side effect (Tier A)
+	SurfaceCommand SurfaceOpKind = "command" // changes state (Tier B)
+)
+
+// StoreTransport is the ref prefix of a store hand-off: store.<name>.<change>.
+const StoreTransport = "store"
+
+// StoreChange is the change a store hand-off reports.
+type StoreChange string
+
+const (
+	StoreInserted StoreChange = "inserted"
+	StoreUpdated  StoreChange = "updated"
+	StoreDeleted  StoreChange = "deleted"
+)
+
+// UnknownCaller is the surface `callers:` value for "no caller observed".
+const UnknownCaller = "unknown"
 
 // ParticipantKind is what a name in a use case resolves to.
 type ParticipantKind string
