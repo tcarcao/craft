@@ -36,7 +36,8 @@ const unobservedSuffix = " (unobserved caller)"
 
 // BuildSurfaces computes coverage (spec §8.4): an entry is used by every use
 // case with a Request to the surface's boundary whose operation text, or one
-// item of whose operation list, equals the entry's (whitespace collapsed;
+// item of whose operation list, equals the entry's text or one of the
+// entry's items (whitespace collapsed;
 // ADDR and SQL items are egress and use no entry); a receives trigger on the boundary with that
 // operation counts as "<use case> (unobserved caller)". A surface on a service
 // also covers requests to the service's contexts that have no surface of
@@ -68,9 +69,11 @@ func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces 
 		}
 		// An operation list uses each of its items; an ADDR or SQL item
 		// is egress and uses no entry.
-		ops := it.Operations
-		if len(ops) == 0 {
-			ops = []model.Operation{*it.Operation}
+		// The whole bracket is used too, for an entry that lists the same
+		// operations.
+		ops := []model.Operation{*it.Operation}
+		if len(it.Operations) > 1 {
+			ops = append(ops, it.Operations...)
 		}
 		for _, op := range ops {
 			if op.Verb == lang.OpVerbAddr || op.Verb == lang.OpVerbSQL {
@@ -94,7 +97,21 @@ func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces 
 		}
 		t := SurfaceTable{Subject: s.Subject, Callers: s.Callers, Spec: s.Spec, Notes: s.Notes}
 		for _, op := range s.Operations {
-			names := used[usageKey{boundary, collapse(op.Operation.Text)}]
+			// An entry is used by its whole text and, when it lists
+			// several operations, by each of them (as
+			// operation-not-in-surface reads it).
+			names := map[string]bool{}
+			keys := []string{collapse(op.Operation.Text)}
+			if items := lang.SplitOperationItems(op.Operation.Text); len(items) > 1 {
+				for _, it := range items {
+					keys = append(keys, collapse(it.Text))
+				}
+			}
+			for _, key := range keys {
+				for n := range used[usageKey{boundary, key}] {
+					names[n] = true
+				}
+			}
 			usedBy := make([]string, 0, len(names))
 			for n := range names {
 				usedBy = append(usedBy, n)

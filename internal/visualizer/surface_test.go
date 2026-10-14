@@ -190,3 +190,34 @@ use_case "Partner traces a transaction" {
 		}
 	}
 }
+
+// A surface line that lists several operations is used by a request with
+// the same list and by a request with any one of its items, as
+// operation-not-in-surface accepts both (re-arch-central: atlas-advert's
+// `[postAdvert, putAdvert, deleteAdvert]` lost its only user in v2.25).
+func TestSurface_ListEntryCoveredByListAndItems(t *testing.T) {
+	src := `domain p {
+    partner
+    atlas
+}
+surface atlas {
+    command save or delete an advert  [postAdvert, putAdvert, deleteAdvert]
+}
+use_case "Partner saves an advert" {
+    when partner listens x.Y
+        partner asks atlas to save or delete the advert  [postAdvert, putAdvert, deleteAdvert]
+}
+use_case "Partner deletes an advert" {
+    when partner listens x.Z
+        partner asks atlas to delete the advert  [deleteAdvert]
+}
+`
+	out, err := New(nil).Render(resolvedDoc(t, src), Request{View: ViewSurface, Backend: Mermaid, Format: FormatMarkdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "| `postAdvert, putAdvert, deleteAdvert` | command | save or delete an advert | Partner deletes an advert, Partner saves an advert |\n"
+	if got := string(out.Data); !strings.Contains(got, want) {
+		t.Errorf("missing %q in:\n%s", want, got)
+	}
+}
