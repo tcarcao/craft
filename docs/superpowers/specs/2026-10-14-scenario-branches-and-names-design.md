@@ -71,7 +71,13 @@ use_case "Resolve a subscriber's billing cycle range" {
    nest to any depth.
 4. **Columns.** The parser compares `lexer.Token.Column` (runes, 1-based). A tab counts as advancing to
    the next multiple of 4 for this comparison only. The formatter rewrites tabs to spaces (§6.1).
-5. **Indentation stays insignificant everywhere else.** Outside a block body, action lines keep today's
+5. **Comments are trivia for the offside rule.** A comment line never closes a body, at any indentation,
+   and a block comment before a header keyword (`/* c */ alt "b"`) does not stop it being a header; such a line's column is its indentation (where the comment starts). An
+   action's verb must be on its subject's line, so a subject-only line never takes the next line's subject
+   as its verb across a block boundary.
+6. **One diagnostic for a misplaced `else`.** An `else` header that is both mis-indented and orphaned reports
+   only `orphan-else`.
+7. **Indentation stays insignificant everywhere else.** Outside a block body, action lines keep today's
    rules: they run until `when`, `scenario` or `}`.
 
 ### 3.2 Diagnostics (errors, with recovery)
@@ -82,6 +88,7 @@ use_case "Resolve a subscriber's billing cycle range" {
 | `craft/syntax/inconsistent-indent` | A line is left of its block's first body line but right of the header. | The line joins the innermost block whose header is left of it. |
 | `craft/syntax/orphan-else` | An `else` has no open `alt` at its column, or its block is an `opt`. | Parsed as the start of a new `alt` with that label. |
 | `craft/syntax/missing-label` | `alt`, `opt` or `else` stands alone on its line (the next token is a NEWLINE). Any other token after it means the line is an ordinary action whose subject is named `alt`/`opt`/`else`. | Treated as a header with an empty label. |
+| `craft/syntax/unexpected-token` (existing code) | Tokens follow a header's label on the same line (`alt "a" x does it`). | The extra tokens are wrapped in an error node inside the header; the body starts on the next line. |
 | `craft/syntax/scenario-without-when` | A `scenario "…"` line is not followed by `when`. | Name dropped. |
 
 An unterminated block at end of file needs no diagnostic of its own: the use case's missing `}` is
