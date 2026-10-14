@@ -14,6 +14,28 @@ import (
 	"github.com/tcarcao/craft/v2/internal/workspace"
 )
 
+// decodedSemanticToken is one semantic token at an absolute position.
+type decodedSemanticToken struct {
+	line, char, length, tokenType, modifiers uint32
+}
+
+// decodeSemanticTokens walks semanticTokens/full data, 5-tuples of
+// (deltaLine, deltaChar, length, type, mods), back to absolute positions.
+func decodeSemanticTokens(data []uint32) []decodedSemanticToken {
+	var out []decodedSemanticToken
+	var line, char uint32
+	for i := 0; i+4 < len(data); i += 5 {
+		if d := data[i]; d > 0 {
+			line += d
+			char = data[i+1]
+		} else {
+			char += data[i+1]
+		}
+		out = append(out, decodedSemanticToken{line, char, data[i+2], data[i+3], data[i+4]})
+	}
+	return out
+}
+
 // Regression for the semanticTokens/full crash: a green tree wider than the
 // source produced token offsets past EOF, and converting one to an LSP position
 // panicked with "slice bounds out of range". Every .craft file the repo ships
@@ -58,20 +80,13 @@ func TestSemanticTokensFull_NonASCIIDocuments(t *testing.T) {
 			// Data is 5-tuples of (deltaLine, deltaChar, length, type, mods).
 			// Walk them back to absolute positions and check each one exists.
 			lines := strings.Split(src, "\n")
-			var line, char uint32
-			for i := 0; i+4 < len(res.Data); i += 5 {
-				if d := res.Data[i]; d > 0 {
-					line += d
-					char = res.Data[i+1]
-				} else {
-					char += res.Data[i+1]
+			for i, tok := range decodeSemanticTokens(res.Data) {
+				if int(tok.line) >= len(lines) {
+					t.Fatalf("token %d on line %d, file has %d lines", i, tok.line, len(lines))
 				}
-				if int(line) >= len(lines) {
-					t.Fatalf("token %d on line %d, file has %d lines", i/5, line, len(lines))
-				}
-				if utf16Len := utf16Length(lines[line]); char > utf16Len {
+				if utf16Len := utf16Length(lines[tok.line]); tok.char > utf16Len {
 					t.Errorf("token %d at line %d char %d, line is %d UTF-16 units",
-						i/5, line, char, utf16Len)
+						i, tok.line, tok.char, utf16Len)
 				}
 			}
 		})
@@ -236,15 +251,8 @@ func TestSemanticTokens_ScenarioKeyword(t *testing.T) {
 		}
 	}
 	typeAt := map[[2]uint32]uint32{}
-	var line, char uint32
-	for i := 0; i+4 < len(res.Data); i += 5 {
-		if d := res.Data[i]; d > 0 {
-			line += d
-			char = res.Data[i+1]
-		} else {
-			char += res.Data[i+1]
-		}
-		typeAt[[2]uint32{line, char}] = res.Data[i+3]
+	for _, tok := range decodeSemanticTokens(res.Data) {
+		typeAt[[2]uint32{tok.line, tok.char}] = tok.tokenType
 	}
 	if got, ok := typeAt[[2]uint32{1, 2}]; !ok || got != flow {
 		t.Errorf("`scenario \"a\"` keyword: type %d (present=%v), want flow keyword %d", got, ok, flow)
@@ -275,15 +283,8 @@ func TestSemanticTokens_BlockKeywords(t *testing.T) {
 		}
 	}
 	typeAt := map[[2]uint32]uint32{}
-	var line, char uint32
-	for i := 0; i+4 < len(res.Data); i += 5 {
-		if d := res.Data[i]; d > 0 {
-			line += d
-			char = res.Data[i+1]
-		} else {
-			char += res.Data[i+1]
-		}
-		typeAt[[2]uint32{line, char}] = res.Data[i+3]
+	for _, tok := range decodeSemanticTokens(res.Data) {
+		typeAt[[2]uint32{tok.line, tok.char}] = tok.tokenType
 	}
 	for _, pos := range [][2]uint32{{2, 4}, {4, 4}, {5, 6}} {
 		if got, ok := typeAt[pos]; !ok || got != flow {

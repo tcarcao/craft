@@ -1113,23 +1113,26 @@ func (p *Parser) parseScenario() []model.Diagnostic {
 	return diags
 }
 
-// tabWidth is the tab stop used by visualColumn: a tab advances the column to
-// the next multiple of tabWidth.
+// tabWidth is the tab stop used by peekVisualColumn: a tab advances the
+// column to the next multiple of tabWidth.
 const tabWidth = 4
 
-// visualColumn returns the 1-based column the offside rule uses for tok, the
-// next significant token, with tabs expanded to the next multiple of
-// tabWidth. When only trivia precedes tok on its line, that is the line's
-// indentation: comments are trivia, so `/* c */ else "b"` sits where the line
-// starts, not where `else` does. Otherwise it is tok's own column. It is used
-// only by the offside rule of block bodies; tok.Column (runes) stays the
-// column for everything else.
-func (p *Parser) visualColumn(tok lexer.Token) int {
+// peekVisualColumn returns the 1-based column the offside rule uses for the
+// line that the next significant token starts: the line's indentation, with
+// tabs expanded to the next multiple of tabWidth. Comments are trivia, so
+// `/* c */ else "b"` sits where its line starts, not where `else` does. It is
+// used only by the offside rule of block bodies; Token.Column (runes) stays
+// the column for everything else.
+//
+// The caller must have checked peekAtLineStart: the walk back to the line
+// start is then bounded by the line's indentation and leading comments,
+// which keeps a long line of steps linear rather than quadratic.
+func (p *Parser) peekVisualColumn() int {
+	tok := p.peek()
 	if tok.Type == lexer.TokenEOF || tok.Offset < 0 || tok.Offset > len(p.src) {
 		return tok.Column
 	}
 	lineStart := strings.LastIndexByte(p.src[:tok.Offset], '\n') + 1
-	lineStartsWithTok := p.atLineStart(tok)
 	col := 0
 	for _, r := range p.src[lineStart:tok.Offset] {
 		switch r {
@@ -1138,19 +1141,17 @@ func (p *Parser) visualColumn(tok lexer.Token) int {
 		case ' ':
 			col++
 		default:
-			if lineStartsWithTok {
-				return col + 1 // the leading comment's column
-			}
-			col++
+			return col + 1 // a leading comment's column
 		}
 	}
 	return col + 1
 }
 
-// atLineStart reports whether tok, the next significant token, is the first
-// significant token on its line: only whitespace and comments (trivia) precede
-// it there, so `/* c */ alt "b"` still starts with `alt`.
-func (p *Parser) atLineStart(tok lexer.Token) bool {
+// peekAtLineStart reports whether the next significant token is the first
+// significant token on its line: only whitespace and comments (trivia)
+// precede it there, so `/* c */ alt "b"` still starts with `alt`.
+func (p *Parser) peekAtLineStart() bool {
+	tok := p.peek()
 	if tok.Offset < 0 || tok.Offset > len(p.src) {
 		return false
 	}
@@ -1183,7 +1184,7 @@ func (p *Parser) isHeader() (string, bool) {
 	default:
 		return "", false
 	}
-	if !p.atLineStart(tok) {
+	if !p.peekAtLineStart() {
 		return "", false
 	}
 	next := p.peekAt(1)
@@ -1222,14 +1223,23 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 	bodyCol := 0 // column of the branch's first body line; 0 until seen
 	for p.atStep() {
 		tok := p.peek()
-		col := p.visualColumn(tok)
-		if col <= minCol {
-			break
+		kw, isHdr := p.isHeader()
+
+		// Only the first token of a line is subject to the offside rule: a
+		// token later on a line belongs wherever its line's first token went,
+		// and can never be a header.
+		col := 0
+		if p.peekAtLineStart() && (minCol > 0 || isHdr) {
+			col = p.peekVisualColumn()
 		}
-		if minCol > 0 {
-			if bodyCol == 0 {
+		if minCol > 0 && col > 0 {
+			if col <= minCol {
+				break
+			}
+			switch {
+			case bodyCol == 0:
 				bodyCol = col
-			} else if kw, _ := p.isHeader(); col < bodyCol && kw != "else" && p.atLineStart(tok) {
+			case col < bodyCol && kw != "else":
 				// A mis-indented else is reported only as an orphan below.
 				diags = append(diags, model.Diagnostic{
 					Code:     "craft/syntax/inconsistent-indent",
@@ -1239,22 +1249,23 @@ func (p *Parser) parseSteps(minCol int) []model.Diagnostic {
 				})
 			}
 		}
-		if kw, ok := p.isHeader(); ok {
-			if kw == "else" {
-				// No alt at this column is open (an else at an open alt's
-				// column is taken by parseBlock's loop before control gets
-				// back here), or the open block is an opt.
-				diags = append(diags, model.Diagnostic{
-					Code:     "craft/syntax/orphan-else",
-					Message:  "`else` must sit at the same column as an `alt` above it (an `opt` has no else)",
-					Severity: model.SeverityError,
-					Range:    tokenRange(tok),
-				})
-			}
-			diags = append(diags, p.parseBlock(kw, col)...)
+
+		if !isHdr {
+			diags = append(diags, p.parseAction()...)
 			continue
 		}
-		diags = append(diags, p.parseAction()...)
+		if kw == "else" {
+			// No alt at this column is open (an else at an open alt's column
+			// is taken by parseBlock's loop before control gets back here),
+			// or the open block is an opt.
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/orphan-else",
+				Message:  "`else` must sit at the same column as an `alt` above it (an `opt` has no else)",
+				Severity: model.SeverityError,
+				Range:    tokenRange(tok),
+			})
+		}
+		diags = append(diags, p.parseBlock(kw, col)...)
 	}
 	return diags
 }
@@ -1270,7 +1281,8 @@ func (p *Parser) parseBlock(kw string, col int) []model.Diagnostic {
 	if kw != "opt" {
 		for {
 			next, ok := p.isHeader()
-			if !ok || next != "else" || p.visualColumn(p.peek()) != col {
+			// isHeader implies the else starts its line.
+			if !ok || next != "else" || p.peekVisualColumn() != col {
 				break
 			}
 			diags = append(diags, p.parseBranch("else", col)...)
@@ -1318,7 +1330,9 @@ func (p *Parser) parseBranch(kw string, col int) []model.Diagnostic {
 	}
 	p.builder.FinishNode() // BranchHeader
 
-	if !p.atStep() || p.visualColumn(p.peek()) <= col {
+	// The header line's remainder has been consumed (or is a `}`, which ends
+	// the steps), so a next step starts its own line.
+	if !p.atStep() || p.peekVisualColumn() <= col {
 		diags = append(diags, model.Diagnostic{
 			Code:     "craft/syntax/empty-branch",
 			Message:  fmt.Sprintf("`%s \"…\"` has no steps: indent its steps under it", kw),
@@ -1472,12 +1486,7 @@ func (p *Parser) parseAction() []model.Diagnostic {
 		// Subject-only line. The verb must be on the action's own line: taking
 		// the next line's first token as the verb would swallow that line,
 		// and across a block boundary that line belongs to another block.
-		diags = append(diags, model.Diagnostic{
-			Code:     "craft/syntax/unexpected-token",
-			Message:  fmt.Sprintf("action %q has no verb: write `%s <verb> …` on one line", subjectTok.Value, subjectTok.Value),
-			Severity: model.SeverityError,
-			Range:    tokenRange(subjectTok),
-		})
+		diags = append(diags, p.diagNoVerb(subjectTok, p.lastConsumed()))
 		p.builder.FinishNode()
 		return diags
 	}
@@ -2270,6 +2279,31 @@ var lexerKindToSyntaxKindMap = map[lexer.TokenType]SyntaxKind{
 	lexer.TokenLineComment:  SyntaxKindLineComment,
 	lexer.TokenBlockComment: SyntaxKindBlockComment,
 	lexer.TokenDocComment:   SyntaxKindDocComment,
+}
+
+// lastConsumed returns the last significant token emitted into the tree.
+func (p *Parser) lastConsumed() lexer.Token {
+	for j := p.pos - 1; j >= 0; j-- {
+		switch p.tokens[j].Type {
+		case lexer.TokenLineComment, lexer.TokenBlockComment, lexer.TokenDocComment:
+			continue
+		}
+		return p.tokens[j]
+	}
+	return lexer.Token{Type: lexer.TokenEOF}
+}
+
+// diagNoVerb reports an action line that has a subject but no verb on its
+// line. first and last are the first and last tokens of the subject slot, so
+// a qualified subject (`re/billing`) is named and spanned whole.
+func (p *Parser) diagNoVerb(first, last lexer.Token) model.Diagnostic {
+	name := p.src[first.Offset:last.End]
+	return model.Diagnostic{
+		Code:     "craft/syntax/unexpected-token",
+		Message:  fmt.Sprintf("action %q has no verb: write `%s <verb> …` on one line", name, name),
+		Severity: model.SeverityError,
+		Range:    model.Range{Start: tokenRange(first).Start, End: p.tokenEndPosition(last)},
+	}
 }
 
 func (p *Parser) diagUnexpected(tok lexer.Token, expected string) model.Diagnostic {

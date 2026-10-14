@@ -3,6 +3,7 @@ package syntax_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tcarcao/craft/v2/internal/model"
 	"github.com/tcarcao/craft/v2/internal/syntax"
@@ -202,27 +203,6 @@ func TestBlocks_CommentsAndBlankLinesDoNotEndBody(t *testing.T) {
 	checkLossless(t, src)
 }
 
-func TestBlocks_Diagnostics(t *testing.T) {
-	cases := map[string]string{
-		"craft/syntax/empty-branch":        "use_case \"U\" {\n  when O does\n    alt \"a\"\n    x does it\n}",
-		"craft/syntax/inconsistent-indent": "use_case \"U\" {\n  when O does\n    alt \"a\"\n        x does it\n      x does more\n}",
-		"craft/syntax/orphan-else":         "use_case \"U\" {\n  when O does\n    opt \"a\"\n      x does it\n    else \"b\"\n      x does more\n}",
-		"craft/syntax/missing-label":       "use_case \"U\" {\n  when O does\n    alt\n      x does it\n}",
-	}
-	for code, src := range cases {
-		_, _, diags := syntax.Parse(src)
-		found := false
-		for _, d := range diags {
-			if d.Code == code {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("%s: not reported; got %v", code, diags)
-		}
-	}
-}
-
 func TestBlocks_Recovery(t *testing.T) {
 	cases := []struct {
 		name, src, code, tree string
@@ -373,4 +353,121 @@ func TestBlocks_MisindentedOrphanElseReportsOnlyOrphan(t *testing.T) {
 	if got != want {
 		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
 	}
+}
+
+// longBodyLineSrc is a block body line of n error steps (`"s"` tokens). Each
+// token is its own step, so any per-step work proportional to the line length
+// makes the parse quadratic.
+func longBodyLineSrc(n int) string {
+	return "use_case \"U\" {\n  when O does\n    alt \"a\"\n      x does it\n      " +
+		strings.Repeat("\"s\" ", n) + "\n}"
+}
+
+func TestBlocks_LongLineIsNotQuadratic(t *testing.T) {
+	src := longBodyLineSrc(20000)
+	start := time.Now()
+	syntax.Parse(src)
+	if d := time.Since(start); d > 200*time.Millisecond {
+		t.Errorf("parse of a %d-byte body line took %v, want < 200ms", len(src), d)
+	}
+}
+
+func BenchmarkBlocks_LongLine(b *testing.B) {
+	src := longBodyLineSrc(20000)
+	for b.Loop() {
+		syntax.Parse(src)
+	}
+}
+
+// The no-verb diagnostic spans the whole subject slot, qualified name included.
+func TestBlocks_NoVerbSpansQualifiedSubject(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    re/billing\n    y does z\n}"
+	got, diags := outlineAll(t, src)
+	if c := strings.Join(codes(diags), ","); c != "craft/syntax/unexpected-token" {
+		t.Fatalf("diags = %s", c)
+	}
+	r := diags[0].Range
+	if r.Start.Line != 2 || r.Start.Character != 4 || r.End.Line != 2 || r.End.Character != 14 {
+		t.Errorf("range = %+v, want line 2 chars 4-14", r)
+	}
+	if !strings.Contains(diags[0].Message, `"re/billing"`) {
+		t.Errorf("message = %q, want the full subject name", diags[0].Message)
+	}
+	if want := "when\n  action re/billing\n  action y\n"; got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// Multi-line block comments before a header keyword. These pin current
+// behaviour: comments are trivia, so a keyword preceded on its line only by
+// the tail of a block comment that began on an earlier line is still a
+// header, and the offside rule measures that line by its indentation, which
+// is where the comment's tail starts.
+func TestBlocks_MultiLineCommentBeforeHeader(t *testing.T) {
+	cases := map[string]struct{ src, tree string }{
+		// The comment starts on its own line; ` */` is indented like the alt.
+		"comment-only line before": {
+			src:  "use_case \"U\" {\n  when O does\n    alt \"a\"\n      x does it\n    /* a\n    b */ else \"b\"\n      y does it\n}",
+			tree: "when\n  alt\n    branch a\n      action x\n    branch b\n      action y\n",
+		},
+		// The comment starts after an action on the previous line; its tail
+		// at column 2 is the header line's indentation.
+		"comment opened after an action": {
+			src:  "use_case \"U\" {\n  when O does\n    x does it /* c\n */ alt \"b\"\n      y does it\n}",
+			tree: "when\n  action x\n  alt\n    branch b\n      action y\n",
+		},
+	}
+	for name, tc := range cases {
+		got, diags := outlineAll(t, tc.src)
+		if len(diags) != 0 {
+			t.Errorf("%s: unexpected diags: %v", name, diags)
+		}
+		if got != tc.tree {
+			t.Errorf("%s: tree:\n%s\nwant:\n%s", name, got, tc.tree)
+		}
+		checkLossless(t, tc.src)
+	}
+}
+
+// An else at the outer alt's column closes the nested alt (and its else) and
+// adds a branch to the outer one.
+func TestBlocks_ElseAtOuterColumnAfterNestedAlt(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    alt \"a\"\n      x does it\n      alt \"b\"\n        y does it\n      else \"c\"\n        z does it\n    else \"d\"\n      w does it\n    v ends\n}"
+	got, diags := outlineAll(t, src)
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	want := "when\n  alt\n    branch a\n      action x\n      alt\n        branch b\n          action y\n        branch c\n          action z\n    branch d\n      action w\n  action v\n"
+	if got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// A label-less, body-less header as the last line before EOF: missing label,
+// empty branch, and the use case's own missing `}`.
+func TestBlocks_BareHeaderAtEOF(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    x does it\n    alt\n"
+	got, diags := outlineAll(t, src)
+	if c := strings.Join(codes(diags), ","); c != "craft/syntax/missing-label,craft/syntax/empty-branch,craft/syntax/unclosed-block" {
+		t.Errorf("diags = %s", c)
+	}
+	if want := "when\n  action x\n  alt\n    branch \n"; got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+	checkLossless(t, src)
+}
+
+// A label on the line after the keyword is not a label. This pins the current
+// three diagnostics: the header has no label, its branch is empty (the string
+// line is not deeper than the header), and the string is not a step.
+func TestBlocks_LabelOnNextLine(t *testing.T) {
+	src := "use_case \"U\" {\n  when O does\n    alt\n    \"label\"\n      x does it\n}"
+	got, diags := outlineAll(t, src)
+	if c := strings.Join(codes(diags), ","); c != "craft/syntax/missing-label,craft/syntax/empty-branch,craft/syntax/unexpected-token" {
+		t.Errorf("diags = %s", c)
+	}
+	if want := "when\n  alt\n    branch \n  action \n  action x\n"; got != want {
+		t.Errorf("tree:\n%s\nwant:\n%s", got, want)
+	}
+	checkLossless(t, src)
 }
