@@ -273,3 +273,27 @@ func TestV225Fields_AreOmittedWhenEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveUseCaseTitle(t *testing.T) {
+	doc := &model.CraftDoc{UseCases: []model.UseCase{
+		{Name: "Pay at the till", SourceURI: "b.craft", TagValues: map[string][]string{model.TagFormerlyTitled: {"Pay; Settle"}}},
+		{Name: "Twin", SourceURI: "a.craft"},
+		{Name: "Twin", SourceURI: "b.craft"},
+		{Name: "Settle", SourceURI: "c.craft"},
+	}}
+	if m, former := model.ResolveUseCaseTitle(doc, "Pay at the till"); len(m) != 1 || former {
+		t.Errorf("exact: %+v %v", m, former)
+	}
+	if m, former := model.ResolveUseCaseTitle(doc, "Pay"); len(m) != 1 || !former || m[0].Name != "Pay at the till" {
+		t.Errorf("former: %+v %v", m, former)
+	}
+	if m, former := model.ResolveUseCaseTitle(doc, "Settle"); len(m) != 1 || former || m[0].SourceURI != "c.craft" {
+		t.Errorf("an exact title wins over a former one: %+v %v", m, former)
+	}
+	if m, _ := model.ResolveUseCaseTitle(doc, "Twin"); len(m) != 2 {
+		t.Errorf("ambiguous: %+v", m)
+	}
+	if m, former := model.ResolveUseCaseTitle(doc, "Nowhere"); len(m) != 0 || former {
+		t.Errorf("none: %+v %v", m, former)
+	}
+}

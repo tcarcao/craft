@@ -140,3 +140,73 @@ func TestLintModel_DuplicateScenarioBodyGroups(t *testing.T) {
 		}
 	}
 }
+
+func linkWorkspace(files map[string]string) Result {
+	var rs []FileResult
+	for name, src := range files {
+		rs = append(rs, File(name, src))
+	}
+	return Workspace(rs)
+}
+
+func countCode(res Result, code string) int {
+	n := 0
+	for _, d := range res.Diagnostics {
+		if d.Code == code {
+			n++
+		}
+	}
+	return n
+}
+
+func TestLinks_ResolveAcrossFiles(t *testing.T) {
+	res := linkWorkspace(map[string]string{
+		"a.craft": "use_case \"Promote\" {\n  when S promotes\n    x does it\n    continues \"Pay\"\n}\n",
+		"b.craft": "use_case \"Pay at the till\" {\n  tags {\n    formerly_titled: \"Pay; Settle\"\n  }\n  when S pays\n    y does it\n}\n",
+	})
+	link := res.Doc.UseCases[0].Scenarios[0].Steps[1].Link
+	if link.Target == nil || link.Target.Name != "Pay at the till" || link.Target.SourceURI != "b.craft" {
+		t.Fatalf("target = %+v", link.Target)
+	}
+	if countCode(res, "craft/lint/link-to-former-title") != 1 {
+		t.Error("a link through formerly_titled warns")
+	}
+}
+
+func TestLinks_Lints(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+		code  string
+		want  int
+	}{
+		{"unresolved", map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    includes \"Nowhere\"\n    x does it\n}\n"}, "craft/sema/unresolved-use-case", 1},
+		{"ambiguous", map[string]string{
+			"a.craft": "use_case \"A\" {\n  when S does\n    includes \"Twin\"\n    x does it\n}\nuse_case \"Twin\" {\n  when S does\n    x does it\n}\n",
+			"b.craft": "use_case \"Twin\" {\n  when S does\n    y does it\n}\n"}, "craft/sema/ambiguous-use-case", 1},
+		{"resolved has no unresolved", map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    includes \"B\"\n    x does it\n}\nuse_case \"B\" {\n  when S does\n    y does it\n}\n"}, "craft/sema/unresolved-use-case", 0},
+		{"continues not last", map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    continues \"B\"\n    x does it\n}\nuse_case \"B\" {\n  when S does\n    y does it\n}\n"}, "craft/lint/continues-not-last", 1},
+		{"continues then note", map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    continues \"B\"\n    note \"fine\"\n}\nuse_case \"B\" {\n  when S does\n    y does it\n}\n"}, "craft/lint/continues-not-last", 0},
+		{"continues last in a branch", map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    alt \"x\"\n      continues \"B\"\n    x does it\n}\nuse_case \"B\" {\n  when S does\n    y does it\n}\n"}, "craft/lint/continues-not-last", 0},
+		{"self", map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    x does it\n    continues \"A\"\n}\n"}, "craft/lint/self-link", 1},
+	}
+	for _, c := range cases {
+		if got := countCode(linkWorkspace(c.files), c.code); got != c.want {
+			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+func TestLinks_LintRangeIsTheTitle(t *testing.T) {
+	res := linkWorkspace(map[string]string{"a.craft": "use_case \"A\" {\n  when S does\n    includes \"Nowhere\"\n    x does it\n}\n"})
+	for _, d := range res.Diagnostics {
+		if d.Code != "craft/sema/unresolved-use-case" {
+			continue
+		}
+		if d.SourceURI != "a.craft" || d.Range.Start.Line != 2 || d.Range.Start.Character != 13 || d.Range.End.Character != 22 {
+			t.Errorf("range = %+v in %q", d.Range, d.SourceURI)
+		}
+		return
+	}
+	t.Error("no unresolved-use-case")
+}

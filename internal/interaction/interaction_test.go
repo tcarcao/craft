@@ -1143,3 +1143,23 @@ use_case "Chat" {
 		t.Errorf("a plain return gains no Answers: %+v", acts[3])
 	}
 }
+
+// A link is not an action: no interaction, no step number, and a scenario
+// that opens with one is triggered into its first action as without it.
+func TestDerive_LinksAreNotSteps(t *testing.T) {
+	body := `
+use_case "Checkout" {
+    when Customer places order
+%s        Ordering asks Billing to charge the card
+        Billing returns to Ordering the receipt
+%s}
+`
+	without := summary(derive(t, map[string]string{"a.craft": structure + fmt.Sprintf(body, "", "")}))
+	with := summary(derive(t, map[string]string{"a.craft": structure + fmt.Sprintf(body, "        includes \"Session\"\n", "        continues \"Pay\"\n")}))
+	want := `0 trigger Customer->Ordering [places order]
+1 request Ordering->Billing [to charge the card]
+2 response Billing->Ordering [returns the receipt]`
+	if without != want || with != want {
+		t.Errorf("without:\n%s\nwith:\n%s\nwant:\n%s", without, with, want)
+	}
+}

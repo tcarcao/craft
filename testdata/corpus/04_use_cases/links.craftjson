@@ -25,6 +25,9 @@
                 "id": "link_2",
                 "kind": "includes",
                 "title": "Site session preamble",
+                "target": {
+                  "name": "Site session preamble"
+                },
                 "line": 12,
                 "column": 18
               }
@@ -111,6 +114,9 @@
                 "id": "link_6",
                 "kind": "continues",
                 "title": "Seller pays at the checkout",
+                "target": {
+                  "name": "Seller pays at the checkout"
+                },
                 "line": 19,
                 "column": 19
               }

@@ -691,3 +691,60 @@ type Position struct {
 	Line      int `json:"line"`
 	Character int `json:"character"`
 }
+
+// ResolveUseCaseTitle finds the use cases a link title names: every use
+// case with that exact name; when there is none, every use case whose
+// formerly_titled tag lists it (values split on `;`, trimmed). viaFormer is
+// true in the second case. One match is a resolved link; two or more (use
+// cases of one title in different files) are ambiguous. Use cases are
+// matched once per (name, file).
+func ResolveUseCaseTitle(doc *CraftDoc, title string) (matches []UseCaseRef, viaFormer bool) {
+	if doc == nil || title == "" {
+		return nil, false
+	}
+	seen := map[UseCaseRef]bool{}
+	add := func(uc UseCase) {
+		r := UseCaseRef{Name: uc.Name, SourceURI: uc.SourceURI}
+		if !seen[r] {
+			seen[r] = true
+			matches = append(matches, r)
+		}
+	}
+	for _, uc := range doc.UseCases {
+		if uc.Name == title {
+			add(uc)
+		}
+	}
+	if len(matches) > 0 {
+		return matches, false
+	}
+	for _, uc := range doc.UseCases {
+		for _, v := range uc.TagValues[TagFormerlyTitled] {
+			for _, former := range strings.Split(v, ";") {
+				if strings.TrimSpace(former) == title {
+					add(uc)
+				}
+			}
+		}
+	}
+	return matches, len(matches) > 0
+}
+
+// EachLink calls fn with every link of the scenario in source order (a
+// depth-first walk of Steps).
+func (s Scenario) EachLink(fn func(*Link)) {
+	eachLink(s.Steps, fn)
+}
+
+func eachLink(steps []Step, fn func(*Link)) {
+	for _, st := range steps {
+		if st.Link != nil {
+			fn(st.Link)
+		}
+		if st.Block != nil {
+			for i := range st.Block.Branches {
+				eachLink(st.Block.Branches[i].Steps, fn)
+			}
+		}
+	}
+}

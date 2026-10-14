@@ -26,6 +26,7 @@ func LintModel(doc *model.CraftDoc, perFileTrees map[string]syntax.SyntaxNode, l
 	}
 	var diags []model.Diagnostic
 	diags = append(diags, lintDuplicateScenarioBodies(doc)...)
+	diags = append(diags, lintLinks(doc)...)
 	return diags
 }
 
@@ -302,4 +303,68 @@ func actionsEqual(x, y model.Action) bool {
 	// their first item are different steps.
 	return x.Type == y.Type && x.Context == y.Context && x.Verb == y.Verb && x.TargetContext == y.TargetContext &&
 		slices.Equal(x.EventList(), y.EventList()) && x.Connector == y.Connector && x.Phrase == y.Phrase && opText(x.Operation) == opText(y.Operation)
+}
+
+// ── links ─────────────────────────────────────────────────────────────────────
+// unresolved-use-case (warning: the target may live in a file that was not
+// loaded), ambiguous-use-case (error), link-to-former-title, continues-not-last
+// and self-link (warnings), spec §15.3. The range is the title string.
+
+func lintLinks(doc *model.CraftDoc) []model.Diagnostic {
+	var diags []model.Diagnostic
+	add := func(uc model.UseCase, l *model.Link, code string, sev model.Severity, msg string) {
+		var r model.Range
+		if l.Line > 0 {
+			start := colToLSP(l.Column)
+			r = model.Range{
+				Start: model.Position{Line: lineToLSP(l.Line), Character: start},
+				End:   model.Position{Line: lineToLSP(l.Line), Character: start + lspLen(strconv.Quote(l.Title))},
+			}
+		}
+		diags = append(diags, model.Diagnostic{Code: code, Message: msg, Severity: sev, SourceURI: uc.SourceURI, Range: r})
+	}
+	var walk func(uc model.UseCase, steps []model.Step)
+	walk = func(uc model.UseCase, steps []model.Step) {
+		for i, st := range steps {
+			if st.Block != nil {
+				for _, br := range st.Block.Branches {
+					walk(uc, br.Steps)
+				}
+			}
+			l := st.Link
+			if l == nil || l.Title == "" {
+				continue // a missing title is the parser's missing-label
+			}
+			matches, former := model.ResolveUseCaseTitle(doc, l.Title)
+			switch {
+			case len(matches) == 0:
+				add(uc, l, "craft/sema/unresolved-use-case", model.SeverityWarning,
+					fmt.Sprintf("no use case is titled %q in the loaded files; check the title, or load the file that defines it", l.Title))
+			case len(matches) > 1:
+				add(uc, l, "craft/sema/ambiguous-use-case", model.SeverityError,
+					fmt.Sprintf("%q names use cases in %d files; rename one of them: a link names one use case", l.Title, len(matches)))
+			case former:
+				add(uc, l, "craft/lint/link-to-former-title", model.SeverityWarning,
+					fmt.Sprintf("%q is a former title of %q; link to its current title", l.Title, matches[0].Name))
+			}
+			if len(matches) == 1 && matches[0].Name == uc.Name && matches[0].SourceURI == uc.SourceURI {
+				add(uc, l, "craft/lint/self-link", model.SeverityWarning, "this use case links to itself; link to another use case, or remove the link")
+			}
+			if l.Kind == model.LinkContinues {
+				for _, after := range steps[i+1:] {
+					if after.Note == nil {
+						add(uc, l, "craft/lint/continues-not-last", model.SeverityWarning,
+							"`continues` ends this body: the steps after it never run here; move them to the target or use `includes`")
+						break
+					}
+				}
+			}
+		}
+	}
+	for _, uc := range doc.UseCases {
+		for _, sc := range uc.Scenarios {
+			walk(uc, sc.Steps)
+		}
+	}
+	return diags
 }

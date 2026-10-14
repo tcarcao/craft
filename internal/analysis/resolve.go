@@ -49,6 +49,14 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 					a.To = resolve(a.TargetContext)
 				}
 			})
+			// A link resolves to its target only when one use case of the
+			// workspace answers to the title (spec §15.2); sema.LintModel
+			// reports the other outcomes.
+			sc.EachLink(func(l *model.Link) {
+				if matches, _ := model.ResolveUseCaseTitle(doc, l.Title); len(matches) == 1 {
+					l.Target = &matches[0]
+				}
+			})
 		}
 	}
 

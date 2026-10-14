@@ -356,8 +356,8 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 	first := model.FirstStepIndex(steps)
 	for i, st := range steps {
 		switch {
-		case st.Note != nil:
-			continue
+		case st.Note != nil || st.Link != nil:
+			continue // not an action: no interaction, no step number
 		case st.Block != nil:
 			if pending && i == first && w.boxTrigger(st.Block, path) {
 				pending, triggered = false, true
