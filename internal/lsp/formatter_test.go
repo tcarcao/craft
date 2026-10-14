@@ -1,6 +1,9 @@
 package lsp
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -1931,5 +1934,192 @@ func TestFormatDocumentCheckedWith_AnnotationsAlignBeforeTrailingComments(t *tes
 	}
 	if again := formatSource(t, got); again != got {
 		t.Errorf("format is not idempotent\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
+// stepOutline renders the step tree of every scenario in src, one line per
+// scenario head, action and branch, indented by nesting. Two sources with the
+// same outline put every action in the same block and branch, which is the
+// membership the formatter must never change. Mirrors outline in
+// internal/syntax/blocks_test.go.
+func stepOutline(t *testing.T, src string) string {
+	t.Helper()
+	g, _, diags := syntax.Parse(src)
+	for _, d := range diags {
+		if bailsFormatting(d) {
+			t.Fatalf("stepOutline: unexpected diagnostic %s: %s", d.Code, d.Message)
+		}
+	}
+	var b strings.Builder
+	var walk func(steps []syntax.StepDecl, depth int)
+	walk = func(steps []syntax.StepDecl, depth int) {
+		for _, st := range steps {
+			ind := strings.Repeat("  ", depth)
+			if a, ok := st.Action(); ok {
+				b.WriteString(ind + "action " + a.SubjectName() + " " + a.VerbValue() + "\n")
+				continue
+			}
+			blk, _ := st.Block()
+			b.WriteString(ind + string(blk.Kind()) + "\n")
+			for _, br := range blk.Branches() {
+				b.WriteString(ind + "  branch " + br.Label() + "\n")
+				walk(br.Steps(), depth+2)
+			}
+		}
+	}
+	for _, uc := range syntax.AsFile(syntax.Root(g)).UseCases() {
+		for _, sc := range uc.Scenarios() {
+			b.WriteString("scenario " + sc.Name() + "\n")
+			walk(sc.Steps(), 1)
+		}
+	}
+	return b.String()
+}
+
+func TestFormat_BranchesCanonical(t *testing.T) {
+	in := "use_case \"U\" {\n  scenario \"a\"\n  when O does it\n      x asks y for z\n      alt \"one\"\n          x does a\n      else \"two\"\n          x does b\n          opt \"three\"\n              x does c\n      x ends\n  scenario \"b\"\n  when O does other\n      x does d\n}\n"
+	want := "use_case \"U\" {\n    scenario \"a\"\n    when O does it\n        x asks y for z\n        alt \"one\"\n            x does a\n        else \"two\"\n            x does b\n            opt \"three\"\n                x does c\n        x ends\n\n    scenario \"b\"\n    when O does other\n        x does d\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
+// Tabs become spaces, and every action stays in the block and branch it was
+// in. The tab-indented body is deeper than its header by one tab stop, which
+// the parser reads as 4 columns.
+func TestFormat_BranchTabsBecomeSpacesKeepingMembership(t *testing.T) {
+	in := "use_case \"U\" {\n\twhen O does it\n\t\talt \"one\"\n\t\t\tx does a\n\t\t\topt \"deep\"\n\t\t\t\tx does b\n\t\telse \"two\"\n\t\t\tx does c\n\t\tx ends\n}\n"
+	want := "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n            opt \"deep\"\n                x does b\n        else \"two\"\n            x does c\n        x ends\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if strings.Contains(got, "\t") {
+		t.Errorf("output still contains a tab:\n%s", got)
+	}
+	if before, after := stepOutline(t, in), stepOutline(t, got); before != after {
+		t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// The formatter must not touch a file with a §3.2 diagnostic: re-indenting
+// it could move a line from one block into another.
+func TestFormat_RefusesBranchSyntaxErrors(t *testing.T) {
+	cases := map[string]string{
+		"craft/syntax/empty-branch":          "use_case \"U\" {\n  when O does it\n    alt \"one\"\n    x ends\n}\n",
+		"craft/syntax/inconsistent-indent":   "use_case \"U\" {\n  when O does it\n    alt \"one\"\n        x does a\n      x does b\n}\n",
+		"craft/syntax/orphan-else":           "use_case \"U\" {\n  when O does it\n    x does a\n    else \"two\"\n      x does b\n}\n",
+		"craft/syntax/missing-label":         "use_case \"U\" {\n  when O does it\n    alt\n      x does a\n}\n",
+		"craft/syntax/scenario-without-when": "use_case \"U\" {\n  when O does it\n    x does a\n  scenario \"n\"\n}\n",
+		"craft/syntax/unexpected-token":      "use_case \"U\" {\n  when O does it\n    alt \"one\" x does it\n      x does a\n}\n",
+	}
+	for code, in := range cases {
+		t.Run(code, func(t *testing.T) {
+			got, blocked := FormatDocumentChecked(in)
+			if blocked == nil {
+				t.Fatalf("formatted a file with %s:\n%s", code, got)
+			}
+			if blocked.Code != code {
+				t.Errorf("blocked by %s, want %s", blocked.Code, code)
+			}
+			if got != in {
+				t.Errorf("refused file came back changed:\n%s", got)
+			}
+		})
+	}
+}
+
+// A comment between a scenario's name and its `when` belongs to that same
+// scenario: no blank line is inserted on either side of it. A comment above
+// a named scenario takes the scenario's blank line above itself.
+func TestFormat_CommentInsideScenarioHead(t *testing.T) {
+	in := "use_case \"U\" {\n    scenario \"n\"\n    // note\n    when O does it\n        x does y\n\n    // about m\n    scenario \"m\"\n    /* inline */\n    when O does other\n        x does z\n}\n"
+	got := FormatDocument(in)
+	if got != in {
+		t.Errorf("got:\n%s\nwant:\n%s", got, in)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
+// Comments inside a block body indent with the body, and a trailing comment
+// after a branch label stays on the header line.
+func TestFormat_CommentsInsideBranches(t *testing.T) {
+	in := "use_case \"U\" {\n  when O does it\n    alt \"one\" // why\n      // full line\n      x does a\n    // before else\n    else \"two\"\n      x does b\n      opt \"three\"\n        /* deep */\n        x does c\n}\n"
+	want := "use_case \"U\" {\n    when O does it\n        alt \"one\" // why\n            // full line\n            x does a\n        // before else\n        else \"two\"\n            x does b\n            opt \"three\"\n                /* deep */\n                x does c\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+	if before, after := stepOutline(t, in), stepOutline(t, got); before != after {
+		t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// A blank line between steps inside a branch survives, collapsed to one, as
+// it does between actions outside a block.
+func TestFormat_BlankLineInsideBranchPreserved(t *testing.T) {
+	in := "use_case \"U\" {\n  when O does it\n    alt \"one\"\n      x does a\n\n\n      x does b\n    else \"two\"\n      x does c\n}\n"
+	want := "use_case \"U\" {\n    when O does it\n        alt \"one\"\n            x does a\n\n            x does b\n        else \"two\"\n            x does c\n}\n"
+	got := FormatDocument(in)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if before, after := stepOutline(t, in), stepOutline(t, got); before != after {
+		t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// The configured indent unit applies to block bodies too.
+func TestFormat_BranchesUseConfiguredIndent(t *testing.T) {
+	cfg := fmtconfig.Defaults()
+	cfg.Indent = 2
+	in := "use_case \"U\" {\n    scenario \"a\"\n    when O does it\n        alt \"one\"\n            x does a\n        else \"two\"\n            opt \"three\"\n                x does c\n        x ends\n}\n"
+	want := "use_case \"U\" {\n  scenario \"a\"\n  when O does it\n    alt \"one\"\n      x does a\n    else \"two\"\n      opt \"three\"\n        x does c\n    x ends\n}\n"
+	got := FormatDocumentWith(in, cfg)
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocumentWith(got, cfg); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+	if before, after := stepOutline(t, in), stepOutline(t, got); before != after {
+		t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// Round trip over the branch and scenario-name corpus fixtures, at both
+// indent widths: idempotent, and every action keeps its block and branch.
+func TestFormat_BranchFixturesRoundTrip(t *testing.T) {
+	for _, name := range []string{"branches_full", "alt_else", "opt", "nested_blocks", "branch_tabs", "named_scenarios"} {
+		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", "04_use_cases", name+".craft"))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		src := string(raw)
+		for _, indent := range []int{2, 4} {
+			cfg := fmtconfig.Defaults()
+			cfg.Indent = indent
+			t.Run(fmt.Sprintf("%s/indent=%d", name, indent), func(t *testing.T) {
+				once, blocked := FormatDocumentCheckedWith(src, cfg)
+				if blocked != nil {
+					t.Fatalf("declined: [%s] %s", blocked.Code, blocked.Message)
+				}
+				if twice := FormatDocumentWith(once, cfg); twice != once {
+					t.Errorf("not idempotent\nfirst:\n%s\nsecond:\n%s", once, twice)
+				}
+				if before, after := stepOutline(t, src), stepOutline(t, once); before != after {
+					t.Errorf("block membership changed\nbefore:\n%s\nafter:\n%s", before, after)
+				}
+			})
+		}
 	}
 }

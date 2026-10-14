@@ -26,19 +26,6 @@ var skippedDirs = map[string]bool{
 	"vendor":       true,
 }
 
-// pendingBlockFormatter lists the alt/opt block fixtures the formatter cannot
-// yet round-trip: it flattens block indentation, which breaks the file. Keyed
-// by directory and basename. The same rule and list are copied in
-// cmd/craft/fmt_test.go (TestRunFmt_NeverWritesUnverifiedOutput).
-// TODO(Task 9): remove once the formatter handles alt/opt blocks (both copies).
-var pendingBlockFormatter = map[string]bool{
-	"branches_full.craft": true,
-	"alt_else.craft":      true,
-	"opt.craft":           true,
-	"nested_blocks.craft": true,
-	"branch_tabs.craft":   true,
-}
-
 // allCraftFiles walks the whole repository for .craft files.
 //
 // It walks rather than listing known directories on purpose. A hardcoded root
@@ -59,9 +46,6 @@ func allCraftFiles(t *testing.T) []string {
 			return nil
 		}
 		if strings.HasSuffix(path, ".craft") {
-			if pendingBlockFormatter[filepath.Base(path)] && strings.Contains(filepath.ToSlash(path), "corpus/04_use_cases/") {
-				return nil
-			}
 			files = append(files, path)
 		}
 		return nil
@@ -283,6 +267,18 @@ func TestFormatDocument_EveryCraftFileInRepo(t *testing.T) {
 // fixture will break this test. That is intended: it forces an explicit
 // decision (skip it here, or move it under testdata/broken/*) rather than
 // letting the corpus drift uncanonical in silence.
+// canonicalElsewhere names the corpus files that are deliberately not
+// canonical, each mapped (from the repository root) to the file holding its
+// canonical form. Formatting the key must produce that file byte for byte,
+// which is a stronger check than skipping it.
+//
+// branch_tabs.craft exists to test the parser's offside rule on tab-indented
+// blocks, so reformatting it to spaces would delete the case it covers. It is
+// alt_else.craft indented with tabs, so its canonical form is alt_else.craft.
+var canonicalElsewhere = map[string]string{
+	repoRoot + "/testdata/corpus/04_use_cases/branch_tabs.craft": "testdata/corpus/04_use_cases/alt_else.craft",
+}
+
 func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
 	for _, file := range allCraftFiles(t) {
 		t.Run(file, func(t *testing.T) {
@@ -291,8 +287,16 @@ func TestFormatDocument_CanonicalCorpusIsByteIdentical(t *testing.T) {
 				t.Fatalf("reading %s: %v", file, err)
 			}
 			src := string(raw)
+			want := src
+			if other, ok := canonicalElsewhere[filepath.ToSlash(file)]; ok {
+				otherRaw, err := os.ReadFile(filepath.Join(repoRoot, other))
+				if err != nil {
+					t.Fatalf("reading %s: %v", other, err)
+				}
+				want = string(otherRaw)
+			}
 			once := FormatDocument(src)
-			if once != src {
+			if once != want {
 				t.Errorf("%s: not canonical under the default configuration\ngot:\n%s", file, once)
 			}
 			// Whatever the input looked like, its formatted form must be a

@@ -17,7 +17,9 @@ import (
 //   - colons: no space before, one space after
 //   - commas: no space before, one space after
 //   - use_case blocks formatted with when at scenario indent / actions one
-//     level deeper / blank line between scenarios
+//     level deeper / blank line between scenarios; a `scenario "…"` name
+//     line sits at the `when` column, and an alt/opt/else branch body one
+//     level deeper than its header (else aligned with its alt)
 //   - arch blocks preserved verbatim (free-form component chain syntax)
 func FormatDocument(content string) string {
 	return FormatDocumentWith(content, fmtconfig.Defaults())
@@ -245,8 +247,27 @@ func squashWhitespace(s string) string {
 // structure around them is wrong, and re-rendering from that structure drops
 // or duplicates them. That is how `charge {amount} [POST /pay]` came back as
 // `charge {amount  [ POST / pay ]`.
+//
+// The block-structure codes (spec §3.2) are named as well, though today every
+// one is an error. The formatter indents a block body from the tree, and
+// under any of them the tree's block membership is a recovery guess rather
+// than the author's layout: re-indenting from it could move a line into
+// another branch. Naming them keeps that refusal if one is ever relaxed to a
+// warning.
 func bailsFormatting(d craft.Diagnostic) bool {
-	return d.Severity == craft.SeverityError || d.Code == "craft/syntax/not-yet-implemented"
+	return d.Severity == craft.SeverityError || d.Code == "craft/syntax/not-yet-implemented" ||
+		blockStructureCodes[d.Code]
+}
+
+// blockStructureCodes are the spec §3.2 diagnostics for alt/opt/else blocks
+// and scenario names. See bailsFormatting.
+var blockStructureCodes = map[string]bool{
+	"craft/syntax/empty-branch":          true,
+	"craft/syntax/inconsistent-indent":   true,
+	"craft/syntax/orphan-else":           true,
+	"craft/syntax/missing-label":         true,
+	"craft/syntax/scenario-without-when": true,
+	"craft/syntax/unexpected-token":      true,
 }
 
 // isCommentKind reports whether a leaf token is a comment. Line and block
@@ -342,10 +363,6 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	var prevReal *syntax.SyntaxToken
 	prevLedScenario := false
 
-	// afterScenarioName is set from a `scenario "name"` line until the `when`
-	// it names.
-	afterScenarioName := false
-
 	// continuing says the token about to be written carries on a property
 	// value the author wrapped onto another line, rather than starting a new
 	// statement. separatorFor cannot work this out: it sees one token pair and
@@ -399,7 +416,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// to remove.
 		startsOwnLine := prev == nil || strings.Contains(gap, "\n")
 		leadsScenario := isCommentKind(tok.Kind()) && braceDepth == 1 &&
-			startsOwnLine && nextRealTokenIsWhen(toks, i)
+			startsOwnLine && nextRealTokenOpensScenario(toks, i)
 
 		// A `when` at the use_case's own brace depth closes any scenario body
 		// that was open (it, the leading comment above, and the enclosing `}`
@@ -408,15 +425,11 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// the separator is computed is what keeps the `when` line at depth 1
 		// instead of 2.
 		//
-		// A `scenario "name"` line opens a scenario the same way, and the `when`
-		// that follows it is the same scenario, not a new one (no blank line).
-		//
-		// TODO(Task 9): known bug in these scenario-name booleans (namesScenario,
-		// whenOfNamed, afterScenarioName): `scenario "n"`, then a `// note`
-		// line, then `when` gets an extra blank line. Layout is fixed in Task 9.
-		namesScenario := tok.Kind() == syntax.SyntaxKindKwScenario && braceDepth == 1
-		whenOfNamed := tok.Kind() == syntax.SyntaxKindKwWhen && afterScenarioName
-		startsScenarioHead := (tok.Kind() == syntax.SyntaxKindKwWhen && braceDepth == 1) || namesScenario
+		// A `scenario "name"` line opens a scenario the same way. Which token
+		// opens a scenario is read from the tree (opensScenario), not from the
+		// tokens before it: the `when` under a name, and any comment between
+		// the two, are inside a scenario that is already open.
+		startsScenarioHead := braceDepth == 1 && opensScenario(tok)
 		if startsScenarioHead || leadsScenario {
 			scenarioDepth = 0
 		}
@@ -433,12 +446,7 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 		// The scenario's blank line goes above the whole run, so only the first
 		// token of it asks for one. A `when` whose comment already opened the
 		// scenario must not ask for a second.
-		startsScenario := (startsScenarioHead || leadsScenario) && !prevLedScenario && !whenOfNamed
-		if namesScenario {
-			afterScenarioName = true
-		} else if tok.Kind() == syntax.SyntaxKindKwWhen {
-			afterScenarioName = false
-		}
+		startsScenario := (startsScenarioHead || leadsScenario) && !prevLedScenario
 
 		// A wrapped value continues only across a line break that follows a
 		// comma or a field colon: `contexts: A,\n B` and `contexts:\n A` both
@@ -469,7 +477,12 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 			continuing = false
 		}
 
-		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth, startsScenario, cfg, continuing)
+		// Inside an alt/opt block, a line indents one level per enclosing
+		// branch body. branchDepth reads that from the tree, so it never
+		// depends on the author's columns, and a refused parse (any §3.2
+		// diagnostic) never gets here, so the tree's block membership is the
+		// one the author's offside layout meant.
+		sep := separatorFor(prev, gap, tok, braceDepth+scenarioDepth+branchDepth(tok), startsScenario, cfg, continuing)
 		sb.WriteString(sep)
 		sb.WriteString(tok.Text())
 
@@ -570,19 +583,63 @@ func writeTokens(sb *strings.Builder, node syntax.SyntaxNode, cfg fmtconfig.Conf
 	return interior, commentEnd, commentStart
 }
 
-// nextRealTokenIsWhen reports whether the first token after i that carries
-// meaning, skipping whitespace and any further comments, is a `when`.
+// nextRealTokenOpensScenario reports whether the first token after i that
+// carries meaning, skipping whitespace and any further comments, opens a
+// scenario (see opensScenario).
 //
 // Skipping comments is what makes a run of them work: every comment in
 // `// a`, `// b`, `when ...` sees the same `when` and the whole run attaches to
 // that scenario, rather than only the last one.
-func nextRealTokenIsWhen(toks []syntax.SyntaxToken, i int) bool {
+func nextRealTokenOpensScenario(toks []syntax.SyntaxToken, i int) bool {
 	for j := i + 1; j < len(toks); j++ {
 		k := toks[j].Kind()
 		if k == syntax.SyntaxKindWhitespace || k == syntax.SyntaxKindEOF || isCommentKind(k) {
 			continue
 		}
-		return k == syntax.SyntaxKindKwWhen || k == syntax.SyntaxKindKwScenario
+		return opensScenario(toks[j])
 	}
 	return false
+}
+
+// opensScenario reports whether tok is the first line of a scenario: the
+// `scenario` keyword of a name line, or a `when` with no name line above it.
+// The `when` under a `scenario "…"` line continues the scenario that line
+// opened, so a comment between the two gets no blank line of its own.
+//
+// The caller checks the brace depth: a `when` is a contextual keyword, and
+// only the use case's own `when` opens a scenario.
+func opensScenario(tok syntax.SyntaxToken) bool {
+	switch tok.Kind() {
+	case syntax.SyntaxKindKwScenario:
+		return true
+	case syntax.SyntaxKindKwWhen:
+		p := tok.Parent()
+		return p == nil || p.Kind() != syntax.SyntaxKindScenario ||
+			p.ChildNode(syntax.SyntaxKindScenarioName) == nil
+	}
+	return false
+}
+
+// branchDepth is the number of alt/opt branch bodies tok sits in. A header
+// line (`alt`, `opt`, `else` and its label) sits at its block's own level,
+// one less than its body, so `else` aligns with its `alt`.
+//
+// Comments are answered from their own place in the tree too. The parser
+// attaches leading trivia to the node of the token after it, so a full-line
+// comment indents with the line below it: inside a body when a body step
+// follows, at the header's level when an `else` follows. A trailing comment
+// takes no indent, so whatever its node says is never written.
+func branchDepth(tok syntax.SyntaxToken) int {
+	d := 0
+	for n := tok.Parent(); n != nil; n = n.Parent() {
+		switch n.Kind() {
+		case syntax.SyntaxKindBranch:
+			d++
+		case syntax.SyntaxKindBranchHeader:
+			d--
+		case syntax.SyntaxKindScenario, syntax.SyntaxKindUseCaseDecl:
+			return d
+		}
+	}
+	return d
 }
