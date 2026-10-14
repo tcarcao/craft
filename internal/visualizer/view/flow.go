@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/model"
 )
 
@@ -36,8 +37,16 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 		// innermost branch instead.
 		// Listens are never prefixed, and a trigger only when its scenario
 		// opens with a block (see interaction.Interaction.Branch).
+		// A par or loop edge also names its kind (spec §4.5); alt and opt
+		// keep the bare label.
 		if len(branch) > 0 {
-			label = "[" + branch[len(branch)-1].Label + "] " + label
+			br := branch[len(branch)-1]
+			switch br.Kind {
+			case lang.BlockPar, lang.BlockLoop:
+				label = "[" + string(br.Kind) + ": " + br.Label + "] " + label
+			default:
+				label = "[" + br.Label + "] " + label
+			}
 		}
 		f.Edges = append(f.Edges, FlowEdge{From: from, To: to, Number: len(f.Edges) + 1, Label: label, Style: style})
 	}

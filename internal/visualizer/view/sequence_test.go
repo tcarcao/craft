@@ -94,6 +94,18 @@ use_case "Checkout" {
             Billing asks Ordering to seventh
         else "y"
         Ordering asks Billing to eighth
+    scenario "batch order"
+    when Customer uploads a batch
+        note "z"
+        par "fan-out"
+            Ordering asks Billing to ninth
+            Ordering asks Billing to tenth
+        loop "for each order"
+            par "a"
+                Ordering asks Billing to eleventh
+            and "b"
+                opt "o"
+                    Billing asks Ordering to twelfth
 }
 `
 	doc := analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc
@@ -217,5 +229,104 @@ use_case "U" {
 	}
 	if !slices.Equal(notes, want) {
 		t.Errorf("notes:\n%v\nwant:\n%v", notes, want)
+	}
+}
+
+// A note before an opening opt does not hide the opt: the trigger is still
+// drawn inside the opt's box and again for the skipped path.
+func TestSequenceOpeningOptAfterALeadingNote(t *testing.T) {
+	src := `actor user Customer
+domain shop {
+    Ordering
+    Billing
+}
+use_case "Checkout" {
+    when Customer places an order
+        note "vouchers are optional"
+        opt "with a voucher"
+            Billing applies the voucher
+        Ordering charges the card
+}
+`
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc
+	seq := BuildSequence(doc, interaction.Derive(doc))
+	var got []string
+	for _, m := range seq.Sections[0].Messages {
+		got = append(got, fmt.Sprintf("%s %s->%s %q in %d", m.Kind, m.From, m.To, m.Label, len(m.Branch)))
+	}
+	want := []string{
+		`step-note -> "vouchers are optional" in 0`,
+		`call Customer->shop/Billing "places an order" in 1`,
+		`self shop/Billing->shop/Billing "applies the voucher" in 1`,
+		`call Customer->shop/Ordering "places an order" in 0`,
+		`self shop/Ordering->shop/Ordering "charges the card" in 0`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// An opening par draws one trigger before its box, to its first action, and
+// one inside each branch that starts at another participant. Split branches
+// after the first have a blank label.
+func TestSequenceOpeningPar(t *testing.T) {
+	src := `actor user Customer
+domain shop {
+    Ordering
+    Billing
+    Shipping
+}
+use_case "Reads" {
+    when Customer opens the page
+        par "fan-out"
+            Ordering asks Billing for a
+            Ordering asks Shipping for b
+            Shipping asks Billing for c
+}
+`
+	doc := analysis.Workspace([]analysis.FileResult{analysis.File("test.craft", src)}).Doc
+	seq := BuildSequence(doc, interaction.Derive(doc))
+	var got []string
+	for _, m := range seq.Sections[0].Messages {
+		var path []string
+		for _, r := range m.Branch {
+			path = append(path, fmt.Sprintf("%s:%q#%d", r.Kind, r.Label, r.Index))
+		}
+		got = append(got, fmt.Sprintf("%s->%s %q {%s}", m.From, m.To, m.Label, strings.Join(path, ">")))
+	}
+	want := []string{
+		`Customer->shop/Ordering "opens the page" {}`,
+		`shop/Ordering->shop/Billing "for a" {par:"fan-out"#0}`,
+		`shop/Ordering->shop/Shipping "for b" {par:""#1}`,
+		`Customer->shop/Shipping "opens the page" {par:""#2}`,
+		`shop/Shipping->shop/Billing "for c" {par:""#2}`,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A split par's branches after the first carry a blank label, so writers
+// print a bare separator.
+func TestBlockOps_SplitPar(t *testing.T) {
+	r0 := BranchRef{Block: "b", Kind: lang.BlockPar, Label: "x", Index: 0}
+	r1 := BranchRef{Block: "b", Kind: lang.BlockPar, Label: "", Index: 1}
+	r2 := BranchRef{Block: "b", Kind: lang.BlockPar, Label: "", Index: 2}
+	refs := branchPath([]interaction.BranchRef{
+		{Block: "b", Kind: lang.BlockPar, Label: "x", Index: 0, Split: true},
+		{Block: "b", Kind: lang.BlockPar, Label: "x", Index: 1, Split: true},
+		{Block: "b", Kind: lang.BlockPar, Label: "x", Index: 2, Split: true},
+	})
+	if !reflect.DeepEqual(refs, []BranchRef{r0, r1, r2}) {
+		t.Errorf("branchPath = %+v", refs)
+	}
+	if got := BlockOps(nil, []BranchRef{r0}); !reflect.DeepEqual(got, []BlockOp{{Kind: BlockOpen, BlockKind: lang.BlockPar, Label: "x"}}) {
+		t.Errorf("open = %+v", got)
+	}
+	if got := BlockOps([]BranchRef{r0}, []BranchRef{r1}); !reflect.DeepEqual(got, []BlockOp{{Kind: BlockElse, BlockKind: lang.BlockPar, Label: ""}}) {
+		t.Errorf("else = %+v", got)
+	}
+	if got := BlockOps([]BranchRef{r2}, nil); !reflect.DeepEqual(got, []BlockOp{{Kind: BlockClose, BlockKind: lang.BlockPar, Label: ""}}) {
+		t.Errorf("close = %+v", got)
 	}
 }

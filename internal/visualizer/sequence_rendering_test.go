@@ -734,3 +734,85 @@ func TestSequence_NotesAndFindings(t *testing.T) {
 		t.Errorf("use-case-level finding must open the section:\n%s", puml)
 	}
 }
+
+const parRenderSrc = `actor user Seeker
+domain ad {
+    frontendplatform
+    graphql
+    atlas
+    media
+    adcore
+    Dapi
+}
+use_case "Seeker reads an advert" {
+    when Seeker opens an advert
+        frontendplatform asks graphql for the advert  [ad]
+        par "field resolvers"
+            graphql asks atlas for the SEO title  [postSeoadvertsbatch]
+            graphql asks atlas for the targeting data  [postAdverttargetingbatch]
+            graphql asks atlas where the advert came from  [postAdsourcebatch]
+        loop "for each image, until all are signed"
+            graphql asks media to sign the image URL  [signUrl]
+        par "the advert"
+            graphql asks adcore for the advert  [GET /ads]
+        and "the statistics"
+            graphql asks Dapi for the page statistics  [GET /stats]
+}
+`
+
+func TestSequence_ParAndLoop(t *testing.T) {
+	puml, mmd := sequenceSource(t, parRenderSrc)
+	for _, want := range []string{"par field resolvers", "else", "loop for each image, until all are signed", "par the advert", "else the statistics"} {
+		requireLine(t, "plantuml", puml, want)
+	}
+	for _, want := range []string{"par field resolvers", "and", "loop for each image, until all are signed", "and the statistics"} {
+		requireLine(t, "mermaid", mmd, want)
+	}
+	forbidLine(t, "mermaid", mmd, "else")
+	for name, out := range map[string]string{"plantuml": puml, "mermaid": mmd} {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasSuffix(l, " ") {
+				t.Errorf("%s: trailing space in %q", name, l)
+			}
+		}
+	}
+}
+
+func TestSequence_EmptyAltLabelHasNoTrailingSpace(t *testing.T) {
+	puml, mmd := sequenceSource(t, `actor user Customer
+domain shop {
+    Ordering
+}
+use_case "U" {
+    when Customer places an order
+        alt ""
+            Ordering accepts it
+        else ""
+            Ordering refuses it
+}
+`)
+	requireLine(t, "plantuml", puml, "alt")
+	requireLine(t, "plantuml", puml, "else")
+	requireLine(t, "mermaid", mmd, "alt")
+	requireLine(t, "mermaid", mmd, "else")
+	for name, out := range map[string]string{"plantuml": puml, "mermaid": mmd} {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasSuffix(l, " ") {
+				t.Errorf("%s: trailing space in %q", name, l)
+			}
+		}
+	}
+}
+
+func TestFlow_ParAndLoopEdgesNameTheirKind(t *testing.T) {
+	doc := resolvedDoc(t, parRenderSrc)
+	out, _, err := renderSource(doc, ViewFlow, PlantUML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"[par: field resolvers] for the SEO title", "[loop: for each image, until all are signed] to sign the image URL", "[par: the statistics] for the page statistics"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("flow lacks %q:\n%s", want, out)
+		}
+	}
+}

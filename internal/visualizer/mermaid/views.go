@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 )
 
@@ -149,20 +150,35 @@ func Sequence(s view.Sequence) string {
 	return b.String()
 }
 
-// writeBlockOps draws alt/opt block lines. A close is a bare end: its
+// writeBlockOps draws alt/opt/par/loop block lines. The branches of a par
+// are separated by and, those of an alt by else. A close is a bare end: its
 // BlockKind and Label are informational only.
 func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 	for _, op := range ops {
 		label := strings.ReplaceAll(op.Label, ";", ",")
 		switch op.Kind {
 		case view.BlockOpen:
-			fmt.Fprintf(b, "    %s %s\n", op.BlockKind, label)
+			writeHeader(b, string(op.BlockKind), label)
 		case view.BlockElse:
-			fmt.Fprintf(b, "    else %s\n", label)
+			kw := "else"
+			if op.BlockKind == lang.BlockPar {
+				kw = "and"
+			}
+			writeHeader(b, kw, label)
 		case view.BlockClose:
 			b.WriteString("    end\n")
 		}
 	}
+}
+
+// writeHeader writes an indented block line, with no trailing space for an
+// empty label.
+func writeHeader(b *strings.Builder, kw, label string) {
+	if label == "" {
+		fmt.Fprintf(b, "    %s\n", kw)
+		return
+	}
+	fmt.Fprintf(b, "    %s %s\n", kw, label)
 }
 
 // noteOver spells the participants a note is drawn over: the listed ones, or

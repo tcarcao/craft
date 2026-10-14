@@ -278,17 +278,27 @@ func noteOver(s view.Sequence, over []string, al *aliases, sep string) string {
 	return strings.Join(names, sep)
 }
 
-// writeBlockOps draws alt/opt block lines. A close is a bare end: its
-// BlockKind and Label are informational only.
+// writeBlockOps draws alt/opt/par/loop block lines. PlantUML separates the
+// branches of every block kind, par included, with else. A close is a bare
+// end: its BlockKind and Label are informational only.
 func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 	for _, op := range ops {
 		switch op.Kind {
 		case view.BlockOpen:
-			fmt.Fprintf(b, "%s %s\n", op.BlockKind, op.Label)
+			writeHeader(b, string(op.BlockKind), op.Label)
 		case view.BlockElse:
-			fmt.Fprintf(b, "else %s\n", op.Label)
+			writeHeader(b, "else", op.Label)
 		case view.BlockClose:
 			b.WriteString("end\n")
 		}
 	}
+}
+
+// writeHeader writes a block line, with no trailing space for an empty label.
+func writeHeader(b *strings.Builder, kw, label string) {
+	if label == "" {
+		fmt.Fprintf(b, "%s\n", kw)
+		return
+	}
+	fmt.Fprintf(b, "%s %s\n", kw, label)
 }

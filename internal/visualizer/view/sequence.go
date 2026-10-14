@@ -56,7 +56,7 @@ type Message struct {
 	// has more than one: "2: <name>", or "2: when …" for an unnamed one;
 	// writers frame each one. Empty for a use case with a single scenario.
 	Scenario string
-	// Branch is the path from the outermost alt/opt block inward to the
+	// Branch is the path from the outermost block inward to the
 	// branch the message sits in; nil outside blocks. Writers open, switch and
 	// close native blocks from the change between consecutive messages (see
 	// BlockOps).
@@ -81,8 +81,8 @@ type BranchRef struct {
 type BlockOpKind string
 
 const (
-	BlockOpen  BlockOpKind = "open"  // a block's first branch: alt/opt <label>
-	BlockElse  BlockOpKind = "else"  // the next branch of the open block: else <label>
+	BlockOpen  BlockOpKind = "open"  // a block's first branch: <kind> <label>
+	BlockElse  BlockOpKind = "else"  // the next branch of the open block: else (or and) <label>
 	BlockClose BlockOpKind = "close" // end
 )
 
@@ -172,7 +172,10 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 			if len(uc.Scenarios) > 1 {
 				l.title = scenarioTitle(i, sc)
 			}
-			l.opensBlock = len(sc.Steps) > 0 && sc.Steps[0].Block != nil
+			// An opening par or loop gets an ordinary trigger, drawn before
+			// its box (spec §4.4); only an alt or opt is triggered per branch.
+			ob := sc.OpeningBlock()
+			l.opensBlock = ob != nil && (ob.Kind == lang.BlockAlt || ob.Kind == lang.BlockOpt)
 			l.emit(0) // the trigger and listens
 			l.walk(sc.Steps, nil)
 		}
@@ -303,8 +306,8 @@ type scenarioLayout struct {
 	step    int // actions seen so far, numbered as interaction numbers them
 	// start is the index of the scenario's first message in the section.
 	start int
-	// opensBlock is true when the scenario's first step is a block. Its
-	// triggers are then not drawn up front (see emit).
+	// opensBlock is true when the scenario's first step that is not a note
+	// is an alt or opt. Its triggers are then not drawn up front (see emit).
 	opensBlock bool
 }
 
@@ -355,6 +358,7 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 	// skip: the scenario opens with an opt; the first action after it is
 	// reached by the unbranched trigger.
 	skip := false
+	first := firstStepIndex(steps)
 	for i, st := range steps {
 		switch {
 		case st.Action != nil:
@@ -370,9 +374,9 @@ func (l *scenarioLayout) walk(steps []model.Step, path []BranchRef) {
 		case st.Note != nil:
 			l.note(*st.Note, path)
 		case st.Block != nil:
-			skip = skip || (len(path) == 0 && i == 0 && l.opensBlock && st.Block.Kind == lang.BlockOpt)
+			skip = skip || (len(path) == 0 && i == first && l.opensBlock && st.Block.Kind == lang.BlockOpt)
 			for bi, br := range st.Block.Branches {
-				inner := append(slices.Clone(path), BranchRef{Block: st.Block.ID, Kind: st.Block.Kind, Label: br.Label, Index: bi})
+				inner := append(slices.Clone(path), viewRef(st.Block.ID, st.Block.Kind, br.Label, bi, st.Block.Split))
 				before := len(sec.Messages)
 				l.emitTriggers(inner)
 				l.walk(br.Steps, inner)
@@ -441,7 +445,29 @@ func branchPath(refs []interaction.BranchRef) []BranchRef {
 	}
 	out := make([]BranchRef, len(refs))
 	for i, r := range refs {
-		out[i] = BranchRef{Block: r.Block, Kind: r.Kind, Label: r.Label, Index: r.Index}
+		out[i] = viewRef(r.Block, r.Kind, r.Label, r.Index, r.Split)
 	}
 	return out
+}
+
+// viewRef is the view's copy of a branch ref. Every view BranchRef is built
+// here, so emitTriggers' comparison of an interaction's path with the walk's
+// path keeps matching. A split par branch after the first has a blank label,
+// so writers print a bare separator (spec §4.5).
+func viewRef(block string, kind lang.BlockKind, label string, index int, split bool) BranchRef {
+	if split && index > 0 {
+		label = ""
+	}
+	return BranchRef{Block: block, Kind: kind, Label: label, Index: index}
+}
+
+// firstStepIndex returns the index of the first step that is not a note, or
+// -1. It mirrors the helper of the same name in package interaction.
+func firstStepIndex(steps []model.Step) int {
+	for i, st := range steps {
+		if st.Note == nil {
+			return i
+		}
+	}
+	return -1
 }
