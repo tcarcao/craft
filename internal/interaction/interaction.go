@@ -88,11 +88,15 @@ type Interaction struct {
 	Targeted bool
 	// Branch is the path from the outermost block inward to the branch the
 	// action sits in; nil outside blocks. Listen always has a nil Branch; a
-	// Trigger has one only when its scenario opens with a block, which gets
-	// one trigger per branch, each reaching that branch's first action. When
-	// the opening block is an opt, the path where it is skipped also gets a
-	// Trigger with a nil Branch, to the first action after the block (when
-	// there is one). Each interaction owns its slice.
+	// Trigger has one only when its scenario opens with a block (its first
+	// step that is not a note). An opening alt or opt gets one trigger per
+	// branch, each reaching that branch's first action; when it is an opt,
+	// the path where it is skipped also gets a Trigger with a nil Branch, to
+	// the first action after the block (when there is one). An opening par
+	// gets one unbranched Trigger to its first action in source order, plus
+	// one inside each other branch whose first action has a different
+	// subject. An opening loop gets one unbranched Trigger. Each interaction
+	// owns its slice.
 	Branch []BranchRef
 }
 
@@ -105,6 +109,9 @@ type BranchRef struct {
 	Kind  lang.BlockKind
 	Label string
 	Index int // 0-based branch index within the block
+	// Split is copied from model.Block.Split: the branch is one step of a par
+	// written without `and`.
+	Split bool
 }
 
 // Derive lists every interaction of doc in source order: use case, scenario,
@@ -146,6 +153,7 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 	// the first action in source order for what follows the block.
 	var callStack []frame
 	var trigger *Interaction
+	var reached string
 
 	switch t.Type {
 	case lang.TriggerExternal:
@@ -163,9 +171,10 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 		if t.ScheduleKind != "" {
 			it.Site.Length = utf16Len(string(t.ScheduleKind)) // the keyword stands for CRON
 		}
-		if len(sc.Steps) > 0 && sc.Steps[0].Block != nil {
-			// Opening with a block: each branch that has a target gets the
-			// trigger (walker.branchTrigger checks per branch). The stack
+		ob := sc.OpeningBlock()
+		if ob != nil && (ob.Kind == lang.BlockAlt || ob.Kind == lang.BlockOpt) {
+			// Opening with an alt or opt: each branch that has a target gets
+			// the trigger (walker.branchTrigger checks per branch). The stack
 			// keeps the frame of the first action with a subject, for what
 			// follows the block.
 			trigger = &it
@@ -177,11 +186,24 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 			}
 			break
 		}
+		// No opening block, or a par or loop: one ordinary trigger to the
+		// first action, drawn before the block. A loop is not a repeated
+		// trigger: the actor starts the work once.
 		if len(actions) > 0 && actions[0].Context != "" {
 			first := endpoint(actions[0].Context, actions[0].From)
 			callStack = append(callStack, frame{caller: actor, callee: first})
 			it.To = first
 			out = append(out, it)
+			reached = first.Key
+		}
+		if ob != nil && ob.Kind == lang.BlockPar {
+			// Each par branch that starts at another participant still gets
+			// a trigger of its own (spec §4.4).
+			tmpl := it
+			tmpl.To = Endpoint{}
+			trigger = &tmpl
+		} else {
+			reached = ""
 		}
 	case lang.TriggerDomainListen:
 		if t.Context == "" || t.Event == "" {
@@ -201,7 +223,7 @@ func deriveScenario(uc model.UseCase, ucIndex int, sc model.Scenario, publishers
 		}
 	}
 
-	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, trigger: trigger, out: out}
+	w := walker{base: base, uri: uc.SourceURI, callStack: callStack, trigger: trigger, reached: reached, out: out}
 	w.walk(sc.Steps, nil, trigger != nil)
 	return w.out
 }
@@ -224,6 +246,10 @@ type walker struct {
 	// trigger, when set, is the trigger of a scenario that opens with a
 	// block, To unset: each branch the scenario opens with gets a copy.
 	trigger *Interaction
+	// reached is the Key the unbranched trigger of an opening par already
+	// reaches. A par branch whose first action has that subject needs no
+	// trigger of its own (spec §4.4); "" for any other scenario.
+	reached string
 	step    int
 	out     []Interaction
 }
@@ -239,10 +265,13 @@ func (w *walker) walk(steps []model.Step, path []BranchRef, opening bool) (trigg
 	// skipped: the scenario opens with an opt, so the path where it is not
 	// taken still needs a trigger, into the first action after the block.
 	skipped := false
+	first := firstStepIndex(steps)
 	for i, st := range steps {
 		switch {
+		case st.Note != nil:
+			continue
 		case st.Block != nil:
-			if pending && i == 0 {
+			if pending && i == first {
 				if w.walkBlock(st.Block, path, true) {
 					pending, triggered = false, true
 				}
@@ -281,6 +310,9 @@ func (w *walker) branchTrigger(a model.Action, path []BranchRef) bool {
 	if w.trigger == nil || a.Context == "" {
 		return false
 	}
+	if w.reached != "" && endpoint(a.Context, a.From).Key == w.reached {
+		return true // already reached by the trigger drawn before the par
+	}
 	it := *w.trigger
 	it.To = endpoint(a.Context, a.From)
 	it.Branch = slices.Clone(path)
@@ -289,17 +321,20 @@ func (w *walker) branchTrigger(a model.Action, path []BranchRef) bool {
 	return true
 }
 
-// walkBlock visits each branch of b. Every branch of an alt starts from the
-// call stack as it was at the alt; an opt body continues from it. After the
-// block the stack is restored to its state at the block's start, because which
-// branch ran is unknown. It reports whether any branch got a trigger.
+// walkBlock visits each branch of b. Every branch of an alt or a par starts
+// from the call stack as it was at the block; an opt or loop body continues
+// from it (a loop body is derived once: one iteration). After the block the
+// stack is restored to its state at the block's start, because which branch
+// ran, or how the concurrent ones interleaved, is unknown. It reports whether
+// any branch got a trigger.
 func (w *walker) walkBlock(b *model.Block, path []BranchRef, opening bool) (triggered bool) {
 	saved := slices.Clone(w.callStack)
 	for i, br := range b.Branches {
-		if b.Kind == lang.BlockAlt || i == 0 {
+		if b.Kind == lang.BlockAlt || b.Kind == lang.BlockPar || i == 0 {
 			w.callStack = slices.Clone(saved)
 		}
-		if w.walk(br.Steps, append(slices.Clone(path), BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i}), opening) {
+		ref := BranchRef{Block: b.ID, Kind: b.Kind, Label: br.Label, Index: i, Split: b.Split}
+		if w.walk(br.Steps, append(slices.Clone(path), ref), opening) {
 			triggered = true
 		}
 	}
@@ -345,6 +380,16 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 		return
 	}
 	w.out = append(w.out, it)
+}
+
+// firstStepIndex returns the index of the first step that is not a note, or -1.
+func firstStepIndex(steps []model.Step) int {
+	for i, st := range steps {
+		if st.Note == nil {
+			return i
+		}
+	}
+	return -1
 }
 
 // frame is one outstanding call: caller asked callee and has not been

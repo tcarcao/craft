@@ -690,3 +690,118 @@ func TestDerive_OpeningOptWithoutAStepAfterItAndAltGetNoSkipTrigger(t *testing.T
 		}
 	}
 }
+
+func TestDerive_ParBranchesStartFromTheParStack(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        Ordering asks Billing to charge the card
+        par "side effects"
+            Billing returns the receipt
+            Billing asks Bank to log it
+        Ordering returns the confirmation
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {}
+2 response Billing->Ordering {par:side effects#0}
+3 request Billing->Bank {par:side effects#1}
+4 response Ordering->Customer {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	for _, it := range its {
+		if len(it.Branch) > 0 && !it.Branch[0].Split {
+			t.Errorf("fan-out branch ref must carry Split: %+v", it.Branch[0])
+		}
+	}
+}
+
+func TestDerive_OpeningParTriggersOnceWhenEveryBranchStartsAtTheSameClient(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Reads" {
+    when Customer opens the page
+        par "fan-out"
+            Ordering asks Billing for a
+            Ordering asks Shipping for b
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {par:fan-out#0}
+2 request Ordering->Shipping {par:fan-out#1}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestDerive_OpeningParTriggersABranchThatStartsElsewhere(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Reads" {
+    when Customer opens the page
+        par "fan-out"
+            Ordering asks Billing for a
+            Shipping asks Billing for b
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {par:fan-out#0}
+0 trigger Customer->Shipping {par:fan-out#1}
+2 request Shipping->Billing {par:fan-out#1}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestDerive_OpeningLoopIsTriggeredOnce(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Batch" {
+    when Customer uploads a batch
+        loop "for each order"
+            Ordering asks Billing to charge
+}
+`})
+	want := `0 trigger Customer->Ordering {}
+1 request Ordering->Billing {loop:for each order#0}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestDerive_LeadingNoteDoesNotHideTheOpeningBlock(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        note "the client retries on timeout"
+        alt "with a voucher"
+            Billing applies the voucher
+        else "without"
+            Ordering charges the card
+}
+`})
+	want := `0 trigger Customer->Billing {alt:with a voucher#0}
+1 internal Billing->Billing {alt:with a voucher#0}
+0 trigger Customer->Ordering {alt:without#1}
+2 internal Ordering->Ordering {alt:without#1}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestDerive_LeadingNoteDoesNotHideTheOpeningOpt(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Checkout" {
+    when Customer places an order
+        note "vouchers are optional"
+        opt "with a voucher"
+            Billing applies the voucher
+        Ordering charges the card
+}
+`})
+	want := `0 trigger Customer->Billing {opt:with a voucher#0}
+1 internal Billing->Billing {opt:with a voucher#0}
+0 trigger Customer->Ordering {}
+2 internal Ordering->Ordering {}`
+	if got := branchSummary(its); got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
