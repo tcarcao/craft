@@ -456,11 +456,14 @@ func (w *walker) action(a model.Action, path []BranchRef) {
 		w.callStack = append(w.callStack, frame{caller: it.From, callee: it.To})
 	case lang.ActionAsync:
 		// One Publish per event; a `notifies one of` publishes each of its
-		// events at the same step (spec §8.5).
+		// events at the same step (spec §8.5). A repeated item
+		// (duplicate-event-in-list warns) publishes once.
+		seen := map[string]bool{}
 		for _, ev := range a.EventList() {
-			if ev == "" {
+			if ev == "" || seen[ev] {
 				continue
 			}
+			seen[ev] = true
 			p := it
 			p.Kind, p.Event, p.Label = Publish, ev, ev
 			p.OneOf = len(a.Events) > 0

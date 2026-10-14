@@ -62,6 +62,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintRepeatedRequests(perFileTrees, ws, lis)...)
 	diags = append(diags, lintDuplicateEventInList(perFileTrees, lis)...)
 	diags = append(diags, lintOneOfSingleEvent(perFileTrees, lis)...)
+	diags = append(diags, lintDuplicateOperationInList(perFileTrees, lis)...)
 	diags = append(diags, lintEgressOnInternalStep(perFileTrees, lis)...)
 	diags = append(diags, lintUnquotedAddress(perFileTrees, lis)...)
 	return diags
@@ -905,6 +906,46 @@ func lintDuplicateEventInList(perFileTrees map[string]syntax.SyntaxNode, lis map
 				for _, a := range sc.Actions() {
 					if a.IsOneOf() {
 						check(a.EventItems())
+					}
+				}
+			}
+		}
+	}
+	return diags
+}
+
+// ── duplicate-operation-in-list ───────────────────────────────────────────────
+// Warning: the same item twice in one operation bracket (`[opA, opA, opB]`),
+// by exact text. The range is the repeated item.
+
+func lintDuplicateOperationInList(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	var diags []model.Diagnostic
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li, hasLI := lis[uri]
+		for _, uc := range syntax.AsFile(perFileTrees[uri]).UseCases() {
+			for _, sc := range uc.Scenarios() {
+				for _, a := range sc.Actions() {
+					items := lang.SplitOperationItems(a.OpText())
+					if len(items) < 2 {
+						continue
+					}
+					seen := map[string]bool{}
+					for _, it := range items {
+						if it.Text == "" || !seen[it.Text] {
+							seen[it.Text] = true
+							continue
+						}
+						var r model.Range
+						if hasLI {
+							r = opItemRange(a.OpAnnotation(), it, li)
+						}
+						diags = append(diags, model.Diagnostic{
+							Code:      "craft/lint/duplicate-operation-in-list",
+							Message:   fmt.Sprintf("operation %q is already in this bracket; drop the repeat", it.Text),
+							Severity:  model.SeverityWarning,
+							SourceURI: uri,
+							Range:     r,
+						})
 					}
 				}
 			}

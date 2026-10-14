@@ -156,7 +156,7 @@ scenarios with the same list are therefore indistinguishable, and two with diffe
 | `craft/sema/store-ref-in-event-list` (new) | error | A `store.` ref in a list of 2+ items. "A store hand-off names one store; write one scenario per store." |
 | `craft/lint/duplicate-event-in-list` (new) | warning | The same item twice in one list (exact text). Range: the second one. |
 | `craft/lint/dead-event`, `craft/lint/event-not-past-tense` | warning | Unchanged rules, now applied to each item; the range is the item. |
-| `craft/lint/duplicate-scenario-body` (new, §5.2) | warning | Two scenarios of one use case with identical bodies. When both triggers are `listens` by the same subject, the message says "fold them into one trigger: `when <subject> listens <a>, <b>`". |
+| `craft/lint/duplicate-scenario-body` (new, §5.2) | warning | Two scenarios of one use case with identical bodies. When both triggers are `listens` by the same subject, with no store ref and the same schedule, the message says "fold them into one trigger: `when <subject> listens <a>, <b>`" (each item once); otherwise it names what differs (§5.2). |
 | `craft/syntax/unexpected-token` | error | A comma with no item after it (the list ends at a comma followed by a step line or `}`). |
 
 ### 4.4 Interaction semantics
@@ -271,12 +271,19 @@ both.
 equal: the same shape, every action equal on `Type`, `Context`, `Verb`, `TargetContext`, `Event`,
 `Connector`, `Phrase` and `Operation.Text`, every block equal on kind and labels. Notes and links are
 ignored. The body must hold at least one action. The range is the second scenario's trigger.
-- Both triggers `listens` by the same subject → the G10 message (§4.3).
+- Both triggers `listens` by the same subject, neither with a store ref, both with the same schedule →
+  the G10 message (§4.3), each item once, the shared schedule kept
+  (`when s listens a.A, b.B cron "…"`).
+- Otherwise, when the triggers differ in initiator, schedule, `receives` operation or a store ref →
+  "the two scenarios run the same steps but start <what differs>, so one trigger cannot replace them;
+  check that the steps really are the same, and if they differ, write the difference as an `alt`".
 - Otherwise → "the two scenarios run the same steps; if they differ only by site, market or
   environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the
   difference as an `alt`".
 
-Today's corpus: 11 warnings in 6 use cases, all `listens` (they fold into G10 lists).
+Today's corpus: 13 warnings: 11 `listens` folds in 6 use cases (they fold into G10 lists), one pair of
+initiators running one body (`nmf-billing-cycle-rollover:19`) and one pair of `receives` operations
+(`revise-an-active-poa-adjustment:31`).
 
 Craft does not validate tag **values**. The site and environment codes are deployment configuration
 that craft cannot see; the hub can (§5.5).
@@ -642,6 +649,7 @@ async_action = name_slot 'notifies' ( event_item | 'one' 'of' event_list ) op_an
 | `craft/lint/one-of-single-event` (new) | warning | `notifies one of` with one item. "Drop `one of`." |
 | `craft/lint/duplicate-event-in-list` | warning | Also for `notifies one of`. |
 | `craft/lint/operation-not-in-surface` (v2.23) | warning | Now checks each item; one warning per item that the target's surface does not list. |
+| `craft/lint/duplicate-operation-in-list` (new) | warning | The same item twice in one operation bracket (exact text): `[opA, opA, opB]`. Range: the repeat. |
 | `craft/lint/repeated-request` (v2.23) | warning | Unchanged: it compares the whole `Operation.Text`. |
 | `dead-event`, `event-not-past-tense` | warning | Per item of a `one of` list. |
 

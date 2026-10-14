@@ -129,3 +129,29 @@ func TestNotifiesBareListIsAnError(t *testing.T) {
 		t.Fatalf("diags = %v", diags)
 	}
 }
+
+func TestNotifiesOneOf_ExtraWordsKeepTheBracket(t *testing.T) {
+	g, _, diags := syntax.Parse("use_case \"U\" {\n    when O does\n        x notifies one of a.B, c.D foo  [TOPIC t]\n}")
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/unexpected-token" {
+		t.Fatalf("diags = %v", diags)
+	}
+	a := syntax.AsFile(syntax.Root(g)).UseCases()[0].Scenarios()[0].Actions()[0]
+	if a.OpText() != "TOPIC t" {
+		t.Errorf("OpText = %q; the sweep must stop at the bracket", a.OpText())
+	}
+	if got := itemValues(a.EventItems()); !slices.Equal(got, []string{"a.B", "c.D"}) {
+		t.Errorf("items = %v", got)
+	}
+}
+
+func TestNotifiesOneOf_ExtraWordsAfterTheFirstItem(t *testing.T) {
+	_, _, diags := syntax.Parse("use_case \"U\" {\n    when O does\n        x notifies one of a.B foo, c.D\n}")
+	if len(diags) != 1 {
+		t.Fatalf("diags = %v", diags)
+	}
+	d := diags[0]
+	// `foo` starts at column 30 (0-based): the report is there, not at `of`.
+	if d.Range.Start.Character != 30 || !strings.Contains(d.Message, "one of") {
+		t.Errorf("diag = %+v", d)
+	}
+}

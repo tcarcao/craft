@@ -48,3 +48,35 @@ func TestLintModel_DuplicateScenarioBody(t *testing.T) {
 		}
 	}
 }
+
+// TestLintModel_DuplicateScenarioBodyMessage pins the message: a fold only
+// when one listens trigger can replace both (no store ref, one schedule),
+// with each item once; otherwise the message names what differs.
+func TestLintModel_DuplicateScenarioBodyMessage(t *testing.T) {
+	const body = "    s asks t to do it  [x]\n"
+	cases := []struct {
+		name, a, b string
+		want       string
+	}{
+		{"repeated item", "  when s listens a.A, b.B\n", "  when s listens b.B\n", "`when s listens a.A, b.B`"},
+		{"same schedule", "  when s listens a.A cron \"0 1 * * *\"\n", "  when s listens b.B cron \"0 1 * * *\"\n", "`when s listens a.A, b.B cron \"0 1 * * *\"`"},
+		{"schedules differ", "  when s listens a.A cron \"0 1 * * *\"\n", "  when s listens b.B\n", "different schedules"},
+		{"store ref", "  when s listens store.q.inserted\n", "  when s listens b.B\n", "store hand-off"},
+		{"initiators differ", "  when O starts it\n", "  when P starts it\n", "different initiators (`O` and `P`)"},
+		{"listeners differ", "  when s listens a.A\n", "  when t listens a.A\n", "different initiators (`s` and `t`)"},
+		{"operations differ", "  when s receives a call  [opA]\n", "  when s receives a call  [opB]\n", "different operations (`[opA]` and `[opB]`)"},
+	}
+	for _, c := range cases {
+		got := modelDiags(t, dupHead+c.a+body+c.b+body+"}\n", "craft/lint/duplicate-scenario-body")
+		if len(got) != 1 {
+			t.Errorf("%s: %d warnings", c.name, len(got))
+			continue
+		}
+		if !strings.Contains(got[0].Message, c.want) {
+			t.Errorf("%s: message %q lacks %q", c.name, got[0].Message, c.want)
+		}
+		if strings.Contains(got[0].Message, "sites") {
+			t.Errorf("%s: names sites/envs: %q", c.name, got[0].Message)
+		}
+	}
+}

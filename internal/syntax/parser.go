@@ -1251,6 +1251,26 @@ func (p *Parser) sweepRestOfLine(line int, expected string) []model.Diagnostic {
 	return []model.Diagnostic{d}
 }
 
+// sweepLineUpTo is sweepRestOfLine stopped before the token at lookahead
+// index limit (an operation bracket the caller still parses); a negative
+// limit sweeps the whole line. It reports nothing when there is nothing to
+// sweep.
+func (p *Parser) sweepLineUpTo(line, limit int, expected string) []model.Diagnostic {
+	if limit < 0 {
+		return p.sweepRestOfLine(line, expected)
+	}
+	if limit == 0 {
+		return nil
+	}
+	d := p.diagUnexpected(p.peek(), expected)
+	p.builder.StartNode(SyntaxKindErrorNode)
+	for n := 0; n < limit; n++ {
+		p.consume()
+	}
+	p.builder.FinishNode()
+	return []model.Diagnostic{d}
+}
+
 // atStep reports whether the next token can start a step of the current
 // scenario: anything but `when`, a `scenario "…"` line, `}` or EOF.
 func (p *Parser) atStep() bool {
@@ -1501,7 +1521,7 @@ func (p *Parser) parseTrigger(whenLine int) []model.Diagnostic {
 		last := verbTok
 		if t := p.peek(); t.Line == verbTok.Line && (t.Type == lexer.TokenString || t.Type == lexer.TokenIdent) {
 			var d []model.Diagnostic
-			last, d = p.parseEventList()
+			last, d = p.parseEventList(false)
 			diags = append(diags, d...)
 		}
 		// Optional polling cadence after the last item:
@@ -1706,13 +1726,15 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 	switch {
 	case eventTok.Type == lexer.TokenIdent && eventTok.Value == "one" &&
 		of.Type == lexer.TokenIdent && of.Value == "of" && of.Line == eventTok.Line &&
-		p.peekAt(2).Line == eventTok.Line && p.eventItemAhead(2):
+		p.peekAt(2).Line == eventTok.Line && p.eventItemStartAhead(2):
 		// notifies one of <event list>: one of these, chosen at run time
 		// (spec §8.3). `notifies one` and `notifies one [op]` stay events.
+		// Words after the first item (`one of a.B foo, c.D`) are reported
+		// below, at the first of them.
 		oneOf = true
 		p.consumeAs(SyntaxKindKwOne)
 		p.consumeAs(SyntaxKindKwOf)
-		_, d := p.parseEventList()
+		_, d := p.parseEventList(true)
 		diags = append(diags, d...)
 	case eventTok.Type == lexer.TokenString:
 		p.consumeAs(SyntaxKindString)
@@ -1745,7 +1767,7 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 	// so they neither vanish silently nor parse as a step.
 	start := p.opAnnotationStart(line)
 	if t := p.peek(); start != 0 && t.Line == line && t.Type != lexer.TokenEOF && t.Type != lexer.TokenRBrace {
-		diags = append(diags, p.diagNotifiesExtraWords(t))
+		diags = append(diags, p.diagNotifiesExtraWords(t, oneOf))
 		p.builder.StartNode(SyntaxKindErrorNode)
 		for n := 0; (start < 0 || n < start) && p.peek().Line == line &&
 			p.peek().Type != lexer.TokenEOF && p.peek().Type != lexer.TokenRBrace; n++ {
@@ -1761,11 +1783,23 @@ func (p *Parser) parseNotifiesAction() []model.Diagnostic {
 }
 
 // diagNotifiesExtraWords reports the words after a `notifies` event on its
-// line, at the first of them.
-func (p *Parser) diagNotifiesExtraWords(tok lexer.Token) model.Diagnostic {
+// line, at the first of them. oneOf words it for an item of a `one of` list.
+func (p *Parser) diagNotifiesExtraWords(tok lexer.Token, oneOf bool) model.Diagnostic {
 	d := p.diagUnexpected(tok, "the end of the line")
 	d.Message = "a `notifies` event is one name: write a ref such as `team.OwnersNotified` or a quoted string; to describe work in prose, write an internal step (`sync informs the owners team`)"
+	if oneOf {
+		d.Message = "each item of `notifies one of` is one event name, and items are separated by `, `: write `notifies one of a.B, c.D`"
+	}
 	return d
+}
+
+// eventItemStartAhead reports whether the token at offset can start an event
+// item: a string or a name. Unlike eventItemAhead it does not look past the
+// item, so `one of a.B foo, c.D` is still a `one of` list, whose stray word
+// is then reported where it is.
+func (p *Parser) eventItemStartAhead(offset int) bool {
+	t := p.peekAt(offset)
+	return t.Type == lexer.TokenString || t.Type == lexer.TokenIdent || isAnyKeywordAsIdent(t.Type)
 }
 
 // parseReturnsAction parses [to <target>] [connector_word] <phrase> after `returns`.
@@ -3312,9 +3346,11 @@ func (p *Parser) parseEventItem() {
 // reported on the comma; the next line then parses as a step. An item on the
 // comma's line followed by extra words (`a.B, c.D foo`) is kept, and the
 // extra words are reported and swept up to the end of the line, so they do
-// not become a step. It returns the last token consumed, whose line is where
-// a trailing schedule or bracket must sit.
-func (p *Parser) parseEventList() (lexer.Token, []model.Diagnostic) {
+// not become a step. With keepOp (the `notifies one of` list) the sweep
+// stops at a trailing operation bracket, which the caller then parses. It
+// returns the last token consumed, whose line is where a trailing schedule or
+// bracket must sit.
+func (p *Parser) parseEventList(keepOp bool) (lexer.Token, []model.Diagnostic) {
 	var diags []model.Diagnostic
 	cp := p.builder.Checkpoint()
 	p.parseEventItem()
@@ -3340,7 +3376,11 @@ func (p *Parser) parseEventList() (lexer.Token, []model.Diagnostic) {
 	}
 	if junkLine >= 0 {
 		// Outside the EventList node, so the items stay clean.
-		diags = append(diags, p.sweepRestOfLine(junkLine, "`,` or the end of the line after an event")...)
+		limit := -1
+		if keepOp {
+			limit = p.opAnnotationStart(junkLine)
+		}
+		diags = append(diags, p.sweepLineUpTo(junkLine, limit, "`,` or the end of the line after an event")...)
 	}
 	return p.lastConsumed(), diags
 }

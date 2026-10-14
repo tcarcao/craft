@@ -301,3 +301,19 @@ func TestLint_UnquotedAddress(t *testing.T) {
 		}
 	}
 }
+
+func TestLint_DuplicateOperationInList(t *testing.T) {
+	dup := "use_case \"U\" {\n  when O does\n    o asks s for it  [opA, opA, opB]\n}"
+	ok := "use_case \"U\" {\n  when O does\n    o asks s for it  [opA, opB]\n}"
+	if n := lintCodes(t, dup, "craft/lint/duplicate-operation-in-list"); n != 1 {
+		t.Errorf("dup: %d", n)
+	}
+	for _, d := range analyzeSingleFileForTest(t, dup) {
+		if d.Code == "craft/lint/duplicate-operation-in-list" && (d.Range.Start.Character != 27 || d.Range.End.Character != 30) {
+			t.Errorf("range = %+v; want the second opA", d.Range)
+		}
+	}
+	if n := lintCodes(t, ok, "craft/lint/duplicate-operation-in-list"); n != 0 {
+		t.Errorf("ok: %d", n)
+	}
+}

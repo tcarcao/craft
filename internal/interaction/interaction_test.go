@@ -1072,3 +1072,21 @@ use_case "Checkout" {
 		t.Errorf("requests = %v", reqs)
 	}
 }
+
+func TestDerive_NotifiesOneOfRepeatedItemPublishesOnce(t *testing.T) {
+	its := derive(t, map[string]string{"a.craft": structure + `
+use_case "Outbox" {
+    when Customer pays
+        Billing notifies one of shop.Paid, shop.Paid, shop.Failed
+}
+`})
+	var pubs []string
+	for _, it := range its {
+		if it.Kind == interaction.Publish {
+			pubs = append(pubs, it.Event)
+		}
+	}
+	if want := []string{"shop.Paid", "shop.Failed"}; !slices.Equal(pubs, want) {
+		t.Errorf("publishes = %v", pubs)
+	}
+}

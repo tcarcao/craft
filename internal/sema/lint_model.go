@@ -61,12 +61,67 @@ func lintDuplicateScenarioBodies(doc *model.CraftDoc) []model.Diagnostic {
 	return diags
 }
 
+// duplicateBodyMessage says how to fix two scenarios with one body. It
+// suggests a fold only when one `listens` trigger can replace both: the same
+// subject, no store ref (a store hand-off names one store, so it cannot join
+// a list) and the same schedule. Otherwise it names what differs between the
+// triggers; with nothing to name, the scenarios may differ by site or
+// environment.
 func duplicateBodyMessage(a, b model.Trigger) string {
-	if a.Type == lang.TriggerDomainListen && b.Type == lang.TriggerDomainListen && a.Context == b.Context {
-		items := append(refOrEvents(a), refOrEvents(b)...)
-		return fmt.Sprintf("the two scenarios run the same steps; fold them into one trigger: `when %s listens %s`", a.Context, strings.Join(items, ", "))
+	const same = "the two scenarios run the same steps"
+	if a.Type == lang.TriggerDomainListen && b.Type == lang.TriggerDomainListen && a.Context == b.Context &&
+		a.Store == nil && b.Store == nil && a.ScheduleKind == b.ScheduleKind && a.Schedule == b.Schedule {
+		var items []string
+		for _, ev := range append(refOrEvents(a), refOrEvents(b)...) {
+			if !slices.Contains(items, ev) {
+				items = append(items, ev)
+			}
+		}
+		fold := fmt.Sprintf("when %s listens %s", a.Context, strings.Join(items, ", "))
+		if a.ScheduleKind != "" {
+			fold += fmt.Sprintf(" %s %q", a.ScheduleKind, a.Schedule)
+		}
+		return fmt.Sprintf("%s; fold them into one trigger: `%s`", same, fold)
 	}
-	return "the two scenarios run the same steps; if they differ only by site, market or environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the difference as an `alt`"
+	if diff := triggerDifference(a, b); diff != "" {
+		return fmt.Sprintf("%s but start %s, so one trigger cannot replace them; check that the steps really are the same, and if they differ, write the difference as an `alt`", same, diff)
+	}
+	return same + "; if they differ only by site, market or environment, write one scenario with a `sites`/`envs` tag; if the steps really differ, write the difference as an `alt`"
+}
+
+// triggerDifference names what tells two triggers apart, for
+// duplicateBodyMessage: the initiator, the schedule, a `receives` operation,
+// or a store hand-off. "" when it finds none of these.
+func triggerDifference(a, b model.Trigger) string {
+	initiator := func(t model.Trigger) string {
+		if t.Type == lang.TriggerExternal {
+			return t.Actor
+		}
+		return t.Context
+	}
+	schedule := func(t model.Trigger) string {
+		if t.ScheduleKind == "" {
+			return "no schedule"
+		}
+		return fmt.Sprintf("%s %q", t.ScheduleKind, t.Schedule)
+	}
+	opText := func(t model.Trigger) string {
+		if t.Operation == nil {
+			return ""
+		}
+		return t.Operation.Text
+	}
+	switch {
+	case initiator(a) != initiator(b):
+		return fmt.Sprintf("from different initiators (`%s` and `%s`)", initiator(a), initiator(b))
+	case a.ScheduleKind != b.ScheduleKind || a.Schedule != b.Schedule:
+		return fmt.Sprintf("on different schedules (`%s` and `%s`)", schedule(a), schedule(b))
+	case opText(a) != opText(b):
+		return fmt.Sprintf("through different operations (`[%s]` and `[%s]`)", opText(a), opText(b))
+	case a.Store != nil || b.Store != nil:
+		return "from a store hand-off, which names one store and cannot share a `listens` list"
+	}
+	return ""
 }
 
 // refOrEvents is a listens trigger's items as an author writes them: a ref
