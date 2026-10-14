@@ -45,7 +45,7 @@ end
 == VAS application rejected by provider ==
 
 group 1: when VasApplication listens "RequestVasApplication"
-[-> VasApplication : RequestVasApplication
+[-> VasApplication : RequestVasApplication (from VASFulfillment)
 VasApplication -> VasApplication : delegates apply through provider translator
 VasApplication ->> VasApplication : notifies "VasApplicationFailed"
 end

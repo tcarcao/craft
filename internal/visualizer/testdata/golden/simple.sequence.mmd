@@ -58,7 +58,7 @@ sequenceDiagram
     rect rgb(245, 245, 245)
     Note over Customer,Susbscription: 3: when OrderFulfilment listens "Order payment deferred"
     OrderManagement-)OrderFulfilment: Order payment deferred
-    External->>OrderFulfilment: Order payment deferred
+    External->>OrderFulfilment: Order payment deferred (from OrderMgmt)
     OrderFulfilment->>WalletItemAddition: to fulfil the addition request
     WalletItemAddition->>Wallet: to add VAS
     Wallet-)Wallet: notifies "VAS added"
@@ -96,7 +96,7 @@ sequenceDiagram
     end
     rect rgb(245, 245, 245)
     Note over Customer,Susbscription: 2: when OrderFulfilment listens "Order payment deferred"
-    External->>OrderFulfilment: Order payment deferred
+    External->>OrderFulfilment: Order payment deferred (from OrderManagement)
     OrderMgmt-)OrderFulfilment: Order payment deferred
     OrderFulfilment->>VASMgmt: to schedule the VAS
     VASMgmt->>VASMgmt: schedules the VAS for future application

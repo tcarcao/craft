@@ -128,7 +128,7 @@ func BlockOps(prev, next []BranchRef) []BlockOp {
 // the section of the last of them, in source order; the earlier sections stay
 // empty.
 func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence {
-	b := sequenceBuilder{ns: newNodeSet(doc), inbound: map[string]bool{}}
+	b := sequenceBuilder{ns: newNodeSet(doc), inbound: map[string]*inboundArrow{}}
 	byUseCase := map[string]int{}
 	for _, uc := range doc.UseCases {
 		byUseCase[uc.Name] = len(b.seq.Sections)
@@ -174,10 +174,37 @@ type sequenceBuilder struct {
 	seq Sequence
 	// order lists participant IDs in order of first appearance.
 	order []string
-	// inbound marks "use case index|scenario|event" already drawn as inbound.
-	inbound map[string]bool
+	// inbound holds the inbound arrow drawn for "use case index|scenario|event".
+	inbound map[string]*inboundArrow
 	// onStage marks, per section, the participants already drawn in it.
 	onStage []map[string]bool
+}
+
+// inboundArrow is an event drawn as arriving from outside a section, and the
+// publishers it arrives from.
+type inboundArrow struct {
+	section, message int
+	event            string
+	publishers       []string // display names, in arrival order
+}
+
+// maxNamedPublishers is how many publishers an inbound label names before
+// summing up the rest as "+N more".
+const maxNamedPublishers = 3
+
+// label is the event, then the publishers it comes from: sorted by display
+// name, at most maxNamedPublishers of them. An event with no publisher in the
+// model keeps its bare name.
+func (a *inboundArrow) label() string {
+	if len(a.publishers) == 0 {
+		return a.event
+	}
+	names := slices.Clone(a.publishers)
+	slices.Sort(names)
+	if len(names) > maxNamedPublishers {
+		names = append(names[:maxNamedPublishers], fmt.Sprintf("+%d more", len(a.publishers)-maxNamedPublishers))
+	}
+	return a.event + " (from " + strings.Join(names, ", ") + ")"
 }
 
 func (b *sequenceBuilder) appear(id string) {
@@ -211,17 +238,28 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	case interaction.Listen:
 		// A publisher already on stage in this use case delivers the
 		// event itself; otherwise the event arrives from outside, once
-		// per listening scenario however many publishers it has.
+		// per listening scenario however many publishers it has. The
+		// arrow names those publishers but draws none of them: the section
+		// stays about its own use case.
 		if onStage[it.From.Key] {
 			msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageAsync
 			break
 		}
 		key := fmt.Sprintf("%d|%s|%s", it.UseCaseIndex, it.Scenario, it.Event)
-		if b.inbound[key] {
+		arrow := b.inbound[key]
+		if arrow == nil {
+			arrow = &inboundArrow{section: idx, message: len(b.seq.Sections[idx].Messages), event: it.Event}
+			b.inbound[key] = arrow
+		}
+		if it.From != interaction.External && !slices.Contains(arrow.publishers, it.From.Name) {
+			arrow.publishers = append(arrow.publishers, it.From.Name)
+		}
+		if arrow.message < len(b.seq.Sections[arrow.section].Messages) {
+			// Already drawn: only its label grows.
+			b.seq.Sections[arrow.section].Messages[arrow.message].Label = arrow.label()
 			return
 		}
-		b.inbound[key] = true
-		msg.To, msg.Kind = ns.add(it.To), MessageInbound
+		msg.To, msg.Kind, msg.Label = ns.add(it.To), MessageInbound, arrow.label()
 	default:
 		return
 	}

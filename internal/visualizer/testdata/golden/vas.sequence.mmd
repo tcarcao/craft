@@ -42,7 +42,7 @@ sequenceDiagram
     Note over CRON,VasLifecycleTimer: VAS application rejected by provider
     rect rgb(245, 245, 245)
     Note over CRON,VasLifecycleTimer: 1: when VasApplication listens "RequestVasApplication"
-    External->>VasApplication: RequestVasApplication
+    External->>VasApplication: RequestVasApplication (from VASFulfillment)
     VasApplication->>VasApplication: delegates apply through provider translator
     VasApplication-)VasApplication: notifies "VasApplicationFailed"
     end

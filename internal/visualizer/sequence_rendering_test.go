@@ -634,3 +634,65 @@ func TestFlow_TriggerIntoABranchCarriesTheBranchLabel(t *testing.T) {
 		}
 	}
 }
+
+// An event published in another use case arrives from outside the listener's
+// section, labelled with its publishers: sorted by display name, at most 3,
+// then "+N more". An event nobody in the model publishes keeps its bare label.
+const crossUseCaseEventsSrc = `actor user Customer
+domain shop {
+    Accounts
+    Billing
+    Ordering
+    Payments
+    Shipping
+}
+use_case "Publish" {
+    when Customer pays
+        Payments notifies "One"
+        Ordering notifies "Two"
+        Billing notifies "Two"
+        Payments notifies "Four"
+        Ordering notifies "Four"
+        Accounts notifies "Four"
+        Billing notifies "Four"
+}
+use_case "Listen one" {
+    when Shipping listens "One"
+        Shipping books a courier
+}
+use_case "Listen two" {
+    when Shipping listens "Two"
+        Shipping books a courier
+}
+use_case "Listen four" {
+    when Shipping listens "Four"
+        Shipping books a courier
+}
+use_case "Listen none" {
+    when Shipping listens "Nobody"
+        Shipping books a courier
+}
+`
+
+func TestSequence_InboundEventNamesItsPublishers(t *testing.T) {
+	puml, mmd := sequenceSource(t, crossUseCaseEventsSrc)
+	for _, want := range []string{
+		"[-> Shipping : One (from Payments)",
+		"[-> Shipping : Two (from Billing, Ordering)",
+		"[-> Shipping : Four (from Accounts, Billing, Ordering, +1 more)",
+		"[-> Shipping : Nobody",
+	} {
+		requireLine(t, "plantuml", puml, want)
+	}
+	for _, want := range []string{
+		"External->>Shipping: One (from Payments)",
+		"External->>Shipping: Two (from Billing, Ordering)",
+		"External->>Shipping: Four (from Accounts, Billing, Ordering, +1 more)",
+		"External->>Shipping: Nobody",
+	} {
+		requireLine(t, "mermaid", mmd, want)
+	}
+	if n := strings.Count(puml, "[-> "); n != 4 {
+		t.Errorf("plantuml: %d inbound arrows, want one per listening scenario (4):\n%s", n, puml)
+	}
+}
