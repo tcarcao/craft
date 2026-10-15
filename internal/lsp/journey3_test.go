@@ -394,6 +394,17 @@ func TestSources_DocumentLinks(t *testing.T) {
 	}
 }
 
+// A source root with a space, # or % still gives a valid file URI.
+func TestSources_DocumentLinksEscaped(t *testing.T) {
+	links := documentLinks(t, linksClient(t, `{"sourceRoots": {"*": "/my src/#a%b"}}`))
+	if len(links) == 0 {
+		t.Fatalf("no links")
+	}
+	if want := "file:///my%20src/%23a%25b/re-x/src/offers.go#L5"; links[0].Target != want {
+		t.Errorf("target = %q, want %q", links[0].Target, want)
+	}
+}
+
 func TestLinks_SemanticTokens(t *testing.T) {
 	const flowKeyword, usecaseString, comment = 8, 30, 34
 	toks := semanticTokensAt(t, linksLSPSrc)

@@ -3,6 +3,8 @@ package lsp
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -227,10 +229,7 @@ func (s *Server) DocumentLink(_ context.Context, params *protocol.DocumentLinkPa
 			if dir == "" {
 				continue
 			}
-			target := "file://" + strings.TrimSuffix(dir, "/") + "/" + strings.TrimPrefix(c.Path, "/")
-			if c.Start > 0 {
-				target += fmt.Sprintf("#L%d", c.Start)
-			}
+			target := fileURI(strings.TrimSuffix(dir, "/")+"/"+strings.TrimPrefix(c.Path, "/"), c.Start)
 			start := tok.Offset() + green.TextSize(c.At)
 			out = append(out, protocol.DocumentLink{
 				Range:  protocol.Range{Start: lspPosFromOffset(f.LineIndex, start), End: lspPosFromOffset(f.LineIndex, start+green.TextSize(c.Len))},
@@ -239,6 +238,21 @@ func (s *Server) DocumentLink(_ context.Context, params *protocol.DocumentLinkPa
 		}
 	}
 	return out, nil
+}
+
+// fileURI is the file:// URI of the absolute path abs, with #L<line> when
+// line > 0. The path is escaped, so spaces, # and % survive; a Windows drive
+// path gets a leading slash (file:///C:/...).
+func fileURI(abs string, line int) string {
+	p := filepath.ToSlash(abs)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
+	if line > 0 {
+		u.Fragment = fmt.Sprintf("L%d", line)
+	}
+	return u.String()
 }
 
 // sourceDir is the local directory of a cite's repo: the written repo, else
