@@ -2,16 +2,19 @@
 
 ## [Unreleased]
 
-**Why a minor version (v2.27.0).** New optional syntax, additive `pkg/craft` fields and a method, and two new lint warnings. A string after a context or actor name was a syntax error before, so no file that parsed changes meaning, and a model without display names projects and renders byte-for-byte as in 2.26.1 (checked on re-arch-central: every diagram identical).
+**Why a minor version (v2.27.0).** New optional syntax, additive `pkg/craft` fields and a method, and three new lint warnings. A string after a context or actor name was a syntax error before, so no file that parsed changes meaning, and a model without display names projects and renders byte-for-byte as in 2.26.1 (checked on re-arch-central: every diagram identical).
 
 ### Added
 - **Display names for bounded contexts and actors.** A quoted string after the name, on the same line, in a domain body or an actor declaration: `nmf_monetization "nMF, the money engine"`, `user Seller "the seller"`, `actor system AdCore "OLX ad-core"`. Declared once in the registry; journey files keep the ids. A string on a later line stays `craft/syntax/unexpected-token`. Display names are not read from a service's `contexts:` list.
 - **`pkg/craft`**: `Domain.DisplayNames` (bounded-context name to display name), `Actor.DisplayName`, `Participant.DisplayName` (set on resolved trigger subjects, action subjects and targets, store and surface participants), and `CraftDoc.DisplayNames()` keyed by participant ID (`<domain>/<bc>` or the actor name). All are optional JSON keys (`displayNames`, `displayName`).
-- **Diagnostics.** `craft/lint/duplicate-display-name` (warning: two contexts or actors share a display name; reported on each later one in sorted file order) and `craft/lint/empty-display-name` (warning: `""` declares none). See `docs/DIAGNOSTICS.md`.
+- **Diagnostics.** `craft/lint/duplicate-display-name` (warning: two contexts or actors share a display name; reported on each later one in sorted file order), `craft/lint/empty-display-name` (warning: `""` declares none) and `craft/lint/conflicting-display-name` (warning: one context or actor is declared again with another display name, or with one after a declaration without; the first declaration in sorted file order is drawn, and the later string is reported). See `docs/DIAGNOSTICS.md`.
 - **Language server.** Hover on a context or actor reference, an actor declaration, or a bounded context in a domain body adds `display name: …`. Context and actor completion details end with `: <display name>`. `craft.extractWorkspace` reports `displayName` on bounded-context and actor entries, and the partial DSL it rebuilds for a domain keeps the display names.
 
 ### Changed — diagrams
 - **Display names are drawn instead of ids**, while diagram identifiers and element order still come from the id: PlantUML `participant "nMF, the money engine" as nmf_monetization`, `actor "the seller" as Seller`; Mermaid `participant nmf_monetization as nMF, the money engine`, `nmf_monetization["nMF, the money engine"]`. Flow frames, architecture frames, event queues (`nMF, the money engine events`), C4 containers, context groups and actors use them too; a C4 container's description keeps the id. The surface table heading reads `nMF, the money engine (nmf_monetization)`. Messages and notes are not rewritten.
+- **Inbound arrows name publishers by display name**: `PricesChanged (from nMF, the money engine)`, in the sequence view and in journey spines. The publishers are still sorted by id.
+- **Long display names wrap** at 24 characters, on spaces, wherever a name is drawn: `\n` in PlantUML (sequence participants, flow and architecture frames, actors, event queues, C4 actors, groups and containers), `<br/>` in Mermaid (sequence, flowchart and C4). A word longer than 24 characters keeps its own line. Ids never wrap, and the surface table heading does not wrap.
+- **Mermaid escapes.** A sequence diagram writes `#` in a participant name, message or note as the full-width `＃` (Mermaid read it as a comment and cut the rest), as it already writes `;` as `,`. A quoted flowchart label writes a `#` that would start an entity code (`#2;`) as `#35;`. C4 writes `"` as `'`, as PlantUML does (Mermaid's C4 renderer drew `#quot;` as a literal `&quot;`).
 
 ## [2.26.1] — 2026-10-15
 

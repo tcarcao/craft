@@ -3,7 +3,7 @@
 **Date:** 2026-10-15
 **Owner:** Tiago Carção
 **Status:** Implemented on feat/display-names
-**Release:** v2.27.0 (minor: additive syntax, additive `pkg/craft` fields, two new lint codes)
+**Release:** v2.27.0 (minor: additive syntax, additive `pkg/craft` fields, three new lint codes)
 
 ## 1. Problem
 
@@ -112,6 +112,7 @@ not rewritten: they are the author's text.
 |---|---|---|
 | `craft/lint/duplicate-display-name` | warning | Two contexts or actors in the workspace share a display name (exact text). Reported on each later string, in sorted file order. Readers could not tell the two apart in a diagram. |
 | `craft/lint/empty-display-name` | warning | The display name is `""`. It is ignored; remove it or write the name. |
+| `craft/lint/conflicting-display-name` | warning | One context or actor is declared again with another display name, or with one after a declaration without. The first declaration in sorted file order is drawn; the later string is reported. |
 
 ## 7. Formatter
 
