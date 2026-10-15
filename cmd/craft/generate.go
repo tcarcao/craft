@@ -222,12 +222,22 @@ func generateJourneys(r *visualizer.Renderer, model *craft.CraftDoc, journeys []
 			}
 			continue
 		}
-		name := base + "-journey-" + strings.ReplaceAll(slug, "/", "-") + "." + out.Ext
+		name := base + "-journey-" + fileSlug(slug) + "." + out.Ext
 		if err := writeOutput(filepath.Join(outDir, name), out.Data, force); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// fileSlug makes slug safe to use in a file name: each / and \ becomes -,
+// and every .. is removed, so the file stays in the output directory.
+func fileSlug(slug string) string {
+	s := strings.NewReplacer("/", "-", `\`, "-").Replace(slug)
+	for strings.Contains(s, "..") {
+		s = strings.ReplaceAll(s, "..", "")
+	}
+	return s
 }
 
 // closestSlugs returns the n slugs nearest to want by edit distance, ties

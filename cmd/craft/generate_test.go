@@ -945,6 +945,29 @@ func TestGenerateCmd_JourneyErrors(t *testing.T) {
 	}
 }
 
+// A journey slug never names a file outside the output directory.
+func TestFileSlug(t *testing.T) {
+	cases := map[string]string{
+		"seller-pays":      "seller-pays",
+		"a/b":              "a-b",
+		`a\b`:              "a-b",
+		"../../etc/passwd": "--etc-passwd",
+		`..\..\x`:          "--x",
+		"a....b":           "ab",
+		"a...b":            "a.b",
+	}
+	for in, want := range cases {
+		got := fileSlug(in)
+		if got != want {
+			t.Errorf("fileSlug(%q) = %q, want %q", in, got, want)
+		}
+		out := filepath.Join("out", "base-journey-"+got+".svg")
+		if filepath.Dir(out) != "out" {
+			t.Errorf("fileSlug(%q) = %q escapes the output directory: %s", in, got, out)
+		}
+	}
+}
+
 func TestClosestSlugs(t *testing.T) {
 	got := closestSlugs([]string{"zeta", "seller-pays", "seller-promotes-an-advert", "seller-promotes"}, "seller-promotes-an-adver", 3)
 	want := []string{"seller-promotes-an-advert", "seller-promotes", "seller-pays"}
