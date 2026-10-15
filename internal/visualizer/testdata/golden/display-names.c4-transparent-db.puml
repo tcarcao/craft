@@ -18,7 +18,7 @@ LAYOUT_WITH_LEGEND()
 
 title Container Diagram - Architecture (transparent mode)
 
-System_Ext(CRON, "the hourly clock", "Scheduler")
+System_Ext(CRON, "the hourly clock that\nrebuilds the prices", "Scheduler")
 Person(Seller, "the seller", "External user")
 
 System_Boundary(Event_System_boundary, "Event_System") {

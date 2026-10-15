@@ -30,15 +30,15 @@ skinparam rectangle {
 
 ' Service boundaries
 rectangle "nmf" as nmf {
-  frame "nMF, the\nmoney engine" as nmf_monetization
+  frame "nMF, the money engine" as nmf_monetization
 }
 rectangle "portfolio" as portfolio {
   frame "invoicearchive" as invoicearchive
-  frame "portfolio value" as portfoliovalue
+  frame "portfolio value,\nrecomputed on every\nprice change" as portfoliovalue
 }
 
 ' Domain queues
-queue "nMF, the money engine events" as nmf_monetization_events
+queue "nMF, the money engine\nevents" as nmf_monetization_events
 
 ' Subdomain connections
 nmf_monetization --> portfoliovalue

@@ -6,6 +6,8 @@ package view
 
 import (
 	"sort"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
 	"github.com/tcarcao/craft/v2/internal/lang"
@@ -39,6 +41,33 @@ type Node struct {
 // Text is what the reader sees: the display name when one is declared,
 // otherwise the label.
 func (n Node) Text() string { return shown(n.Label, n.Display) }
+
+// NameWidth is the width, in characters, at which writers wrap a display
+// name. Ids are never wrapped.
+const NameWidth = 24
+
+// WrapName breaks a display name into lines of at most NameWidth characters,
+// at spaces; a word longer than NameWidth keeps a line of its own. A name
+// that fits is one line, unchanged.
+func WrapName(name string) []string {
+	if utf8.RuneCountInString(name) <= NameWidth {
+		return []string{name}
+	}
+	var lines []string
+	line := ""
+	for _, w := range strings.Fields(name) {
+		switch {
+		case line == "":
+			line = w
+		case utf8.RuneCountInString(line)+1+utf8.RuneCountInString(w) <= NameWidth:
+			line += " " + w
+		default:
+			lines = append(lines, line)
+			line = w
+		}
+	}
+	return append(lines, line)
+}
 
 // shown is display when it is set, else label.
 func shown(label, display string) string {

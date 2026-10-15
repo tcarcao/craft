@@ -1,11 +1,11 @@
 flowchart LR
-    CRON(["the hourly clock"])
+    CRON(["the hourly clock that<br/>rebuilds the prices"])
     PriceProject(["price project #35;2; EU"])
     Seller(["the seller"])
     invoicearchive["invoicearchive"]
     nmf_monetization["nMF, the money engine"]
-    portfoliovalue["portfolio value"]
-    nmf_monetization_events[("nMF, the money engine events")]
+    portfoliovalue["portfolio value,<br/>recomputed on every<br/>price change"]
+    nmf_monetization_events[("nMF, the money engine<br/>events")]
     CRON -- "1. fires the hourly refresh" --> nmf_monetization
     nmf_monetization -- "2. to resolve the template prices" --> PriceProject
     nmf_monetization -- "3. writes the pricing" --> nmf_monetization

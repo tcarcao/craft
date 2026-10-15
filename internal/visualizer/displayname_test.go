@@ -2,8 +2,11 @@ package visualizer
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 )
 
 func displayNamesDoc(t *testing.T) string {
@@ -20,13 +23,14 @@ func displayNamesDoc(t *testing.T) string {
 func TestDisplayNames_Sequence(t *testing.T) {
 	puml, mmd := sequenceSource(t, displayNamesDoc(t))
 	requireLine(t, "plantuml", puml, `participant "nMF, the money engine" as nmf_monetization`)
-	requireLine(t, "plantuml", puml, `participant "portfolio value" as portfoliovalue`)
+	requireLine(t, "plantuml", puml, `participant "portfolio value,\nrecomputed on every\nprice change" as portfoliovalue`)
 	requireLine(t, "plantuml", puml, `participant "invoicearchive" as invoicearchive`)
 	requireLine(t, "plantuml", puml, `actor "the seller" as Seller`)
-	requireLine(t, "plantuml", puml, `boundary "the hourly clock" as CRON <<scheduler>>`)
+	requireLine(t, "plantuml", puml, `boundary "the hourly clock that\nrebuilds the prices" as CRON <<scheduler>>`)
 	requireLine(t, "mermaid", mmd, `participant nmf_monetization as nMF, the money engine`)
 	requireLine(t, "mermaid", mmd, `actor Seller as the seller`)
-	requireLine(t, "mermaid", mmd, `participant CRON as the hourly clock (scheduler)`)
+	requireLine(t, "mermaid", mmd, `participant CRON as the hourly clock that<br/>rebuilds the prices (scheduler)`)
+	requireLine(t, "mermaid", mmd, `participant portfoliovalue as portfolio value,<br/>recomputed on every<br/>price change`)
 }
 
 // Mermaid reads '#' in a sequence participant as the start of a comment and
@@ -58,10 +62,13 @@ func TestDisplayNames_Flow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireLine(t, "plantuml", string(p), `frame "nMF, the\nmoney engine" as nmf_monetization`)
-	requireLine(t, "plantuml", string(p), `queue "nMF, the money engine events" as nmf_monetization_events`)
+	requireLine(t, "plantuml", string(p), `frame "nMF, the money engine" as nmf_monetization`)
+	requireLine(t, "plantuml", string(p), `frame "portfolio value,\nrecomputed on every\nprice change" as portfoliovalue`)
+	requireLine(t, "plantuml", string(p), `boundary "the hourly clock that\nrebuilds the prices" as CRON <<scheduler>>`)
+	requireLine(t, "plantuml", string(p), `queue "nMF, the money engine\nevents" as nmf_monetization_events`)
 	requireLine(t, "mermaid", string(m), `nmf_monetization["nMF, the money engine"]`)
 	requireLine(t, "mermaid", string(m), `Seller(["the seller"])`)
+	requireLine(t, "mermaid", string(m), `portfoliovalue["portfolio value,<br/>recomputed on every<br/>price change"]`)
 }
 
 func TestDisplayNames_ArchitectureAndC4(t *testing.T) {
@@ -70,14 +77,17 @@ func TestDisplayNames_ArchitectureAndC4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(a), `frame "nMF, the\nmoney engine" as nmf_monetization`) {
+	if !strings.Contains(string(a), `frame "nMF, the money engine" as nmf_monetization`) ||
+		!strings.Contains(string(a), `frame "portfolio value,\nrecomputed on every\nprice change" as portfoliovalue`) {
 		t.Errorf("architecture:\n%s", a)
 	}
 	c, _, err := renderSource(doc, ViewC4, PlantUML)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"nMF, the money engine Domain"`, `Container(nmf_monetization, "nMF, the money engine", "Go Application"`, `Person(Seller, "the seller"`} {
+	for _, want := range []string{`"nMF, the money engine\nDomain"`, `Container(nmf_monetization, "nMF, the money engine", "Go Application"`, `Person(Seller, "the seller"`,
+		`Container(portfoliovalue, "portfolio value,\nrecomputed on every\nprice change", "PHP Application"`,
+		`"portfolio value,\nrecomputed on every\nprice change Domain"`} {
 		if !strings.Contains(string(c), want) {
 			t.Errorf("c4 lacks %s:\n%s", want, c)
 		}
@@ -179,9 +189,39 @@ use_case "Seller pays" {
 	}
 	m := string(out.Data)
 	requireLine(t, "mermaid", m, `Person(Seller, "the 'best' seller #1;", "External user")`)
-	requireLine(t, "mermaid", m, `Container_Boundary(money_nmf_Domain_boundary, "nMF, 'the' engine #2; Domain") {`)
+	requireLine(t, "mermaid", m, `Container_Boundary(money_nmf_Domain_boundary, "nMF, 'the' engine #2;<br/>Domain") {`)
 	requireLine(t, "mermaid", m, `Container(nmf, "nMF, 'the' engine #2;", "Go Application", "nmf [Context]")`)
 	if strings.Contains(m, "#quot;") || strings.Contains(m, "#35;") {
 		t.Errorf("entity code in C4:\n%s", m)
 	}
+}
+
+// A long display name wraps at view.NameWidth on word boundaries; a word
+// longer than the width keeps its own line, and ids never wrap.
+func TestWrapName(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want []string
+	}{
+		{"nMF, the money engine", []string{"nMF, the money engine"}},
+		{"portfolio value, recomputed on every price change", []string{"portfolio value,", "recomputed on every", "price change"}},
+		{"a supercalifragilisticexpialidocious-engine x", []string{"a", "supercalifragilisticexpialidocious-engine", "x"}},
+		{"exactly twenty-four chars", []string{"exactly twenty-four", "chars"}},
+		{"", []string{""}},
+	} {
+		if got := view.WrapName(c.in); !slices.Equal(got, c.want) {
+			t.Errorf("WrapName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Ids are never wrapped: a long id without a display name is drawn as is.
+func TestDisplayNames_LongIdNotWrapped(t *testing.T) {
+	puml, mmd := sequenceSource(t, `use_case "Long ids" {
+    when Seller opens the page
+        a_very_long_bounded_context_identifier_name asks another_very_long_bounded_context_identifier to do it
+}
+`)
+	requireLine(t, "plantuml", puml, `participant "a_very_long_bounded_context_identifier_name" as a_very_long_bounded_context_identifier_name`)
+	requireLine(t, "mermaid", mmd, `participant a_very_long_bounded_context_identifier_name as a_very_long_bounded_context_identifier_name`)
 }

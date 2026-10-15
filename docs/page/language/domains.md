@@ -100,6 +100,7 @@ Rules:
 - Display names are declared in domain blocks only, not in a service's `contexts:` list.
 - Two contexts or actors with the same display name get a `craft/lint/duplicate-display-name` warning; `""` gets `craft/lint/empty-display-name` and is ignored.
 - A context or actor declared again with another display name gets a `craft/lint/conflicting-display-name` warning. Diagrams draw the first declaration, in sorted file order.
+- A long display name wraps at about 24 characters, at spaces, in every diagram (PlantUML `\n`, Mermaid `<br/>`). A single word longer than that is not broken. The surface table heading does not wrap. Ids never wrap.
 - A file without display names renders exactly as before.
 
 ## Domain Naming

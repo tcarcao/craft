@@ -4,9 +4,9 @@ flowchart LR
     end
     subgraph portfolio["portfolio"]
         invoicearchive["invoicearchive"]
-        portfoliovalue["portfolio value"]
+        portfoliovalue["portfolio value,<br/>recomputed on every<br/>price change"]
     end
-    nmf_monetization_events[("nMF, the money engine events")]
+    nmf_monetization_events[("nMF, the money engine<br/>events")]
     nmf_monetization --> portfoliovalue
     nmf_monetization --> nmf_monetization_events
     portfoliovalue --> nmf_monetization

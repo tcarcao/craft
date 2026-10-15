@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/tcarcao/craft/v2/internal/visualizer/view"
 )
 
 // safeID renders a Mermaid-safe identifier from a human-readable name.
@@ -66,6 +68,16 @@ func (a *aliases) declare(id, label string) string {
 	}
 	a.byID[id], a.used[al] = al, true
 	return al
+}
+
+// name is the text drawn for a node: its display name wrapped at
+// view.NameWidth with <br/> (which Mermaid's flowchart, sequence and C4
+// renderers all break at), else label, which a display name never changes.
+func name(display, label string) string {
+	if display == "" {
+		return label
+	}
+	return strings.Join(view.WrapName(display), "<br/>")
 }
 
 // entity matches what Mermaid decodes as an entity code inside a quoted

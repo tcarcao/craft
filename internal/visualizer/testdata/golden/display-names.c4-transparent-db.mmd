@@ -1,6 +1,6 @@
 C4Container
     title Container Diagram - Architecture (transparent mode)
-    System_Ext(CRON, "the hourly clock", "Scheduler")
+    System_Ext(CRON, "the hourly clock that<br/>rebuilds the prices", "Scheduler")
     Person(Seller, "the seller", "External user")
     System_Boundary(Event_System_boundary, "Event_System") {
         ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")

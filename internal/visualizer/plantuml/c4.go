@@ -50,7 +50,7 @@ func C4(c view.C4) string {
 		if a.Element == view.C4ExternalSystem {
 			element = "System_Ext"
 		}
-		fmt.Fprintf(&b, "%s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), text(a.Text()), text(a.Description))
+		fmt.Fprintf(&b, "%s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), text(name(a.Display, a.Label)), text(a.Description))
 	}
 	if len(c.Actors) > 0 {
 		b.WriteString("\n")
@@ -63,7 +63,7 @@ func C4(c view.C4) string {
 		}
 		fmt.Fprintf(&b, "%s(%s, \"%s\") {\n", boundary, al.declare("system:"+sys.ID, sys.Label+" boundary"), text(sys.Label))
 		for _, g := range sys.Groups {
-			fmt.Fprintf(&b, "    Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), text(g.Text()))
+			fmt.Fprintf(&b, "    Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), text(name(g.Display, g.Label)))
 			for _, ct := range g.Containers {
 				container(&b, "        ", al, ct, sys.External)
 			}
@@ -99,5 +99,5 @@ func container(b *strings.Builder, indent string, al *aliases, c view.C4Containe
 		sprite = fmt.Sprintf(", $sprite=\"%s\"", c.Icon)
 	}
 	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\"%s)\n", indent, element, al.declare(c.ID, c.Label),
-		text(c.Text()), text(c.Technology), text(c.Description), sprite)
+		text(name(c.Display, c.Label)), text(c.Technology), text(c.Description), sprite)
 }

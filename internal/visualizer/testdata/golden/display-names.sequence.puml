@@ -3,11 +3,11 @@ skinparam backgroundColor white
 skinparam defaultFontName SansSerif
 skinparam sequenceMessageAlign center
 
-boundary "the hourly clock" as CRON <<scheduler>>
+boundary "the hourly clock that\nrebuilds the prices" as CRON <<scheduler>>
 participant "nMF, the money engine" as nmf_monetization
 boundary "price project #2; EU" as PriceProject
 actor "the seller" as Seller
-participant "portfolio value" as portfoliovalue
+participant "portfolio value,\nrecomputed on every\nprice change" as portfoliovalue
 participant "invoicearchive" as invoicearchive
 
 == Rebuild the price list ==

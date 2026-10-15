@@ -741,7 +741,7 @@ func TestJourneySemantics3_PlantUMLRenders(t *testing.T) {
 // assertMermaidRenders runs mermaid-cli on src in a container and fails when
 // mmdc exits non-zero or writes an empty SVG. It skips when no container
 // runtime is available, like plantUMLEndpoint.
-func assertMermaidRenders(t *testing.T, src string) {
+func assertMermaidRenders(t *testing.T, src string) []byte {
 	t.Helper()
 	ctx := context.Background()
 	inPath := filepath.Join(t.TempDir(), "input.mmd")
@@ -788,6 +788,7 @@ func assertMermaidRenders(t *testing.T, src string) {
 	if len(out) == 0 {
 		t.Fatal("mmdc produced empty SVG")
 	}
+	return out
 }
 
 // TestJourneySpine_Renders proves both renderers accept the v2.25 sequence
@@ -901,7 +902,17 @@ func TestDisplayNames_MermaidRenders(t *testing.T) {
 			if err != nil {
 				t.Fatalf("generate: %v", err)
 			}
-			assertMermaidRenders(t, src)
+			svg := assertMermaidRenders(t, src)
+			if v != visualizer.ViewSequence {
+				return
+			}
+			// '#' is kept (as U+FF03), not read as a comment, and <br/>
+			// breaks a long display name into lines.
+			for _, want := range []string{"price project \uff032, EU", ">recomputed on every<", ">price change<"} {
+				if !bytes.Contains(svg, []byte(want)) {
+					t.Errorf("sequence SVG lacks %q", want)
+				}
+			}
 		})
 	}
 }

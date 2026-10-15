@@ -20,7 +20,7 @@ func C4(c view.C4) string {
 		if a.Element == view.C4ExternalSystem {
 			element = "System_Ext"
 		}
-		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), c4text(a.Text()), c4text(a.Description))
+		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), c4text(name(a.Display, a.Label)), c4text(a.Description))
 	}
 	for _, sys := range c.Systems {
 		boundary := "System_Boundary"
@@ -29,7 +29,7 @@ func C4(c view.C4) string {
 		}
 		fmt.Fprintf(&b, "    %s(%s, \"%s\") {\n", boundary, al.declare("system:"+sys.ID, sys.Label+" boundary"), c4text(sys.Label))
 		for _, g := range sys.Groups {
-			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), c4text(g.Text()))
+			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), c4text(name(g.Display, g.Label)))
 			for _, ct := range g.Containers {
 				c4Container(&b, "            ", al, ct, sys.External)
 			}
@@ -55,7 +55,7 @@ func c4Container(b *strings.Builder, indent string, al *aliases, c view.C4Contai
 	if external {
 		element += "_Ext"
 	}
-	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), c4text(c.Text()), c4text(c.Technology), c4text(c.Description))
+	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), c4text(name(c.Display, c.Label)), c4text(c.Technology), c4text(c.Description))
 }
 
 // c4text makes a label safe inside a double-quoted C4 string. Mermaid's C4

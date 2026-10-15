@@ -2,14 +2,14 @@
 // journey below uses only ids, and every view shows the display names.
 actors {
     user Seller "the seller"
-    scheduler CRON "the hourly clock"
+    scheduler CRON "the hourly clock that rebuilds the prices"
     system PriceProject "price project #2; EU"
 }
 
 domains {
     billing {
         nmf_monetization "nMF, the money engine"
-        portfoliovalue "portfolio value"
+        portfoliovalue "portfolio value, recomputed on every price change"
         invoicearchive
     }
 }

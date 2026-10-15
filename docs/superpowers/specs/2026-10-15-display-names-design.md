@@ -79,13 +79,18 @@ the id is still in the source, and the element order (sorted by id) does not cha
 |---|---|---|
 | PlantUML sequence | `participant "nmf_monetization" as nmf_monetization` | `participant "nMF, the money engine" as nmf_monetization` |
 | Mermaid sequence | `participant nmf_monetization as nmf_monetization` | `participant nmf_monetization as nMF, the money engine` |
-| PlantUML flow | `frame "nmf_monetization" as nmf_monetization` | `frame "nMF, the\nmoney engine" as nmf_monetization` (wrapped as today) |
+| PlantUML flow | `frame "nmf_monetization" as nmf_monetization` | `frame "nMF, the money engine" as nmf_monetization` (wrapped at 24 characters, see below) |
 | Mermaid flow | `nmf_monetization["nmf_monetization"]` | `nmf_monetization["nMF, the money engine"]` |
 | Event queue | `queue "nmf_monetization events"` | `queue "nMF, the money engine events"` |
 | Architecture | context frame shows the id | context frame shows the display name |
 | C4 (boundaries) | container `nmf_monetization`, group `nmf_monetization Domain` | container and group show the display name |
 | C4 actors | `Person(Seller, "Seller", …)` | `Person(Seller, "the seller", …)` |
 | Surface table | `## nmf_monetization` | `## nMF, the money engine (nmf_monetization)` |
+
+A display name longer than 24 characters wraps on word boundaries wherever it is drawn: `\n` in PlantUML
+(sequence participants, flow and architecture frames, actors, event queues, C4 actors, groups and containers)
+and `<br/>` in Mermaid, whose sequence, flowchart and C4 renderers all break at it. A word longer than 24
+characters keeps its own line. Ids are never wrapped, and the surface table heading does not wrap.
 
 Actors follow the same rules (`actor "the seller" as Seller`). In C4 transparent mode a service is one
 container and no context name is drawn, so nothing changes there. Messages, notes and step labels are

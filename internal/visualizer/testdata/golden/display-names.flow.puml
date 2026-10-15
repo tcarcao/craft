@@ -26,16 +26,16 @@ skinparam actor {
 
 ' Domains as frames
 frame "invoicearchive" as invoicearchive
-frame "nMF, the\nmoney engine" as nmf_monetization
-frame "portfolio value" as portfoliovalue
+frame "nMF, the money engine" as nmf_monetization
+frame "portfolio value,\nrecomputed on every\nprice change" as portfoliovalue
 
 ' Actors
-boundary "the hourly clock" as CRON <<scheduler>>
+boundary "the hourly clock that\nrebuilds the prices" as CRON <<scheduler>>
 boundary "price project #2; EU" as PriceProject
 actor "the seller" as Seller
 
 ' Domain queues
-queue "nMF, the money engine events" as nmf_monetization_events
+queue "nMF, the money engine\nevents" as nmf_monetization_events
 
 ' Workflow flows
 CRON --> nmf_monetization : 1. fires the hourly refresh

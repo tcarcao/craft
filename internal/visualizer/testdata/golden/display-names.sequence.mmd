@@ -1,9 +1,9 @@
 sequenceDiagram
-    participant CRON as the hourly clock (scheduler)
+    participant CRON as the hourly clock that<br/>rebuilds the prices (scheduler)
     participant nmf_monetization as nMF, the money engine
     actor PriceProject as price project ＃2, EU
     actor Seller as the seller
-    participant portfoliovalue as portfolio value
+    participant portfoliovalue as portfolio value,<br/>recomputed on every<br/>price change
     participant invoicearchive as invoicearchive
     Note over CRON,invoicearchive: Rebuild the price list
     CRON->>nmf_monetization: fires the hourly refresh
