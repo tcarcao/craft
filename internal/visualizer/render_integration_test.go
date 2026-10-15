@@ -848,3 +848,60 @@ func TestJourneySpine_Renders(t *testing.T) {
 		assertRendersClean(t, endpoint, puml)
 	})
 }
+
+func displayNamesDoc(t *testing.T) *craft.CraftDoc {
+	t.Helper()
+	src, err := os.ReadFile("testdata/display-names.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	return analysis.Workspace([]analysis.FileResult{analysis.File("display-names.craft", string(src))}).Doc
+}
+
+// TestDisplayNames_PlantUMLRenders renders every view of the display-names
+// fixture on the strict PlantUML server (2.27): a quoted display name with a
+// comma as the participant text, the id as its alias. The sequence SVG must
+// carry the display name, not only the id.
+func TestDisplayNames_PlantUMLRenders(t *testing.T) {
+	endpoint := plantUMLEndpoint(t)
+	doc := displayNamesDoc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			puml, _, err := renderPUML(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			assertRendersClean(t, endpoint, string(puml))
+			if v != visualizer.ViewSequence {
+				return
+			}
+			resp, err := http.Post(endpoint+"/svg", "text/plain", bytes.NewReader(puml))
+			if err != nil {
+				t.Fatalf("POST /svg: %v", err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			for _, want := range []string{"nMF, the money engine", "the seller", "the hourly clock"} {
+				if !bytes.Contains(body, []byte(want)) {
+					t.Errorf("sequence SVG lacks %q", want)
+				}
+			}
+		})
+	}
+}
+
+// TestDisplayNames_MermaidRenders proves mermaid-cli accepts the
+// `participant <id> as <display name>` form with a comma in the name, and the
+// display names in flow, architecture and C4 nodes.
+func TestDisplayNames_MermaidRenders(t *testing.T) {
+	doc := displayNamesDoc(t)
+	for _, v := range []visualizer.View{visualizer.ViewSequence, visualizer.ViewFlow, visualizer.ViewArchitecture, visualizer.ViewC4} {
+		t.Run(string(v), func(t *testing.T) {
+			src, err := renderMermaid(doc, v)
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+			assertMermaidRenders(t, src)
+		})
+	}
+}

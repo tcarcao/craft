@@ -1,0 +1,34 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+
+boundary "the hourly clock" as CRON <<scheduler>>
+participant "nMF, the money engine" as nmf_monetization
+boundary "PriceProject" as PriceProject
+actor "the seller" as Seller
+participant "portfolio value" as portfoliovalue
+participant "invoicearchive" as invoicearchive
+
+== Rebuild the price list ==
+
+CRON -> nmf_monetization : fires the hourly refresh
+nmf_monetization -> PriceProject : to resolve the template prices [POST /pricing/resolve]
+nmf_monetization -> nmf_monetization : writes the pricing
+nmf_monetization ->> nmf_monetization : notifies "pricing.PricesChanged"
+
+== Seller reads their portfolio value ==
+
+group 1: when Seller opens the portfolio page
+Seller -> portfoliovalue : opens the portfolio page
+portfoliovalue -> nmf_monetization : for the price list [getPrices]
+nmf_monetization --> portfoliovalue : returns the price list
+portfoliovalue -> portfoliovalue : computes the value
+invoicearchive -> invoicearchive : files the snapshot
+end
+group 2: when portfoliovalue listens "pricing.PricesChanged"
+nmf_monetization ->> portfoliovalue : pricing.PricesChanged
+portfoliovalue -> portfoliovalue : recomputes every portfolio
+end
+
+@enduml

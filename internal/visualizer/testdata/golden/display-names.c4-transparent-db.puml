@@ -1,0 +1,44 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/php>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (transparent mode)
+
+System_Ext(CRON, "the hourly clock", "Scheduler")
+Person(Seller, "the seller", "External user")
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(nmf_boundary, "nmf") {
+    Container(nmf_Application, "nmf Application", "Go Application", "Core business logic for nmf domains: nmf_monetization", $sprite="go")
+    ContainerDb(nmf_pricing, "nmf_pricing", "Database", "Stores pricing data", $sprite="database")
+}
+
+System_Boundary(portfolio_boundary, "portfolio") {
+    Container(portfolio_Application, "portfolio Application", "PHP Application", "Core business logic for portfolio domains: portfoliovalue, invoicearchive", $sprite="php")
+}
+
+Rel(CRON, nmf_Application, "Triggers")
+Rel(Seller, portfolio_Application, "Triggers")
+Rel(portfolio_Application, nmf_Application, "for the price list", "Service API")
+Rel(nmf_Application, nmf_pricing, "Reads/Writes data", "Database Protocol")
+Rel(nmf_Application, Event_Queue, "pricing.PricesChanged", "Event Publishing")
+Rel(Event_Queue, portfolio_Application, "pricing.PricesChanged", "Event Delivery")
+
+@enduml

@@ -1,0 +1,53 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontName SansSerif
+
+' Domain styling with frames
+skinparam frame {
+  BackgroundColor #E1BEE7
+  BorderColor #9370DB
+  BorderThickness 2
+  FontColor black
+  FontSize 11
+  FontStyle bold
+}
+
+skinparam queue {
+  BackgroundColor #FFE4B5
+  BorderColor #666666
+  FontSize 10
+}
+
+skinparam actor {
+  BackgroundColor white
+  BorderColor black
+}
+
+' Domains as frames
+frame "invoicearchive" as invoicearchive
+frame "nMF, the\nmoney engine" as nmf_monetization
+frame "portfolio value" as portfoliovalue
+
+' Actors
+boundary "the hourly clock" as CRON <<scheduler>>
+boundary "PriceProject" as PriceProject
+actor "the seller" as Seller
+
+' Domain queues
+queue "nMF, the money engine events" as nmf_monetization_events
+
+' Workflow flows
+CRON --> nmf_monetization : 1. fires the hourly refresh
+nmf_monetization ->> PriceProject : 2. to resolve the template prices
+nmf_monetization -> nmf_monetization : 3. writes the pricing
+nmf_monetization ->> nmf_monetization_events : 4. pricing.PricesChanged
+Seller --> portfoliovalue : 5. opens the portfolio page
+portfoliovalue ->> nmf_monetization : 6. for the price list
+nmf_monetization --> portfoliovalue : 7. returns the price list
+portfoliovalue -> portfoliovalue : 8. computes the value
+invoicearchive -> invoicearchive : 9. files the snapshot
+nmf_monetization_events --> portfoliovalue : 10. pricing.PricesChanged
+portfoliovalue -> portfoliovalue : 11. recomputes every portfolio
+
+@enduml

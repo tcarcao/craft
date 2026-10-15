@@ -16,10 +16,12 @@ type Surfaces struct{ Tables []SurfaceTable }
 // source order.
 type SurfaceTable struct {
 	Subject string
-	Callers []string
-	Spec    string
-	Notes   []model.Note
-	Rows    []SurfaceRow
+	// DisplayName is the subject's declared display name; "" when none.
+	DisplayName string
+	Callers     []string
+	Spec        string
+	Notes       []model.Note
+	Rows        []SurfaceRow
 }
 
 // SurfaceRow is one operation and the use cases that use it.
@@ -96,6 +98,9 @@ func BuildSurfaces(doc *model.CraftDoc, its []interaction.Interaction) Surfaces 
 			boundary = s.Participant.ID
 		}
 		t := SurfaceTable{Subject: s.Subject, Callers: s.Callers, Spec: s.Spec, Notes: s.Notes}
+		if s.Participant != nil {
+			t.DisplayName = s.Participant.DisplayName
+		}
 		for _, op := range s.Operations {
 			// An entry is used by its whole text and, when it lists
 			// several operations, by each of them (as

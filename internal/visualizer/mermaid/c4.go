@@ -20,7 +20,7 @@ func C4(c view.C4) string {
 		if a.Element == view.C4ExternalSystem {
 			element = "System_Ext"
 		}
-		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), text(a.Label), text(a.Description))
+		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), text(a.Text()), text(a.Description))
 	}
 	for _, sys := range c.Systems {
 		boundary := "System_Boundary"
@@ -29,7 +29,7 @@ func C4(c view.C4) string {
 		}
 		fmt.Fprintf(&b, "    %s(%s, \"%s\") {\n", boundary, al.declare("system:"+sys.ID, sys.Label+" boundary"), text(sys.Label))
 		for _, g := range sys.Groups {
-			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), text(g.Label))
+			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), text(g.Text()))
 			for _, ct := range g.Containers {
 				c4Container(&b, "            ", al, ct, sys.External)
 			}
@@ -55,5 +55,5 @@ func c4Container(b *strings.Builder, indent string, al *aliases, c view.C4Contai
 	if external {
 		element += "_Ext"
 	}
-	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), text(c.Label), text(c.Technology), text(c.Description))
+	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), text(c.Text()), text(c.Technology), text(c.Description))
 }

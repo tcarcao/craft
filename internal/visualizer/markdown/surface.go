@@ -14,7 +14,13 @@ func Surfaces(v view.Surfaces) string {
 	var sb strings.Builder
 	sb.WriteString("# Surfaces\n")
 	for _, t := range v.Tables {
-		sb.WriteString("\n## " + t.Subject + "\n\n")
+		heading := t.Subject
+		if t.DisplayName != "" {
+			// The id stays beside the display name: the table is where a
+			// reader looks up the boundary in the source.
+			heading = t.DisplayName + " (" + t.Subject + ")"
+		}
+		sb.WriteString("\n## " + heading + "\n\n")
 		header := false
 		if len(t.Callers) > 0 {
 			sb.WriteString("Callers: " + strings.Join(t.Callers, ", ") + "\n")

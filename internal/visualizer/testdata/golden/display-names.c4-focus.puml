@@ -1,0 +1,51 @@
+@startuml
+!include <C4/C4_Container.puml>
+!include <tupadr3/devicons/database>
+!include <tupadr3/devicons2/postgresql>
+!include <tupadr3/devicons/mysql>
+!include <tupadr3/devicons2/redis>
+!include <tupadr3/devicons2/mongodb>
+!include <tupadr3/devicons2/go>
+!include <tupadr3/devicons2/php>
+!include <tupadr3/font-awesome-5/code>
+!include <tupadr3/font-awesome-5/mobile>
+!include <tupadr3/font-awesome-5/globe>
+!include <tupadr3/font-awesome-5/shield_alt>
+!include <tupadr3/font-awesome-5/list>
+
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Architecture (boundaries mode)
+
+System_Ext(CRON, "the hourly clock", "Scheduler")
+Person(Seller, "the seller", "External user")
+
+Enterprise_Boundary(portfolio_boundary, "portfolio") {
+    Container_Boundary(portfolio_portfoliovalue_Domain_boundary, "portfolio value Domain") {
+        Container_Ext(portfoliovalue, "portfolio value", "PHP Application", "portfoliovalue [Context]", $sprite="php")
+    }
+    Container_Boundary(portfolio_invoicearchive_Domain_boundary, "invoicearchive Domain") {
+        Container_Ext(invoicearchive, "invoicearchive", "PHP Application", "invoicearchive [Context]", $sprite="php")
+    }
+}
+
+System_Boundary(Event_System_boundary, "Event_System") {
+    ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing", $sprite="list")
+}
+
+System_Boundary(nmf_boundary, "nmf") {
+    Container_Boundary(nmf_nmf_monetization_Domain_boundary, "nMF, the money engine Domain") {
+        Container(nmf_monetization, "nMF, the money engine", "Go Application", "nmf_monetization [Context]", $sprite="go")
+    }
+    ' Data Layer
+    ContainerDb(nmf_pricing, "nmf_pricing", "Database", "Stores pricing data", $sprite="database")
+}
+
+Rel(CRON, nmf_monetization, "Triggers")
+Rel(Seller, portfoliovalue, "Triggers")
+Rel(portfoliovalue, nmf_monetization, "for the price list", "Service API")
+Rel(nmf_monetization, Event_Queue, "pricing.PricesChanged", "Event Publishing")
+Rel(Event_Queue, portfoliovalue, "pricing.PricesChanged", "Event Delivery")
+
+@enduml

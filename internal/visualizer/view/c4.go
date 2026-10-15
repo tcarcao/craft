@@ -47,7 +47,12 @@ const (
 type C4Actor struct {
 	ID, Label, Description string
 	Element                C4ActorElement
+	// Display is the actor's display name, drawn instead of Label; "" when none.
+	Display string
 }
+
+// Text is what the reader sees: the display name, or the label.
+func (a C4Actor) Text() string { return shown(a.Label, a.Display) }
 
 // C4System is a service or an infrastructure layer.
 type C4System struct {
@@ -63,7 +68,12 @@ type C4System struct {
 type C4Group struct {
 	ID, Label  string
 	Containers []C4Container
+	// Display is drawn instead of Label; "" when the context has no display name.
+	Display string
 }
+
+// Text is what the reader sees: the display name, or the label.
+func (g C4Group) Text() string { return shown(g.Label, g.Display) }
 
 // C4ContainerKind tells a writer which element to use.
 type C4ContainerKind string
@@ -81,7 +91,12 @@ type C4Container struct {
 	// Icon is a sprite name ("go", "postgresql", "globe", …); writers that
 	// cannot draw icons ignore it.
 	Icon string
+	// Display is drawn instead of Label; "" when the context has no display name.
+	Display string
 }
+
+// Text is what the reader sees: the display name, or the label.
+func (c C4Container) Text() string { return shown(c.Label, c.Display) }
 
 // C4Relation is one arrow. Technology is empty for an actor's relations.
 type C4Relation struct {
@@ -107,6 +122,8 @@ type c4Builder struct {
 	// service; in transparent mode every context a user scenario touches.
 	entries map[string]string
 
+	display map[string]string // participant ID → display name
+
 	actors map[string]bool
 	// egress holds the actors that are only the target of an ADDR egress
 	// from a service: drawn as external systems, but not as users.
@@ -120,8 +137,9 @@ func BuildC4(doc *model.CraftDoc, its []interaction.Interaction, opts C4Options)
 		doc: doc, its: its, opts: opts,
 		focused: map[string]bool{}, ctxSvc: map[string]string{},
 		containers: map[string]C4Container{}, entries: map[string]string{},
-		actors: map[string]bool{},
-		egress: map[string]bool{},
+		actors:  map[string]bool{},
+		egress:  map[string]bool{},
+		display: doc.DisplayNames(),
 	}
 	b.indexServices()
 	b.findEntries()
@@ -306,8 +324,15 @@ func (b *c4Builder) serviceSystem(svc model.Service) C4System {
 		for i, ctx := range svc.Contexts {
 			c := C4Container{ID: contextKey(svc, i), Label: ctx, Technology: tech,
 				Description: ctx + " [Context]", Kind: C4App, Icon: icon}
+			g := C4Group{ID: svc.Name + "/" + ctx, Label: ctx + " Domain"}
+			if i < len(svc.ContextIDs) {
+				if dn := b.display[svc.ContextIDs[i]]; dn != "" {
+					c.Display, g.Display = dn, dn+" Domain"
+				}
+			}
 			b.containers[c.ID] = c
-			sys.Groups = append(sys.Groups, C4Group{ID: svc.Name + "/" + ctx, Label: ctx + " Domain", Containers: []C4Container{c}})
+			g.Containers = []C4Container{c}
+			sys.Groups = append(sys.Groups, g)
 		}
 	} else if len(svc.Contexts) > 0 {
 		c := C4Container{ID: appContainerID(svc.Name), Label: svc.Name + " Application", Technology: tech,
@@ -631,7 +656,7 @@ func dedupeRelations(rels []C4Relation) []C4Relation {
 }
 
 func (b *c4Builder) actor(name string) C4Actor {
-	a := C4Actor{ID: name, Label: name, Element: C4Person, Description: "External user"}
+	a := C4Actor{ID: name, Label: name, Element: C4Person, Description: "External user", Display: b.display[name]}
 	for _, decl := range b.doc.Actors {
 		if decl.Name != name {
 			continue

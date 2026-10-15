@@ -21,7 +21,7 @@ func goldenModels(t *testing.T) map[string]string {
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no corpus models found: %v", err)
 	}
-	files = append(files, "testdata/vas.craft", "testdata/journey-semantics.craft", "testdata/journey-semantics-2.craft", "testdata/journey-semantics-3.craft")
+	files = append(files, "testdata/vas.craft", "testdata/journey-semantics.craft", "testdata/journey-semantics-2.craft", "testdata/journey-semantics-3.craft", "testdata/display-names.craft")
 	out := map[string]string{}
 	for _, f := range files {
 		out[strings.TrimSuffix(filepath.Base(f), ".craft")] = f

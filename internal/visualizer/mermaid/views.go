@@ -11,7 +11,7 @@ import (
 
 // node writes one flowchart node in the shape of its kind.
 func node(b *strings.Builder, indent string, al *aliases, n view.Node) {
-	id, label := al.declare(n.ID, n.Label), text(n.Label)
+	id, label := al.declare(n.ID, n.Label), text(n.Text())
 	switch n.Kind {
 	case view.NodeActor:
 		fmt.Fprintf(b, "%s%s([\"%s\"])\n", indent, id, label)
@@ -77,7 +77,7 @@ func Sequence(s view.Sequence) string {
 	al := newAliases()
 	b.WriteString("sequenceDiagram\n")
 	for _, p := range s.Participants {
-		kind, label := "participant", strings.ReplaceAll(p.Label, ";", ",")
+		kind, label := "participant", strings.ReplaceAll(p.Text(), ";", ",")
 		switch p.Kind {
 		case view.NodeActor:
 			kind = "actor"

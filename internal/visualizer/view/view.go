@@ -30,6 +30,22 @@ type Node struct {
 	Label     string
 	Kind      NodeKind
 	ActorType model.ActorType // for NodeActor; "" when the actor is not declared
+	// Display is the declared display name to show instead of Label (2.27);
+	// "" when none. Writers keep deriving identifiers, and views keep
+	// ordering, from Label, so a display name changes only the drawn text.
+	Display string
+}
+
+// Text is what the reader sees: the display name when one is declared,
+// otherwise the label.
+func (n Node) Text() string { return shown(n.Label, n.Display) }
+
+// shown is display when it is set, else label.
+func shown(label, display string) string {
+	if display != "" {
+		return display
+	}
+	return label
 }
 
 // EdgeStyle tells a writer how to draw an edge.
@@ -48,12 +64,13 @@ func queueID(publisher string) string { return "queue:" + publisher }
 
 // nodes collects the endpoints of interactions as nodes, keyed by ID.
 type nodeSet struct {
-	byID   map[string]Node
-	actors map[string]model.ActorType
+	byID    map[string]Node
+	actors  map[string]model.ActorType
+	display map[string]string // participant ID → display name
 }
 
 func newNodeSet(doc *model.CraftDoc) *nodeSet {
-	ns := &nodeSet{byID: map[string]Node{}, actors: map[string]model.ActorType{}}
+	ns := &nodeSet{byID: map[string]Node{}, actors: map[string]model.ActorType{}, display: doc.DisplayNames()}
 	for _, a := range doc.Actors {
 		if _, seen := ns.actors[a.Name]; !seen {
 			ns.actors[a.Name] = a.Type
@@ -67,7 +84,7 @@ func (ns *nodeSet) add(e interaction.Endpoint) string {
 	if _, ok := ns.byID[e.Key]; ok {
 		return e.Key
 	}
-	n := Node{ID: e.Key, Label: e.Name, Kind: NodeContext}
+	n := Node{ID: e.Key, Label: e.Name, Kind: NodeContext, Display: ns.display[e.Key]}
 	switch {
 	case e == interaction.External || e == interaction.Unobserved:
 		n.Kind = NodeExternal
@@ -95,7 +112,11 @@ func (ns *nodeSet) addActor(e interaction.Endpoint) string {
 func (ns *nodeSet) addQueue(publisher interaction.Endpoint) string {
 	id := queueID(publisher.Key)
 	if _, ok := ns.byID[id]; !ok {
-		ns.byID[id] = Node{ID: id, Label: publisher.Name + " events", Kind: NodeQueue}
+		n := Node{ID: id, Label: publisher.Name + " events", Kind: NodeQueue}
+		if dn := ns.display[publisher.Key]; dn != "" {
+			n.Display = dn + " events"
+		}
+		ns.byID[id] = n
 	}
 	return id
 }

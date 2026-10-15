@@ -123,30 +123,30 @@ func Flow(f view.Flow) string {
 
 	b.WriteString("' Domains as frames\n")
 	for _, n := range f.Contexts {
-		fmt.Fprintf(&b, "frame \"%s\" as %s\n", text(wrap(n.Label, 15)), al.declare(n.ID, n.Label))
+		fmt.Fprintf(&b, "frame \"%s\" as %s\n", text(wrap(n.Text(), 15)), al.declare(n.ID, n.Label))
 	}
 	b.WriteString("\n")
 	if len(f.Actors) > 0 {
 		b.WriteString("' Actors\n")
 		for _, n := range f.Actors {
-			fmt.Fprintf(&b, "%s \"%s\" as %s%s\n", actorElement(n.ActorType), text(n.Label), al.declare(n.ID, n.Label), actorStereotype(n.ActorType))
+			fmt.Fprintf(&b, "%s \"%s\" as %s%s\n", actorElement(n.ActorType), text(n.Text()), al.declare(n.ID, n.Label), actorStereotype(n.ActorType))
 		}
 		b.WriteString("\n")
 	}
 	for _, n := range f.Externals {
-		fmt.Fprintf(&b, "cloud \"%s\" as %s\n\n", text(n.Label), al.declare(n.ID, n.Label))
+		fmt.Fprintf(&b, "cloud \"%s\" as %s\n\n", text(n.Text()), al.declare(n.ID, n.Label))
 	}
 	if len(f.Queues) > 0 {
 		b.WriteString("' Domain queues\n")
 		for _, n := range f.Queues {
-			fmt.Fprintf(&b, "queue \"%s\" as %s\n", text(n.Label), al.declare(n.ID, n.Label))
+			fmt.Fprintf(&b, "queue \"%s\" as %s\n", text(n.Text()), al.declare(n.ID, n.Label))
 		}
 		b.WriteString("\n")
 	}
 	if len(f.Stores) > 0 {
 		b.WriteString("' Data stores\n")
 		for _, n := range f.Stores {
-			fmt.Fprintf(&b, "database \"%s\" as %s\n", text(n.Label), al.declare(n.ID, n.Label))
+			fmt.Fprintf(&b, "database \"%s\" as %s\n", text(n.Text()), al.declare(n.ID, n.Label))
 		}
 		b.WriteString("\n")
 	}
@@ -198,7 +198,7 @@ func Architecture(a view.Architecture) string {
 		for _, g := range a.Groups {
 			fmt.Fprintf(&b, "rectangle \"%s\" as %s {\n", text(wrap(g.Service.Label, 20)), al.declare(g.Service.ID, g.Service.Label))
 			for _, n := range g.Contexts {
-				fmt.Fprintf(&b, "  %s \"%s\" as %s\n", archElement(n), text(wrap(n.Label, 20)), al.declare(n.ID, n.Label))
+				fmt.Fprintf(&b, "  %s \"%s\" as %s\n", archElement(n), text(wrap(n.Text(), 20)), al.declare(n.ID, n.Label))
 			}
 			b.WriteString("}\n")
 		}
@@ -207,14 +207,14 @@ func Architecture(a view.Architecture) string {
 	if len(a.Ungrouped) > 0 {
 		b.WriteString("' Ungrouped subdomains\n")
 		for _, n := range a.Ungrouped {
-			fmt.Fprintf(&b, "%s \"%s\" as %s\n", archElement(n), text(wrap(n.Label, 20)), al.declare(n.ID, n.Label))
+			fmt.Fprintf(&b, "%s \"%s\" as %s\n", archElement(n), text(wrap(n.Text(), 20)), al.declare(n.ID, n.Label))
 		}
 		b.WriteString("\n")
 	}
 	if len(a.Queues) > 0 {
 		b.WriteString("' Domain queues\n")
 		for _, n := range a.Queues {
-			fmt.Fprintf(&b, "queue \"%s\" as %s\n", text(n.Label), al.declare(n.ID, n.Label))
+			fmt.Fprintf(&b, "queue \"%s\" as %s\n", text(n.Text()), al.declare(n.ID, n.Label))
 		}
 		b.WriteString("\n")
 	}
@@ -248,7 +248,7 @@ func Sequence(s view.Sequence) string {
 		case view.NodeStore:
 			kind = "database"
 		}
-		fmt.Fprintf(&b, "%s \"%s\" as %s%s\n", kind, text(p.Label), al.declare(p.ID, p.Label), stereo)
+		fmt.Fprintf(&b, "%s \"%s\" as %s%s\n", kind, text(p.Text()), al.declare(p.ID, p.Label), stereo)
 	}
 	if len(s.Participants) > 0 {
 		b.WriteString("\n")

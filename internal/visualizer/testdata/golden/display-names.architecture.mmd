@@ -1,0 +1,13 @@
+flowchart LR
+    subgraph nmf["nmf"]
+        nmf_monetization["nMF, the money engine"]
+    end
+    subgraph portfolio["portfolio"]
+        invoicearchive["invoicearchive"]
+        portfoliovalue["portfolio value"]
+    end
+    nmf_monetization_events[("nMF, the money engine events")]
+    nmf_monetization --> portfoliovalue
+    nmf_monetization --> nmf_monetization_events
+    portfoliovalue --> nmf_monetization
+    nmf_monetization_events --> portfoliovalue

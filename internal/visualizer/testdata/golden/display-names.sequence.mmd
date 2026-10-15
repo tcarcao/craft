@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant CRON as the hourly clock (scheduler)
+    participant nmf_monetization as nMF, the money engine
+    actor PriceProject as PriceProject
+    actor Seller as the seller
+    participant portfoliovalue as portfolio value
+    participant invoicearchive as invoicearchive
+    Note over CRON,invoicearchive: Rebuild the price list
+    CRON->>nmf_monetization: fires the hourly refresh
+    nmf_monetization->>PriceProject: to resolve the template prices [POST /pricing/resolve]
+    nmf_monetization->>nmf_monetization: writes the pricing
+    nmf_monetization-)nmf_monetization: notifies "pricing.PricesChanged"
+    Note over CRON,invoicearchive: Seller reads their portfolio value
+    rect rgb(245, 245, 245)
+    Note over CRON,invoicearchive: 1: when Seller opens the portfolio page
+    Seller->>portfoliovalue: opens the portfolio page
+    portfoliovalue->>nmf_monetization: for the price list [getPrices]
+    nmf_monetization-->>portfoliovalue: returns the price list
+    portfoliovalue->>portfoliovalue: computes the value
+    invoicearchive->>invoicearchive: files the snapshot
+    end
+    rect rgb(245, 245, 245)
+    Note over CRON,invoicearchive: 2: when portfoliovalue listens "pricing.PricesChanged"
+    nmf_monetization-)portfoliovalue: pricing.PricesChanged
+    portfoliovalue->>portfoliovalue: recomputes every portfolio
+    end

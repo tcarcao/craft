@@ -1,0 +1,20 @@
+C4Container
+    title Container Diagram - Architecture (transparent mode)
+    System_Ext(CRON, "the hourly clock", "Scheduler")
+    Person(Seller, "the seller", "External user")
+    System_Boundary(Event_System_boundary, "Event_System") {
+        ContainerQueue(Event_Queue, "Event_Queue", "Message Queue", "Handles asynchronous event processing and routing")
+    }
+    System_Boundary(nmf_boundary, "nmf") {
+        Container(nmf_Application, "nmf Application", "Go Application", "Core business logic for nmf domains: nmf_monetization")
+        ContainerDb(nmf_pricing, "nmf_pricing", "Database", "Stores pricing data")
+    }
+    System_Boundary(portfolio_boundary, "portfolio") {
+        Container(portfolio_Application, "portfolio Application", "PHP Application", "Core business logic for portfolio domains: portfoliovalue, invoicearchive")
+    }
+    Rel(CRON, nmf_Application, "Triggers")
+    Rel(Seller, portfolio_Application, "Triggers")
+    Rel(portfolio_Application, nmf_Application, "for the price list", "Service API")
+    Rel(nmf_Application, nmf_pricing, "Reads/Writes data", "Database Protocol")
+    Rel(nmf_Application, Event_Queue, "pricing.PricesChanged", "Event Publishing")
+    Rel(Event_Queue, portfolio_Application, "pricing.PricesChanged", "Event Delivery")
