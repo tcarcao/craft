@@ -55,13 +55,16 @@ A use case, domain or surface whose `}` is missing also stops at a declaration t
 ## 3. Actors
 
 ```ebnf
-actor_def        = 'actor' actor_type actor_name NL* ;
+actor_def        = 'actor' actor_type actor_name display_name? NL* ;
 actors_def       = 'actors' '{' NL* actor_definition_list '}' NL* ;
 actor_definition_list = actor_definition (NL+ actor_definition)* NL* ;
-actor_definition = actor_type actor_name ;
+actor_definition = actor_type actor_name display_name? ;
 actor_type       = identifier ;       (* known kinds: user, system, service, scheduler, tool, infra *)
 actor_name       = identifier ;
+display_name     = STRING ;           (* 2.27; on the name's line *)
 ```
+
+**Display names (2.27).** An actor or a bounded context may carry a quoted display name after its name, on the same line: `user Seller "the seller"`, `nmf_monetization "nMF, the money engine"`. Diagrams, hovers and the surface table show it in place of the id; the id stays the identity everywhere else. A string on a later line is still `craft/syntax/unexpected-token`. `""` is ignored with a `craft/lint/empty-display-name` warning, and two declarations with the same display name get `craft/lint/duplicate-display-name`.
 
 The actor-type slot accepts any identifier (grammar ruling Q5: tooling decides the known set). Six kinds are known (2.24 added the last three):
 
@@ -101,7 +104,7 @@ domain_block_list = domain_block (NL+ domain_block)* NL* ;
 domain_block      = domain_name '{' NL* bounded_context_list '}' ;
 bounded_context_list = bounded_context (NL+ bounded_context)* NL* ;
 domain_name       = identifier ;
-bounded_context   = identifier ;
+bounded_context   = identifier display_name? ;   (* display_name: §3, 2.27 *)
 ```
 
 Examples:
@@ -113,7 +116,7 @@ domain Billing {
 
 domains {
   Identity {
-    Authentication
+    Authentication "sign-in"
     Profile
   }
   Catalog {

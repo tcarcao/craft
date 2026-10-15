@@ -605,6 +605,21 @@ func (a ActorDecl) Name() *SyntaxToken {
 	return a.node.ChildToken(SyntaxKindIdent)
 }
 
+// DisplayName returns the actor's display name (unquoted) and its string
+// token, or "" and nil when the declaration has none (2.27).
+func (a ActorDecl) DisplayName() (string, *SyntaxToken) {
+	return displayName(a.node)
+}
+
+// displayName reads the optional display-name string of a declaration node.
+func displayName(n SyntaxNode) (string, *SyntaxToken) {
+	tok := n.ChildToken(SyntaxKindString)
+	if tok == nil {
+		return "", nil
+	}
+	return unquoteStringText(tok.Text()), tok
+}
+
 // Line returns the 1-based source line of the actor name token using li.
 func (a ActorDecl) Line(li green.LineIndex) int {
 	tok := a.Name()
@@ -662,6 +677,10 @@ type BoundedContext struct{ node SyntaxNode }
 
 // Name returns the identifier token for the bounded context's name.
 func (bc BoundedContext) Name() *SyntaxToken { return bc.node.ChildToken(SyntaxKindIdent) }
+
+// DisplayName returns the bounded context's display name (unquoted) and its
+// string token, or "" and nil when the declaration has none (2.27).
+func (bc BoundedContext) DisplayName() (string, *SyntaxToken) { return displayName(bc.node) }
 
 // RefDecl is a typed view over a SyntaxKindRef node — a name reference wrapped
 // by the parser at reference sites such as contexts: field values.

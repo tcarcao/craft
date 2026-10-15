@@ -229,9 +229,19 @@ func (p *Parser) parseActorStatement() []model.Diagnostic {
 		return diags
 	}
 	p.consumeAs(SyntaxKindIdent)
+	p.consumeDisplayName(nameTok)
 
 	p.builder.FinishNode()
 	return diags
+}
+
+// consumeDisplayName consumes the optional display name of a declared bounded
+// context or actor: a string that starts on the name's line (2.27). A string
+// on a later line is left for the caller, which reports it as before.
+func (p *Parser) consumeDisplayName(nameTok lexer.Token) {
+	if tok := p.peek(); tok.Type == lexer.TokenString && tok.Line == nameTok.Line {
+		p.consumeAs(SyntaxKindString)
+	}
 }
 
 // parseImportStatement parses: import "<path>"
@@ -310,6 +320,7 @@ func (p *Parser) parseActorsBlock() []model.Diagnostic {
 			continue
 		}
 		p.consumeAs(SyntaxKindIdent)
+		p.consumeDisplayName(nameTok)
 		p.builder.FinishNode()
 	}
 
@@ -473,10 +484,15 @@ func (p *Parser) parseBoundedContextList() []model.Diagnostic {
 				seen[tok.Value] = true
 				p.builder.StartNode(SyntaxKindBoundedContext)
 				p.consumeAs(SyntaxKindIdent)
+				p.consumeDisplayName(tok)
 				p.builder.FinishNode()
 			} else {
-				// Duplicate: consume but do not wrap (first occurrence wins).
+				// Duplicate: consume but do not wrap (first occurrence wins),
+				// together with its display name.
 				p.consume()
+				if next := p.peek(); next.Type == lexer.TokenString && next.Line == tok.Line {
+					p.consume()
+				}
 			}
 		} else if tok.Type == lexer.TokenError {
 			diags = append(diags, p.diagUnexpected(tok, "bounded context name or `}`"))
