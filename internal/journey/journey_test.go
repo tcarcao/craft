@@ -66,6 +66,14 @@ func TestBuild(t *testing.T) {
 				uc("Z", "j", "  when z listens e.ToZ, e.W\n    z notifies e.Z\n"),
 			"b.craft": uc("X", "j", "  when x listens e.Y\n    x notifies e.X\n") +
 				uc("Y", "j", "  when y listens e.X\n    y notifies e.Y\n    y notifies e.ToZ\n")}, []string{"X", "Y", "Z", "W"}, true},
+		// A call to a member's receives orders the caller first (§17.2).
+		{"call to a member's receives", map[string]string{"a.craft": uc("Callee", "j", "  when c receives a request to rebuild  [rebuild]\n    c does it\n") + uc("Caller", "j", "  when S does\n    a asks c to rebuild it  [rebuild]\n")}, []string{"Caller", "Callee"}, false},
+		{"call matches an item of a list", map[string]string{"a.craft": uc("Callee", "j", "  when c receives a request to rebuild  [rebuild]\n    c does it\n") + uc("Caller", "j", "  when S does\n    a asks c to drop and rebuild it  [drop, rebuild]\n")}, []string{"Caller", "Callee"}, false},
+		{"call to another operation adds no edge", map[string]string{"a.craft": uc("Callee", "j", "  when c receives a request to rebuild  [rebuild]\n    c does it\n") + uc("Caller", "j", "  when S does\n    a asks c to drop it  [drop]\n")}, []string{"Callee", "Caller"}, false},
+		{"call to another context adds no edge", map[string]string{"a.craft": uc("Callee", "j", "  when c receives a request to rebuild  [rebuild]\n    c does it\n") + uc("Caller", "j", "  when S does\n    a asks d to rebuild it  [rebuild]\n")}, []string{"Callee", "Caller"}, false},
+		// Only a receives trigger is a callee: a plain trigger whose first
+		// action is the called context is not guessed.
+		{"plain trigger is no callee", map[string]string{"a.craft": uc("Callee", "j", "  when S needs a rebuild\n    c asks e to rebuild it  [rebuild]\n") + uc("Caller", "j", "  when S does\n    a asks c to rebuild it  [rebuild]\n")}, []string{"Callee", "Caller"}, false},
 		{"other journeys ignored", map[string]string{"a.craft": uc("A", "j", "  when S does\n    a does it\n") + uc("Z", "k", "  when S does\n    z does it\n")}, []string{"A"}, false},
 	}
 	for _, c := range cases {
@@ -84,6 +92,15 @@ func TestBuild_Edges(t *testing.T) {
 	}
 	if j.Members[0].UseCase != 0 || j.Members[0].SourceURI != "a.craft" {
 		t.Errorf("member 0 = %+v", j.Members[0])
+	}
+}
+
+func TestBuild_CallEdge(t *testing.T) {
+	j := journey.Build(docOf(t, map[string]string{"a.craft": uc("Callee", "j", "  when c receives a request  [GET /x, rebuild]\n    c does it\n") +
+		uc("Caller", "j", "  when S does\n    a asks c to drop and rebuild it  [drop, rebuild, GET /x]\n")}), "j")
+	want := []model.JourneyEdge{{From: 0, To: 1, Kind: model.JourneyEdgeCall, Event: "GET /x"}, {From: 0, To: 1, Kind: model.JourneyEdgeCall, Event: "rebuild"}}
+	if !slices.Equal(j.Edges, want) || order(j)[0] != "Caller" {
+		t.Errorf("order %v edges = %+v", order(j), j.Edges)
 	}
 }
 

@@ -140,6 +140,6 @@ func TestV225Exports(t *testing.T) {
 	if craft.TagFormerlyJourney != "formerly_journey" {
 		t.Errorf("TagFormerlyJourney = %q", craft.TagFormerlyJourney)
 	}
-	_ = []craft.JourneyEdgeKind{craft.JourneyEdgeEvent, craft.JourneyEdgeStore, craft.JourneyEdgeContinues}
+	_ = []craft.JourneyEdgeKind{craft.JourneyEdgeEvent, craft.JourneyEdgeStore, craft.JourneyEdgeContinues, craft.JourneyEdgeCall, craft.JourneyEdgeIncludes}
 	_ = craft.LinkIncludes
 }

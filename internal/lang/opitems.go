@@ -40,6 +40,20 @@ func SplitOperationItems(body string) []OpItem {
 	return out
 }
 
+// OperationKeys returns the items of a bracket body as compared across use
+// cases: each item trimmed, with every run of whitespace made one space, and
+// empty items dropped. A call and the receives it reaches share an operation
+// when they share a key (spec §17.2).
+func OperationKeys(body string) []string {
+	var out []string
+	for _, it := range SplitOperationItems(body) {
+		if k := strings.Join(strings.Fields(it.Text), " "); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 // ParseOperationItem splits one item into its protocol verb and payload, as
 // the parser splits a whole bracket. An ADDR address loses its quotes.
 func ParseOperationItem(text string) (verb, payload string) {

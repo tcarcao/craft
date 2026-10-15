@@ -142,6 +142,8 @@ const (
 	JourneyEdgeEvent     = model.JourneyEdgeEvent
 	JourneyEdgeStore     = model.JourneyEdgeStore
 	JourneyEdgeContinues = model.JourneyEdgeContinues
+	JourneyEdgeCall      = model.JourneyEdgeCall
+	JourneyEdgeIncludes  = model.JourneyEdgeIncludes
 )
 
 // KnownActorTypes lists the actor kinds Craft recognises, in presentation

@@ -12,8 +12,9 @@ type (
 )
 
 // BuildJourney orders the use cases whose journey tag is slug by the
-// hand-offs between them (publish→listen, store write→read, continues
-// links), as spec §17.2 says: connected members first, and among ready ones
+// hand-offs between them (publish→listen, store write→read, an asks to a
+// member's receives with the same operation, continues and includes links;
+// each edge carries its JourneyEdgeKind), as spec §17.2 says: connected members first, and among ready ones
 // a successor of the member placed last, then the namesake (the member
 // whose title, or else whose file, is named after the journey), then file
 // and line; unconnected members last, namesake first. The hub orders flows

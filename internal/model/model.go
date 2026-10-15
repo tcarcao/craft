@@ -216,6 +216,8 @@ const (
 	JourneyEdgeEvent     = lang.JourneyEdgeEvent
 	JourneyEdgeStore     = lang.JourneyEdgeStore
 	JourneyEdgeContinues = lang.JourneyEdgeContinues
+	JourneyEdgeCall      = lang.JourneyEdgeCall
+	JourneyEdgeIncludes  = lang.JourneyEdgeIncludes
 )
 
 // JourneyMember is one use case of a journey spine.
@@ -225,13 +227,14 @@ type JourneyMember struct {
 	SourceURI string `json:"sourceUri,omitempty"`
 }
 
-// JourneyEdge connects two members: From's publish, store write or
-// continues link reaches To. From and To index Journey.Members.
+// JourneyEdge connects two members: From's publish, store write, call,
+// continues link or includes link reaches To. From and To index
+// Journey.Members.
 type JourneyEdge struct {
 	From  int             `json:"from"`
 	To    int             `json:"to"`
 	Kind  JourneyEdgeKind `json:"kind"`
-	Event string          `json:"event,omitempty"` // the event or store ref; "" for continues
+	Event string          `json:"event,omitempty"` // the event, store ref or operation; "" for continues and includes
 }
 
 // Journey is the spine of one journey slug: its members in spine order.

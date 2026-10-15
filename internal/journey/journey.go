@@ -1,5 +1,7 @@
 // Package journey builds a journey spine: the use cases that share a
-// `journey` tag, ordered by the hand-offs between them (spec §17.2).
+// `journey` tag, ordered by the hand-offs between them: events, store
+// hand-offs, calls to a member's receives, continues and includes links
+// (spec §17.2).
 package journey
 
 import (
@@ -87,15 +89,36 @@ type handoffs struct {
 	listens   map[string]bool // events of its listens triggers
 	readStore map[string]bool // the subset read from a store
 	continues []model.UseCaseRef
+	includes  []model.UseCaseRef
+	calls     []call        // the operations of its asks, in source order
+	receives  map[call]bool // the operations its receives triggers answer
+}
+
+// call is one operation asked of, or received by, a context: the context's
+// resolved ID (or its name as written) and one operation key.
+type call struct{ context, op string }
+
+// contextKey is what a call and a receives compare their context by: the
+// resolved participant, else the name as written.
+func contextKey(written string, p *model.Participant) string {
+	if p != nil {
+		return p.ID
+	}
+	return written
 }
 
 // collect gathers uc's hand-offs, pairing as interaction.Derive does: an
 // async action with a subject publishes each event of its list; a listens
 // trigger with a subject listens to each item of its list.
 func collect(uc model.UseCase) handoffs {
-	h := handoffs{publishes: map[string]bool{}, stores: map[string]bool{}, listens: map[string]bool{}, readStore: map[string]bool{}}
+	h := handoffs{publishes: map[string]bool{}, stores: map[string]bool{}, listens: map[string]bool{}, readStore: map[string]bool{}, receives: map[call]bool{}}
 	for _, sc := range uc.Scenarios {
 		t := sc.Trigger
+		if t.Type == lang.TriggerReceive && t.Context != "" && t.Operation != nil {
+			for _, op := range lang.OperationKeys(t.Operation.Text) {
+				h.receives[call{contextKey(t.Context, t.Subject), op}] = true
+			}
+		}
 		if t.Type == lang.TriggerDomainListen && t.Context != "" {
 			for _, ev := range t.EventList() {
 				if ev != "" {
@@ -107,6 +130,11 @@ func collect(uc model.UseCase) handoffs {
 			}
 		}
 		for _, a := range sc.Actions() {
+			if a.Type == lang.ActionSync && a.TargetContext != "" && a.Operation != nil {
+				for _, op := range lang.OperationKeys(a.Operation.Text) {
+					h.calls = append(h.calls, call{contextKey(a.TargetContext, a.To), op})
+				}
+			}
 			if a.Type != lang.ActionAsync || a.Context == "" {
 				continue
 			}
@@ -120,8 +148,12 @@ func collect(uc model.UseCase) handoffs {
 			}
 		}
 		sc.EachLink(func(l *model.Link) {
-			if l.Kind == model.LinkContinues && l.Target != nil {
+			switch {
+			case l.Target == nil:
+			case l.Kind == model.LinkContinues:
 				h.continues = append(h.continues, *l.Target)
+			case l.Kind == model.LinkIncludes:
+				h.includes = append(h.includes, *l.Target)
 			}
 		})
 	}
@@ -129,8 +161,7 @@ func collect(uc model.UseCase) handoffs {
 }
 
 // edgesBetween lists the edges between members (From/To index members), in
-// member order, deduplicated. An includes link adds none: the included flow
-// is drawn in place by its ref frame.
+// member order, deduplicated.
 func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 	hs := make([]handoffs, len(members))
 	for k, m := range members {
@@ -158,6 +189,11 @@ func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 			for _, r := range hs[a].continues {
 				if r.Name == to.Name && r.SourceURI == to.SourceURI {
 					add(model.JourneyEdge{From: a, To: b, Kind: model.JourneyEdgeContinues})
+				}
+			}
+			for _, c := range hs[a].calls {
+				if hs[b].receives[c] {
+					add(model.JourneyEdge{From: a, To: b, Kind: model.JourneyEdgeCall, Event: c.op})
 				}
 			}
 			for _, ev := range events {

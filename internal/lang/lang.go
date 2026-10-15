@@ -159,4 +159,9 @@ const (
 	JourneyEdgeEvent     JourneyEdgeKind = "event"
 	JourneyEdgeStore     JourneyEdgeKind = "store"
 	JourneyEdgeContinues JourneyEdgeKind = "continues"
+	// JourneyEdgeCall: an asks reaches another member's receives trigger
+	// with the same operation.
+	JourneyEdgeCall JourneyEdgeKind = "call"
+	// JourneyEdgeIncludes: an includes link to another member.
+	JourneyEdgeIncludes JourneyEdgeKind = "includes"
 )
