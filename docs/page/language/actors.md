@@ -78,6 +78,21 @@ actors {
 }
 ```
 
+## Display names (2.27)
+
+An actor may carry a display name, a quoted string after its name on the same line. Diagrams and hovers show it; use cases keep the name:
+
+```craft
+actors {
+  user Seller        "the seller"
+  scheduler CRON     "the hourly clock"
+}
+
+actor system AdCore "OLX ad-core"
+```
+
+PlantUML draws `actor "the seller" as Seller`. See [Domains](./domains.md#display-names-2-27) for the rules, which are the same for bounded contexts.
+
 ## Using Actors in Use Cases
 
 Actors appear in external triggers:

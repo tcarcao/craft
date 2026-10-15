@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+**Why a minor version (v2.27.0).** New optional syntax, additive `pkg/craft` fields and a method, and two new lint warnings. A string after a context or actor name was a syntax error before, so no file that parsed changes meaning, and a model without display names projects and renders byte-for-byte as in 2.26.1 (checked on re-arch-central: every diagram identical).
+
+### Added
+- **Display names for bounded contexts and actors.** A quoted string after the name, on the same line, in a domain body or an actor declaration: `nmf_monetization "nMF, the money engine"`, `user Seller "the seller"`, `actor system AdCore "OLX ad-core"`. Declared once in the registry; journey files keep the ids. A string on a later line stays `craft/syntax/unexpected-token`. Display names are not read from a service's `contexts:` list.
+- **`pkg/craft`**: `Domain.DisplayNames` (bounded-context name to display name), `Actor.DisplayName`, `Participant.DisplayName` (set on resolved trigger subjects, action subjects and targets, store and surface participants), and `CraftDoc.DisplayNames()` keyed by participant ID (`<domain>/<bc>` or the actor name). All are optional JSON keys (`displayNames`, `displayName`).
+- **Diagnostics.** `craft/lint/duplicate-display-name` (warning: two contexts or actors share a display name; reported on each later one in sorted file order) and `craft/lint/empty-display-name` (warning: `""` declares none). See `docs/DIAGNOSTICS.md`.
+- **Language server.** Hover on a context or actor reference, an actor declaration, or a bounded context in a domain body adds `display name: …`. Context and actor completion details end with `: <display name>`. `craft.extractWorkspace` reports `displayName` on bounded-context and actor entries, and the partial DSL it rebuilds for a domain keeps the display names.
+
+### Changed — diagrams
+- **Display names are drawn instead of ids**, while diagram identifiers and element order still come from the id: PlantUML `participant "nMF, the money engine" as nmf_monetization`, `actor "the seller" as Seller`; Mermaid `participant nmf_monetization as nMF, the money engine`, `nmf_monetization["nMF, the money engine"]`. Flow frames, architecture frames, event queues (`nMF, the money engine events`), C4 containers, context groups and actors use them too; a C4 container's description keeps the id. The surface table heading reads `nMF, the money engine (nmf_monetization)`. Messages and notes are not rewritten.
+
 ## [2.26.1] — 2026-10-15
 
 ### Fixed

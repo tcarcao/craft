@@ -73,6 +73,34 @@ domain Payment {
 bounded contexts help you organize related capabilities and identify bounded contexts.
 :::
 
+## Display names (2.27)
+
+A bounded context id is the right identity for the model, but a reader may not recognise it. Give it a display name once, in the domain block, as a quoted string after the name on the same line:
+
+```craft
+domains {
+  billing {
+    nmf_monetization  "nMF, the money engine"
+    portfoliovalue    "portfolio value"
+    invoicearchive
+  }
+}
+```
+
+Use cases keep using the id (`nmf_monetization asks …`). Diagrams show the display name and keep the id as the diagram identifier:
+
+```plantuml
+participant "nMF, the money engine" as nmf_monetization
+```
+
+Mermaid writes `participant nmf_monetization as nMF, the money engine`. Flow, architecture and C4 nodes and event queues show the display name too, and the surface table heading reads `nMF, the money engine (nmf_monetization)`. Hover and completion in the editor show it.
+
+Rules:
+- The string must start on the name's line. A string on its own line is a syntax error.
+- Display names are declared in domain blocks only, not in a service's `contexts:` list.
+- Two contexts or actors with the same display name get a `craft/lint/duplicate-display-name` warning; `""` gets `craft/lint/empty-display-name` and is ignored.
+- A file without display names renders exactly as before.
+
 ## Domain Naming
 
 ### Use Business Terms
