@@ -191,6 +191,11 @@ func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 					add(model.JourneyEdge{From: a, To: b, Kind: model.JourneyEdgeContinues})
 				}
 			}
+			for _, r := range hs[a].includes {
+				if r.Name == to.Name && r.SourceURI == to.SourceURI {
+					add(model.JourneyEdge{From: a, To: b, Kind: model.JourneyEdgeIncludes})
+				}
+			}
 			for _, c := range hs[a].calls {
 				if hs[b].receives[c] {
 					add(model.JourneyEdge{From: a, To: b, Kind: model.JourneyEdgeCall, Event: c.op})

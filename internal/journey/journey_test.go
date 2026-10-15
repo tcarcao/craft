@@ -42,7 +42,7 @@ func TestBuild(t *testing.T) {
 		{"ties by file then line", map[string]string{"b.craft": uc("Y", "j", "  when S does\n    y does it\n"), "a.craft": uc("X", "j", "  when S does\n    x does it\n")}, []string{"X", "Y"}, false},
 		{"members across files", map[string]string{"a.craft": uc("L", "j", "  when l listens e.A\n    l does it\n"), "b.craft": uc("P", "j", "  when S does\n    p notifies e.A\n")}, []string{"P", "L"}, false},
 		{"continues", map[string]string{"a.craft": uc("Checkout", "j", "  when S pays\n    p does it\n") + uc("Promote", "j", "  when S promotes\n    q does it\n    continues \"Checkout\"\n")}, []string{"Promote", "Checkout"}, false},
-		{"includes adds no edge", map[string]string{"a.craft": uc("Pre", "j", "  when S opens\n    p does it\n") + uc("Main", "j", "  when S starts\n    includes \"Pre\"\n    q does it\n")}, []string{"Pre", "Main"}, false},
+		{"includes", map[string]string{"a.craft": uc("Pre", "j", "  when S opens\n    p does it\n") + uc("Main", "j", "  when S starts\n    includes \"Pre\"\n    q does it\n")}, []string{"Main", "Pre"}, false},
 		{"store", map[string]string{"a.craft": uc("Read", "j", "  when r listens store.q.inserted\n    r does it\n") + uc("Write", "j", "  when S does\n    w notifies store.q.inserted\n")}, []string{"Write", "Read"}, false},
 		{"roster member", map[string]string{"a.craft": uc("L", "j", "  when l listens e.X, e.A\n    l does it\n") + uc("P", "j", "  when S does\n    p notifies e.A\n")}, []string{"P", "L"}, false},
 		{"cycle", map[string]string{"a.craft": uc("A", "j", "  when a listens e.B\n    a notifies e.A\n") + uc("B", "j", "  when b listens e.A\n    b notifies e.B\n")}, []string{"A", "B"}, true},
@@ -92,6 +92,14 @@ func TestBuild_Edges(t *testing.T) {
 	}
 	if j.Members[0].UseCase != 0 || j.Members[0].SourceURI != "a.craft" {
 		t.Errorf("member 0 = %+v", j.Members[0])
+	}
+}
+
+func TestBuild_IncludesEdge(t *testing.T) {
+	j := journey.Build(docOf(t, map[string]string{"a.craft": uc("Pre", "j", "  when S opens\n    p does it\n") + uc("Main", "j", "  when S starts\n    includes \"Pre\"\n    q does it\n")}), "j")
+	want := []model.JourneyEdge{{From: 0, To: 1, Kind: model.JourneyEdgeIncludes}}
+	if !slices.Equal(j.Edges, want) {
+		t.Errorf("edges = %+v", j.Edges)
 	}
 }
 
