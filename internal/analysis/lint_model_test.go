@@ -266,14 +266,16 @@ func TestLintModel_JourneyUnconnected(t *testing.T) {
 		if d.Severity != model.SeverityHint || d.Range.Start.Line != line || d.Range.Start.Character != 13 || d.Range.End.Character != 13+len("seller-j") {
 			t.Errorf("diag %d = %+v", i, d)
 		}
-		if !strings.Contains(d.Message, "`seller-j`") {
+		if !strings.Contains(d.Message, "`seller-j`") || !strings.Contains(d.Message, "`receives`") || !strings.Contains(d.Message, "includes") {
 			t.Errorf("message %q", d.Message)
 		}
 	}
 	one := journeyUC("A", "j", "  when S does\n    a does it\n")
 	chain := journeyUC("A", "j", "  when S does\n    a notifies e.A\n") + journeyUC("B", "j", "  when b listens e.A\n    b does it\n")
 	quoted := journeyUC("A", "\"j\"", "  when S does\n    a notifies e.A\n    continues \"B\"\n") + journeyUC("B", "\"j\"", "  when S does\n    b does it\n")
-	for name, src := range map[string]string{"one member": one, "chain": chain, "continues": quoted} {
+	call := journeyUC("A", "j", "  when S does\n    a asks c to rebuild it  [rebuild]\n") + journeyUC("B", "j", "  when c receives a request to rebuild  [rebuild]\n    c does it\n")
+	includes := journeyUC("A", "j", "  when S does\n    includes \"B\"\n") + journeyUC("B", "j", "  when S opens\n    b does it\n")
+	for name, src := range map[string]string{"one member": one, "chain": chain, "continues": quoted, "call": call, "includes": includes} {
 		if n := len(modelDiags(t, src, "craft/lint/journey-unconnected")); n != 0 {
 			t.Errorf("%s: %d hints, want 0", name, n)
 		}

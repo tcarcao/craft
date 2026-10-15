@@ -413,7 +413,7 @@ func lintJourneys(doc *model.CraftDoc, perFileTrees map[string]syntax.SyntaxNode
 		for k, m := range j.Members {
 			if !connected[k] {
 				add(doc.UseCases[m.UseCase], "craft/lint/journey-unconnected", model.SeverityHint,
-					fmt.Sprintf("nothing in the model connects this use case to the rest of `%s`: add the notifies/listens pair, a continues link, or move it to its own journey", slug))
+					fmt.Sprintf("nothing in the model connects this use case to the rest of `%s`: add the notifies/listens pair, a `receives` trigger for the operation another member asks for, a continues or includes link, or move it to its own journey", slug))
 			}
 		}
 	}
