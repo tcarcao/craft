@@ -802,6 +802,11 @@ func TestJourneySpine_Renders(t *testing.T) {
 		}
 		rs = append(rs, analysis.File(name, string(src)))
 	}
+	resync, err := os.ReadFile("testdata/journey-spine/resync.craft")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	rs = append(rs, analysis.File("img/resync.craft", string(resync)))
 	rs = append(rs, analysis.File("links.craft", `use_case "Seller asks the assistant a question" {
     when Seller asks the assistant a question
         includes "Site session preamble"
@@ -821,12 +826,19 @@ func TestJourneySpine_Renders(t *testing.T) {
 	t.Run("mermaid spine", func(t *testing.T) {
 		assertMermaidRenders(t, render(t, visualizer.Mermaid, "seller-promotes-an-advert"))
 	})
+	// v2.25.1: a call to a member's receives, drawn from the caller.
+	t.Run("mermaid call spine", func(t *testing.T) {
+		assertMermaidRenders(t, render(t, visualizer.Mermaid, "resync"))
+	})
 	t.Run("mermaid links", func(t *testing.T) {
 		assertMermaidRenders(t, render(t, visualizer.Mermaid, ""))
 	})
 	endpoint := plantUMLEndpoint(t)
 	t.Run("plantuml spine", func(t *testing.T) {
 		assertRendersClean(t, endpoint, render(t, visualizer.PlantUML, "seller-promotes-an-advert"))
+	})
+	t.Run("plantuml call spine", func(t *testing.T) {
+		assertRendersClean(t, endpoint, render(t, visualizer.PlantUML, "resync"))
 	})
 	t.Run("plantuml links", func(t *testing.T) {
 		puml := render(t, visualizer.PlantUML, "")

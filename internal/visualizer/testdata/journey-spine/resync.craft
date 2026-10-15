@@ -1,0 +1,33 @@
+use_case "Images are rebuilt" {
+    tags {
+        journey: resync
+    }
+
+    when cacheimages receives a request to rebuild a collection  [uploadImages]
+        cacheimages stores the images
+        cacheimages returns the collection
+}
+
+use_case "Operator resyncs an advert" {
+    tags {
+        journey: resync
+    }
+
+    when Operator resyncs an advert
+        includes "Advert is read"
+        consolebackend asks cacheimages to rebuild the collection  [deleteCollection, uploadImages]
+}
+
+use_case "Advert is read" {
+    tags {
+        journey: resync
+    }
+
+    when consolebackend receives a read  [readAdvert]
+        consolebackend loads the advert
+}
+
+use_case "Images are rebuilt elsewhere" {
+    when cacheimages receives a request to rebuild a collection  [uploadImages]
+        cacheimages stores the images
+}

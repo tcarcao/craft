@@ -148,7 +148,9 @@ type SequenceOptions struct {
 	// published that event in an earlier section is delivered directly, as
 	// from a publisher on stage in its own section (spec §17.4). A publisher
 	// outside the diagram, or one that publishes only later, keeps the
-	// inbound arrow. The journey spine sets it.
+	// inbound arrow. Likewise a receives trigger whose operation an earlier
+	// section asks of the same context is drawn as a call from that caller,
+	// and its unaddressed reply goes back to it. The journey spine sets it.
 	SharedStage bool
 }
 
@@ -167,7 +169,8 @@ func BuildSequence(doc *model.CraftDoc, its []interaction.Interaction) Sequence 
 // the section of the last of them, in source order; the earlier sections stay
 // empty.
 func BuildSequenceWith(doc *model.CraftDoc, its []interaction.Interaction, opts SequenceOptions) Sequence {
-	b := sequenceBuilder{ns: newNodeSet(doc), inbound: map[string]*inboundArrow{}, shared: opts.SharedStage, published: map[string]int{}}
+	b := sequenceBuilder{ns: newNodeSet(doc), inbound: map[string]*inboundArrow{}, shared: opts.SharedStage, published: map[string]int{},
+		called: map[string]stagedCall{}, callerOf: map[string]interaction.Endpoint{}}
 	byUseCase := map[string]int{}
 	for _, uc := range doc.UseCases {
 		byUseCase[uc.Name] = len(b.seq.Sections)
@@ -236,6 +239,56 @@ type sequenceBuilder struct {
 	// "<publisher key>|<event>" to the first section that drew the publish.
 	shared    bool
 	published map[string]int
+	// called maps "<callee key>|<operation key>" to the first section that
+	// drew that call, and its caller (shared stage only); callerOf maps
+	// "<use case index>|<scenario>" to the caller a receives trigger was
+	// drawn from.
+	called   map[string]stagedCall
+	callerOf map[string]interaction.Endpoint
+}
+
+// stagedCall is a call drawn in section, by caller.
+type stagedCall struct {
+	section int
+	caller  interaction.Endpoint
+}
+
+// operationKeys are the operation keys of it's bracket (lang.OperationKeys).
+func operationKeys(it interaction.Interaction) []string {
+	if it.Operation == nil {
+		return nil
+	}
+	return lang.OperationKeys(it.Operation.Text)
+}
+
+// calls records that it, a request, is drawn in section idx.
+func (b *sequenceBuilder) calls(idx int, it interaction.Interaction) {
+	if !b.shared {
+		return
+	}
+	for _, k := range operationKeys(it) {
+		if _, ok := b.called[it.To.Key+"|"+k]; !ok {
+			b.called[it.To.Key+"|"+k] = stagedCall{section: idx, caller: it.From}
+		}
+	}
+}
+
+// stagedCaller returns the caller of it, a receives trigger in section idx,
+// when an earlier section asked its context for one of its operations.
+func (b *sequenceBuilder) stagedCaller(idx int, it interaction.Interaction) (interaction.Endpoint, bool) {
+	if !b.shared {
+		return interaction.Endpoint{}, false
+	}
+	for _, k := range operationKeys(it) {
+		if c, ok := b.called[it.To.Key+"|"+k]; ok && c.section < idx {
+			return c.caller, true
+		}
+	}
+	return interaction.Endpoint{}, false
+}
+
+func scenarioKeyOf(it interaction.Interaction) string {
+	return fmt.Sprintf("%d|%s", it.UseCaseIndex, it.Scenario)
 }
 
 // staged reports whether from delivers event directly to a listener in
@@ -423,6 +476,12 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 	switch it.Kind {
 	case interaction.Trigger:
 		if it.From == interaction.Unobserved {
+			if caller, ok := b.stagedCaller(idx, it); ok {
+				// A member drawn earlier makes this call (spec §17.4).
+				b.callerOf[scenarioKeyOf(it)] = caller
+				msg.From, msg.To, msg.Kind = ns.add(caller), ns.add(it.To), MessageCall
+				break
+			}
 			msg.To, msg.Kind = ns.add(it.To), MessageFound
 			break
 		}
@@ -434,9 +493,14 @@ func (b *sequenceBuilder) add(idx int, it interaction.Interaction, title string)
 		}
 	case interaction.Request:
 		msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(it.To), MessageCall
+		b.calls(idx, it)
 	case interaction.Response:
 		msg.Stream = it.Stream
 		if it.To == interaction.Unobserved {
+			if caller, ok := b.callerOf[scenarioKeyOf(it)]; ok {
+				msg.From, msg.To, msg.Kind = ns.add(it.From), ns.add(caller), MessageReply
+				break
+			}
 			msg.From, msg.Kind = ns.add(it.From), MessageLost
 			break
 		}

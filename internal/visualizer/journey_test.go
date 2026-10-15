@@ -148,3 +148,27 @@ func TestJourneySpine_Cycle(t *testing.T) {
 	requireLine(t, "plantuml", puml, "ping ->> pong : e.Ping")
 	requireLine(t, "plantuml", puml, "[-> ping : e.Pong (from pong)")
 }
+
+// A call to a member's receives drawn earlier in the spine reaches the
+// callee from the caller, not from an unobserved caller, and the callee's
+// unaddressed reply goes back to it. Includes stays a ref frame in place.
+func TestJourneySpine_CallAndIncludes(t *testing.T) {
+	src, err := os.ReadFile("testdata/journey-spine/resync.craft")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := spineDoc(t, map[string]string{"img/resync.craft": string(src)})
+	puml := renderSpine(t, doc, PlantUML, "resync")
+	op, rb, rd := strings.Index(puml, "== Operator resyncs an advert =="), strings.Index(puml, "== Images are rebuilt =="), strings.Index(puml, "== Advert is read ==")
+	if op < 0 || rb < op || rd < op {
+		t.Fatalf("sections out of order:\n%s", puml)
+	}
+	requireLine(t, "plantuml", puml, "ref over Operator, consolebackend : Advert is read")
+	requireLine(t, "plantuml", puml, "consolebackend -> cacheimages : a request to rebuild a collection [uploadImages]")
+	requireLine(t, "plantuml", puml, "cacheimages --> consolebackend : returns the collection")
+	// A receives no member calls keeps its unobserved caller.
+	requireLine(t, "plantuml", puml, "[-> consolebackend : a read [readAdvert]")
+	mmd := renderSpine(t, doc, Mermaid, "resync")
+	requireLine(t, "mermaid", mmd, "consolebackend->>cacheimages: a request to rebuild a collection [uploadImages]")
+	requireLine(t, "mermaid", mmd, "cacheimages-->>consolebackend: returns the collection")
+}
