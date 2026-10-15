@@ -64,6 +64,8 @@ type ActorSymbol struct {
 	Column int
 	// URI is the file that contains this declaration.
 	URI string
+	// DisplayName is the actor's declared display name; "" when none.
+	DisplayName string
 }
 
 // DomainSymbol holds collected information about a domain declaration.
@@ -71,6 +73,9 @@ type DomainSymbol struct {
 	Name string
 	// BoundedContexts lists the bounded context names within the domain.
 	BoundedContexts []string
+	// DisplayNames maps a bounded-context name to its declared display
+	// name; nil when no context of the domain declares one.
+	DisplayNames map[string]string
 	// Line is the 1-based source line of the domain name.
 	Line int
 	// Column is the 1-based column where the domain name starts.
@@ -296,12 +301,14 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		if hasLI {
 			actorLine, actorCol = lineIdx.LineCol16(nameTok.Offset())
 		}
+		dn, _ := a.DisplayName()
 		sym := ActorSymbol{
-			Name:   nameTok.Text(),
-			Type:   actorType,
-			Line:   actorLine,
-			Column: actorCol,
-			URI:    uri,
+			DisplayName: dn,
+			Name:        nameTok.Text(),
+			Type:        actorType,
+			Line:        actorLine,
+			Column:      actorCol,
+			URI:         uri,
 		}
 		if prev, dup := seenActors[nameTok.Text()]; dup {
 			startChar := colToLSP(sym.Column)
@@ -334,10 +341,17 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		// underline the right source range.
 		nameContent := syntax.StringAwareText(*nameTok)
 		var bcNames []string
+		var displayNames map[string]string
 		for _, bc := range d.BoundedContexts() {
 			bcTok := bc.Name()
 			if bcTok != nil {
 				bcNames = append(bcNames, bcTok.Text())
+				if dn, _ := bc.DisplayName(); dn != "" {
+					if displayNames == nil {
+						displayNames = map[string]string{}
+					}
+					displayNames[bcTok.Text()] = dn
+				}
 			}
 		}
 		domLine, domCol := 0, 0
@@ -351,6 +365,7 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 		sym := DomainSymbol{
 			Name:            nameContent,
 			BoundedContexts: bcNames,
+			DisplayNames:    displayNames,
 			Line:            domLine,
 			Column:          domCol,
 			EndLine:         domEndLine,

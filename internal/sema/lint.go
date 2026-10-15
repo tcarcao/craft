@@ -65,6 +65,80 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintDuplicateOperationInList(perFileTrees, lis)...)
 	diags = append(diags, lintEgressOnInternalStep(perFileTrees, lis)...)
 	diags = append(diags, lintUnquotedAddress(perFileTrees, lis)...)
+	diags = append(diags, lintDisplayNames(perFileTrees, lis)...)
+	return diags
+}
+
+// ── duplicate-display-name / empty-display-name ───────────────────────────────
+// Warning: two declarations (bounded contexts or actors) share a display name,
+// so a reader of a diagram cannot tell them apart; reported on each later
+// string in sorted file order. Warning: a display name is "", which declares
+// none.
+
+func lintDisplayNames(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
+	type site struct {
+		identity, name string
+		tok            syntax.SyntaxToken
+	}
+	type first struct{ identity, uri string }
+	var diags []model.Diagnostic
+	seen := map[string]first{}
+	for _, uri := range sortedTreeURIs(perFileTrees) {
+		li := lis[uri]
+		file := syntax.AsFile(perFileTrees[uri])
+		var sites []site
+		for _, d := range file.Domains() {
+			nameTok := d.Name()
+			if nameTok == nil {
+				continue
+			}
+			for _, bc := range d.BoundedContexts() {
+				if dn, tok := bc.DisplayName(); tok != nil && bc.Name() != nil {
+					sites = append(sites, site{"bc:" + syntax.StringAwareText(*nameTok) + "/" + bc.Name().Text(), dn, *tok})
+				}
+			}
+		}
+		for _, a := range file.Actors() {
+			if dn, tok := a.DisplayName(); tok != nil && a.Name() != nil {
+				sites = append(sites, site{"actor:" + a.Name().Text(), dn, *tok})
+			}
+		}
+		sort.SliceStable(sites, func(i, j int) bool { return sites[i].tok.Offset() < sites[j].tok.Offset() })
+		for _, s := range sites {
+			line, col := li.LineCol16(s.tok.Offset())
+			start := colToLSP(col)
+			rng := model.Range{
+				Start: model.Position{Line: lineToLSP(line), Character: start},
+				End:   model.Position{Line: lineToLSP(line), Character: start + lspLen(s.tok.Text())},
+			}
+			if s.name == "" {
+				diags = append(diags, model.Diagnostic{
+					Code:      "craft/lint/empty-display-name",
+					Message:   "an empty display name declares none; remove the \"\" or write the name readers should see",
+					Severity:  model.SeverityWarning,
+					SourceURI: uri,
+					Range:     rng,
+				})
+				continue
+			}
+			f, dup := seen[s.name]
+			if !dup {
+				seen[s.name] = first{s.identity, uri}
+				continue
+			}
+			if f.identity == s.identity {
+				continue
+			}
+			diags = append(diags, model.Diagnostic{
+				Code: "craft/lint/duplicate-display-name",
+				Message: fmt.Sprintf("display name %q is already used by %s (%s); diagrams would draw both under one name, so give this one another",
+					s.name, strings.TrimPrefix(strings.TrimPrefix(f.identity, "bc:"), "actor:"), f.uri),
+				Severity:  model.SeverityWarning,
+				SourceURI: uri,
+				Range:     rng,
+			})
+		}
+	}
 	return diags
 }
 
