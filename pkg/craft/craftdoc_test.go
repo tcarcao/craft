@@ -137,6 +137,9 @@ func TestV224Exports(t *testing.T) {
 func TestV225Exports(t *testing.T) {
 	_ = craft.Step{Link: &craft.Link{Kind: craft.LinkContinues, Target: &craft.UseCaseRef{Name: "x"}, Sources: []craft.Source{{Path: "a.go", Start: 1, End: 2}}}}
 	_ = []string{craft.TagJourney, craft.TagFormerlyTitled}
+	if craft.TagFormerlyJourney != "formerly_journey" {
+		t.Errorf("TagFormerlyJourney = %q", craft.TagFormerlyJourney)
+	}
 	_ = []craft.JourneyEdgeKind{craft.JourneyEdgeEvent, craft.JourneyEdgeStore, craft.JourneyEdgeContinues}
 	_ = craft.LinkIncludes
 }

@@ -135,8 +135,9 @@ const (
 	LinkIncludes  = model.LinkIncludes
 	LinkContinues = model.LinkContinues
 
-	TagJourney        = model.TagJourney
-	TagFormerlyTitled = model.TagFormerlyTitled
+	TagJourney         = model.TagJourney
+	TagFormerlyTitled  = model.TagFormerlyTitled
+	TagFormerlyJourney = model.TagFormerlyJourney
 
 	JourneyEdgeEvent     = model.JourneyEdgeEvent
 	JourneyEdgeStore     = model.JourneyEdgeStore

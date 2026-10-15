@@ -204,8 +204,9 @@ type Link struct {
 
 // Tag keys with a meaning in v2.25 (see lang).
 const (
-	TagJourney        = lang.TagJourney
-	TagFormerlyTitled = lang.TagFormerlyTitled
+	TagJourney         = lang.TagJourney
+	TagFormerlyTitled  = lang.TagFormerlyTitled
+	TagFormerlyJourney = lang.TagFormerlyJourney
 )
 
 // JourneyEdgeKind is what connects two members of a journey spine.
