@@ -5209,6 +5209,33 @@ func TestFormat_SourcesAndLinks(t *testing.T) {
 - [ ] **Step 3:** `$CRAFT generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' --journey seller-promotes-an-advert --format mermaid --output ~/Downloads/domain-hub/journey-assessment/_render-journey-semantics-3/` (18 use cases in 9 files, spec §19.1): the file renders in mermaid-cli; check by eye that a publisher drawn earlier delivers directly. Then copy two files to a temp dir, convert three cite comments to `//@` and one `// Follows …` header into `includes "…"`, validate (0 errors) and render.
 - [ ] **Step 4:** Nothing is committed in re-arch-central. Record the counts for Task B20.
 
+**Results (2026-10-15, branch at 1d66207, corpus copied once to the session scratchpad `b19/corpus`; re-arch-central untouched).** Baseline: v2.24.0 (installed `craft`) against the branch build, on the unmigrated copy, `docs/**/*.craft` (374 files, 622 use cases).
+
+| Check | v2.24.0 | v2.25 branch |
+|---|---|---|
+| `craft validate` | 0 errors, 143 warnings, 3 hints | 0 errors, the same 143 warnings, 242 hints: +239 `journey-unconnected` (members of 96 of the 127 multi-member journeys; the spec guessed about 69 journeys). No `malformed-source`/`detached-source` (0 `//@` lines). No other difference. |
+| `craft fmt --check` | clean | clean |
+| `craft generate` (every type, puml and mermaid, plus 622 `--type sequence --split` files) | — | byte-identical except `docs-surface.md`: three rows gain "Price a seller's portfolio …", whose `[getMyAccountDetails, promotionDetails, summary]` list now covers each item (intended, f98c603); one row, atlas-advert's `[postAdvert, putAdvert, deleteAdvert]`, lost its only user. That was a regression of f98c603, fixed in a2ed962 (an entry that lists operations is used by the same list and by each item). |
+
+Spec §19.3 migrations, applied in order on the copy (a local git repo, one commit per step):
+
+1. **G4, `// path:line` → `//@ …`** (`b19/scripts/cites.py`: a full-line comment whose text starts with `[repo ]path:lines`, further `, path:lines` or `, :lines` cites joined, the punctuation after the head replaced by ` -- `). Of 4,495 full-line comments, **961 convert** (in 294 files; 871 lines grow by a character or more, so "the line does not grow" holds only where ` -- ` replaces a longer separator). Result: **0 `malformed-source`, 53 `detached-source`** (35 in registries: `context_map.craft` 26, `actors.craft` 7, `topology.craft` 2; 10 in surface files; 8 in journey file headers or between use cases), and **908 attached lines giving 1,051 `Source`s** (actions 841, notes 112, triggers 86, branches 8, use cases 4). 0 errors, `fmt --check` clean, every diagram unchanged. The earlier probe's 76 detached / 55 in registries came from a looser converter (it also took cites with no line range); this one requires `:lines` on the first cite.
+2. **G6, `continues` where a header names the next file** (`b19/scripts/links.py`: clauses with "Hands off to", "continues in", "that follows is", "the next page runs", "does next"; one link from the file's last use case to the target file's first use case in the same journey, at the end of its body). 44 file references: **34 point into another journey** (no spine edge is possible), 6 join members an event or store edge already joins, **4 become links**. Those 4 journeys gain an edge: `moderated-price-field-unlocks` (had none), `advert-statistics-to-seller-dashboard`, `seller-cross-posts-an-advert-to-olx`, `seller-promotes-an-advert`. Multi-member journeys with edges: **55 → 56 of 127**; unconnected members 239 → 236. Counting `Follows X` as `X continues here` adds 20 references and no link (all cross-journey or already joined). Upper bound from any comment that names another member's file (header or body): 74 unconnected members in **29 journeys, 16 of the 72 edge-less ones**, so at most **71 of 127** journeys would have edges. The rest is not a header job: **203 of the 239 unconnected members share their file with another member** (separate entry points of one flow), and need a `notifies`/`listens` pair, a hand-written `continues`, or their own journey.
+3. **G6, `includes`** (`b19/scripts/includes.py`): the 17 `Follows X` and 6 session-preamble header references become `includes "<X's first use case>"` as the first step of the file's first use case: **23 includes, all resolve** (0 `unresolved-use-case`/`ambiguous-use-case`), 0 errors, `fmt --check` clean.
+4. v2.24.0 on the migrated copy: **27 errors** (exactly the 4 `continues` and 23 `includes` lines; `//@` lines are plain comments to it), so the corpus needs craft ≥ 2.25.0 before the first link lands (spec §19.3 step 4).
+
+**Spines** (`craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' --journey …`, after step 2; both backends render: mermaid-cli 12.0.0 exit 0, PlantUML no syntax error):
+
+| Journey | Members | Edges | Unconnected | Notes |
+|---|---|---|---|---|
+| `seller-promotes-an-advert` (acceptance) | 18 | 21 | 2 | 18 sections; 16 deliveries drawn directly from a publisher in an earlier section, 0 inbound `(from …)` arrows; one `ref over` frame (the new `continues`) |
+| `billing-cycle-close-issues-an-invoice` | 6 | 5 | 0 | one inbound arrow from a publisher outside the spine |
+| `billing-cycle-rollover` | 4 | 4 | 0 | cycle, entered at "Turn the billing cycle over" from "Open …" (2898554 holds) |
+| `seller-cross-posts-an-advert-to-olx` | 3 | 3 | 0 | cycle; with the new `continues` the location mapper (downstream of the cycle, earliest file) was placed first. Fixed in 1d66207: a cycle is entered on the cycle; the mapper now comes last |
+| `user-is-deleted-and-erased-estate-wide` | 6 | 4 | 1 | — |
+
+No journey of the unmigrated corpus changes order with 1d66207.
+
 ---
 
 ### Task B20: Release prep v2.25.0 (CHANGELOG) — **cheap**
