@@ -59,6 +59,13 @@ func TestBuild(t *testing.T) {
 			"a-loc.craft": uc("Map", "j", "  when S maps\n    m does it\n"),
 			"b-olx.craft": uc("Post", "j", "  when p listens e.Changed\n    p notifies e.Export\n") +
 				uc("Change", "j", "  when c listens e.Export\n    c notifies e.Changed\n    continues \"Map\"\n")}, []string{"Post", "Change", "Map"}, true},
+		// A cycle fed by another cycle waits for it: X<->Y hands off to
+		// Z<->W, so X<->Y is entered first even though W sorts first by file.
+		{"cycle fed by a cycle waits for it", map[string]string{
+			"a.craft": uc("W", "j", "  when w listens e.Z\n    w notifies e.W\n") +
+				uc("Z", "j", "  when z listens e.ToZ, e.W\n    z notifies e.Z\n"),
+			"b.craft": uc("X", "j", "  when x listens e.Y\n    x notifies e.X\n") +
+				uc("Y", "j", "  when y listens e.X\n    y notifies e.Y\n    y notifies e.ToZ\n")}, []string{"X", "Y", "Z", "W"}, true},
 		{"other journeys ignored", map[string]string{"a.craft": uc("A", "j", "  when S does\n    a does it\n") + uc("Z", "k", "  when S does\n    z does it\n")}, []string{"A"}, false},
 	}
 	for _, c := range cases {

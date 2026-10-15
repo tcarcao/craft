@@ -189,9 +189,11 @@ func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 //	        is left);
 //	tier 4: an unconnected member.
 //
-// "On a cycle" here means: every unplaced predecessor of the member can be
-// reached back from it through unplaced members, so nothing upstream of its
-// cycle is still waiting to be placed.
+// "On a cycle" here means: every unplaced member that can reach the member
+// can also be reached back from it, that is, the member sits in a strongly
+// connected component of the unplaced members that no unplaced member
+// outside it feeds. So nothing upstream of its cycle, including another
+// cycle, is still waiting to be placed.
 //
 // Within a tier: a successor of the member placed last (so independent
 // chains do not interleave), then the namesake (see namesake), then the
@@ -226,33 +228,26 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 	named := namesake(doc, slug, members, before)
 	reached := make([]bool, n)
 	placed := make([]bool, n)
-	// reaches reports whether to can be reached from from through unplaced
-	// members.
-	reaches := func(from, to int) bool {
-		visited := make([]bool, n)
-		stack := []int{from}
-		for len(stack) > 0 {
-			m := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
+	// onCycle[m] reports whether m sits in a strongly connected component
+	// of the unplaced members that no unplaced member outside it feeds.
+	// Recomputed before each pick.
+	onCycle := make([]bool, n)
+	sourceSCCs := func() {
+		comp := unplacedSCCs(n, succ, placed)
+		fed := make(map[int]bool)
+		for m := range n {
+			if placed[m] {
+				continue
+			}
 			for _, s := range succ[m] {
-				if s == to {
-					return true
-				}
-				if !placed[s] && !visited[s] {
-					visited[s] = true
-					stack = append(stack, s)
+				if !placed[s] && comp[s] != comp[m] {
+					fed[comp[s]] = true
 				}
 			}
 		}
-		return false
-	}
-	onCycle := func(m int) bool {
-		for _, p := range pred[m] {
-			if !placed[p] && !reaches(m, p) {
-				return false
-			}
+		for m := range n {
+			onCycle[m] = !placed[m] && !fed[comp[m]]
 		}
-		return true
 	}
 	tier := func(m int) int {
 		switch {
@@ -260,7 +255,7 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 			return 4
 		case indeg[m] == 0:
 			return 0
-		case !onCycle(m):
+		case !onCycle[m]:
 			return 3
 		case reached[m]:
 			return 1
@@ -282,6 +277,7 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 		return before(m, cur)
 	}
 	for len(order) < n {
+		sourceSCCs()
 		next := -1
 		for m := range n {
 			if !placed[m] && (next < 0 || better(m, next)) {
@@ -300,6 +296,56 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 		}
 	}
 	return order, cycle
+}
+
+// unplacedSCCs returns, for each unplaced member, the id of its strongly
+// connected component in the graph of unplaced members (Tarjan). Placed
+// members get -1.
+func unplacedSCCs(n int, succ [][]int, placed []bool) []int {
+	comp := make([]int, n)
+	index := make([]int, n)
+	low := make([]int, n)
+	onStack := make([]bool, n)
+	for m := range n {
+		comp[m], index[m] = -1, -1
+	}
+	var stack []int
+	next, ids := 0, 0
+	var visit func(v int)
+	visit = func(v int) {
+		index[v], low[v] = next, next
+		next++
+		stack = append(stack, v)
+		onStack[v] = true
+		for _, w := range succ[v] {
+			switch {
+			case placed[w]:
+			case index[w] < 0:
+				visit(w)
+				low[v] = min(low[v], low[w])
+			case onStack[w]:
+				low[v] = min(low[v], index[w])
+			}
+		}
+		if low[v] == index[v] {
+			for {
+				w := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				onStack[w] = false
+				comp[w] = ids
+				if w == v {
+					break
+				}
+			}
+			ids++
+		}
+	}
+	for m := range n {
+		if !placed[m] && index[m] < 0 {
+			visit(m)
+		}
+	}
+	return comp
 }
 
 // namesake returns the member the journey is named after, or -1. In order
