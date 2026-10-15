@@ -94,3 +94,56 @@ func TestDisplayNames_SurfaceHeading(t *testing.T) {
 		t.Errorf("surface:\n%s", out.Data)
 	}
 }
+
+// An inbound arrow names its publishers by display name, in id order: here
+// the id order (alpha, mid, zeta) is not the display-name order.
+func TestDisplayNames_InboundFromLabel(t *testing.T) {
+	puml, mmd := sequenceSource(t, `domains {
+    billing {
+        zeta "Alpha pricing"
+        alpha "Zulu quotes"
+        mid "mid #3"
+        listener "the listener"
+    }
+}
+
+use_case "Zeta publishes" {
+    when CRON fires
+        zeta notifies pricing.PricesChanged
+}
+
+use_case "Alpha publishes" {
+    when CRON fires
+        alpha notifies pricing.PricesChanged
+        mid notifies pricing.PricesChanged
+}
+
+use_case "Listener reacts" {
+    when listener listens pricing.PricesChanged
+        listener recomputes the prices
+}
+`)
+	requireLine(t, "plantuml", puml, "[-> listener : pricing.PricesChanged (from Zulu quotes, mid #3, Alpha pricing)")
+	// Mermaid message text ends at '#' too.
+	requireLine(t, "mermaid", mmd, "External->>listener: pricing.PricesChanged (from Zulu quotes, mid \uff033, Alpha pricing)")
+}
+
+// In a journey spine, a publisher outside the spine keeps the inbound arrow,
+// named by its display name.
+func TestDisplayNames_JourneyInboundFromLabel(t *testing.T) {
+	doc := spineDoc(t, map[string]string{
+		"registry.craft": `domains {
+    vas {
+        graphql "the GraphQL gateway"
+        nmf_monetization "nMF, the money engine"
+    }
+}
+`,
+		"vas/backoffice.craft": `use_case "Agent schedules a VAS" {
+    when Agent schedules a VAS
+        graphql notifies com.olx.realestate_vas.VasScheduled
+}
+`})
+	puml := renderSpine(t, doc, PlantUML, "seller-promotes-an-advert")
+	requireLine(t, "plantuml", puml, "[-> nmf_monetization : com.olx.realestate_vas.VasScheduled (from the GraphQL gateway)")
+}

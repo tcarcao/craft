@@ -68,11 +68,12 @@ func Architecture(a view.Architecture) string {
 	return b.String()
 }
 
-// participantText makes a name safe after `as` in a sequence participant:
-// Mermaid ends the statement at ';' and starts a comment at '#', cutting the
-// rest of the name silently. ';' becomes ',' and '#' the full-width '＃'
-// (U+FF03), which reads the same; neither occurs in an id.
-func participantText(s string) string {
+// seqText makes text safe in a sequence diagram, as a participant name after
+// `as`, a message or a note: Mermaid ends the statement at ';' and starts a
+// comment at '#', cutting the rest of the text silently. ';' becomes ',' and
+// '#' the full-width '＃' (U+FF03), which reads the same; neither occurs in
+// an id.
+func seqText(s string) string {
 	return strings.NewReplacer(";", ",", "#", "\uff03").Replace(s)
 }
 
@@ -85,7 +86,7 @@ func Sequence(s view.Sequence) string {
 	al := newAliases()
 	b.WriteString("sequenceDiagram\n")
 	for _, p := range s.Participants {
-		kind, label := "participant", participantText(p.Text())
+		kind, label := "participant", seqText(p.Text())
 		switch p.Kind {
 		case view.NodeActor:
 			kind = "actor"
@@ -139,14 +140,14 @@ func Sequence(s view.Sequence) string {
 				if m.Scenario != "" {
 					b.WriteString("    rect rgb(245, 245, 245)\n")
 					if span := noteOver(s, nil, al, ","); span != "" {
-						fmt.Fprintf(&b, "    Note over %s: %s\n", span, strings.ReplaceAll(m.Scenario, ";", ","))
+						fmt.Fprintf(&b, "    Note over %s: %s\n", span, seqText(m.Scenario))
 					}
 				}
 				group = m.Scenario
 			}
 			writeBlockOps(&b, view.BlockOps(path, m.Branch))
 			path = m.Branch
-			label := strings.ReplaceAll(m.Label, ";", ",")
+			label := seqText(m.Label)
 			if m.Stream {
 				b.WriteString("    loop stream\n")
 			}
@@ -204,7 +205,7 @@ func Sequence(s view.Sequence) string {
 // BlockKind and Label are informational only.
 func writeBlockOps(b *strings.Builder, ops []view.BlockOp) {
 	for _, op := range ops {
-		label := strings.ReplaceAll(op.Label, ";", ",")
+		label := seqText(op.Label)
 		switch op.Kind {
 		case view.BlockOpen:
 			writeHeader(b, string(op.BlockKind), label)

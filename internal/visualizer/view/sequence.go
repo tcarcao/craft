@@ -320,7 +320,7 @@ type inboundArrow struct {
 	// head starts the label: the event of an inbound arrow, "polls <change>"
 	// of a store read.
 	head       string
-	publishers []string // display names, in arrival order
+	publishers []publisher // in arrival order
 	// suffix ends the label: ", <schedule>" for a scheduled listener.
 	suffix string
 }
@@ -329,15 +329,24 @@ type inboundArrow struct {
 // summing up the rest as "+N more".
 const maxNamedPublishers = 3
 
-// label is the event, then the publishers it comes from: sorted by display
-// name, at most maxNamedPublishers of them. An event with no publisher in the
-// model keeps its bare name.
+// publisher is one publisher an inbound arrow names: its name, which orders
+// and deduplicates, and the text drawn, its display name when it has one.
+type publisher struct{ name, shown string }
+
+// label is the event, then the publishers it comes from: sorted by name (the
+// id, so a display name never reorders them), each drawn by its display name,
+// at most maxNamedPublishers of them. An event with no publisher in the model
+// keeps its bare name.
 func (a *inboundArrow) label() string {
 	if len(a.publishers) == 0 {
 		return a.head + a.suffix
 	}
-	names := slices.Clone(a.publishers)
-	slices.Sort(names)
+	pubs := slices.Clone(a.publishers)
+	slices.SortFunc(pubs, func(x, y publisher) int { return strings.Compare(x.name, y.name) })
+	names := make([]string, len(pubs))
+	for i, p := range pubs {
+		names[i] = p.shown
+	}
 	if len(names) > maxNamedPublishers {
 		names = append(names[:maxNamedPublishers], fmt.Sprintf("+%d more", len(a.publishers)-maxNamedPublishers))
 	}
@@ -381,7 +390,7 @@ func (b *sequenceBuilder) addRoster(idx int, listens []interaction.Interaction, 
 		if !slices.Contains(inboundItems, it.Event) {
 			inboundItems = append(inboundItems, it.Event)
 		}
-		inbound.addPublisher(it.From)
+		inbound.addPublisher(it.From, b.ns.display)
 	}
 	suffix := ""
 	if schedule != "" {
@@ -439,7 +448,7 @@ func (b *sequenceBuilder) growInbound(it interaction.Interaction) bool {
 	if arrow == nil {
 		return false
 	}
-	arrow.addPublisher(it.From)
+	arrow.addPublisher(it.From, b.ns.display)
 	b.seq.Sections[arrow.section].Messages[arrow.message].Label = arrow.label()
 	return true
 }
@@ -451,15 +460,18 @@ func (b *sequenceBuilder) newInbound(idx int, it interaction.Interaction, head s
 	if it.Schedule != "" {
 		arrow.suffix = ", " + it.Schedule
 	}
-	arrow.addPublisher(it.From)
+	arrow.addPublisher(it.From, b.ns.display)
 	b.inbound[inboundKey(it)] = arrow
 	return arrow
 }
 
-func (a *inboundArrow) addPublisher(from interaction.Endpoint) {
-	if from != interaction.External && !slices.Contains(a.publishers, from.Name) {
-		a.publishers = append(a.publishers, from.Name)
+// addPublisher adds from to the publishers the arrow names, by its display
+// name in display (participant ID → display name) when it has one.
+func (a *inboundArrow) addPublisher(from interaction.Endpoint, display map[string]string) {
+	if from == interaction.External || slices.ContainsFunc(a.publishers, func(p publisher) bool { return p.name == from.Name }) {
+		return
 	}
+	a.publishers = append(a.publishers, publisher{name: from.Name, shown: cmp.Or(display[from.Key], from.Name)})
 }
 
 func (b *sequenceBuilder) appear(id string) {
