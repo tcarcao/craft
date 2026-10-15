@@ -147,3 +147,41 @@ func TestDisplayNames_JourneyInboundFromLabel(t *testing.T) {
 	puml := renderSpine(t, doc, PlantUML, "seller-promotes-an-advert")
 	requireLine(t, "plantuml", puml, "[-> nmf_monetization : com.olx.realestate_vas.VasScheduled (from the GraphQL gateway)")
 }
+
+// Mermaid's C4 renderer decodes no entity codes, so "#quot;" would be drawn
+// literally: a '"' becomes "'", as in PlantUML, and '#' stays as written.
+func TestDisplayNames_C4MermaidQuotes(t *testing.T) {
+	doc := resolvedDoc(t, `actors {
+    user Seller "the \"best\" seller #1;"
+}
+
+domains {
+    billing {
+        nmf "nMF, \"the\" engine #2;"
+    }
+}
+
+services {
+    money {
+        contexts: nmf
+        language: golang
+    }
+}
+
+use_case "Seller pays" {
+    when Seller pays the invoice
+        nmf records the payment
+}
+`)
+	out, err := New(nil).Render(doc, Request{View: ViewC4, Backend: Mermaid, Format: FormatSource, C4: &C4Options{Boundaries: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := string(out.Data)
+	requireLine(t, "mermaid", m, `Person(Seller, "the 'best' seller #1;", "External user")`)
+	requireLine(t, "mermaid", m, `Container_Boundary(money_nmf_Domain_boundary, "nMF, 'the' engine #2; Domain") {`)
+	requireLine(t, "mermaid", m, `Container(nmf, "nMF, 'the' engine #2;", "Go Application", "nmf [Context]")`)
+	if strings.Contains(m, "#quot;") || strings.Contains(m, "#35;") {
+		t.Errorf("entity code in C4:\n%s", m)
+	}
+}

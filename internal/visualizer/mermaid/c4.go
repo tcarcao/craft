@@ -20,16 +20,16 @@ func C4(c view.C4) string {
 		if a.Element == view.C4ExternalSystem {
 			element = "System_Ext"
 		}
-		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), text(a.Text()), text(a.Description))
+		fmt.Fprintf(&b, "    %s(%s, \"%s\", \"%s\")\n", element, al.declare(a.ID, a.Label), c4text(a.Text()), c4text(a.Description))
 	}
 	for _, sys := range c.Systems {
 		boundary := "System_Boundary"
 		if sys.External {
 			boundary = "Enterprise_Boundary"
 		}
-		fmt.Fprintf(&b, "    %s(%s, \"%s\") {\n", boundary, al.declare("system:"+sys.ID, sys.Label+" boundary"), text(sys.Label))
+		fmt.Fprintf(&b, "    %s(%s, \"%s\") {\n", boundary, al.declare("system:"+sys.ID, sys.Label+" boundary"), c4text(sys.Label))
 		for _, g := range sys.Groups {
-			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), text(g.Text()))
+			fmt.Fprintf(&b, "        Container_Boundary(%s, \"%s\") {\n", al.declare("group:"+g.ID, sys.Label+" "+g.Label+" boundary"), c4text(g.Text()))
 			for _, ct := range g.Containers {
 				c4Container(&b, "            ", al, ct, sys.External)
 			}
@@ -42,10 +42,10 @@ func C4(c view.C4) string {
 	}
 	for _, r := range c.Relations {
 		if r.Technology == "" {
-			fmt.Fprintf(&b, "    Rel(%s, %s, \"%s\")\n", al.of(r.From), al.of(r.To), text(r.Label))
+			fmt.Fprintf(&b, "    Rel(%s, %s, \"%s\")\n", al.of(r.From), al.of(r.To), c4text(r.Label))
 			continue
 		}
-		fmt.Fprintf(&b, "    Rel(%s, %s, \"%s\", \"%s\")\n", al.of(r.From), al.of(r.To), text(r.Label), text(r.Technology))
+		fmt.Fprintf(&b, "    Rel(%s, %s, \"%s\", \"%s\")\n", al.of(r.From), al.of(r.To), c4text(r.Label), c4text(r.Technology))
 	}
 	return b.String()
 }
@@ -55,5 +55,10 @@ func c4Container(b *strings.Builder, indent string, al *aliases, c view.C4Contai
 	if external {
 		element += "_Ext"
 	}
-	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), text(c.Text()), text(c.Technology), text(c.Description))
+	fmt.Fprintf(b, "%s%s(%s, \"%s\", \"%s\", \"%s\")\n", indent, element, al.declare(c.ID, c.Label), c4text(c.Text()), c4text(c.Technology), c4text(c.Description))
 }
+
+// c4text makes a label safe inside a double-quoted C4 string. Mermaid's C4
+// renderer decodes no entity codes ("#quot;" would be drawn as written), so a
+// '"' becomes "'", as in the PlantUML writer, and '#' is left alone.
+func c4text(s string) string { return strings.ReplaceAll(s, `"`, "'") }
