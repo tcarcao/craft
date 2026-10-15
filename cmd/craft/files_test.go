@@ -78,3 +78,20 @@ func TestValidateAndInspect_EmptyDirectoryErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveFiles_GlobMatchedEmptyDirIsSkipped(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a.craft"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveFiles([]string{filepath.Join(root, "*")})
+	if err != nil {
+		t.Fatalf("glob over an empty dir: %v", err)
+	}
+	if len(got) != 1 || filepath.Base(got[0]) != "a.craft" {
+		t.Fatalf("got %v, want only a.craft", got)
+	}
+}

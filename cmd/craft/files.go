@@ -13,7 +13,8 @@ import (
 
 // resolveFiles expands glob patterns (including **) into file paths.
 // A directory (given literally or matched by a glob) expands recursively to
-// the *.craft files under it, sorted; a directory with none is an error.
+// the *.craft files under it, sorted; a directory named literally with none
+// is an error, one a glob matched is skipped.
 // Literal paths that don't match a glob are passed through as-is.
 func resolveFiles(patterns []string) ([]string, error) {
 	var files []string
@@ -45,6 +46,11 @@ func resolveFiles(patterns []string) ([]string, error) {
 			if info.IsDir() {
 				found, err := craftFilesUnder(m)
 				if err != nil {
+					// A directory a glob happened to match is skipped; only a
+					// directory named literally must hold .craft files.
+					if m != pattern {
+						continue
+					}
 					return nil, err
 				}
 				for _, f := range found {
