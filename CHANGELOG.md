@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.26.1] — 2026-10-15
+
+### Fixed
+- **`craft generate <dir>` no longer panics.** A directory argument (`craft generate docs`) was matched by the glob and then silently dropped, leaving no input files, and `generate` indexed `files[0]`. Input paths now expand a directory recursively to its `*.craft` files in sorted order, and a directory with no `.craft` files is an error (`no .craft files found under directory <dir>`). `validate` and `inspect` had the same gap (a directory gave an empty result and exit 0) and share the fix. `fmt` keeps its explicit directory error. `generate` also reports `no files matched` instead of panicking when nothing resolves.
+
 ## [2.26.0] — 2026-10-15
 
 **Why a minor version.** `pkg/craft` gains two exported constants and spine order can change; no identifier is removed or changes type, and no file that validated starts to fail.

@@ -826,7 +826,7 @@ func TestJourneySpine_Renders(t *testing.T) {
 	t.Run("mermaid spine", func(t *testing.T) {
 		assertMermaidRenders(t, render(t, visualizer.Mermaid, "seller-promotes-an-advert"))
 	})
-	// v2.25.1: a call to a member's receives, drawn from the caller.
+	// v2.26.0: a call to a member's receives, drawn from the caller.
 	t.Run("mermaid call spine", func(t *testing.T) {
 		assertMermaidRenders(t, render(t, visualizer.Mermaid, "resync"))
 	})
