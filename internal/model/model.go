@@ -524,6 +524,9 @@ type Participant struct {
 	// Service is the service that deploys a bounded context or owns a data
 	// store, or the service itself; empty when there is none.
 	Service string `json:"service,omitempty"`
+	// DisplayName is the declared display name of a bounded context or an
+	// actor (2.27); empty when it declares none.
+	DisplayName string `json:"displayName,omitempty"`
 }
 
 // ParticipantKind is what a use-case name resolves to.
@@ -646,6 +649,9 @@ type Interaction struct {
 type Domain struct {
 	Name            string   `json:"name"`
 	BoundedContexts []string `json:"boundedContexts"`
+	// DisplayNames maps a bounded-context name to its declared display name
+	// (2.27). Only contexts that declare one are present; nil when none does.
+	DisplayNames map[string]string `json:"displayNames,omitempty"`
 }
 
 // Actor is an entity outside the system that interacts with it: a person
@@ -655,6 +661,33 @@ type Actor struct {
 	Name string    `json:"name"`
 	Type ActorType `json:"type"`
 	Line int       `json:"line,omitempty"`
+	// DisplayName is the actor's declared display name (2.27); empty when
+	// it declares none.
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+// DisplayNames maps participant IDs to declared display names: a bounded
+// context by its canonical "<domain>/<bc>", an actor by its name. Only
+// declarations with a display name are present; the first actor of a name
+// wins, as everywhere else.
+func (d *CraftDoc) DisplayNames() map[string]string {
+	out := map[string]string{}
+	for _, dom := range d.Domains {
+		for bc, dn := range dom.DisplayNames {
+			out[dom.Name+"/"+bc] = dn
+		}
+	}
+	seen := map[string]bool{}
+	for _, a := range d.Actors {
+		if seen[a.Name] {
+			continue
+		}
+		seen[a.Name] = true
+		if a.DisplayName != "" {
+			out[a.Name] = a.DisplayName
+		}
+	}
+	return out
 }
 
 // ActorType classifies an actor.

@@ -34,10 +34,12 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 			continue // malformed — skip
 		}
 		actorLine, _ := li.LineCol(nameTok.Offset())
+		dn, _ := a.DisplayName()
 		doc.Actors = append(doc.Actors, model.Actor{
-			Name: nameTok.Text(),
-			Type: model.ActorType(typeVal),
-			Line: actorLine,
+			Name:        nameTok.Text(),
+			Type:        model.ActorType(typeVal),
+			Line:        actorLine,
+			DisplayName: dn,
 		})
 	}
 
@@ -47,14 +49,22 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 			continue
 		}
 		var bcNames []string
+		var displayNames map[string]string
 		for _, bc := range d.BoundedContexts() {
 			if bcTok := bc.Name(); bcTok != nil {
 				bcNames = append(bcNames, bcTok.Text())
+				if dn, _ := bc.DisplayName(); dn != "" {
+					if displayNames == nil {
+						displayNames = map[string]string{}
+					}
+					displayNames[bcTok.Text()] = dn
+				}
 			}
 		}
 		doc.Domains = append(doc.Domains, model.Domain{
 			Name:            syntax.StringAwareText(*nameTok),
 			BoundedContexts: bcNames,
+			DisplayNames:    displayNames,
 		})
 	}
 	doc.Domains = firstByName(doc.Domains, func(d model.Domain) string { return d.Name })

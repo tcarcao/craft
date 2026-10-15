@@ -1,0 +1,28 @@
+{
+  "useCases": [],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 2,
+      "displayName": "the seller"
+    },
+    {
+      "name": "CRON",
+      "type": "scheduler",
+      "line": 3,
+      "displayName": "the nightly clock"
+    },
+    {
+      "name": "AdCore",
+      "type": "system",
+      "line": 4
+    },
+    {
+      "name": "Gateway",
+      "type": "system",
+      "line": 7,
+      "displayName": "the payment gateway"
+    }
+  ]
+}

@@ -17,6 +17,10 @@
 //
 // Since v2.24.0 a listens trigger or a notifies may carry several events
 // (EventList), and an action several operations (OperationList).
+//
+// Since v2.27.0 a bounded context or an actor may declare a display name:
+// Domain.DisplayNames, Actor.DisplayName, Participant.DisplayName and
+// CraftDoc.DisplayNames(). All are optional JSON keys.
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"

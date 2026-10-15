@@ -1,0 +1,7 @@
+actors {
+    user Seller "the seller"
+    scheduler CRON "the nightly clock"
+    system AdCore
+}
+
+actor system Gateway "the payment gateway"

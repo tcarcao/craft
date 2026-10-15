@@ -1,0 +1,24 @@
+{
+  "useCases": [],
+  "domains": [
+    {
+      "name": "Billing",
+      "boundedContexts": [
+        "nmf_monetization",
+        "Payments"
+      ],
+      "displayNames": {
+        "nmf_monetization": "nMF, the money engine"
+      }
+    },
+    {
+      "name": "Identity",
+      "boundedContexts": [
+        "Authentication"
+      ],
+      "displayNames": {
+        "Authentication": "sign-in"
+      }
+    }
+  ]
+}

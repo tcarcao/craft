@@ -11,6 +11,7 @@ import (
 // of matching names themselves. It uses the same resolver as sema's checks
 // and the LSP, so a model that validates draws exactly what it says.
 func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
+	displayNames := doc.DisplayNames()
 	resolve := func(name string) *model.Participant {
 		if name == "" {
 			return nil
@@ -18,6 +19,9 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 		p, _ := sema.ResolveParticipant(ws, "", name)
 		if p.Kind == "" {
 			return nil
+		}
+		if p.Kind == model.ParticipantBoundedContext || p.Kind == model.ParticipantActor {
+			p.DisplayName = displayNames[p.ID]
 		}
 		return &p
 	}

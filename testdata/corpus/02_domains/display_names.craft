@@ -1,0 +1,10 @@
+domains {
+    Billing {
+        nmf_monetization "nMF, the money engine"
+        Payments
+    }
+}
+
+domain Identity {
+    Authentication "sign-in"
+}
