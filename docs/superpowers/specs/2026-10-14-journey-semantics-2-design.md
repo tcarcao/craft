@@ -1294,9 +1294,10 @@ craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' -
      (E1, E1-next, E2, E2-next); then (b) the namesake; then (c) the smallest (source file, line).
   2. Unconnected members come after every connected one: the namesake first, then by (source file,
      line). Being unconnected outranks being the namesake.
-  3. When no connected member is ready (a cycle), the next is one that a placed member hands off to,
-     so the cycle is entered where the flow reaches it; when no placed member reaches one, the
-     namesake, then the smallest (source file, line). Rules (a)–(c) break ties inside each case, and
+  3. When no connected member is ready (a cycle), the next is a member on a cycle (every unplaced
+     predecessor of it can be reached back from it, so a member downstream of the cycle waits) that
+     a placed member hands off to, so the cycle is entered where the flow reaches it; when no placed
+     member reaches one, the namesake, then the smallest (source file, line). Rules (a)–(c) break ties inside each case, and
      the result records `Cycle: true`; the CLI
   prints `note: journey <slug> has a hand-off cycle; it is entered where the flow reaches it` to
   stderr. The order is deterministic.

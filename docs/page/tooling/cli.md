@@ -80,7 +80,7 @@ craft generate [files...] [flags]
 - **Edges.** A → B when A publishes an event (or writes a store ref) that B's trigger listens to, or when A has a `continues "B"` link. `includes` adds no edge.
 - **Namesake.** The member the journey is named after: a member whose title, slugified, is the slug; else one in a file named `<slug>.craft`; else one in a file named after one of its `formerly_journey` values.
 - **Order.** A topological sort over the edges. Connected members come first; among the members that are ready, a successor of the member placed last wins (so a chain is not interleaved with another), then the namesake, then the earliest file and line. Members with no edge come last, the namesake first.
-- **Cycles.** When no connected member is ready, the next is one that a placed member hands off to (the cycle is entered where the flow reaches it), else the namesake, else the earliest. `craft generate` prints `note: journey <slug> has a hand-off cycle; it is entered where the flow reaches it` to stderr.
+- **Cycles.** When no connected member is ready, the next is a member on the cycle (a member downstream of the cycle waits for it) that a placed member hands off to (the cycle is entered where the flow reaches it), else the namesake, else the earliest. `craft generate` prints `note: journey <slug> has a hand-off cycle; it is entered where the flow reaches it` to stderr.
 
 An unknown slug is an error that lists the three closest slugs.
 

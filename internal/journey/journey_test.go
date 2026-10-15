@@ -52,6 +52,13 @@ func TestBuild(t *testing.T) {
 			uc("Moves", "j", "  when m listens e.Ended\n    m does it\n") +
 			uc("Turn", "j", "  when t listens e.End\n    t notifies e.Ended\n") +
 			uc("Rearm", "j", "  when r listens e.Ended\n    r notifies e.End\n")}, []string{"Open", "Turn", "Moves", "Rearm"}, true},
+		// A member downstream of a cycle waits for it: the cycle is entered
+		// on the cycle, not at the downstream member that sorts first by
+		// file (re-arch-central seller-cross-posts-an-advert-to-olx, B19).
+		{"cycle entered on the cycle, not downstream of it", map[string]string{
+			"a-loc.craft": uc("Map", "j", "  when S maps\n    m does it\n"),
+			"b-olx.craft": uc("Post", "j", "  when p listens e.Changed\n    p notifies e.Export\n") +
+				uc("Change", "j", "  when c listens e.Export\n    c notifies e.Changed\n    continues \"Map\"\n")}, []string{"Post", "Change", "Map"}, true},
 		{"other journeys ignored", map[string]string{"a.craft": uc("A", "j", "  when S does\n    a does it\n") + uc("Z", "k", "  when S does\n    z does it\n")}, []string{"A"}, false},
 	}
 	for _, c := range cases {

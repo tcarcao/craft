@@ -45,8 +45,9 @@ func Slugs(doc *model.CraftDoc) []string {
 // members come first: among ready ones, a successor of the member placed
 // last, then the namesake (the member the journey is named after), then
 // (source file, line). When none is ready (a cycle), the cycle is entered
-// where a placed member hands off into it, else at the namesake, else by
-// (source file, line), and Cycle is set. Members with no hand-off to or from
+// at a member on it where a placed member hands off into it, else at the
+// namesake, else by (source file, line), and Cycle is set; a member
+// downstream of the cycle waits for it. Members with no hand-off to or from
 // another member come last, namesake first.
 func Build(doc *model.CraftDoc, slug string) model.Journey {
 	j := model.Journey{Slug: slug}
@@ -179,10 +180,18 @@ func edgesBetween(doc *model.CraftDoc, members []int) []model.JourneyEdge {
 // unconnected ones. The next member is chosen by tier, then preference:
 //
 //	tier 0: a connected member with no unplaced predecessor (ready);
-//	tier 1: a connected member a placed member hands off to (a cycle, entered
-//	        where the flow reaches it);
-//	tier 2: any other connected member (a cycle nothing hands into);
-//	tier 3: an unconnected member.
+//	tier 1: a connected member on a cycle that a placed member hands off to
+//	        (the cycle is entered where the flow reaches it);
+//	tier 2: any other connected member on a cycle (a cycle nothing hands
+//	        into);
+//	tier 3: a connected member that still waits for a member off its cycle
+//	        (downstream of a cycle; never chosen while a tier 1 or 2 member
+//	        is left);
+//	tier 4: an unconnected member.
+//
+// "On a cycle" here means: every unplaced predecessor of the member can be
+// reached back from it through unplaced members, so nothing upstream of its
+// cycle is still waiting to be placed.
 //
 // Within a tier: a successor of the member placed last (so independent
 // chains do not interleave), then the namesake (see namesake), then the
@@ -193,6 +202,7 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 	indeg := make([]int, n)
 	succ := make([][]int, n)
 	connected := make([]bool, n)
+	pred := make([][]int, n)
 	seen := map[[2]int]bool{}
 	for _, e := range edges {
 		connected[e.From], connected[e.To] = true, true
@@ -200,6 +210,7 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 			seen[p] = true
 			indeg[e.To]++
 			succ[e.From] = append(succ[e.From], e.To)
+			pred[e.To] = append(pred[e.To], e.From)
 		}
 	}
 	before := func(x, y int) bool {
@@ -214,12 +225,43 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 	}
 	named := namesake(doc, slug, members, before)
 	reached := make([]bool, n)
+	placed := make([]bool, n)
+	// reaches reports whether to can be reached from from through unplaced
+	// members.
+	reaches := func(from, to int) bool {
+		visited := make([]bool, n)
+		stack := []int{from}
+		for len(stack) > 0 {
+			m := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for _, s := range succ[m] {
+				if s == to {
+					return true
+				}
+				if !placed[s] && !visited[s] {
+					visited[s] = true
+					stack = append(stack, s)
+				}
+			}
+		}
+		return false
+	}
+	onCycle := func(m int) bool {
+		for _, p := range pred[m] {
+			if !placed[p] && !reaches(m, p) {
+				return false
+			}
+		}
+		return true
+	}
 	tier := func(m int) int {
 		switch {
 		case !connected[m]:
-			return 3
+			return 4
 		case indeg[m] == 0:
 			return 0
+		case !onCycle(m):
+			return 3
 		case reached[m]:
 			return 1
 		}
@@ -239,7 +281,6 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 		}
 		return before(m, cur)
 	}
-	placed := make([]bool, n)
 	for len(order) < n {
 		next := -1
 		for m := range n {
@@ -247,7 +288,7 @@ func topoOrder(doc *model.CraftDoc, slug string, members []int, edges []model.Jo
 				next = m
 			}
 		}
-		if t := tier(next); t == 1 || t == 2 {
+		if t := tier(next); t >= 1 && t <= 3 {
 			cycle = true
 		}
 		placed[next] = true

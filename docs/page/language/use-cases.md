@@ -691,7 +691,7 @@ Each use case is a section. The participants are shared, so a listener whose pub
 2. then the **namesake**: the member whose title, slugified, is the slug; else one in a file named `<slug>.craft`; else one in a file named after one of its `formerly_journey` values;
 3. then the earliest file and line.
 
-Members with no hand-off to or from another member come after every connected one, the namesake first. Each gets a `craft/lint/journey-unconnected` hint: connect it with a `notifies`/`listens` pair or a `continues` link, or move it to its own journey. When the hand-offs form a cycle, the cycle is entered where the flow reaches it (a member that a placed member hands off to), else at the namesake, and `craft generate` notes it on stderr.
+Members with no hand-off to or from another member come after every connected one, the namesake first. Each gets a `craft/lint/journey-unconnected` hint: connect it with a `notifies`/`listens` pair or a `continues` link, or move it to its own journey. When the hand-offs form a cycle, the cycle is entered on the cycle where the flow reaches it (a member of the cycle that a placed member hands off to), else at the namesake; a member downstream of the cycle waits for it. `craft generate` notes the cycle on stderr.
 
 `--journey a,b` draws one file per slug (`<base>-journey-<slug>.puml`), and `--journey all` every journey with two or more members. In the editor, hover on a `journey` value lists the members in spine order, go to definition jumps to the others, and a code lens counts them. Go code gets the same order from `pkg/craft.BuildJourney(doc, slug)`.
 
