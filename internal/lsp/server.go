@@ -955,7 +955,7 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 	for _, dom := range wsSym.Domains {
 		var bcs []craftBCEntry
 		for _, bcName := range dom.BoundedContexts {
-			bcs = append(bcs, craftBCEntry{Name: bcName})
+			bcs = append(bcs, craftBCEntry{Name: bcName, DisplayName: dom.DisplayNames[bcName]})
 		}
 		result.Domains = append(result.Domains, craftDomainEntry{
 			Name:            dom.Name,
@@ -971,6 +971,7 @@ func (s *Server) craftExtractWorkspace(args []interface{}) interface{} {
 		result.Actors = append(result.Actors, craftActorEntry{
 			Name:          actor.Name,
 			ActorType:     string(actor.Type),
+			DisplayName:   actor.DisplayName,
 			URI:           actor.URI,
 			StartLine:     actor.Line,
 			EndLine:       actor.Line, // actors are single-line within a block
@@ -1243,7 +1244,11 @@ func reconstructDomainFromView(dom syntax.DomainDecl) string {
 		if bcTok == nil {
 			continue
 		}
-		sb.WriteString(bcIndent + bcTok.Text() + "\n")
+		line := bcIndent + bcTok.Text()
+		if _, dnTok := bc.DisplayName(); dnTok != nil {
+			line += " " + dnTok.Text()
+		}
+		sb.WriteString(line + "\n")
 	}
 	if dom.IsGrouped() {
 		sb.WriteString(indent + "}\n}")
@@ -1287,8 +1292,9 @@ type craftDomainEntry struct {
 }
 
 type craftBCEntry struct {
-	Name      string `json:"name"`
-	StartLine int    `json:"startLine"`
+	Name        string `json:"name"`
+	StartLine   int    `json:"startLine"`
+	DisplayName string `json:"displayName,omitempty"`
 }
 
 type craftUseCaseEntry struct {
@@ -1304,6 +1310,7 @@ type craftUseCaseEntry struct {
 type craftActorEntry struct {
 	Name          string `json:"name"`
 	ActorType     string `json:"type"`
+	DisplayName   string `json:"displayName,omitempty"`
 	URI           string `json:"uri"`
 	StartLine     int    `json:"startLine"`
 	EndLine       int    `json:"endLine"`
@@ -1700,7 +1707,7 @@ func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*pr
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
-					Value: "actor: " + nameTok.Text() + " (" + a.ActorTypeValue() + ")",
+					Value: withDisplayName("actor: "+nameTok.Text()+" ("+a.ActorTypeValue()+")", actorDisplayName(a)),
 				},
 			}, nil
 		}
@@ -1722,6 +1729,21 @@ func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*pr
 					Value: "domain: " + syntax.StringAwareText(*nameTok),
 				},
 			}, nil
+		}
+		for _, bc := range d.BoundedContexts() {
+			bcTok := bc.Name()
+			if bcTok == nil {
+				continue
+			}
+			if bcLine, _ := f.LineIndex.LineCol(bcTok.Offset()); bcLine == cursorLine {
+				dn, _ := bc.DisplayName()
+				return &protocol.Hover{
+					Contents: protocol.MarkupContent{
+						Kind:  protocol.PlainText,
+						Value: withDisplayName("bounded context: "+bcTok.Text()+" (domain: "+syntax.StringAwareText(*nameTok)+")", dn),
+					},
+				}, nil
+			}
 		}
 	}
 
@@ -1832,6 +1854,20 @@ func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*pr
 	return nil, nil
 }
 
+// withDisplayName adds a declared display name to a hover as its own line.
+func withDisplayName(hover, displayName string) string {
+	if displayName == "" {
+		return hover
+	}
+	return hover + "\ndisplay name: " + displayName
+}
+
+// actorDisplayName is an actor declaration's display name, "" when none.
+func actorDisplayName(a syntax.ActorDecl) string {
+	dn, _ := a.DisplayName()
+	return dn
+}
+
 // hoverForUseCaseRef resolves a use-case body reference and returns a hover string.
 func hoverForUseCaseRef(rm sema.ResolutionMap, uri, name string, line int) string {
 	if name == "" {
@@ -1843,11 +1879,12 @@ func hoverForUseCaseRef(rm sema.ResolutionMap, uri, name string, line int) strin
 	}
 	switch target.Kind {
 	case lang.ParticipantActor:
-		return "actor: " + target.Actor.Name + " (" + string(target.Actor.Type) + ")"
+		return withDisplayName("actor: "+target.Actor.Name+" ("+string(target.Actor.Type)+")", target.Actor.DisplayName)
 	case lang.ParticipantDomain:
 		return "domain: " + target.Domain.Name
 	case lang.ParticipantBoundedContext:
-		return "bounded context: " + name + " (domain: " + target.Domain.Name + ")"
+		bare := name[strings.LastIndex(name, "/")+1:]
+		return withDisplayName("bounded context: "+name+" (domain: "+target.Domain.Name+")", target.Domain.DisplayNames[bare])
 	case lang.ParticipantService:
 		detail := "service: " + target.Service.Name
 		if target.Service.Language != "" {

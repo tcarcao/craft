@@ -588,7 +588,7 @@ func bcSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 			items = append(items, protocol.CompletionItem{
 				Label:  bc,
 				Kind:   protocol.CompletionItemKindModule,
-				Detail: "bounded context (domain: " + domName + ")",
+				Detail: withDetail("bounded context (domain: "+domName+")", dom.DisplayNames[bc]),
 			})
 		}
 	}
@@ -613,7 +613,7 @@ func domainAndServiceSymbolCompletions(ws *workspace.Workspace) *protocol.Comple
 			items = append(items, protocol.CompletionItem{
 				Label:  bc,
 				Kind:   protocol.CompletionItemKindModule,
-				Detail: "bounded context (domain: " + domName + ")",
+				Detail: withDetail("bounded context (domain: "+domName+")", dom.DisplayNames[bc]),
 			})
 		}
 	}
@@ -634,6 +634,14 @@ func protocolVerbCompletions() *protocol.CompletionList {
 		}
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
+}
+
+// withDetail appends a declared display name to a completion item's detail.
+func withDetail(detail, displayName string) string {
+	if displayName == "" {
+		return detail
+	}
+	return detail + ": " + displayName
 }
 
 func domainBodyCompletions() *protocol.CompletionList {
@@ -702,7 +710,7 @@ func allSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 		items = append(items, protocol.CompletionItem{
 			Label:  name,
 			Kind:   protocol.CompletionItemKindVariable,
-			Detail: "actor (" + string(actor.Type) + ")",
+			Detail: withDetail("actor ("+string(actor.Type)+")", actor.DisplayName),
 		})
 	}
 	for name := range wsSym.Services {
@@ -722,7 +730,7 @@ func allSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 			items = append(items, protocol.CompletionItem{
 				Label:  bc,
 				Kind:   protocol.CompletionItemKindModule,
-				Detail: "bounded context (domain: " + domName + ")",
+				Detail: withDetail("bounded context (domain: "+domName+")", dom.DisplayNames[bc]),
 			})
 		}
 	}
@@ -743,7 +751,7 @@ func actorSymbolCompletions(ws *workspace.Workspace) *protocol.CompletionList {
 		items = append(items, protocol.CompletionItem{
 			Label:  name,
 			Kind:   protocol.CompletionItemKindVariable,
-			Detail: "actor (" + string(actor.Type) + ")",
+			Detail: withDetail("actor ("+string(actor.Type)+")", actor.DisplayName),
 		})
 	}
 	return &protocol.CompletionList{IsIncomplete: false, Items: items}
