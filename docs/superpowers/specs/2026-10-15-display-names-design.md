@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-15
 **Owner:** Tiago Carção
-**Status:** Implemented on feat/display-names
+**Status:** Implemented (v2.27.0)
 **Release:** v2.27.0 (minor: additive syntax, additive `pkg/craft` fields, three new lint codes)
 
 ## 1. Problem

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.27.0] — 2026-10-15
 
 **Why a minor version (v2.27.0).** New optional syntax, additive `pkg/craft` fields and a method, and three new lint warnings. A string after a context or actor name was a syntax error before, so no file that parsed changes meaning, and a model without display names projects and renders byte-for-byte as in 2.26.1 (checked on re-arch-central: every diagram identical).
 
