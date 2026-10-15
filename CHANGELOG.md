@@ -1,9 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [2.26.0] — 2026-10-15
+
+**Why a minor version.** `pkg/craft` gains two exported constants and spine order can change; no identifier is removed or changes type, and no file that validated starts to fail.
 
 ### Changed
-- **Spine edges for calls to a member's `receives` and for `includes`.** An `asks` in member A whose target context and operation (item by item for a list) match a `receives` trigger of member B adds a `call` edge A → B, labelled with the operation; an `includes "B"` link adds an `includes` edge A → B. Both order A before B, like a hand-off, and connect both members for `journey-unconnected`. Only `receives` triggers answer a call; a plain trigger is not guessed. In a spine sequence, a `receives` that an earlier section calls is drawn as a call from that caller, and its reply goes back to it; `includes` keeps its `ref` frame. `pkg/craft` adds `JourneyEdgeCall` and `JourneyEdgeIncludes` (additive). A spine whose members were connected only by these can change order.
+- **Spine edges for calls to a member's `receives` and for `includes`.** An `asks` in member A whose target context and operation (item by item for a list) match a `receives` trigger of member B adds a `call` edge A → B, labelled with the operation; an `includes "B"` link adds an `includes` edge A → B. Both order A before B, like a hand-off, and connect both members for `journey-unconnected`. Only `receives` triggers answer a call; a plain trigger is not guessed. In a spine sequence, a `receives` that an earlier section calls is drawn as a call from that caller, and its reply goes back to it; `includes` keeps its `ref` frame. `pkg/craft` adds `JourneyEdgeCall` and `JourneyEdgeIncludes` (additive). Any spine with a call or `includes` edge can change order, and can gain a stderr hand-off-cycle note (an `includes` one way and a `continues` back, or a call and a callback). The `journey-unconnected` hint now names all four ways to connect a member: an event or store pair, a `continues` or `includes` link, or a call to its `receives`.
 
 ## [2.25.0] — 2026-10-15
 
