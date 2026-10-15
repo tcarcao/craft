@@ -90,6 +90,9 @@ func generateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if len(files) == 0 {
+				return fmt.Errorf("no files matched %v", args)
+			}
 			contents := make(map[string][]byte, len(files))
 			for _, file := range files {
 				content, err := os.ReadFile(file)
