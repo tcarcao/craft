@@ -1281,8 +1281,16 @@ craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' -
 - **Edges** between two different members A and B:
   - `event`: A has a `Publish` of an event that B's trigger listens to (any item of its list);
   - `store`: the same, for a store hand-off;
-  - `continues`: A has a `continues` link to B.
-  An `includes` link adds no edge: the included flow is shown in place by its `ref` frame.
+  - `continues`: A has a `continues` link to B;
+  - `call` (v2.25.1): an `asks` in A whose target context (resolved, else as written) and operation
+    match a `receives` trigger of B. A list bracket matches item by item (items trimmed, whitespace
+    collapsed): `[drop, rebuild]` reaches `receives … [rebuild]`. One edge per shared operation, with
+    the operation in `Event`. Only a `receives` trigger is a callee: a plain trigger whose first action
+    is the called context is not guessed, so write the callee side as `receives`;
+  - `includes` (v2.25.1): A has an `includes` link to B. (v2.25.0 added no edge: the included flow is
+    still shown in place by its `ref` frame, and now the includer is also ordered before it.)
+  Every kind orders the same way: A before B. Every kind counts as connection for
+  `journey-unconnected`.
 - **Namesake:** the member the journey is named after. In order of preference: a member whose title,
   slugified (lowercase, each run of characters that are not letters or digits becomes `-`, trimmed), is
   the slug; a member in a file whose base name without `.craft` is the slug; a member in a file named
@@ -1312,7 +1320,7 @@ type JourneyMember struct {
 type JourneyEdge struct {
     From, To int             // member indices
     Kind     JourneyEdgeKind
-    Event    string          // the event or store ref; "" for continues
+    Event    string          // the event, store ref or operation (call); "" for continues and includes
 }
 type Journey struct {
     Slug    string
@@ -1323,13 +1331,16 @@ type Journey struct {
 func BuildJourney(doc *CraftDoc, slug string) Journey
 func JourneySlugs(doc *CraftDoc) []string // sorted
 ```
-`pkg/craft` re-exports these, so the hub orders flows with the same function instead of a copy.
+`pkg/craft` re-exports these, so the hub orders flows with the same function instead of a copy. The
+kinds are `JourneyEdgeEvent`, `JourneyEdgeStore`, `JourneyEdgeContinues`, and since v2.25.1
+`JourneyEdgeCall` (`"call"`) and `JourneyEdgeIncludes` (`"includes"`).
 
 ### 17.3 Sema / lint
 `craft/lint/journey-unconnected` (new, **hint**): a member of a journey with 2+ members that has no edge
 to or from another member. The range is the `journey` tag value. "Nothing in the model connects this
-use case to the rest of `<slug>`: add the `notifies`/`listens` pair, a `continues` link, or move it to
-its own journey." A hint, because today about 69 journeys would raise it: it is the G6 migration
+use case to the rest of `<slug>`: add the notifies/listens pair, a `receives` trigger for the operation
+another member asks for, a continues or includes link, or move it to its own journey." (v2.25.1 adds
+the `receives` and `includes` ways.) A hint, because today about 69 journeys would raise it: it is the G6 migration
 backlog, not an error in the model.
 
 ### 17.4 Rendering
@@ -1342,6 +1353,13 @@ For a spine:
   drawn as a direct `publisher ->> listener` message, as v2.22 does for a publisher in the same section.
   A store read keeps the v2.23 store-lane form. A publisher outside the spine, or later in it, keeps the
   inbound arrow with `(from …)`.
+- **Calls (v2.25.1).** A `receives` trigger whose operation an earlier section asks of the same
+  context (a `call` edge) is drawn as a call from that caller (`caller -> callee : <phrase> [op]`)
+  instead of the found message from the unobserved caller, and the callee's unaddressed reply goes
+  back to the caller (`callee --> caller`) instead of the lost message. A `receives` that no earlier
+  section calls keeps the unobserved caller. An `includes` stays the `ref` frame in the includer's
+  section. Hand-offs by event or store keep their own arrows, so a call reads as a call, not as an
+  asynchronous message.
 - The title is `Journey: <slug>`: PlantUML `title Journey: <slug>` after the skinparams; Mermaid a
   front-matter title. If the Mermaid render test rejects front matter, the writer uses a first
   `Note over <first>,<last>: Journey: <slug>` instead.
@@ -1458,14 +1476,17 @@ those views a member filter.
   `journey` tag under the cursor, then the preview from the server, in the existing preview panel.
 - **tree-sitter:** no change (the tag syntax exists).
 - **Hub:** the "flow contains use_case" edges gain `Order` from `craft.BuildJourney`, and the edges of the
-  journey (`event`, `store`, `continues`) become flow-internal hand-off edges. `web/src/views/journey.ts`
+  journey (`event`, `store`, `continues`, and since v2.25.1 `call` and `includes`) become flow-internal
+  hand-off edges. `web/src/views/journey.ts`
   lists the use cases in that order with the hand-offs between them, and shows "cycle" when there is
   one. `arch_find_use_cases` with `journey` returns members in spine order.
 
 ### 17.7 Tests
 `internal/journey` table tests: a chain, a fan-out, a `continues` edge, a store edge, ties by file and
-line, a cycle, members across files, a member with a `listens` list. Sequence goldens for the example
-(both backends), a publisher outside the spine, a cycle. CLI: `--journey` one slug, a list, `all`,
+line, a cycle, members across files, a member with a `listens` list; v2.25.1: a call to a member's
+`receives` (one operation, an item of a list, another operation, another context, a plain trigger that
+is no callee) and an `includes` edge. Sequence goldens for the example
+(both backends), a publisher outside the spine, a cycle, and (v2.25.1) a call drawn from its caller. CLI: `--journey` one slug, a list, `all`,
 `--stdout`, an unknown slug, the `--type` and `--split` errors. Lint `journey-unconnected` and
 `journey-list`. Server endpoints. `pkg/craft` API test for `BuildJourney`.
 
@@ -1558,7 +1579,8 @@ v2.25.0, minor.
    code last changed, so a stamp would be a second, drifting copy. ` -- text` keeps the prose on the
    same line, so conversion does not add lines.
 9. **G6: two link words**, `includes` and `continues`, not only the sketch's `continues`. They differ in
-   meaning (the flow comes back vs. it does not) and in the spine (only `continues` orders). No
+   meaning (the flow comes back vs. it does not). In v2.25.0 only `continues` ordered the spine;
+   v2.25.1 orders by `includes` too (the includer first), and by a call to a member's `receives`. No
    `file::title` form, because titles are unique across the corpus; `ambiguous-use-case` guards the
    day they are not. An unresolved link is a warning, not the sketch's error, so single-file validation
    keeps working. `formerly_titled` resolution keeps links alive across renames.

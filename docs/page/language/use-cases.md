@@ -685,13 +685,13 @@ frontendplatform -> graphql : to pay [payInvoice]
 
 Each use case is a section. The participants are shared, so a listener whose publisher was drawn in an earlier section gets the event straight from it; a publisher outside the journey, or later in it, keeps the inbound `(from …)` arrow.
 
-**Order.** The spine is ordered by hand-offs between members: A comes before B when A publishes an event (or writes a store ref) that B's trigger listens to, or when A has `continues "B"`. `includes` does not order. Among members that are ready at the same time:
+**Order.** The spine is ordered by hand-offs between members: A comes before B when A publishes an event (or writes a store ref) that B's trigger listens to, when A has `continues "B"` or `includes "B"`, or when A `asks` a context for an operation that B answers with `when <context> receives … [<operation>]` (a list such as `[drop, rebuild]` matches item by item; since 2.25.1 for `includes` and calls). Only a `receives` trigger answers a call: write the callee side as `receives`, not as a plain trigger. In the diagram, that `receives` is drawn as a call from the caller, and its reply goes back to it. Among members that are ready at the same time:
 
 1. a successor of the member placed last, so one chain is drawn whole before the next;
 2. then the **namesake**: the member whose title, slugified, is the slug; else one in a file named `<slug>.craft`; else one in a file named after one of its `formerly_journey` values;
 3. then the earliest file and line.
 
-Members with no hand-off to or from another member come after every connected one, the namesake first. Each gets a `craft/lint/journey-unconnected` hint: connect it with a `notifies`/`listens` pair or a `continues` link, or move it to its own journey. When the hand-offs form a cycle, the cycle is entered on the cycle where the flow reaches it (a member of the cycle that a placed member hands off to), else at the namesake; a member downstream of the cycle waits for it. `craft generate` notes the cycle on stderr.
+Members with no hand-off to or from another member come after every connected one, the namesake first. Each gets a `craft/lint/journey-unconnected` hint: connect it with a `notifies`/`listens` pair, a `receives` trigger for the operation another member asks for, or a `continues` or `includes` link, or move it to its own journey. When the hand-offs form a cycle, the cycle is entered on the cycle where the flow reaches it (a member of the cycle that a placed member hands off to), else at the namesake; a member downstream of the cycle waits for it. `craft generate` notes the cycle on stderr.
 
 `--journey a,b` draws one file per slug (`<base>-journey-<slug>.puml`), and `--journey all` every journey with two or more members. In the editor, hover on a `journey` value lists the members in spine order, go to definition jumps to the others, and a code lens counts them. Go code gets the same order from `pkg/craft.BuildJourney(doc, slug)`.
 
@@ -887,7 +887,7 @@ Use-case actions and triggers can emit these:
 | `craft/lint/continues-not-last` (2.25) | warning | a step after a `continues` in the same body. |
 | `craft/lint/self-link` (2.25) | warning | a link to its own use case. |
 | `craft/lint/journey-list` (2.25) | warning | a `journey` tag with two or more values. |
-| `craft/lint/journey-unconnected` (2.25) | hint | a journey member with no hand-off to the rest of the journey. |
+| `craft/lint/journey-unconnected` (2.25) | hint | a journey member with no hand-off, call or link to the rest of the journey. |
 
 ## Surfaces
 
