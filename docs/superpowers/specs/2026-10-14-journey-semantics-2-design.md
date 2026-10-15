@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14
 **Owner:** Tiago Carção (design decisions delegated; each one is recorded with its reason in §20)
-**Status:** Part I implemented (v2.24.0)
+**Status:** Implemented (v2.24.0, v2.25.0)
 **Releases:** two minor releases, both additive. No `pkg/craft` name, field or JSON key changes or
 disappears.
 - **v2.24.0** (Part I): G10, G11, G15, G16, G17, G20. Three inputs that parsed before change meaning

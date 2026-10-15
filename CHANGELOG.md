@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.25.0] — 2026-10-15
 
 **Why a minor version.** No exported `pkg/craft` identifier is removed or changes type, and every model addition is an optional JSON key: a file that uses none of the new constructs gives the same `.craftjson` as in 2.24.0. One input that parsed before now has a meaning, a comment that starts with `//@` (see **Changed**); a malformed one is only a warning, so no file that validated starts to fail. re-arch-central validates with 0 errors, and the only new diagnostics are 239 `journey-unconnected` hints (members of 96 of its 127 multi-member journeys).
 
