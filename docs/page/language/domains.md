@@ -99,6 +99,7 @@ Rules:
 - The string must start on the name's line. A string on its own line is a syntax error.
 - Display names are declared in domain blocks only, not in a service's `contexts:` list.
 - Two contexts or actors with the same display name get a `craft/lint/duplicate-display-name` warning; `""` gets `craft/lint/empty-display-name` and is ignored.
+- A context or actor declared again with another display name gets a `craft/lint/conflicting-display-name` warning. Diagrams draw the first declaration, in sorted file order.
 - A file without display names renders exactly as before.
 
 ## Domain Naming

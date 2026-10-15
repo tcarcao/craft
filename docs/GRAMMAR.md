@@ -64,7 +64,7 @@ actor_name       = identifier ;
 display_name     = STRING ;           (* 2.27; on the name's line *)
 ```
 
-**Display names (2.27).** An actor or a bounded context may carry a quoted display name after its name, on the same line: `user Seller "the seller"`, `nmf_monetization "nMF, the money engine"`. Diagrams, hovers and the surface table show it in place of the id; the id stays the identity everywhere else. A string on a later line is still `craft/syntax/unexpected-token`. `""` is ignored with a `craft/lint/empty-display-name` warning, and two declarations with the same display name get `craft/lint/duplicate-display-name`.
+**Display names (2.27).** An actor or a bounded context may carry a quoted display name after its name, on the same line: `user Seller "the seller"`, `nmf_monetization "nMF, the money engine"`. Diagrams, hovers and the surface table show it in place of the id; the id stays the identity everywhere else. A string on a later line is still `craft/syntax/unexpected-token`. `""` is ignored with a `craft/lint/empty-display-name` warning, two declarations with the same display name get `craft/lint/duplicate-display-name`, and one context or actor declared again with another display name gets `craft/lint/conflicting-display-name` (the first declaration, in sorted file order, is drawn).
 
 The actor-type slot accepts any identifier (grammar ruling Q5: tooling decides the known set). Six kinds are known (2.24 added the last three):
 

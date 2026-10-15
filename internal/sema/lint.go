@@ -69,20 +69,25 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	return diags
 }
 
-// ── duplicate-display-name / empty-display-name ───────────────────────────────
+// ── duplicate-display-name / empty-display-name / conflicting-display-name ──
 // Warning: two declarations (bounded contexts or actors) share a display name,
 // so a reader of a diagram cannot tell them apart; reported on each later
 // string in sorted file order. Warning: a display name is "", which declares
-// none.
+// none. Warning: one context or actor is declared again with another display
+// name (or with one, after a declaration without); the first declaration in
+// sorted file order is the one drawn, so the later string is reported.
 
 func lintDisplayNames(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green.LineIndex) []model.Diagnostic {
 	type site struct {
 		identity, name string
-		tok            syntax.SyntaxToken
+		off            green.TextSize
+		tok            *syntax.SyntaxToken // the string; nil when none is declared
 	}
 	type first struct{ identity, uri string }
+	type decl struct{ name, uri string }
 	var diags []model.Diagnostic
-	seen := map[string]first{}
+	seen := map[string]first{}    // display name → first declaration with it
+	declared := map[string]decl{} // identity → its first declaration
 	for _, uri := range sortedTreeURIs(perFileTrees) {
 		li := lis[uri]
 		file := syntax.AsFile(perFileTrees[uri])
@@ -93,18 +98,29 @@ func lintDisplayNames(perFileTrees map[string]syntax.SyntaxNode, lis map[string]
 				continue
 			}
 			for _, bc := range d.BoundedContexts() {
-				if dn, tok := bc.DisplayName(); tok != nil && bc.Name() != nil {
-					sites = append(sites, site{"bc:" + syntax.StringAwareText(*nameTok) + "/" + bc.Name().Text(), dn, *tok})
+				if bc.Name() == nil {
+					continue
 				}
+				dn, tok := bc.DisplayName()
+				sites = append(sites, site{"bc:" + syntax.StringAwareText(*nameTok) + "/" + bc.Name().Text(), dn, bc.Name().Offset(), tok})
 			}
 		}
 		for _, a := range file.Actors() {
-			if dn, tok := a.DisplayName(); tok != nil && a.Name() != nil {
-				sites = append(sites, site{"actor:" + a.Name().Text(), dn, *tok})
+			if a.Name() == nil {
+				continue
 			}
+			dn, tok := a.DisplayName()
+			sites = append(sites, site{"actor:" + a.Name().Text(), dn, a.Name().Offset(), tok})
 		}
-		sort.SliceStable(sites, func(i, j int) bool { return sites[i].tok.Offset() < sites[j].tok.Offset() })
+		sort.SliceStable(sites, func(i, j int) bool { return sites[i].off < sites[j].off })
 		for _, s := range sites {
+			prev, again := declared[s.identity]
+			if !again {
+				declared[s.identity] = decl{s.name, uri}
+			}
+			if s.tok == nil {
+				continue
+			}
 			line, col := li.LineCol16(s.tok.Offset())
 			start := colToLSP(col)
 			rng := model.Range{
@@ -121,18 +137,34 @@ func lintDisplayNames(perFileTrees map[string]syntax.SyntaxNode, lis map[string]
 				})
 				continue
 			}
+			if again {
+				if prev.name == s.name {
+					continue
+				}
+				msg := fmt.Sprintf("%s already has the display name %q (%s), which diagrams draw; use the same name here or remove this one",
+					displayIdentity(s.identity), prev.name, prev.uri)
+				if prev.name == "" {
+					msg = fmt.Sprintf("%s is first declared without a display name (%s), so diagrams draw its id; move the display name there or remove this one",
+						displayIdentity(s.identity), prev.uri)
+				}
+				diags = append(diags, model.Diagnostic{
+					Code:      "craft/lint/conflicting-display-name",
+					Message:   msg,
+					Severity:  model.SeverityWarning,
+					SourceURI: uri,
+					Range:     rng,
+				})
+				continue
+			}
 			f, dup := seen[s.name]
 			if !dup {
 				seen[s.name] = first{s.identity, uri}
 				continue
 			}
-			if f.identity == s.identity {
-				continue
-			}
 			diags = append(diags, model.Diagnostic{
 				Code: "craft/lint/duplicate-display-name",
 				Message: fmt.Sprintf("display name %q is already used by %s (%s); diagrams would draw both under one name, so give this one another",
-					s.name, strings.TrimPrefix(strings.TrimPrefix(f.identity, "bc:"), "actor:"), f.uri),
+					s.name, displayIdentity(f.identity), f.uri),
 				Severity:  model.SeverityWarning,
 				SourceURI: uri,
 				Range:     rng,
@@ -140,6 +172,12 @@ func lintDisplayNames(perFileTrees map[string]syntax.SyntaxNode, lis map[string]
 		}
 	}
 	return diags
+}
+
+// displayIdentity spells a lintDisplayNames identity for a message:
+// "<domain>/<bc>" or the actor name.
+func displayIdentity(identity string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(identity, "bc:"), "actor:")
 }
 
 // ── dead-event ────────────────────────────────────────────────────────────────

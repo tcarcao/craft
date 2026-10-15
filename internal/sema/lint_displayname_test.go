@@ -90,3 +90,48 @@ func TestSymbols_CarryDisplayNames(t *testing.T) {
 		t.Errorf("actor display name = %q", syms.Actors[0].DisplayName)
 	}
 }
+
+// The same actor or context declared again with another display name: the
+// first one (in sorted file order) is drawn, so the later one is reported.
+func TestLint_ConflictingDisplayName(t *testing.T) {
+	diags := lintFiles(t, map[string]string{
+		"file:///a.craft": "actor user Seller \"the seller\"\ndomain billing {\n    nmf \"the money engine\"\n}\n",
+		"file:///b.craft": "actor user Seller \"the vendor\"\ndomain billing {\n    nmf \"nMF\"\n}\n",
+	})
+	got := byCode(diags, "craft/lint/conflicting-display-name")
+	if len(got) != 2 {
+		t.Fatalf("conflicting-display-name = %v", got)
+	}
+	want := []struct {
+		line, start, end int
+		msg              string
+	}{
+		{0, 18, 30, `Seller already has the display name "the seller" (file:///a.craft), which diagrams draw; use the same name here or remove this one`},
+		{2, 8, 13, `billing/nmf already has the display name "the money engine" (file:///a.craft), which diagrams draw; use the same name here or remove this one`},
+	}
+	for i, w := range want {
+		d := got[i]
+		if d.SourceURI != "file:///b.craft" || d.Severity != model.SeverityWarning || d.Message != w.msg ||
+			d.Range.Start.Line != w.line || d.Range.Start.Character != w.start || d.Range.End.Character != w.end {
+			t.Errorf("diag %d = %+v", i, d)
+		}
+	}
+	// A conflict is not also a duplicate.
+	if dup := byCode(diags, "craft/lint/duplicate-display-name"); len(dup) != 0 {
+		t.Errorf("duplicate-display-name = %v", dup)
+	}
+}
+
+// A first declaration without a display name wins too: the later name is
+// never drawn.
+func TestLint_ConflictingDisplayName_FirstHasNone(t *testing.T) {
+	diags := lintFiles(t, map[string]string{
+		"file:///a.craft": "actor user Seller\n",
+		"file:///b.craft": "actor user Seller \"the vendor\"\n",
+	})
+	got := byCode(diags, "craft/lint/conflicting-display-name")
+	if len(got) != 1 || got[0].SourceURI != "file:///b.craft" ||
+		got[0].Message != "Seller is first declared without a display name (file:///a.craft), so diagrams draw its id; move the display name there or remove this one" {
+		t.Fatalf("conflicting-display-name = %v", got)
+	}
+}
