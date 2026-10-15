@@ -68,6 +68,14 @@ func Architecture(a view.Architecture) string {
 	return b.String()
 }
 
+// participantText makes a name safe after `as` in a sequence participant:
+// Mermaid ends the statement at ';' and starts a comment at '#', cutting the
+// rest of the name silently. ';' becomes ',' and '#' the full-width '＃'
+// (U+FF03), which reads the same; neither occurs in an id.
+func participantText(s string) string {
+	return strings.NewReplacer(";", ",", "#", "\uff03").Replace(s)
+}
+
 // Sequence writes a sequence diagram. Each use case opens with a note across
 // all participants. Mermaid has no "found message", so an event arriving from
 // outside the section comes from an External participant, and the caller of a
@@ -77,7 +85,7 @@ func Sequence(s view.Sequence) string {
 	al := newAliases()
 	b.WriteString("sequenceDiagram\n")
 	for _, p := range s.Participants {
-		kind, label := "participant", strings.ReplaceAll(p.Text(), ";", ",")
+		kind, label := "participant", participantText(p.Text())
 		switch p.Kind {
 		case view.NodeActor:
 			kind = "actor"

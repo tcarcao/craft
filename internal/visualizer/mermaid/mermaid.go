@@ -8,6 +8,7 @@ package mermaid
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -67,5 +68,13 @@ func (a *aliases) declare(id, label string) string {
 	return al
 }
 
-// text makes a label safe inside a double-quoted Mermaid string.
-func text(s string) string { return strings.ReplaceAll(s, `"`, "#quot;") }
+// entity matches what Mermaid decodes as an entity code inside a quoted
+// string: "#2;" would be drawn as the character 2.
+var entity = regexp.MustCompile(`#(\w+;)`)
+
+// text makes a label safe inside a double-quoted Mermaid string: a '#' that
+// would start an entity code is written as "#35;", and '"' as "#quot;". A
+// label with no such '#' is unchanged but for its quotes.
+func text(s string) string {
+	return strings.ReplaceAll(entity.ReplaceAllString(s, "#35;$1"), `"`, "#quot;")
+}

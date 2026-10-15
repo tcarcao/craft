@@ -29,6 +29,25 @@ func TestDisplayNames_Sequence(t *testing.T) {
 	requireLine(t, "mermaid", mmd, `participant CRON as the hourly clock (scheduler)`)
 }
 
+// Mermaid reads '#' in a sequence participant as the start of a comment and
+// ';' as the end of a statement, so the name would be cut silently. Both are
+// replaced by look-alikes; PlantUML keeps them.
+func TestDisplayNames_SequenceHashAndSemicolon(t *testing.T) {
+	puml, mmd := sequenceSource(t, displayNamesDoc(t))
+	requireLine(t, "plantuml", puml, `boundary "price project #2; EU" as PriceProject`)
+	requireLine(t, "mermaid", mmd, "actor PriceProject as price project \uff032, EU")
+}
+
+// In a quoted Mermaid label, "#<word>;" is an entity code: "#2;" would be
+// drawn as the control character 2. The '#' is written as "#35;".
+func TestDisplayNames_FlowHashEntity(t *testing.T) {
+	m, _, err := renderSource(resolvedDoc(t, displayNamesDoc(t)), ViewFlow, Mermaid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireLine(t, "mermaid", string(m), `PriceProject(["price project #35;2; EU"])`)
+}
+
 func TestDisplayNames_Flow(t *testing.T) {
 	doc := resolvedDoc(t, displayNamesDoc(t))
 	p, _, err := renderSource(doc, ViewFlow, PlantUML)

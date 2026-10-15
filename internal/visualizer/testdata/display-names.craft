@@ -3,7 +3,7 @@
 actors {
     user Seller "the seller"
     scheduler CRON "the hourly clock"
-    system PriceProject
+    system PriceProject "price project #2; EU"
 }
 
 domains {

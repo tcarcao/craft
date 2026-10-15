@@ -31,7 +31,7 @@ frame "portfolio value" as portfoliovalue
 
 ' Actors
 boundary "the hourly clock" as CRON <<scheduler>>
-boundary "PriceProject" as PriceProject
+boundary "price project #2; EU" as PriceProject
 actor "the seller" as Seller
 
 ' Domain queues
