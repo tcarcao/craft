@@ -57,6 +57,20 @@ docker run --rm -p 8080:8080 tiagocarcao/craft:latest
 
 The server will start on `http://localhost:8080`.
 
+### Git sources (optional)
+
+The server can also render models kept in git, by name, for clients such as the [Confluence macro](https://github.com/tcarcao/craft-confluence). List them in a JSON file and pass its path in `CRAFT_SOURCES`:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e CRAFT_SOURCES=/config/sources.json -e CRAFT_CACHE=/cache \
+  -e GITLAB_TOKEN=glpat-xxxxxxxx \
+  -v "$PWD/sources.json:/config/sources.json:ro" -v craft-cache:/cache \
+  tiagocarcao/craft:latest
+```
+
+The file format and the `/sources` endpoints are described in the [craft-confluence server guide](https://github.com/tcarcao/craft-confluence/blob/main/docs/server.md).
+
 ### From Source
 
 ```bash
