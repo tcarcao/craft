@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gorilla/mux"
 )
 
 func TestParseDSL_V2Default(t *testing.T) {
@@ -164,5 +166,26 @@ func TestHandlePreviewMermaidC4_ReturnsMermaidSource(t *testing.T) {
 	}
 	if !strings.HasPrefix(resp.Data, "C4Container\n") {
 		t.Fatalf("expected Mermaid C4Container header in data, got: %s", resp.Data)
+	}
+}
+
+func TestCORS_AnswersPreflightOnPostOnlyRoute(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/preview/c4", func(http.ResponseWriter, *http.Request) {}).Methods("POST")
+
+	req := httptest.NewRequest(http.MethodOptions, "/preview/c4", nil)
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Private-Network", "true")
+	rr := httptest.NewRecorder()
+	cors(r).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("preflight status = %d, want 200", rr.Code)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Allow-Origin = %q, want *", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Errorf("Allow-Private-Network = %q, want true", got)
 	}
 }

@@ -550,27 +550,34 @@ func main() {
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
 	r.HandleFunc("/download/c4", server.handleDownloadC4Diagram()).Methods("POST")
 
-	// CORS middleware for VSCode extension
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	})
-
 	// Add middleware for logging
 	r.Use(loggingMiddleware)
 
 	log.Printf("Server starting on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	log.Fatal(http.ListenAndServe(":8080", cors(r)))
+}
+
+// cors wraps the whole router rather than being a mux middleware: mux only
+// runs middleware on a matched route, so a browser preflight (OPTIONS) on a
+// POST-only route got a bare 405 and every browser caller failed.
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		// Chrome asks before a public page (e.g. a Confluence macro) calls a
+		// server on a private network; this answers yes.
+		if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+			w.Header().Set("Access-Control-Allow-Private-Network", "true")
+		}
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
