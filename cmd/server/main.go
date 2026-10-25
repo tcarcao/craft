@@ -10,6 +10,8 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gorilla/mux"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
@@ -35,6 +37,7 @@ type Server struct {
 	tmpl     *template.Template
 	renderer *visualizer.Renderer
 	lastC4   []byte
+	sources  map[string]*source
 }
 
 func NewServer() (*Server, error) {
@@ -43,9 +46,19 @@ func NewServer() (*Server, error) {
 		return nil, err
 	}
 
+	cacheDir := os.Getenv("CRAFT_CACHE")
+	if cacheDir == "" {
+		cacheDir = filepath.Join(os.TempDir(), "craft-sources")
+	}
+	sources, err := loadSources(os.Getenv("CRAFT_SOURCES"), cacheDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
 		tmpl:     tmpl,
 		renderer: visualizer.New(visualizer.ExecPlantUML{}),
+		sources:  sources,
 	}, nil
 }
 
@@ -548,6 +561,10 @@ func main() {
 	r.HandleFunc("/preview/journey", server.handlePreviewJourney()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/journey", server.handlePreviewMermaidJourney()).Methods("POST")
 
+	r.HandleFunc("/sources", server.handleSources()).Methods("GET")
+	r.HandleFunc("/sources/{name}/catalog", server.handleCatalog()).Methods("POST")
+	r.HandleFunc("/sources/{name}/render", server.handleSourceRender()).Methods("POST")
+
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
 	r.HandleFunc("/download/c4", server.handleDownloadC4Diagram()).Methods("POST")
 
@@ -564,7 +581,7 @@ func main() {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		// Chrome asks before a public page (e.g. a Confluence macro) calls a
 		// server on a private network; this answers yes.
