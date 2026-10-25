@@ -156,6 +156,7 @@ type C4PreviewRequest struct {
 	FocusInfo      *FocusInfo `json:"focusInfo,omitempty"`
 	BoundariesMode string     `json:"boundariesMode,omitempty"`
 	ShowDatabases  *bool      `json:"showDatabases,omitempty"`
+	Format         string     `json:"format,omitempty"` // png, svg, pdf, puml (default: png)
 }
 
 type FocusInfo struct {
@@ -358,7 +359,7 @@ func (s *Server) handlePreviewC4() http.HandlerFunc {
 		}
 		doc, diags := parseDSL(req.DSL)
 		out, ok := s.render(w, doc, visualizer.Request{
-			View: visualizer.ViewC4, Backend: visualizer.PlantUML, Format: visualizer.FormatPNG,
+			View: visualizer.ViewC4, Backend: visualizer.PlantUML, Format: plantUMLFormat(req.Format),
 			C4: c4Options(req.BoundariesMode, req.ShowDatabases, req.FocusInfo),
 		})
 		if !ok {
