@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.28.0] — 2026-10-25
+
+**Why a minor version (v2.28.0).** New server endpoints, one new optional request field and a server fix. `pkg/craft` is unchanged, and every existing endpoint answers as before.
+
+### Added
+- **Git sources on the server.** A source is one or more repo folders merged into one model, configured in a JSON file named by `CRAFT_SOURCES`; `CRAFT_CACHE` is where the server keeps its mirror clones (default: a temporary folder). A repo URL may reference environment variables (`https://oauth2:${GITLAB_TOKEN}@...`), so tokens stay out of the file. Each repo is mirror-cloned on first use and fetched again when the copy is more than 30 seconds old; the mirror carries GitLab's merge request refs, so `!12` names merge request 12.
+  - `GET /sources` lists the sources and their repos.
+  - `POST /sources/{name}/catalog` takes optional `refs` (`{"<repo>": "<branch, tag, commit or !n>"}`) and returns the use cases (with their file), journeys and files at those refs, the commits and a `contentId`.
+  - `POST /sources/{name}/render` draws `view` (`c4`, `c4-flat`, `architecture`, `flow`, `sequence`, `journey`) of the source, limited to `useCases`, or to the use cases declared in `path`. `dsl` merges one more file (`inline.craft`) into the model, so a draft use case resolves against the source's contexts; with `dsl` and no selection, only the draft's use cases are drawn. The response is a preview response plus `contentId` and `commits`.
+  - `contentId` hashes the git tree of each repo's folder, so it changes only when the model does, not on unrelated commits.
+  - Clients only name a source; refs starting with `-` are rejected.
+- **`POST /preview/c4` takes `format`** (`png`, `svg`, `pdf`, `puml`, default `png`), like `/preview/domain`.
+
+### Fixed
+- **Browser callers could not reach the server.** CORS was a mux middleware, and mux only runs middleware on a matched route, so a browser preflight (`OPTIONS`) on a POST-only route got a bare 405 without CORS headers. The CORS handler now wraps the whole router, and answers Chrome's private network preflight (`Access-Control-Allow-Private-Network: true`), so a public page such as a Confluence macro can call a server on an internal network.
+
 ## [2.27.0] — 2026-10-15
 
 **Why a minor version (v2.27.0).** New optional syntax, additive `pkg/craft` fields and a method, and three new lint warnings. A string after a context or actor name was a syntax error before, so no file that parsed changes meaning, and a model without display names projects and renders byte-for-byte as in 2.26.1 (checked on re-arch-central: every diagram identical).
