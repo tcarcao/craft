@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
@@ -161,6 +162,15 @@ type DomainPreviewRequest struct {
 	DiagramType string `json:"diagramType,omitempty"` // domain, sequence
 	DomainMode  string `json:"domainMode,omitempty"`  // detailed, architecture (only applies when diagramType is "domain")
 	Format      string `json:"format,omitempty"`      // png, svg, pdf, puml (default: png)
+}
+
+// BoardPreviewRequest asks for one use case drawn as a board.
+type BoardPreviewRequest struct {
+	DSL         string `json:"dsl"`
+	DiagramType string `json:"diagramType,omitempty"` // only "" or "domain"
+	DomainMode  string `json:"domainMode,omitempty"`  // "detailed" (default); "architecture" is rejected
+	Format      string `json:"format,omitempty"`      // only "" or "svg"
+	UseCase     string `json:"useCase,omitempty"`     // name or slug; default: the first use case
 }
 
 // C4-specific preview request
@@ -315,6 +325,49 @@ func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 		doc, diags := parseDSL(req.DSL)
 		out, ok := s.render(w, doc, visualizer.Request{
 			View: domainView("domain", req.DomainMode), Backend: visualizer.Mermaid, Format: visualizer.FormatSource,
+		})
+		if !ok {
+			return
+		}
+		respondJSON(w, PreviewResponse{Success: true, Data: string(out.Data), Diagnostics: diags})
+	}
+}
+
+// handlePreviewBoardDomain draws one use case of the domain flow as a
+// Miro-style board. Response.Data carries the SVG as plain text, NOT base64.
+func (s *Server) handlePreviewBoardDomain() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req BoardPreviewRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		if req.DiagramType != "" && req.DiagramType != "domain" {
+			respondWithError(w, http.StatusBadRequest, "the board preview draws the domain diagram only")
+			return
+		}
+		if req.Format != "" && req.Format != "svg" {
+			respondWithError(w, http.StatusBadRequest, "the board preview writes svg only")
+			return
+		}
+		doc, diags := parseDSL(req.DSL)
+		if len(doc.UseCases) == 0 {
+			respondWithError(w, http.StatusBadRequest, "the model has no use case to draw")
+			return
+		}
+		name, slugs := "", make([]string, 0, len(doc.UseCases))
+		for i, uc := range doc.UseCases {
+			slug := visualizer.Slugify(uc.Name)
+			slugs = append(slugs, slug)
+			if (req.UseCase == "" && i == 0) || (req.UseCase != "" && name == "" && (uc.Name == req.UseCase || slug == req.UseCase)) {
+				name = uc.Name
+			}
+		}
+		if name == "" {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("no use case matches %q (available: %s)", req.UseCase, strings.Join(slugs, ", ")))
+			return
+		}
+		out, ok := s.render(w, doc, visualizer.Request{
+			View: domainView("domain", req.DomainMode), Backend: visualizer.Board, Format: visualizer.FormatSVG, UseCases: []string{name},
 		})
 		if !ok {
 			return
@@ -554,6 +607,7 @@ func main() {
 
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/domain", server.handlePreviewMermaidDomain()).Methods("POST")
+	r.HandleFunc("/preview/board/domain", server.handlePreviewBoardDomain()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/sequence", server.handlePreviewMermaidSequence()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/c4", server.handlePreviewMermaidC4()).Methods("POST")
 	r.HandleFunc("/preview/c4", server.handlePreviewC4()).Methods("POST")
