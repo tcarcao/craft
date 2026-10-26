@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **`craft generate --type domain --format board`** draws the flow view as a Miro-style SVG: clouds for bounded contexts, cogs for services and systems, a person for user actors, notes for each step. One board per use case, written as `<base>-domain-<slug>.svg`. `--type` other than `domain`, `--mode architecture` and `--journey` are errors.
+- **`POST /preview/board/domain`** (`dsl`, optional `useCase`) answers the board SVG as plain text in `data`, with diagnostics.
+- Notes are coloured by the operation verb: query (`GET`, `HEAD`, `OPTIONS`, `QUERY`), command (`POST`, `PUT`, `PATCH`, `DELETE`), event (`notifies`).
+
 ## [2.28.0] — 2026-10-25
 
 **Why a minor version (v2.28.0).** New server endpoints, one new optional request field and a server fix. `pkg/craft` is unchanged, and every existing endpoint answers as before.

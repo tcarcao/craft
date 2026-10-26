@@ -225,6 +225,15 @@ in code.
 - Visual check before release: render the goldens and compare against the
   POC by eye.
 
+## As built
+
+- Boomi is modelled as a `system` actor: a cog outside any service box,
+  since actors have no service. (The Invoicing golden therefore does not
+  show it inside the Invoicing box.)
+- A store poll is event delivery (step badge only); a store write gets a
+  neutral note.
+- Service boxes appear only for services with two or more drawn nodes.
+
 ## Release
 
 `go test ./...` green, CHANGELOG entry, installation guide/docs page for the
