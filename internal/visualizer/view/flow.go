@@ -29,6 +29,9 @@ type FlowEdge struct {
 	Number   int
 	Label    string
 	Style    EdgeStyle
+	// Verb is the operation verb of a request ("" when it has no operation,
+	// and for every other kind of edge).
+	Verb string
 	// Inferred draws the edge grey; its label ends in "(inferred)".
 	Inferred bool
 }
@@ -46,7 +49,7 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 		scenario, via string
 	}
 	polled := map[readKey]bool{}
-	add := func(from, to string, style EdgeStyle, label string) {
+	add := func(from, to string, style EdgeStyle, label, verb string) {
 		// The flow has no boxes, so an edge inside a block names its
 		// innermost branch instead.
 		// Listens are never prefixed, and a trigger only when its scenario
@@ -65,7 +68,7 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 		if inferred {
 			label += " (inferred)"
 		}
-		f.Edges = append(f.Edges, FlowEdge{From: from, To: to, Number: len(f.Edges) + 1, Label: label, Style: style, Inferred: inferred})
+		f.Edges = append(f.Edges, FlowEdge{From: from, To: to, Number: len(f.Edges) + 1, Label: label, Style: style, Verb: verb, Inferred: inferred})
 	}
 	for _, it := range its {
 		branch = it.Branch
@@ -75,7 +78,7 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 			if it.From == interaction.Unobserved {
 				// A receives trigger: an "unobserved caller" node calls the
 				// callee (spec §6.5).
-				add(ns.add(it.From), ns.add(it.To), StyleTrigger, it.Label)
+				add(ns.add(it.From), ns.add(it.To), StyleTrigger, it.Label, "")
 				continue
 			}
 			if it.From.Key == it.To.Key {
@@ -84,29 +87,33 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 				ns.addActor(it.From)
 				continue
 			}
-			add(ns.addActor(it.From), ns.add(it.To), StyleTrigger, it.Label)
+			add(ns.addActor(it.From), ns.add(it.To), StyleTrigger, it.Label, "")
 		case interaction.Request:
-			add(ns.add(it.From), ns.add(it.To), StyleCall, it.Label)
+			verb := ""
+			if it.Operation != nil {
+				verb = it.Operation.Verb
+			}
+			add(ns.add(it.From), ns.add(it.To), StyleCall, it.Label, verb)
 		case interaction.Response:
-			add(ns.add(it.From), ns.add(it.To), StyleReply, it.Label)
+			add(ns.add(it.From), ns.add(it.To), StyleReply, it.Label, "")
 		case interaction.Internal:
-			add(ns.add(it.From), ns.add(it.From), StyleSelf, it.Label)
+			add(ns.add(it.From), ns.add(it.From), StyleSelf, it.Label, "")
 		case interaction.Publish:
 			if !it.Via.IsZero() {
-				add(ns.add(it.From), ns.addStore(it.Via), StyleAsync, cmp.Or(storeChange(it.Event), "writes"))
+				add(ns.add(it.From), ns.addStore(it.Via), StyleAsync, cmp.Or(storeChange(it.Event), "writes"), "")
 				continue
 			}
 			label := it.Label
 			if it.OneOf {
 				label = "one of: " + label
 			}
-			add(ns.add(it.From), ns.addQueue(it.From), StyleAsync, label)
+			add(ns.add(it.From), ns.addQueue(it.From), StyleAsync, label, "")
 		case interaction.Listen:
 			if !it.Via.IsZero() {
 				k := readKey{it.UseCaseIndex, it.Scenario, it.Via.Key}
 				if !polled[k] {
 					polled[k] = true
-					add(ns.addStore(it.Via), ns.add(it.To), StyleTrigger, strings.TrimSpace("polls "+storeChange(it.Event)))
+					add(ns.addStore(it.Via), ns.add(it.To), StyleTrigger, strings.TrimSpace("polls "+storeChange(it.Event)), "")
 				}
 				continue
 			}
@@ -114,7 +121,7 @@ func BuildFlow(doc *model.CraftDoc, its []interaction.Interaction) Flow {
 			if it.From != interaction.External {
 				from = ns.addQueue(it.From)
 			}
-			add(from, ns.add(it.To), StyleTrigger, it.Label)
+			add(from, ns.add(it.To), StyleTrigger, it.Label, "")
 		}
 	}
 	f.Contexts = ns.sorted(NodeContext)
