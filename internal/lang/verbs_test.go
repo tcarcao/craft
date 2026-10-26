@@ -28,3 +28,17 @@ func TestEdgeVerbs(t *testing.T) {
 		t.Error("glossary and context_map verbs must not mix")
 	}
 }
+
+func TestVerbMessageKind(t *testing.T) {
+	cases := map[string]MessageKind{
+		"GET": MessageQuery, "HEAD": MessageQuery, "OPTIONS": MessageQuery, "QUERY": MessageQuery,
+		"POST": MessageCommand, "PUT": MessageCommand, "PATCH": MessageCommand, "DELETE": MessageCommand,
+		"GRPC": MessageNeutral, "TOPIC": MessageNeutral, OpVerbSQL: MessageNeutral, OpVerbAddr: MessageNeutral,
+		"": MessageNeutral, "get": MessageNeutral, "FETCH": MessageNeutral,
+	}
+	for verb, want := range cases {
+		if got := VerbMessageKind(verb); got != want {
+			t.Errorf("VerbMessageKind(%q) = %q; want %q", verb, got, want)
+		}
+	}
+}

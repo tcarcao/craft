@@ -105,3 +105,25 @@ func ProtocolVerbs() []string {
 
 // IsProtocolVerb reports whether s is a protocol verb.
 func IsProtocolVerb(s string) bool { return protocolVerbs[s] }
+
+// MessageKind classifies an `asks` by its operation verb, for the board
+// backend: a read is a query, a write a command, anything else neutral.
+type MessageKind string
+
+const (
+	MessageNeutral MessageKind = ""
+	MessageQuery   MessageKind = "query"
+	MessageCommand MessageKind = "command"
+)
+
+// VerbMessageKind classifies a protocol verb as a query or a command.
+// Matching is exact and case-sensitive, like IsProtocolVerb.
+func VerbMessageKind(verb string) MessageKind {
+	switch verb {
+	case "GET", "HEAD", "OPTIONS", "QUERY":
+		return MessageQuery
+	case "POST", "PUT", "PATCH", "DELETE":
+		return MessageCommand
+	}
+	return MessageNeutral
+}
