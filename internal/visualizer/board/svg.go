@@ -65,6 +65,9 @@ func (s *svg) close(name string) { s.b.WriteString("</" + name + ">") }
 // block vertically centred on y.
 func (s *svg) text(x, y float64, str string, size float64, weight int, anchor string, maxChars int, fill string) {
 	lines := wrap(str, maxChars)
+	if len(lines) == 0 {
+		return
+	}
 	lh := size * 1.25
 	s.open("text", "x", num(x), "y", num(y-float64(len(lines)-1)*lh/2), "font-size", num(size),
 		"font-weight", strconv.Itoa(weight), "text-anchor", anchor, "dominant-baseline", "central", "fill", fill)

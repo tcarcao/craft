@@ -1,8 +1,10 @@
 package board
 
 import (
+	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/tcarcao/craft/v2/internal/model"
@@ -69,5 +71,36 @@ func TestShapeOf(t *testing.T) {
 		if got := shapeOf(tc.n); got != tc.want {
 			t.Errorf("%s: shapeOf = %v, want %v", name, got, tc.want)
 		}
+	}
+}
+
+func TestDrawStore_BottomBulgesDown(t *testing.T) {
+	var s svg
+	s.drawStore(point{}, 40)
+	// Sweep 0 from bottom-left to bottom-right curves downward on screen.
+	if !strings.Contains(s.b.String(), " 0 0,0 ") {
+		t.Errorf("store bottom arc must use sweep 0: %s", s.b.String())
+	}
+}
+
+func TestDrawNote_FirstLineAtFixedY(t *testing.T) {
+	for _, label := range []string{"Get", "Get customer details now please ok"} {
+		var s svg
+		s.drawNote(point{}, noteQuery, 1, label, false)
+		out := s.b.String()
+		// The text element's y is its first line's y (tspan dy 0).
+		var y float64
+		fmt.Sscanf(out[strings.Index(out, "<text "):], `<text x="0" y="%f"`, &y)
+		if want := -noteH/2 + 14; y != want {
+			t.Errorf("%q: first line y = %v, want %v", label, y, want)
+		}
+	}
+}
+
+func TestText_EmptyEmitsNothing(t *testing.T) {
+	var s svg
+	s.text(0, 0, "", 8, 400, "middle", 10, "#000")
+	if s.b.Len() != 0 {
+		t.Errorf("empty text wrote %q", s.b.String())
 	}
 }

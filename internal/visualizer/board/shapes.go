@@ -149,7 +149,7 @@ func (s *svg) drawStore(c point, size float64) {
 	w, ry := size*0.8, size*0.13
 	top, bot := -size*0.34, size*0.34
 	s.at(c)
-	s.el("path", "fill", "#111", "d", fmt.Sprintf("M%s,%sL%s,%sA%s,%s 0 0,1 %s,%sL%s,%sZ",
+	s.el("path", "fill", "#111", "d", fmt.Sprintf("M%s,%sL%s,%sA%s,%s 0 0,0 %s,%sL%s,%sZ",
 		num(-w/2), num(top), num(-w/2), num(bot), num(w/2), num(ry), num(w/2), num(bot), num(w/2), num(top)))
 	s.el("ellipse", "cy", num(top), "rx", num(w/2), "ry", num(ry), "fill", "#111", "stroke", "#fff", "stroke-width", "1.5")
 	s.close("g")
@@ -165,7 +165,10 @@ func (s *svg) drawNote(c point, kind noteKind, number int, label string, inferre
 	s.open("g", attrs...)
 	s.el("rect", "x", num(-noteW/2), "y", num(-noteH/2), "width", num(noteW), "height", num(noteH),
 		"fill", noteFill[kind], "stroke", "rgba(0,0,0,.25)", "stroke-width", "0.8", "filter", "url(#shadow)")
-	s.text(0, -noteH/2+14, label, 8.5, 700, "middle", 18, "#1a1a1a")
+	// The first line sits at the top; text centres its block, so shift down
+	// by half the extra lines.
+	y := -noteH/2 + 14 + float64(len(wrap(label, 18))-1)*8.5*1.25/2
+	s.text(0, y, label, 8.5, 700, "middle", 18, "#1a1a1a")
 	if number > 0 {
 		s.el("circle", "cy", num(-noteH/2), "r", "8", "fill", "#fff", "stroke", "#8a8a8a", "stroke-width", "0.8")
 		s.text(0, -noteH/2, strconv.Itoa(number), 8, 400, "middle", 99, "#d33")
