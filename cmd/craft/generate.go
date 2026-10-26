@@ -53,10 +53,20 @@ func generateCmd() *cobra.Command {
 			boundaries = strings.ToLower(boundaries)
 
 			switch format {
-			case "puml", "mermaid", "mermaid-md":
+			case "puml", "mermaid", "mermaid-md", "board":
 				// valid
 			default:
-				return fmt.Errorf("--format must be one of puml|mermaid|mermaid-md, got %q", format)
+				return fmt.Errorf("--format must be one of puml|mermaid|mermaid-md|board, got %q", format)
+			}
+			if format == "board" {
+				switch {
+				case len(journeys) > 0:
+					return fmt.Errorf("--format board draws the detailed domain diagram; it does not draw journeys")
+				case strings.ToLower(diagType) != "domain":
+					return fmt.Errorf("--format board draws the detailed domain diagram only: use --type domain")
+				case strings.ToLower(mode) == "architecture":
+					return fmt.Errorf("--format board draws the detailed domain diagram only: drop --mode architecture")
+				}
 			}
 
 			if len(journeys) > 0 {
@@ -149,7 +159,7 @@ func generateCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&focusContexts, "focus-context", nil, "comma-separated bounded contexts to focus on in C4 diagram")
 	cmd.Flags().StringSliceVar(&useCaseFilter, "use-case", nil, "comma-separated use case slugs or names to render (detailed-domain and sequence only)")
 	cmd.Flags().BoolVar(&split, "split", false, "emit one file per use case (detailed-domain and sequence only)")
-	cmd.Flags().StringVar(&format, "format", "puml", "output format: puml|mermaid|mermaid-md")
+	cmd.Flags().StringVar(&format, "format", "puml", "output format: puml|mermaid|mermaid-md|board")
 	cmd.Flags().BoolVar(&stdout, "stdout", false, "write to stdout instead of files (single diagram only)")
 	cmd.Flags().BoolVar(&force, "force", false, "allow overwriting existing .md files when --format=mermaid-md")
 	cmd.Flags().StringSliceVar(&journeys, "journey", nil, "journey slugs to draw as one sequence each (comma-separated), or all")
@@ -285,6 +295,8 @@ func generateDiagrams(r *visualizer.Renderer, model *craft.CraftDoc, base, outDi
 		backend = visualizer.Mermaid
 	case "mermaid-md":
 		backend, outFormat = visualizer.Mermaid, visualizer.FormatMarkdown
+	case "board":
+		backend, outFormat = visualizer.Board, visualizer.FormatSVG
 	}
 	domainView := visualizer.ViewFlow
 	if strings.ToLower(mode) == "architecture" {
@@ -318,7 +330,9 @@ func generateDiagrams(r *visualizer.Renderer, model *craft.CraftDoc, base, outDi
 
 		// Split applies to per-use-case views; the architecture view is
 		// structural, so it ignores --split.
-		if split && (req.View == visualizer.ViewFlow || req.View == visualizer.ViewSequence) {
+		// The board draws one use case per image, so without --stdout it is
+		// always split.
+		if (split || (format == "board" && !stdout)) && (req.View == visualizer.ViewFlow || req.View == visualizer.ViewSequence) {
 			if err := emitSplitFiles(r, model, req, base, outDir, t, useCaseFilter, force); err != nil {
 				return fmt.Errorf("%s: %w", t, err)
 			}
@@ -374,6 +388,9 @@ func emitSplitFiles(r *visualizer.Renderer, model *craft.CraftDoc, req visualize
 
 		one := req
 		one.UseCases, one.Title = []string{uc.Name}, uc.Name
+		if req.Backend == visualizer.Board {
+			one.Title = "" // the board titles itself "Scenario: <name>"
+		}
 		out, err := r.Render(model, one)
 		if err != nil {
 			return fmt.Errorf("%s: %w", uc.Name, err)
