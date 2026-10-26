@@ -36,6 +36,12 @@ type Node struct {
 	// "" when none. Writers keep deriving identifiers, and views keep
 	// ordering, from Label, so a display name changes only the drawn text.
 	Display string
+	// Participant is the endpoint's resolved kind; "" for unresolved names,
+	// queues and the External/Unobserved placeholders.
+	Participant model.ParticipantKind
+	// Service owns a context or data store; "" for a service node, a queue,
+	// or an endpoint outside any service.
+	Service string
 }
 
 // Text is what the reader sees: the display name when one is declared,
@@ -113,7 +119,10 @@ func (ns *nodeSet) add(e interaction.Endpoint) string {
 	if _, ok := ns.byID[e.Key]; ok {
 		return e.Key
 	}
-	n := Node{ID: e.Key, Label: e.Name, Kind: NodeContext, Display: ns.display[e.Key]}
+	n := Node{ID: e.Key, Label: e.Name, Kind: NodeContext, Display: ns.display[e.Key], Participant: e.Kind}
+	if e.Kind != model.ParticipantService {
+		n.Service = e.Service
+	}
 	switch {
 	case e == interaction.External || e == interaction.Unobserved:
 		n.Kind = NodeExternal

@@ -14,14 +14,14 @@ participant "Notifier" as Notifier
 group 1: when Business_User creates Account
 Business_User -> Authentication : creates Account
 Authentication -> Authentication : validates email format
-Authentication -> Database : to check email uniqueness
+Authentication -> Database : check email uniqueness
 Profile -> Profile : creates user profile
 Authentication ->> Authentication : notifies "User Registered"
 end
 group 2: when Profile listens "User Registered"
 Authentication ->> Profile : User Registered
-Profile -> Database : to store profile data
-Profile -> Notifier : to send welcome email
+Profile -> Database : store profile data
+Profile -> Notifier : send welcome email
 end
 
 @enduml

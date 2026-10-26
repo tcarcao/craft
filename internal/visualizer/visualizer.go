@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tcarcao/craft/v2/internal/interaction"
+	"github.com/tcarcao/craft/v2/internal/visualizer/board"
 	"github.com/tcarcao/craft/v2/internal/visualizer/markdown"
 	"github.com/tcarcao/craft/v2/internal/visualizer/mermaid"
 	"github.com/tcarcao/craft/v2/internal/visualizer/plantuml"
@@ -41,6 +42,8 @@ type Backend string
 const (
 	PlantUML Backend = "plantuml"
 	Mermaid  Backend = "mermaid"
+	// Board is Craft's own SVG writer in the Miro-like notation; flow view only.
+	Board Backend = "board"
 )
 
 // Format is what Render returns.
@@ -142,6 +145,21 @@ func (r *Renderer) Render(doc *craft.CraftDoc, req Request) (Output, error) {
 		its = keepUseCases(its, doc, shown)
 	}
 
+	if req.Backend == Board {
+		if len(shown.UseCases) != 1 {
+			slugs := make([]string, 0, len(doc.UseCases))
+			for _, uc := range doc.UseCases {
+				slugs = append(slugs, Slugify(uc.Name))
+			}
+			return Output{}, fmt.Errorf("%w: the board draws one use case at a time; pick one (available: %s)", ErrUnsupported, strings.Join(slugs, ", "))
+		}
+		title := req.Title
+		if title == "" {
+			title = "Scenario: " + shown.UseCases[0].Name
+		}
+		return Output{Data: board.Flow(view.BuildFlow(shown, its), title), ContentType: contentTypes[FormatSVG], Ext: "svg"}, nil
+	}
+
 	src := write(shown, its, req)
 	switch req.Format {
 	case FormatSource:
@@ -190,6 +208,13 @@ func validate(req Request) error {
 	}
 	switch req.Backend {
 	case PlantUML, Mermaid:
+	case Board:
+		if req.View != ViewFlow {
+			return fmt.Errorf("%w: the board backend draws the flow view only", ErrUnsupported)
+		}
+		if req.Format != FormatSVG {
+			return fmt.Errorf("%w: the board backend writes svg only", ErrUnsupported)
+		}
 	default:
 		return fmt.Errorf("%w: unknown backend %q", ErrUnsupported, req.Backend)
 	}
@@ -200,7 +225,7 @@ func validate(req Request) error {
 			return fmt.Errorf("%w: markdown output is only available for mermaid", ErrUnsupported)
 		}
 	case FormatPNG, FormatSVG, FormatPDF:
-		if req.Backend != PlantUML {
+		if req.Backend != PlantUML && req.Backend != Board {
 			return fmt.Errorf("%w: %s output is only available for plantuml", ErrUnsupported, req.Format)
 		}
 	default:

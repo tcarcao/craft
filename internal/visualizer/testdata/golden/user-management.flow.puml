@@ -39,11 +39,11 @@ queue "Authentication events" as Authentication_events
 ' Workflow flows
 Business_User --> Authentication : 1. creates Account
 Authentication -> Authentication : 2. validates email format
-Authentication ->> Database : 3. to check email uniqueness
+Authentication ->> Database : 3. check email uniqueness
 Profile -> Profile : 4. creates user profile
 Authentication ->> Authentication_events : 5. User Registered
 Authentication_events --> Profile : 6. User Registered
-Profile ->> Database : 7. to store profile data
-Profile ->> Notifier : 8. to send welcome email
+Profile ->> Database : 7. store profile data
+Profile ->> Notifier : 8. send welcome email
 
 @enduml

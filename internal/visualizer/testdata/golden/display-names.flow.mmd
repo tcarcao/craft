@@ -7,11 +7,11 @@ flowchart LR
     portfoliovalue["portfolio value,<br/>recomputed on every<br/>price change"]
     nmf_monetization_events[("nMF, the money engine<br/>events")]
     CRON -- "1. fires the hourly refresh" --> nmf_monetization
-    nmf_monetization -- "2. to resolve the template prices" --> PriceProject
+    nmf_monetization -- "2. resolve the template prices" --> PriceProject
     nmf_monetization -- "3. writes the pricing" --> nmf_monetization
     nmf_monetization -- "4. pricing.PricesChanged" --> nmf_monetization_events
     Seller -- "5. opens the portfolio page" --> portfoliovalue
-    portfoliovalue -- "6. for the price list" --> nmf_monetization
+    portfoliovalue -- "6. the price list" --> nmf_monetization
     nmf_monetization -. "7. returns the price list" .-> portfoliovalue
     portfoliovalue -- "8. computes the value" --> portfoliovalue
     invoicearchive -- "9. files the snapshot" --> invoicearchive

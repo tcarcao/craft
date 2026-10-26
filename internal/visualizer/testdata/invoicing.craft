@@ -1,0 +1,43 @@
+actors {
+    system Boomi
+}
+
+domain Sales {
+    Order
+}
+
+domain Billing {
+    Invoicing
+    Payment
+}
+
+domain Customer {
+    CustomerProfile
+}
+
+services {
+    OrderService {
+        contexts: Order
+    }
+    InvoicingService {
+        contexts: Invoicing
+    }
+    PaymentService {
+        contexts: Payment
+    }
+    CustomerService {
+        contexts: CustomerProfile
+    }
+}
+
+use_case "Invoicing process starts for a prepaid Customer" {
+    when Order changes an order
+        Order notifies order.OrderUpdated
+
+    when Invoicing listens order.OrderUpdated
+        Invoicing asks Payment to get transaction details       [GET /v1/transactions]
+        Invoicing asks CustomerProfile to get customer details  [GET /v1/customers]
+        Invoicing asks Boomi to upload customer                 [POST /customers]
+        Invoicing asks Boomi to upload invoice                  [POST /invoices]
+        Invoicing validates the invoice
+}

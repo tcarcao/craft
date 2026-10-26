@@ -52,7 +52,7 @@ Rel(Business_User, MobileApp, "Uses")
 Rel(WebApp, APIGateway, "API Requests", "HTTPS/REST")
 Rel(MobileApp, APIGateway, "API Requests", "HTTPS/REST")
 Rel(APIGateway, Authentication, "Routes Authentication requests", "HTTP/gRPC")
-Rel(Profile, Notifier, "to send welcome email", "Service API")
+Rel(Profile, Notifier, "send welcome email", "Service API")
 Rel(Authentication, Event_Queue, "User Registered", "Event Publishing")
 Rel(Event_Queue, Profile, "User Registered", "Event Delivery")
 

@@ -23,7 +23,7 @@ C4Container
     Rel(WebApp, APIGateway, "API Requests", "HTTPS/REST")
     Rel(MobileApp, APIGateway, "API Requests", "HTTPS/REST")
     Rel(APIGateway, UserService_Application, "Routes business logic requests", "HTTP/gRPC")
-    Rel(UserService_Application, CommsService_Application, "to send welcome email", "Service API")
+    Rel(UserService_Application, CommsService_Application, "send welcome email", "Service API")
     Rel(UserService_Application, UserService_user_db, "Reads/Writes data", "Database Protocol")
     Rel(UserService_Application, Event_Queue, "User Registered", "Event Publishing")
     Rel(Event_Queue, UserService_Application, "User Registered", "Event Delivery")

@@ -105,5 +105,5 @@ What a diagram shows, independent of how it is written: sequence, flow, architec
 _Avoid_: diagram type, mode
 
 **Backend**:
-The diagram language a view is written in: PlantUML or Mermaid.
+The diagram language a view is written in: PlantUML or Mermaid — or Board, Craft's own SVG in the Miro-like notation (flow view only).
 _Avoid_: renderer, engine

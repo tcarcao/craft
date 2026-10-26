@@ -57,7 +57,7 @@ System_Boundary(messaging_boundary, "messaging") {
 }
 
 Rel(CRON, invoicing, "Triggers")
-Rel(graphql, paymentgateway, "to start the payment", "Service API")
+Rel(graphql, paymentgateway, "start the payment", "Service API")
 Rel(invoicing, messaging_sms_queue, "writes inserted", "Database Query")
 Rel(smsdispatch, messaging_sms_queue, "polls", "Database Query")
 

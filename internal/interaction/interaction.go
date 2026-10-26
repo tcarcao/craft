@@ -553,7 +553,8 @@ func openRequest(stack []frame, caller, callee Endpoint) string {
 	return ""
 }
 
-// label is the action's text as diagrams show it.
+// label is the action's text as diagrams show it. A call drops its connector
+// ("to", "for"): the arrow already says who is asked.
 func label(a model.Action) string {
 	withConnector := func(phrase string) string {
 		if a.Connector != "" && phrase != "" {
@@ -563,7 +564,7 @@ func label(a model.Action) string {
 	}
 	switch a.Type {
 	case lang.ActionSync:
-		return withConnector(a.Phrase)
+		return a.Phrase
 	case lang.ActionAsync:
 		return a.Event
 	case lang.ActionInternal:

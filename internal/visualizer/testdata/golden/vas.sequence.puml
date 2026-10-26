@@ -38,7 +38,7 @@ end
 group 5: when VASFulfillment listens "VasApplied"
 VasApplication ->> VASFulfillment : VasApplied
 VASFulfillment -> VASFulfillment : advances internal VAS lifecycle for succeeded delivery
-VASFulfillment -> VasLifecycle : to record fulfillment outcome on VAS aggregate
+VASFulfillment -> VasLifecycle : record fulfillment outcome on VAS aggregate
 VASFulfillment ->> VASFulfillment : notifies "VasFulfilled"
 end
 
@@ -52,7 +52,7 @@ end
 group 2: when VASFulfillment listens "VasApplicationFailed"
 VasApplication ->> VASFulfillment : VasApplicationFailed
 VASFulfillment -> VASFulfillment : classifies failure and exhausts retry policy when applicable
-VASFulfillment -> VasLifecycle : to record terminal failure for the VAS attempt
+VASFulfillment -> VasLifecycle : record terminal failure for the VAS attempt
 VASFulfillment ->> VASFulfillment : notifies "VasFulfillmentFailed"
 end
 
@@ -60,7 +60,7 @@ end
 
 FulfillmentTimer -> VASFulfillment : fires fulfillment deadline sweep
 VASFulfillment -> VASFulfillment : finds pending correlations past deadline
-VASFulfillment -> VasLifecycle : to record timeout outcome for the VAS attempt
+VASFulfillment -> VasLifecycle : record timeout outcome for the VAS attempt
 VASFulfillment ->> VASFulfillment : notifies "VasFulfillmentTimedOut"
 VASFulfillment ->> VASFulfillment : notifies "RequestEndOfVasApplication"
 

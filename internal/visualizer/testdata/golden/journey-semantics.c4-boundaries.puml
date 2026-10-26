@@ -59,7 +59,7 @@ System_Boundary(payments_api_boundary, "payments-api") {
 Rel(Seeker, frontendplatform, "Triggers")
 Rel(Seller, frontendplatform, "Triggers")
 Rel(CRON, invoicing, "Triggers")
-Rel(graphql, paymentgateway, "to start the payment", "Service API")
+Rel(graphql, paymentgateway, "start the payment", "Service API")
 Rel(invoicing, smsdispatch, "sms_queue inserted", "Shared store")
 
 @enduml

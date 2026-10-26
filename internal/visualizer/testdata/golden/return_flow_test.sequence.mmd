@@ -10,15 +10,15 @@ sequenceDiagram
     Note over User,CacheService: Payment Processing with Proper Return Flow
     User->>PaymentService: submits payment request
     PaymentService->>PaymentService: validates payment data
-    PaymentService->>BankGateway: to process payment
+    PaymentService->>BankGateway: process payment
     BankGateway-->>PaymentService: returns payment result
-    PaymentService->>NotificationService: to send confirmation
+    PaymentService->>NotificationService: send confirmation
     NotificationService-->>PaymentService: returns delivery status
     PaymentService-->>User: returns final confirmation
     Note over User,CacheService: Nested Call Chain
     Admin->>ReportService: requests report
-    ReportService->>DatabaseService: for data
-    DatabaseService->>CacheService: to check cache
+    ReportService->>DatabaseService: data
+    DatabaseService->>CacheService: check cache
     CacheService-->>DatabaseService: returns cache miss
     DatabaseService->>DatabaseService: queries main database
     DatabaseService-->>ReportService: returns report data

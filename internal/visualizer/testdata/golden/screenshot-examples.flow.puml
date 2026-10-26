@@ -60,13 +60,13 @@ queue "Payment events" as Payment_events
 ' Workflow flows
 Business_User --> Authentication : 1. creates Account
 Authentication -> Authentication : 2. validates email format
-Authentication ->> user_db : 3. to check email uniqueness
+Authentication ->> user_db : 3. check email uniqueness
 Profile -> Profile : 4. creates user profile
-Profile ->> user_db : 5. to store profile data
+Profile ->> user_db : 5. store profile data
 Authentication ->> Authentication_events : 6. UserRegistered
 Authentication_events --> Profile : 7. UserRegistered
 Preferences -> Preferences : 8. creates default preferences
-Preferences ->> user_db : 9. to save preferences
+Preferences ->> user_db : 9. save preferences
 EmailNotifier -> EmailNotifier : 10. sends welcome email
 Business_User --> Catalog : 11. views Product
 Catalog --> Business_User : 12. returns product details
@@ -74,55 +74,55 @@ Pricing -> Pricing : 13. calculates current price
 Inventory -> Inventory : 14. checks availability
 Business_User --> OrderManagement : 15. adds Product to Cart
 OrderManagement -> OrderManagement : 16. creates draft order
-OrderManagement ->> order_db : 17. to save draft
+OrderManagement ->> order_db : 17. save draft
 Inventory -> Inventory : 18. reserves stock
 Pricing -> Pricing : 19. applies discounts
 OrderManagement --> Business_User : 20. returns cart summary
 Business_User --> OrderManagement : 21. confirms Purchase
 OrderManagement -> OrderManagement : 22. validates order
 Payment -> Payment : 23. processes payment
-Payment ->> payment_gateway : 24. to charge card
+Payment ->> payment_gateway : 24. charge card
 Payment ->> Payment_events : 25. PaymentCompleted
 Payment_events --> OrderManagement : 26. PaymentCompleted
 OrderManagement -> OrderManagement : 27. marks order as paid
 Inventory -> Inventory : 28. confirms stock allocation
 Shipping -> Shipping : 29. creates shipment
-Shipping ->> shipping_provider : 30. to schedule pickup
+Shipping ->> shipping_provider : 30. schedule pickup
 OrderManagement ->> OrderManagement_events : 31. OrderConfirmed
 OrderManagement_events --> EmailNotifier : 32. OrderConfirmed
 EmailNotifier -> EmailNotifier : 33. sends order confirmation
 SMSNotifier -> SMSNotifier : 34. sends tracking notification
 CronScheduler --> Inventory : 35. triggers "DailyInventorySync"
 Inventory -> Inventory : 36. fetches stock levels
-Inventory ->> inventory_system : 37. to get current stock
+Inventory ->> inventory_system : 37. get current stock
 Inventory ->> Inventory_events : 38. StockLevelsUpdated
 Inventory_events --> Catalog : 39. StockLevelsUpdated
 Catalog -> Catalog : 40. updates product availability
-Catalog ->> product_db : 41. to update stock status
+Catalog ->> product_db : 41. update stock status
 Catalog ->> Catalog_events : 42. CatalogUpdated
 Catalog_events --> PushNotifier : 43. CatalogUpdated
 PushNotifier -> PushNotifier : 44. sends restock notifications
-PushNotifier ->> notification_queue : 45. to queue messages
+PushNotifier ->> notification_queue : 45. queue messages
 Customer_Support --> OrderManagement : 46. views Order
 OrderManagement -> OrderManagement : 47. fetches order details
-OrderManagement ->> order_db : 48. to retrieve order
+OrderManagement ->> order_db : 48. retrieve order
 Payment -> Payment : 49. retrieves payment history
 Shipping -> Shipping : 50. retrieves shipment status
 OrderManagement --> Customer_Support : 51. returns complete order view
 Customer_Support --> OrderManagement : 52. updates Order
 OrderManagement -> OrderManagement : 53. validates changes
-OrderManagement ->> order_db : 54. to update order
+OrderManagement ->> order_db : 54. update order
 OrderManagement ->> OrderManagement_events : 55. OrderUpdated
 OrderManagement_events --> EmailNotifier : 56. OrderUpdated
 EmailNotifier -> EmailNotifier : 57. sends update notification to customer
 Business_User --> Authentication : 58. requests password reset
 Authentication -> Authentication : 59. validates email
 Authentication -> Authentication : 60. generates reset token
-Authentication ->> user_db : 61. to store token
+Authentication ->> user_db : 61. store token
 EmailNotifier -> EmailNotifier : 62. sends reset email
 Business_User --> Authentication : 63. submits new password
 Authentication -> Authentication : 64. validates reset token
-Authentication ->> user_db : 65. to verify token
+Authentication ->> user_db : 65. verify token
 Authentication -> Authentication : 66. updates password
 Authentication ->> Authentication_events : 67. PasswordChanged
 Authentication_events --> EmailNotifier : 68. PasswordChanged

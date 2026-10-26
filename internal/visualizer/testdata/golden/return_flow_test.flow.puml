@@ -39,14 +39,14 @@ actor "User" as User
 ' Workflow flows
 User --> PaymentService : 1. submits payment request
 PaymentService -> PaymentService : 2. validates payment data
-PaymentService ->> BankGateway : 3. to process payment
+PaymentService ->> BankGateway : 3. process payment
 BankGateway --> PaymentService : 4. returns payment result
-PaymentService ->> NotificationService : 5. to send confirmation
+PaymentService ->> NotificationService : 5. send confirmation
 NotificationService --> PaymentService : 6. returns delivery status
 PaymentService --> User : 7. returns final confirmation
 Admin --> ReportService : 8. requests report
-ReportService ->> DatabaseService : 9. for data
-DatabaseService ->> CacheService : 10. to check cache
+ReportService ->> DatabaseService : 9. data
+DatabaseService ->> CacheService : 10. check cache
 CacheService --> DatabaseService : 11. returns cache miss
 DatabaseService -> DatabaseService : 12. queries main database
 DatabaseService --> ReportService : 13. returns report data

@@ -39,17 +39,17 @@ queue "graphql events" as graphql_events
 ' Workflow flows
 graphql_events --> nmf_monetization : 1. nmfbus.AddOnPurchased
 nmf_monetization -> nmf_monetization : 2. picks the mail resolver from the event type alone
-nmf_monetization ->> Siren : 3. to send the purchase mail
+nmf_monetization ->> Siren : 3. send the purchase mail
 Seller --> frontendplatform : 4. buys an add-on
-frontendplatform ->> graphql : 5. to buy the add-on
+frontendplatform ->> graphql : 5. buy the add-on
 graphql ->> graphql_events : 6. nmfbus.AddOnPurchased
 Seller --> frontendplatform : 7. opens the site
-frontendplatform ->> graphql : 8. for the session
+frontendplatform ->> graphql : 8. the session
 Seller --> frontendplatform : 9. asks the assistant a question
-frontendplatform ->> graphql : 10. to stream the answer
+frontendplatform ->> graphql : 10. stream the answer
 Seller --> frontendplatform : 11. promotes an advert
-frontendplatform ->> graphql : 12. for the promotion offers
+frontendplatform ->> graphql : 12. the promotion offers
 Seller --> frontendplatform : 13. pays at the checkout
-frontendplatform ->> graphql : 14. to pay
+frontendplatform ->> graphql : 14. pay
 
 @enduml

@@ -36,7 +36,7 @@ System_Boundary(payments_api_boundary, "payments-api") {
 Rel(Seeker, advertplatform_Application, "Triggers")
 Rel(Seller, advertplatform_Application, "Triggers")
 Rel(CRON, messaging_Application, "Triggers")
-Rel(advertplatform_Application, payments_api_Application, "to start the payment", "Service API")
+Rel(advertplatform_Application, payments_api_Application, "start the payment", "Service API")
 Rel(messaging_Application, messaging_sms_queue, "writes inserted", "Database Query")
 Rel(messaging_Application, messaging_sms_queue, "polls", "Database Query")
 Rel(messaging_Application, messaging_sms_queue, "Reads/Writes data", "Database Protocol")

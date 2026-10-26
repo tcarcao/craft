@@ -63,30 +63,30 @@ PaymentProvider ->> PaymentProvider_events : 8. PaymentCompleted
 PaymentProvider_events --> Order : 9. PaymentCompleted
 Order -> Order : 10. marks the Order as Paid
 Business_User --> VASScheduling : 11. schedules VAS
-VASScheduling ->> Wallet : 12. to reserve a VAS
+VASScheduling ->> Wallet : 12. reserve a VAS
 Wallet -> Wallet : 13. creates an unconfirmed VAS reservation
 Wallet ->> Wallet_events : 14. VAS Addition Request Approved
 VASScheduling -> VASScheduling : 15. drafts a VAS schedule
 Wallet_events --> VASScheduling : 16. VAS Addition Request Approved
-VASScheduling ->> OrderManagement : 17. to create an Order
+VASScheduling ->> OrderManagement : 17. create an Order
 OrderManagement ->> OrderManagement_events : 18. Order Created
 OrderManagement -> OrderManagement : 19. marks the Order as payment deferred
 OrderManagement ->> OrderManagement_events : 20. Order payment deferred
 OrderManagement_events --> OrderFulfilment : 21. Order payment deferred
 OrderMgmt_events --> OrderFulfilment : 22. Order payment deferred
-OrderFulfilment ->> WalletItemAddition : 23. to fulfil the addition request
-WalletItemAddition ->> Wallet : 24. to add VAS
+OrderFulfilment ->> WalletItemAddition : 23. fulfil the addition request
+WalletItemAddition ->> Wallet : 24. add VAS
 Wallet ->> Wallet_events : 25. VAS added
 Wallet_events --> OrderFulfilment : 26. VAS added
-OrderFulfilment ->> OrderManagement : 27. to mark the Order as fulfiled
+OrderFulfilment ->> OrderManagement : 27. mark the Order as fulfiled
 OrderManagement ->> OrderManagement_events : 28. Order completed
 Business_User --> VASScheduling : 29. schedules VAS
-VASScheduling ->> Wallet : 30. to reserve a VAS
+VASScheduling ->> Wallet : 30. reserve a VAS
 Wallet -> Wallet : 31. reserves a VAS
 Wallet ->> Wallet_events : 32. VAS Reserved
 VASScheduling -> VASScheduling : 33. creates a VAS schedule
 Business_User --> VASScheduling : 34. unschedules a VAS scheduling
-VASScheduling ->> Wallet : 35. to cancel the VAS reservation
+VASScheduling ->> Wallet : 35. cancel the VAS reservation
 Wallet -> Wallet : 36. cancels VAS reservation
 Wallet ->> Wallet_events : 37. VAS Reservation Canceled
 VASScheduling -> VASScheduling : 38. cancels the VAS schedule
@@ -100,11 +100,11 @@ OrderMgmt -> OrderMgmt : 45. marks the Order as payment deferred
 OrderMgmt ->> OrderMgmt_events : 46. Order payment deferred
 OrderManagement_events --> OrderFulfilment : 47. Order payment deferred
 OrderMgmt_events --> OrderFulfilment : 48. Order payment deferred
-OrderFulfilment ->> VASMgmt : 49. to schedule the VAS
+OrderFulfilment ->> VASMgmt : 49. schedule the VAS
 VASMgmt -> VASMgmt : 50. schedules the VAS for future application
 VASMgmt ->> VASMgmt_events : 51. VAS scheduled
 VASMgmt_events --> OrderFulfilment : 52. VAS scheduled
-OrderFulfilment ->> Subscription : 53. to create a VAS Subscription
+OrderFulfilment ->> Subscription : 53. create a VAS Subscription
 Subscription -> Subscription : 54. creates a VAS Subscription with the details
 OrderFulfilment -> OrderFulfilment : 55. marks the vas subscription item as Fulfiled
 Business_User --> VASMgmt : 56. schedules a VAS
@@ -118,7 +118,7 @@ VASMgmt -> VASMgmt : 63. marks the VAS as expired
 VASMgmt ->> VASMgmt_events : 64. VAS expired
 VASMgmt_events --> Subscription : 65. VAS expired
 Subscription -> Subscription : 66. checks if VAS has active associated subscription
-Subscription ->> VASMgmt : 67. to "schedule/apply a new VAS"
+Subscription ->> VASMgmt : 67. "schedule/apply a new VAS"
 Subscription -> Subscription : 68. renews the VAS Subscription with the VAS
 Susbscription ->> Susbscription_events : 69. VAS Subscription Renewed
 Business_User --> Subscription : 70. stops the VAS Auto-Renewal

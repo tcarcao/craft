@@ -36,6 +36,6 @@ C4Container
         ContainerDb(messaging_sms_queue, "messaging_sms_queue", "Database", "Stores sms_queue data")
     }
     Rel(CRON, invoicing, "Triggers")
-    Rel(graphql, paymentgateway, "to start the payment", "Service API")
+    Rel(graphql, paymentgateway, "start the payment", "Service API")
     Rel(invoicing, messaging_sms_queue, "writes inserted", "Database Query")
     Rel(smsdispatch, messaging_sms_queue, "polls", "Database Query")

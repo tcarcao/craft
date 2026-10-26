@@ -22,18 +22,18 @@ flowchart LR
     VasApplication -- "11. VasApplied" --> VasApplication_events
     VasApplication_events -- "12. VasApplied" --> VASFulfillment
     VASFulfillment -- "13. advances internal VAS lifecycle for succeeded delivery" --> VASFulfillment
-    VASFulfillment -- "14. to record fulfillment outcome on VAS aggregate" --> VasLifecycle
+    VASFulfillment -- "14. record fulfillment outcome on VAS aggregate" --> VasLifecycle
     VASFulfillment -- "15. VasFulfilled" --> VASFulfillment_events
     VASFulfillment_events -- "16. RequestVasApplication" --> VasApplication
     VasApplication -- "17. delegates apply through provider translator" --> VasApplication
     VasApplication -- "18. VasApplicationFailed" --> VasApplication_events
     VasApplication_events -- "19. VasApplicationFailed" --> VASFulfillment
     VASFulfillment -- "20. classifies failure and exhausts retry policy when applicable" --> VASFulfillment
-    VASFulfillment -- "21. to record terminal failure for the VAS attempt" --> VasLifecycle
+    VASFulfillment -- "21. record terminal failure for the VAS attempt" --> VasLifecycle
     VASFulfillment -- "22. VasFulfillmentFailed" --> VASFulfillment_events
     FulfillmentTimer -- "23. fires fulfillment deadline sweep" --> VASFulfillment
     VASFulfillment -- "24. finds pending correlations past deadline" --> VASFulfillment
-    VASFulfillment -- "25. to record timeout outcome for the VAS attempt" --> VasLifecycle
+    VASFulfillment -- "25. record timeout outcome for the VAS attempt" --> VasLifecycle
     VASFulfillment -- "26. VasFulfillmentTimedOut" --> VASFulfillment_events
     VASFulfillment -- "27. RequestEndOfVasApplication" --> VASFulfillment_events
     VasLifecycleTimer -- "28. fires configured end_time for active time_based VAS" --> VASFulfillment

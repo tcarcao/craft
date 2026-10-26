@@ -40,8 +40,8 @@ participant "nmf_monetization" as nmf_monetization
 == Seller promotes an advert ==
 
 Seller -> frontendplatform : promotes an advert
-frontendplatform -> graphql : to book the promotion [scheduleVas]
-graphql -> vasscheduler : to book it [createSchedule]
+frontendplatform -> graphql : book the promotion [scheduleVas]
+graphql -> vasscheduler : book it [createSchedule]
 vasscheduler ->> vasscheduler : notifies "com.olx.realestate_vas.VasScheduled"
 ref over vasscheduler : continues: Seller pays at the checkout
 
@@ -53,7 +53,7 @@ nmf_monetization -> nmf_monetization : books one draw per day of the schedule
 == Seller pays at the checkout ==
 
 Seller -> frontendplatform : pays at the checkout
-frontendplatform -> graphql : to pay [payInvoice]
+frontendplatform -> graphql : pay [payInvoice]
 
 @enduml`
 

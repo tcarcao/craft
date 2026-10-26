@@ -993,3 +993,70 @@ func TestGenerateCmd_JourneyRepeatedSlugDrawnOnce(t *testing.T) {
 		t.Errorf("dedupeSlugs = %v", got)
 	}
 }
+
+const bankingExample = "../../examples/banking-system.craft"
+
+func TestGenerate_BoardWritesOneSVGPerUseCase(t *testing.T) {
+	tmp := t.TempDir()
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", bankingExample, "--type", "domain", "--format", "board", "-o", tmp})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("generate --format board: %v", err)
+	}
+	files, _ := filepath.Glob(filepath.Join(tmp, "*"))
+	if len(files) != 4 {
+		t.Fatalf("want 4 files (one per use case), got %v", files)
+	}
+	for _, f := range files {
+		base := filepath.Base(f)
+		if !strings.HasPrefix(base, "banking-system-domain-") || !strings.HasSuffix(base, ".svg") {
+			t.Errorf("unexpected file %s", base)
+		}
+		data, _ := os.ReadFile(f)
+		if !strings.HasPrefix(string(data), "<svg") {
+			t.Errorf("%s does not start with <svg", base)
+		}
+	}
+}
+
+func TestGenerate_BoardRejectsOtherTypes(t *testing.T) {
+	cases := map[string][]string{
+		"default type":      {},
+		"c4":                {"--type", "c4"},
+		"architecture mode": {"--type", "domain", "--mode", "architecture"},
+		"journey":           {"--journey", "all"},
+	}
+	for name, extra := range cases {
+		t.Run(name, func(t *testing.T) {
+			tmp := t.TempDir()
+			root := newRootCmd()
+			root.SetArgs(append([]string{"generate", bankingExample, "--format", "board", "-o", tmp}, extra...))
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), "--format board") {
+				t.Fatalf("want a --format board error, got %v", err)
+			}
+			if files, _ := filepath.Glob(filepath.Join(tmp, "*")); len(files) != 0 {
+				t.Errorf("nothing should be written, got %v", files)
+			}
+		})
+	}
+}
+
+func TestGenerate_BoardStdoutNeedsOneUseCase(t *testing.T) {
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", bankingExample, "--type", "domain", "--format", "board", "--stdout"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "one use case") {
+		t.Fatalf("want a one-use-case error, got %v", err)
+	}
+
+	var buf bytes.Buffer
+	root = newRootCmd()
+	root.SetOut(&buf)
+	root.SetArgs([]string{"generate", bankingExample, "--type", "domain", "--format", "board", "--stdout", "--use-case", "money-transfer"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("generate --stdout --use-case: %v", err)
+	}
+	if !strings.HasPrefix(buf.String(), "<svg") {
+		t.Errorf("want SVG on stdout, got %.80s", buf.String())
+	}
+}

@@ -39,13 +39,13 @@ queue "PaymentService events" as PaymentService_events
 ' Workflow flows
 User --> PaymentService : 1. submits payment request
 PaymentService -> PaymentService : 2. validates payment data
-PaymentService ->> BankGateway : 3. to process payment
+PaymentService ->> BankGateway : 3. process payment
 BankGateway --> PaymentService : 4. returns payment result
 PaymentService --> User : 5. returns confirmation status
 PaymentService ->> PaymentService_events : 6. payment_processed
 User --> UserService : 7. submits registration form
 UserService -> UserService : 8. validates user data
-UserService ->> EmailService : 9. to send verification
+UserService ->> EmailService : 9. send verification
 EmailService --> UserService : 10. returns email status
 UserService --> User : 11. returns registration result
 

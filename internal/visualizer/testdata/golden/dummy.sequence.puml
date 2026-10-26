@@ -11,7 +11,7 @@ actor "VASMgmt" as VASMgmt
 == VAS unscheduled ==
 
 Business_User -> VASScheduling : unschedules a VAS scheduling
-VASScheduling -> Wallet : to cancel the VAS reservation
+VASScheduling -> Wallet : cancel the VAS reservation
 Wallet -> Wallet : cancels VAS reservation
 Wallet ->> Wallet : notifies "VAS Reservation Canceled"
 VASScheduling -> VASScheduling : cancels the VAS schedule

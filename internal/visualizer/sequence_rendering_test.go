@@ -76,8 +76,8 @@ use_case "Seeker opens an advert" {
         graphql notifies "AdvertViewed"                [TOPIC web.advert-viewed]
 }
 `)
-	requireLine(t, "plantuml", puml, "frontendplatform -> graphql : for the advert [ad]")
-	requireLine(t, "mermaid", mmd, "frontendplatform->>graphql: for the advert [ad]")
+	requireLine(t, "plantuml", puml, "frontendplatform -> graphql : the advert [ad]")
+	requireLine(t, "mermaid", mmd, "frontendplatform->>graphql: the advert [ad]")
 	requireLine(t, "plantuml", puml, `graphql ->> graphql : notifies "AdvertViewed" [TOPIC web.advert-viewed]`)
 }
 
@@ -131,7 +131,7 @@ use_case "Advisor reads a seeker file" {
 	if strings.Contains(string(out), "Advisor --> Advisor") {
 		t.Errorf("flow has an actor self-edge:\n%s", out)
 	}
-	requireLine(t, "plantuml", string(out), "Advisor ->> concierge : 1. for one seeker file")
+	requireLine(t, "plantuml", string(out), "Advisor ->> concierge : 1. one seeker file")
 }
 
 const branchesSrc = `actor user Customer
@@ -205,11 +205,11 @@ func TestSequence_BranchesExactPlantUML(t *testing.T) {
 	got := between(t, "plantuml", puml, "group 1: online order\n", "group 2: phone order\n")
 	want := `group 1: online order
 Customer -> Ordering : places an order
-Ordering -> Billing : to charge the card
+Ordering -> Billing : charge the card
 alt the card is accepted
 Billing --> Ordering : returns the receipt
 else the card is declined
-Billing -> Bank : for a second opinion
+Billing -> Bank : a second opinion
 opt the bank also declines
 Bank --> Billing : returns the refusal
 end
@@ -229,11 +229,11 @@ func TestSequence_BranchesExactMermaid(t *testing.T) {
 	want := `    rect rgb(245, 245, 245)
     Note over Customer,Bank: 1: online order
     Customer->>Ordering: places an order
-    Ordering->>Billing: to charge the card
+    Ordering->>Billing: charge the card
     alt the card is accepted
     Billing-->>Ordering: returns the receipt
     else the card is declined
-    Billing->>Bank: for a second opinion
+    Billing->>Bank: a second opinion
     opt the bank also declines
     Bank-->>Billing: returns the refusal
     end
@@ -346,7 +346,7 @@ func TestSequence_EmptyBranchesKeepTheirHeaders(t *testing.T) {
             Billing returns the refusal
 `,
 			want:     []string{"alt the card is accepted", "else the card is declined", "end"},
-			wantPUML: "Ordering -> Billing : to charge the card\nalt the card is accepted\nelse the card is declined\nBilling --> Ordering : returns the refusal\nend\n",
+			wantPUML: "Ordering -> Billing : charge the card\nalt the card is accepted\nelse the card is declined\nBilling --> Ordering : returns the refusal\nend\n",
 		},
 		{
 			name: "empty middle branch",
@@ -365,7 +365,7 @@ func TestSequence_EmptyBranchesKeepTheirHeaders(t *testing.T) {
         Ordering returns the confirmation
 `,
 			want:     []string{"opt the card needs a check", "end"},
-			wantPUML: "Ordering -> Billing : to charge the card\nopt the card needs a check\nend\nOrdering --> Customer : returns the confirmation\n",
+			wantPUML: "Ordering -> Billing : charge the card\nopt the card needs a check\nend\nOrdering --> Customer : returns the confirmation\n",
 		},
 	}
 	for _, c := range cases {
@@ -421,10 +421,10 @@ domain shop {
 	want := `== Checkout ==
 
 Customer -> Ordering : places an order
-Ordering -> Billing : to charge the card
+Ordering -> Billing : charge the card
 Ordering --> Customer : returns the confirmation
 Customer -> Ordering : phones in an order
-Ordering -> Billing : to charge the card
+Ordering -> Billing : charge the card
 alt the card is accepted
 Billing --> Ordering : returns the receipt
 else the card is declined
@@ -477,7 +477,7 @@ use_case "Checkout" {
 
 [-> Billing : Card Charged
 Customer -> Ordering : places an order
-Ordering -> Billing : to charge the card
+Ordering -> Billing : charge the card
 opt the card is declined
 Billing --> Ordering : returns the refusal
 end
@@ -514,7 +514,7 @@ use_case "Refund" {
 	want := `== Refund ==
 
 Customer -> Ordering : asks for a refund
-Ordering -> Billing : to refund the card
+Ordering -> Billing : refund the card
 alt the card is open
 Billing --> Ordering : returns the refund
 else the card is closed
@@ -536,7 +536,7 @@ func TestFlow_EdgesInsideABranchCarryTheBranchLabel(t *testing.T) {
 		}
 		s := string(out)
 		for _, want := range []string{
-			"[the card is declined] for a second opinion",
+			"[the card is declined] a second opinion",
 			"[the bank also declines] returns the refusal",
 			"[the card is accepted] returns the receipt",
 		} {
@@ -552,8 +552,13 @@ func TestFlow_EdgesInsideABranchCarryTheBranchLabel(t *testing.T) {
 				t.Errorf("%v: trigger edge has a branch prefix: %q", backend, line)
 			}
 		}
-		if strings.Contains(s, "] to charge the card") || strings.Contains(s, "] returns the confirmation") {
-			t.Errorf("%v: edge outside a block has a prefix:\n%s", backend, s)
+		for _, label := range []string{"charge the card", "returns the confirmation"} {
+			if !strings.Contains(s, label) {
+				t.Errorf("%v: flow lacks %q:\n%s", backend, label, s)
+			}
+			if strings.Contains(s, "] "+label) {
+				t.Errorf("%v: edge outside a block has a prefix:\n%s", backend, s)
+			}
 		}
 	}
 }
@@ -585,10 +590,10 @@ func TestSequence_TriggerIsDrawnInsideEachOpeningBranchPlantUML(t *testing.T) {
 
 alt on the web
 Seeker -> frontendplatform : opens the search page
-frontendplatform -> search : for listings
+frontendplatform -> search : listings
 else in the app
 Seeker -> mobile : opens the search page
-mobile -> search : for listings
+mobile -> search : listings
 else offline
 note over Seeker : opens the search page
 Seeker -> Seeker : reads the cached results
@@ -605,10 +610,10 @@ func TestSequence_TriggerIsDrawnInsideEachOpeningBranchMermaid(t *testing.T) {
 	_, mmd := sequenceSource(t, openingBlockSrc)
 	want := `    alt on the web
     Seeker->>frontendplatform: opens the search page
-    frontendplatform->>search: for listings
+    frontendplatform->>search: listings
     else in the app
     Seeker->>mobile: opens the search page
-    mobile->>search: for listings
+    mobile->>search: listings
     else offline
     Note over Seeker: opens the search page
     Seeker->>Seeker: reads the cached results
@@ -813,7 +818,7 @@ func TestFlow_ParAndLoopEdgesNameTheirKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"[par: field resolvers] for the SEO title", "[loop: for each image, until all are signed] to sign the image URL", "[par: the statistics] for the page statistics"} {
+	for _, want := range []string{"[par: field resolvers] the SEO title", "[loop: for each image, until all are signed] sign the image URL", "[par: the statistics] the page statistics"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("flow lacks %q:\n%s", want, out)
 		}
@@ -835,7 +840,7 @@ func TestSequence_ReceivesDrawsFoundAndLostMessages(t *testing.T) {
 	puml, mmd := sequenceSource(t, receivesSrc)
 	for _, want := range []string{
 		"[-> graphql : a reindex sweep [reindexAdverts]",
-		"graphql -> atlas : for every advert that needs reindexing [getAlladvertstoreindex]",
+		"graphql -> atlas : every advert that needs reindexing [getAlladvertstoreindex]",
 		"graphql -->] : returns the advert ids",
 	} {
 		requireLine(t, "plantuml", puml, want)
@@ -927,14 +932,14 @@ func TestSequence_ParOrLoopOpeningAnAltBranchDrawsTheTriggerOnceBeforeTheBox(t *
 	wantPuml := `alt fresh
 Seeker -> graphql : opens an advert
 par fan
-graphql -> atlas : for a
+graphql -> atlas : a
 else
-graphql -> atlas : for b
+graphql -> atlas : b
 end
 else stale
 Seeker -> graphql : opens an advert
 loop each
-graphql -> atlas : to refresh
+graphql -> atlas : refresh
 end
 end`
 	if !strings.Contains(puml, wantPuml) {
@@ -1372,13 +1377,13 @@ use_case "Seller resumes a selling draft" {
 
 func TestSequence_EgressAndInferred(t *testing.T) {
 	puml, _ := sequenceSource(t, egressSrc)
-	requireLine(t, "plantuml", puml, "obidoanalytics -> front : for the city, region and developer graph [SQL investment flat city region developer]")
-	requireLine(t, "plantuml", puml, "obidoanalytics -> ObjectStore : to take the refreshed snapshot [ADDR SNAPSHOT_DESTINATION]")
+	requireLine(t, "plantuml", puml, "obidoanalytics -> front : the city, region and developer graph [SQL investment flat city region developer]")
+	requireLine(t, "plantuml", puml, "obidoanalytics -> ObjectStore : take the refreshed snapshot [ADDR SNAPSHOT_DESTINATION]")
 	puml, mmd := sequenceSource(t, inferredSrc)
-	requireLine(t, "plantuml", puml, "graphql -[#999999]> ShaperAgent : to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)")
-	requireLine(t, "mermaid", mmd, "graphql->>ShaperAgent: to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)")
+	requireLine(t, "plantuml", puml, "graphql -[#999999]> ShaperAgent : initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)")
+	requireLine(t, "mermaid", mmd, "graphql->>ShaperAgent: initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)")
 	flow, _, _ := renderSource(resolvedDoc(t, inferredSrc), ViewFlow, PlantUML)
-	if !strings.Contains(string(flow), "-[#999999]->> ShaperAgent : 3. to initiate the chat (inferred)") {
+	if !strings.Contains(string(flow), "-[#999999]->> ShaperAgent : 3. initiate the chat (inferred)") {
 		t.Errorf("flow:\n%s", flow)
 	}
 }
@@ -1394,7 +1399,7 @@ use_case "U" {
         graphql returns the session  [inferred]
 }
 `)
-	requireLine(t, "plantuml", puml, "mobile -[#999999]> graphql : to open it (inferred)")
+	requireLine(t, "plantuml", puml, "mobile -[#999999]> graphql : open it (inferred)")
 	requireLine(t, "plantuml", puml, "graphql -[#999999]-> mobile : returns the session (inferred)")
 }
 
@@ -1425,10 +1430,10 @@ use_case "U" {
 	}
 	s := string(out)
 	for _, want := range []string{
-		`"for rows", "SQL (shared tables)"`,
-		`"for x (inferred)", "Service API"`,
-		`"for the file", "HTTP (bare address)"`,
-		`"for y", "Service API"`,
+		`"rows", "SQL (shared tables)"`,
+		`"x (inferred)", "Service API"`,
+		`"the file", "HTTP (bare address)"`,
+		`"y", "Service API"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("c4 lacks %s:\n%s", want, s)
@@ -1466,7 +1471,7 @@ use_case "U" {
 	s := string(out)
 	for _, want := range []string{
 		`System_Ext(ObjectStore, "ObjectStore", "External system")`,
-		`, ObjectStore, "to take the snapshot", "HTTP (bare address)")`,
+		`, ObjectStore, "take the snapshot", "HTTP (bare address)")`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("c4 lacks %s:\n%s", want, s)

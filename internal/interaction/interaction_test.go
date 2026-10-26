@@ -65,11 +65,11 @@ use_case "Checkout" {
 `})
 	want := `0 trigger Customer->Ordering [places order]
 1 internal Ordering->Ordering [validates the basket]
-2 request Ordering->Billing [to charge the card]
-3 request Billing->Bank [for authorization]
+2 request Ordering->Billing [charge the card]
+3 request Billing->Bank [authorization]
 4 response Bank->Billing [returns the decision]
 5 response Billing->Ordering [returns the receipt]
-6 request Ordering->orders_db [to store the order]
+6 request Ordering->orders_db [store the order]
 7 publish Ordering->· [Order Placed]`
 	if got := summary(its); got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
@@ -253,7 +253,7 @@ use_case "Checkout" {
 }
 `})
 	want := `0 trigger Customer->Ordering [places order]
-1 request Ordering->Billing [to charge the card]
+1 request Ordering->Billing [charge the card]
 2 response Ordering->Customer [returns the confirmation]`
 	if got := summary(its); got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
@@ -817,7 +817,7 @@ use_case "Sweep" {
 }
 `})
 	want := `0 trigger unobserved caller->Ordering [a reindex sweep]
-1 request Ordering->Billing [for the totals]
+1 request Ordering->Billing [the totals]
 2 response Billing->Ordering [returns the totals]
 3 response Ordering->unobserved caller [returns the ids]`
 	if got := summary(its); got != want {
@@ -1157,7 +1157,7 @@ use_case "Checkout" {
 	without := summary(derive(t, map[string]string{"a.craft": structure + fmt.Sprintf(body, "", "")}))
 	with := summary(derive(t, map[string]string{"a.craft": structure + fmt.Sprintf(body, "        includes \"Session\"\n", "        continues \"Pay\"\n")}))
 	want := `0 trigger Customer->Ordering [places order]
-1 request Ordering->Billing [to charge the card]
+1 request Ordering->Billing [charge the card]
 2 response Billing->Ordering [returns the receipt]`
 	if without != want || with != want {
 		t.Errorf("without:\n%s\nwith:\n%s\nwant:\n%s", without, with, want)

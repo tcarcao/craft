@@ -48,27 +48,27 @@ database "sms_queue" as sms_queue
 
 ' Workflow flows
 Seeker --> frontendplatform : 1. opens an advert
-frontendplatform ->> graphql : 2. for the advert
-graphql ->> atlas : 3. [par: field resolvers] for the SEO title
-graphql ->> atlas : 4. [par: field resolvers] for the targeting data
+frontendplatform ->> graphql : 2. the advert
+graphql ->> atlas : 3. [par: field resolvers] the SEO title
+graphql ->> atlas : 4. [par: field resolvers] the targeting data
 graphql ->> atlas : 5. [par: field resolvers] where the advert came from
-graphql ->> media : 6. [loop: for each image, until all are signed] to sign the image URL
+graphql ->> media : 6. [loop: for each image, until all are signed] sign the image URL
 Seeker --> frontendplatform : 7. opens the advert statistics
-frontendplatform ->> graphql : 8. for the advert
-graphql ->> adcore : 9. [par: the advert] for the advert
-graphql ->> atlas : 10. [par: the advert] for the owner
-graphql ->> Dapi : 11. [par: the statistics] for the page statistics
+frontendplatform ->> graphql : 8. the advert
+graphql ->> adcore : 9. [par: the advert] the advert
+graphql ->> atlas : 10. [par: the advert] the owner
+graphql ->> Dapi : 11. [par: the statistics] the page statistics
 Seller --> frontendplatform : 12. pays an invoice
-frontendplatform ->> graphql : 13. to pay
-graphql ->> paymentgateway : 14. to start the payment
+frontendplatform ->> graphql : 13. pay
+graphql ->> paymentgateway : 14. start the payment
 unobserved_caller --> graphql : 15. a reindex sweep
-graphql ->> atlas : 16. for every advert that needs reindexing
+graphql ->> atlas : 16. every advert that needs reindexing
 graphql --> unobserved_caller : 17. returns the advert ids
 CRON --> invoicing : 18. cron 0 9 * * 1-5
 invoicing -> invoicing : 19. finds the invoices due in three days
 invoicing ->> sms_queue : 20. inserted
 sms_queue --> smsdispatch : 21. polls inserted
 smsdispatch -> smsdispatch : 22. claims the unsent rows
-smsdispatch ->> Siren : 23. to send the SMS
+smsdispatch ->> Siren : 23. send the SMS
 
 @enduml

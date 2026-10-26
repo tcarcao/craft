@@ -322,10 +322,10 @@ use_case "Reads" {
 	}
 	want := []string{
 		`Customer->shop/Ordering "opens the page" {}`,
-		`shop/Ordering->shop/Billing "for a" {par:"fan-out"#0}`,
-		`shop/Ordering->shop/Shipping "for b" {par:""#1}`,
+		`shop/Ordering->shop/Billing "a" {par:"fan-out"#0}`,
+		`shop/Ordering->shop/Shipping "b" {par:""#1}`,
 		`Customer->shop/Shipping "opens the page" {par:""#2}`,
-		`shop/Shipping->shop/Billing "for c" {par:""#2}`,
+		`shop/Shipping->shop/Billing "c" {par:""#2}`,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

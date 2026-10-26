@@ -61,7 +61,7 @@ craft generate [files...] [flags]
 | `--type` | `all` | Diagram type: `c4`, `domain`, `sequence`, `surface`, or `all`. `surface` writes `<base>-surface.md`, a Markdown table of each `surface` block's operations and the use cases that call them, whatever `--format` says; `all` includes it only when the model declares a surface |
 | `--mode` | `detailed` | Domain diagram detail: `detailed` or `architecture` |
 | `-o, --output` | dir of the first input | Directory to write output files |
-| `--format` | `puml` | Output format: `puml`, `mermaid`, or `mermaid-md` |
+| `--format` | `puml` | Output format: `puml`, `mermaid`, `mermaid-md`, or `board` *(flow view only)* |
 | `--use-case` | — | Comma-separated use case slugs or names to render *(detailed-domain and sequence only)* |
 | `--split` | false | Emit one file per use case *(detailed-domain and sequence only)* |
 | `--stdout` | false | Write to stdout instead of files (single diagram only; mutually exclusive with `--output`, `--split`, `--type all`) |
@@ -89,6 +89,14 @@ An unknown slug is an error that lists the three closest slugs.
 - `puml` — PlantUML source. Render with the PlantUML server, `plantuml.jar`, or a CI image like `plantuml/plantuml-server:jetty`.
 - `mermaid` — raw Mermaid source. Renders in VS Code's Mermaid Preview, `mmdc`, and the [Mermaid Live Editor](https://mermaid.live/).
 - `mermaid-md` — Mermaid wrapped in a fenced ` ```mermaid ` block with a `# title` heading. Commit alongside `.md` docs and GitHub renders the diagram inline. By default refuses to overwrite an existing `.md` (`--force` to opt in).
+- `board` — a Miro-style SVG drawing of the flow view, one board per use case (always split, `--split` is accepted). Needs `--type domain`; `--mode architecture` and `--journey` are errors. Files are `<base>-domain-<slug>.svg`; `--stdout` needs exactly one use case (`--use-case`).
+
+  Bounded contexts and domains are lavender clouds. Services, unresolved names, externals, queues and non-user actors (system, service, ...) are cogs; user actors are a person; data stores a store icon. Notes are sticky: green for a query (`GET`, `HEAD`, `OPTIONS`, `QUERY`), blue for a command (`POST`, `PUT`, `PATCH`, `DELETE`, and actor triggers), yellow for an event (`notifies`), white "Step" for anything else (other verbs or none, replies, internal actions, store writes). Event delivery (queue to listener) shows only the step number. Replies are dashed arrows back. Dashed boxes group the nodes of a service that has two or more. Step numbers match the flow view. The font is Open Sans by name with fallbacks; it is not embedded.
+
+  ```bash
+  craft generate docs/payments.craft --type domain --format board -o boards/
+  # -> boards/payments-domain-purchase-item.svg, ...
+  ```
 
 ```bash
 # PlantUML (default)
@@ -216,6 +224,9 @@ Language features for cites, links and journeys (2.25):
 | `POST /journeys` | `{"files": {"<name>": "<source>", …}}` | `{"success": true, "slugs": [...], "diagnostics": [...]}`, slugs sorted |
 | `POST /preview/journey` | `{"files": {…}, "slug": "<slug>", "format": "png"}` (`png`, `svg`, `pdf` or `puml`) | the PlantUML spine, base64 in `data` |
 | `POST /preview/mermaid/journey` | `{"files": {…}, "slug": "<slug>"}` | the Mermaid spine source, plain text in `data` |
+| `POST /preview/board/domain` | `{"dsl": "…", "useCase": "<name or slug>"}` (optional; default the first use case) | the board SVG, plain text in `data` |
+
+`/preview/board/domain` also accepts `diagramType: "domain"`, `domainMode: "detailed"` and `format: "svg"`. It answers 400 for an unknown use case (the message lists the slugs), another `diagramType` or `format`, architecture mode, a model with no use case, or a use case whose name another use case shares (rename one to draw it).
 
 An empty or unknown slug answers 400.
 
