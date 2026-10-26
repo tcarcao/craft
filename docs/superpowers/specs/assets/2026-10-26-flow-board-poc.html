@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Board POC</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+<style>
+  :root { --bg: #e6e6e6; --board: #ffffff; --ink: #1a1a1a; }
+  html, body { margin: 0; background: var(--bg); font-family: 'Open Sans', sans-serif; color: var(--ink); }
+  #bar { padding: 8px 16px; font-size: 13px; }
+  #bar button { font: inherit; padding: 4px 10px; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<div id="bar">THROWAWAY POC: Craft flow view drawn in a Miro-like style. <button id="dl">Download SVG</button></div>
+<div id="out"></div>
+<script>
+// Input shaped like view.Flow (internal/visualizer/view/flow.go), plus the
+// note kind (query / command / event) the new backend would need.
+const flow = {
+  title: 'Scenario: Invoicing process starts for a prepaid Customer',
+  groups: [{ id: 'svc', label: '' }],
+  nodes: [
+    { id: 'order',     kind: 'context',  label: 'Order' },
+    { id: 'fanout',    kind: 'queue',    label: 'SNS/SQS fanout' },
+    { id: 'invoicing', kind: 'context',  label: 'Invoicing', group: 'svc' },
+    { id: 'boomi',     kind: 'external', label: 'Boomi', group: 'svc' },
+    { id: 'profile',   kind: 'context',  label: 'Customer Profile' },
+    { id: 'payment',   kind: 'context',  label: 'Payment' },
+  ],
+  edges: [
+    { from: 'order', to: 'fanout', style: 'async', n: 1, note: 'event', label: 'Order Updated' },
+    { from: 'fanout', to: 'invoicing', style: 'trigger' },
+    { from: 'invoicing', to: 'payment', style: 'async', n: 2, note: 'query', label: 'Get transaction details' },
+    { from: 'invoicing', to: 'profile', style: 'call', n: 3, note: 'query', label: 'Get customer details' },
+    { from: 'invoicing', to: 'boomi', style: 'call', n: 4, note: 'command', label: 'Upload Customer' },
+    { from: 'invoicing', to: 'boomi', style: 'call', n: 5, note: 'command', label: 'Upload Invoice' },
+  ],
+};
+
+const NOTE = { query: '#d6e46c', command: '#4a90e2', event: '#f2c33c' };
+const SIZE = { context: [190, 110], queue: [46, 46], external: [46, 46], actor: [40, 46] };
+const STICKY = [84, 56];
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+
+// Greedy word wrap; width in characters is close enough for one font size.
+function wrap(text, maxChars) {
+  const lines = [];
+  for (const w of text.split(' ')) {
+    const last = lines[lines.length - 1];
+    if (last && (last + ' ' + w).length <= maxChars) lines[lines.length - 1] = last + ' ' + w;
+    else lines.push(w);
+  }
+  return lines;
+}
+function text(parent, x, y, str, { size = 12, weight = 400, anchor = 'middle', maxChars = 99, fill = '#1a1a1a' } = {}) {
+  const lines = wrap(str, maxChars), lh = size * 1.25;
+  const t = el('text', { x, y: y - (lines.length - 1) * lh / 2, 'font-size': size, 'font-weight': weight,
+    'text-anchor': anchor, 'dominant-baseline': 'central', fill }, parent);
+  lines.forEach((l, i) => el('tspan', { x, dy: i ? lh : 0 }, t).textContent = l);
+  return t;
+}
+
+// Miro-style cloud: 8 hand-placed notches (fractions of w×h, clockwise from top-left),
+// each followed by the bulge (sagitta / chord) of the lobe running to the next notch.
+const CLOUD = [[-.36,-.197,.24],[-.164,-.413,.22],[.128,-.376,.24],[.364,-.197,.46],
+               [.379,.25,.24],[.128,.395,.25],[-.143,.387,.26],[-.399,.132,.53]];
+function cloud(g, w, h) {
+  const p = CLOUD.map(([x, y, k]) => [x * w, y * h, k]);
+  let d = `M${p[0][0]},${p[0][1]}`;
+  p.forEach(([x, y, k], i) => {
+    const [qx, qy] = p[(i + 1) % p.length], c = Math.hypot(qx - x, qy - y), s = k * c;
+    const r = (c * c / 4 + s * s) / (2 * s);
+    d += `A${r},${r} 0 ${k > .5 ? 1 : 0},1 ${qx},${qy}`;
+  });
+  return el('path', { d: d + 'Z', fill: '#cdcdfa', stroke: '#6130b8', 'stroke-width': Math.max(1, Math.min(w, h) / 45),
+    'stroke-linejoin': 'round' }, g);
+}
+// Chunky cog icon: body disc, 8 square teeth, big white ring, black hub.
+function gear(g, r) {
+  el('circle', { r: r * 0.74, fill: '#111' }, g);
+  for (let i = 0; i < 8; i++)
+    el('rect', { x: -r * 0.19, y: -r, width: r * 0.38, height: r * 0.4, rx: r * 0.06, fill: '#111',
+      transform: `rotate(${i * 45})` }, g);
+  el('circle', { r: r * 0.44, fill: '#fff' }, g);
+  el('circle', { r: r * 0.26, fill: '#111' }, g);
+}
+function person(g, s) {
+  el('circle', { cy: -s * 0.28, r: s * 0.22, fill: '#111' }, g);
+  el('path', { fill: '#111', d: `M${-s * 0.46},${s * 0.42}C${-s * 0.46},${s * 0.02} ${s * 0.46},${s * 0.02} ${s * 0.46},${s * 0.42}Z` }, g);
+}
+function sticky(g, x, y, kind, n, label) {
+  const [w, h] = STICKY, s = el('g', { transform: `translate(${x},${y})` }, g);
+  // Miro sticky: thin border, faint shadow, small bold text at the top.
+  el('rect', { x: -w / 2, y: -h / 2, width: w, height: h, fill: NOTE[kind], stroke: 'rgba(0,0,0,.25)',
+    'stroke-width': 0.8, filter: 'url(#shadow)' }, s);
+  const t = text(s, 0, 0, label, { size: 8.5, weight: 700, maxChars: 18 });
+  t.setAttribute('y', -h / 2 + 14);
+  if (n != null) {
+    el('circle', { cy: -h / 2, r: 8, fill: '#fff', stroke: '#8a8a8a', 'stroke-width': 0.8 }, s);
+    text(s, 0, -h / 2, String(n), { size: 8, fill: '#d33' });
+  }
+}
+
+function render(flow) {
+  // dagre only places nodes; lines and notes are drawn by hand afterwards.
+  // ponytail: nodes reached only by queries are side lookups; dagre lays out
+  // the rest top-down and lookups stack to the right of their caller.
+  // Naive heuristic, no collision checks between callers' stacks.
+  const isLookup = id => flow.edges.some(e => e.to === id) &&
+    flow.edges.every(e => (e.to !== id || e.note === 'query') && e.from !== id);
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'TB', nodesep: 120, ranksep: 90, marginx: 60, marginy: 40 });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const n of flow.nodes) {
+    const [width, height] = SIZE[n.kind];
+    g.setNode(n.id, { ...n, width, height });
+  }
+  for (const e of flow.edges) if (!isLookup(e.to)) g.setEdge(e.from, e.to);
+  dagre.layout(g);
+  const callers = {};
+  // In step order, so the first lookup sits level with its caller.
+  for (const e of flow.edges) if (isLookup(e.to) && !Object.values(callers).flat().includes(e.to))
+    (callers[e.from] ||= []).push(e.to);
+  for (const [c, ids] of Object.entries(callers)) {
+    const v = g.node(c), maxX = Math.max(...g.nodes().filter(i => !isLookup(i)).map(i => g.node(i).x + g.node(i).width / 2));
+    ids.forEach((id, i) => Object.assign(g.node(id), { x: maxX + 260, y: v.y + (i % 2 ? -1 : 1) * Math.ceil(i / 2) * 150 }));
+  }
+  const xs = g.nodes().map(i => g.node(i));
+  const minX = Math.min(...xs.map(v => v.x - v.width / 2)) - 60, minY = Math.min(...xs.map(v => v.y - v.height / 2)) - 60;
+  for (const v of xs) { v.x -= minX; v.y -= minY; }
+  g.graph().width = Math.max(...xs.map(v => v.x + v.width / 2)) + 60;
+  g.graph().height = Math.max(...xs.map(v => v.y + v.height / 2)) + 100;
+
+  const LEGEND_W = 290, TITLE_H = 76, PAD = 28;
+  const gw = g.graph().width, gh = g.graph().height;
+  const MIN_W = 1000;
+  const W = LEGEND_W + PAD * 2 + Math.max(gw, MIN_W), H = TITLE_H + Math.max(gh, 620) + PAD;
+  const svg = el('svg', { xmlns: NS, width: W, height: H, viewBox: `0 0 ${W} ${H}`, 'font-family': "'Open Sans', sans-serif" });
+  const defs = el('defs', {}, svg);
+  const f = el('filter', { id: 'shadow', x: '-20%', y: '-20%', width: '150%', height: '160%' }, defs);
+  el('feDropShadow', { dx: 1, dy: 1.5, stdDeviation: 1, 'flood-opacity': 0.18 }, f);
+  const m = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+  el('path', { d: 'M0,1L10,5L0,9Z', fill: '#333' }, m);
+
+  // Frame: grey canvas, title, white board.
+  el('rect', { width: W, height: H, fill: '#e6e6e6' }, svg);
+  text(svg, LEGEND_W + PAD + (W - LEGEND_W - PAD) / 2, TITLE_H / 2 + 4, flow.title, { size: 30, weight: 700 });
+  el('rect', { x: LEGEND_W + PAD, y: TITLE_H, width: W - LEGEND_W - PAD, height: H - TITLE_H, fill: '#fff', stroke: '#bdbdbd' }, svg);
+  legend(svg, 14, 70);
+
+  const board = el('g', { transform: `translate(${LEGEND_W + PAD * 2 + (Math.max(gw, MIN_W) - gw) / 2},${TITLE_H + 10})` }, svg);
+  document.getElementById('out').appendChild(svg); // isPointInFill below needs it in the page
+  // Layers, bottom to top: group boxes, shapes, arrows, notes. Arrows sit on
+  // top of shapes like Miro connectors, so their heads always show.
+  const [groupLayer, nodeLayer, edgeLayer, noteLayer] = [0, 1, 2, 3].map(() => el('g', {}, board));
+  const outline = {};
+  for (const n of flow.nodes) {
+    const v = g.node(n.id), ng = el('g', { transform: `translate(${v.x},${v.y})` }, nodeLayer);
+    if (n.kind === 'context') { outline[n.id] = cloud(ng, v.width, v.height); text(ng, 0, 2, n.label, { size: 15, weight: 700, maxChars: 10 }); }
+    else n.kind === 'actor' ? person(ng, v.height) : gear(ng, v.width / 2);
+  }
+  // Group box: bounds of its members (plus their notes, added below).
+  const groupBox = {};
+  for (const gr of flow.groups) {
+    const ms = flow.nodes.filter(n => n.group === gr.id).map(n => g.node(n.id));
+    groupBox[gr.id] = { x0: Math.min(...ms.map(v => v.x - v.width / 2)), x1: Math.max(...ms.map(v => v.x + v.width / 2)),
+                        y0: Math.min(...ms.map(v => v.y - v.height / 2)), y1: Math.max(...ms.map(v => v.y + v.height / 2)) };
+  }
+  // Where the line from a node's centre towards (dx,dy) leaves its shape:
+  // walk out until the point leaves the cloud's drawn outline; icons are round.
+  const rim = (v, dx, dy) => {
+    const len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len, path = outline[v.id];
+    let t = v.width / 2 * 1.15;
+    if (path) for (t = 0; t < v.width && path.isPointInFill(new DOMPoint(ux * t, uy * t)); t++);
+    return [v.x + ux * (t + 1), v.y + uy * (t + 1)];
+  };
+  // One straight line per node pair; all its messages sit beside it.
+  const pairs = new Map();
+  for (const e of flow.edges) {
+    const k = e.from + '>' + e.to;
+    if (!pairs.has(k)) pairs.set(k, []);
+    pairs.get(k).push(e);
+  }
+  const notes = [];
+  for (const es of pairs.values()) {
+    const a = g.node(es[0].from), b = g.node(es[0].to);
+    const [x1, y1] = rim(a, b.x - a.x, b.y - a.y), [x2, y2] = rim(b, a.x - b.x, a.y - b.y);
+    const dashed = es[0].style === 'async' && es[0].note !== 'event';
+    // Miro-style curved connector: an S-curve along the dominant axis. Its
+    // midpoint is the straight line's, so notes placed off the line still fit.
+    const hz = Math.abs(x2 - x1) > Math.abs(y2 - y1), hx = (x2 - x1) / 2, hy = (y2 - y1) / 2;
+    // Softened halfway towards the straight line so the middle isn't too steep.
+    const c = hz ? `${x1 + hx},${y1 + hy / 2} ${x2 - hx},${y2 - hy / 2}` : `${x1 + hx / 2},${y1 + hy} ${x2 - hx / 2},${y2 - hy}`;
+    el('path', { d: `M${x1},${y1}C${c} ${x2},${y2}`, fill: 'none', stroke: '#333', 'stroke-width': 1.4,
+      'stroke-dasharray': dashed ? '6 5' : 'none', 'marker-end': 'url(#arrow)' }, edgeLayer);
+    const withNote = es.filter(e => e.note);
+    if (!withNote.length) continue;
+    // Notes go below a flat line (above a rising one) and to the right of a steep one.
+    const flat = Math.abs(x2 - x1) > Math.abs(y2 - y1);
+    // Along the line: middle of a flat one, near the target end of a steep one.
+    const t = flat ? 0.5 : 0.72, mx = x1 + (x2 - x1) * t, my = y1 + (y2 - y1) * t;
+    const rowW = withNote.length * STICKY[0] + (withNote.length - 1) * 14;
+    const cx = flat ? mx : mx + rowW / 2 + 18, up = flat && y2 < y1 - 20, cy = flat ? my + (up ? -1 : 1) * (STICKY[1] / 2 + 18 + Math.abs(y2 - y1) * 0.25) : my;
+    withNote.forEach((e, i) => {
+      // A steep line takes its notes alternately right and left of it.
+      const side = !flat && i % 2 ? -1 : 1;
+      let nx = flat ? cx - rowW / 2 + STICKY[0] / 2 + i * (STICKY[0] + 14) : mx + side * (STICKY[0] / 2 + 18), ny = cy;
+      // ponytail: push off earlier notes and nodes along the offset direction; no global solve.
+      const hits = () => notes.some(([x, y]) => Math.abs(x - nx) < STICKY[0] + 10 && Math.abs(y - ny) < STICKY[1] + 14) ||
+        xs.some(v => Math.abs(v.x - nx) < (v.width + STICKY[0]) / 2 + 6 && Math.abs(v.y - ny) < (v.height + STICKY[1]) / 2 + 6);
+      for (let k = 0; k < 40 && hits(); k++) flat ? ny += (up ? -12 : 12) : nx += side * 12;
+      notes.push([nx, ny, e]);
+      const grp = flow.nodes.find(n => n.id === e.from).group;
+      if (grp && grp === flow.nodes.find(n => n.id === e.to).group) {
+        const bx = groupBox[grp];
+        bx.x0 = Math.min(bx.x0, nx - STICKY[0] / 2); bx.x1 = Math.max(bx.x1, nx + STICKY[0] / 2);
+      }
+    });
+  }
+  for (const bx of Object.values(groupBox))
+    el('rect', { x: bx.x0 - 24, y: bx.y0 - 18, width: bx.x1 - bx.x0 + 48, height: bx.y1 - bx.y0 + 36,
+      fill: 'none', stroke: '#8a8a8a', 'stroke-dasharray': '4 4', 'stroke-width': 1.2 }, groupLayer);
+  for (const [x, y, e] of notes) sticky(noteLayer, x, y, e.note, e.n, e.label);
+  for (const n of flow.nodes) {
+    if (n.kind === 'context') continue;
+    const v = g.node(n.id), ng = el('g', { transform: `translate(${v.x},${v.y})` }, nodeLayer);
+    // Name goes on the side away from the nearest sticky note.
+    const near = [...notes].sort((a, b) => Math.hypot(a[0] - v.x, a[1] - v.y) - Math.hypot(b[0] - v.x, b[1] - v.y))[0];
+    const left = near && near[0] > v.x;
+    text(ng, left ? -v.width / 2 - 8 : v.width / 2 + 8, 0, n.label, { size: 11, anchor: left ? 'end' : 'start' });
+  }
+  return svg;
+}
+
+function legend(svg, x, y) {
+  const lg = el('g', { transform: `translate(${x},${y})` }, svg);
+  el('rect', { width: 260, height: 560, fill: '#e6e6e6', stroke: '#9a9a9a', 'stroke-width': 1.5 }, lg);
+  text(lg, 130, 30, 'Notation', { size: 18, weight: 700 });
+  const row = (i, draw, label) => {
+    const cy = 90 + i * 70, ig = el('g', { transform: `translate(50,${cy})` }, lg);
+    draw(ig);
+    text(lg, 105, cy, label, { size: 13, anchor: 'start', maxChars: 16 });
+  };
+  row(0, g => person(g, 44), 'Actor / User / Persona');
+  row(1, g => cloud(g, 62, 52), 'Bounded Context');
+  row(2, g => gear(g, 21), 'System');
+  const note = (kind, word) => g => {
+    el('rect', { x: -38, y: -21, width: 76, height: 42, fill: NOTE[kind], filter: 'url(#shadow)' }, g);
+    text(g, 0, 0, word, { size: 11, maxChars: 10 });
+  };
+  row(3, note('query', 'Get Pizza'), 'Query');
+  row(4, note('command', 'Slice Pineapple'), 'Command');
+  row(5, note('event', 'Pizza Baked'), 'Event');
+  row(6, g => el('path', { d: 'M-30,12L30,-8', stroke: '#666', 'stroke-dasharray': '2 2', 'marker-end': 'url(#arrow)' }, g), 'Direction of message');
+  text(lg, 105, 90 + 6 * 70 + 20, 'From producer to consumer', { size: 8, anchor: 'start' });
+}
+
+const svg = render(flow);
+document.getElementById('dl').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([svg.outerHTML], { type: 'image/svg+xml' }));
+  a.download = 'flow.svg';
+  a.click();
+};
+</script>
+</body>
+</html>
