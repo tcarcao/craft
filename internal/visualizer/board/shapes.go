@@ -176,6 +176,20 @@ func (s *svg) drawNote(c point, kind noteKind, number int, label string, inferre
 	s.close("g")
 }
 
+const legendRowH = 70.0
+
+// legendHeight is the height of the notation panel drawLegend draws.
+func legendHeight(withStore, withStep bool) float64 {
+	rows := 7.0 // person, cloud, cog, query, command, event, direction
+	if withStore {
+		rows++
+	}
+	if withStep {
+		rows++
+	}
+	return 90 + rows*legendRowH - 20
+}
+
 // drawLegend draws the notation panel with its top-left corner at p. The
 // data store and step rows are optional.
 func (s *svg) drawLegend(p point, withStore, withStep bool) {
@@ -212,16 +226,15 @@ func (s *svg) drawLegend(p point, withStore, withStep bool) {
 		s.close("g")
 	}, "Direction of message"})
 
-	const rowH = 70.0
-	height := 90 + float64(len(rows))*rowH - 20
+	height := legendHeight(withStore, withStep)
 	s.at(p)
 	s.el("rect", "width", "260", "height", num(height), "fill", "#e6e6e6", "stroke", "#9a9a9a", "stroke-width", "1.5")
 	s.text(130, 30, "Notation", 18, 700, "middle", 99, "#1a1a1a")
 	for i, r := range rows {
-		cy := 90 + float64(i)*rowH
+		cy := 90 + float64(i)*legendRowH
 		r.draw(point{50, cy})
 		s.text(105, cy, r.label, 13, 400, "start", 16, "#1a1a1a")
 	}
-	s.text(105, 90+float64(len(rows)-1)*rowH+20, "From producer to consumer", 8, 400, "start", 99, "#1a1a1a")
+	s.text(105, 90+float64(len(rows)-1)*legendRowH+20, "From producer to consumer", 8, 400, "start", 99, "#1a1a1a")
 	s.close("g")
 }

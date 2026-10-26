@@ -74,3 +74,14 @@ func TestPreviewBoard_ReportsDiagnostics(t *testing.T) {
 		t.Fatalf("code=%d diagnostics=%v", rr.Code, resp.Diagnostics)
 	}
 }
+
+func TestPreviewBoard_RejectsDuplicateUseCaseNames(t *testing.T) {
+	dsl := boardDSL + "\nuse_case \"Place Order\" {\n  when Business_User retries Order\n    Orders asks Billing to charge card\n}\n"
+	rr, resp := postBoard(t, map[string]string{"dsl": dsl, "useCase": "place-order"})
+	if rr.Code != http.StatusBadRequest || !strings.Contains(resp.Error, `"Place Order"`) {
+		t.Fatalf("code=%d error=%q", rr.Code, resp.Error)
+	}
+	if rr, _ := postBoard(t, map[string]string{"dsl": dsl, "useCase": "cancel-order"}); rr.Code != http.StatusOK {
+		t.Errorf("unique name: status = %d, want 200", rr.Code)
+	}
+}

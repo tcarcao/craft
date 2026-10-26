@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"unicode/utf8"
 
 	"github.com/tcarcao/craft/v2/internal/lang"
 	"github.com/tcarcao/craft/v2/internal/visualizer/view"
@@ -15,6 +16,22 @@ type placed struct {
 	Shape shapeKind
 	X, Y  float64
 	W, H  float64
+	LW    float64 // width of the name drawn right of an icon (0 for a cloud)
+}
+
+// labelW estimates the width of an icon's name at the 11px label font.
+// ponytail: average glyph width, no font metrics; long names in wide glyphs
+// may run a little past the reserved space.
+func labelW(n view.Node, s shapeKind) float64 {
+	if s == shapeCloud {
+		return 0
+	}
+	return 8 + 6.2*float64(utf8.RuneCountInString(n.Text()))
+}
+
+// bounds is the area p covers on the board: the icon and its name.
+func (p *placed) bounds() (x0, y0, x1, y1 float64) {
+	return p.X - p.W/2, p.Y - p.H/2, p.X + p.W/2 + p.LW, p.Y + p.H/2
 }
 
 const (
@@ -57,7 +74,7 @@ func layout(f view.Flow) map[string]*placed {
 			continue
 		}
 		s := shapeOf(n)
-		out[n.ID] = &placed{Node: n, Shape: s, W: nodeSize[s].X, H: nodeSize[s].Y}
+		out[n.ID] = &placed{Node: n, Shape: s, W: nodeSize[s].X, H: nodeSize[s].Y, LW: labelW(n, s)}
 	}
 	edges := slices.Clone(f.Edges)
 	sort.SliceStable(edges, func(i, j int) bool { return edges[i].Number < edges[j].Number })
@@ -68,8 +85,14 @@ func layout(f view.Flow) map[string]*placed {
 	}
 
 	// Ranking edges, breaking cycles by dropping the edge that closes one.
+	// A step weighs 1 (one row down); see the zero-weight edges below.
 	// ponytail: O(n·e) reachability per edge; fine for one use case.
+	type rankEdge struct {
+		from, to string
+		w        int
+	}
 	var kept []view.FlowEdge
+	var rk []rankEdge
 	reaches := func(from, to string) bool {
 		seen := map[string]bool{from: true}
 		stack := []string{from}
@@ -79,10 +102,10 @@ func layout(f view.Flow) map[string]*placed {
 			if c == to {
 				return true
 			}
-			for _, e := range kept {
-				if e.From == c && !seen[e.To] {
-					seen[e.To] = true
-					stack = append(stack, e.To)
+			for _, e := range rk {
+				if e.from == c && !seen[e.to] {
+					seen[e.to] = true
+					stack = append(stack, e.to)
 				}
 			}
 		}
@@ -94,33 +117,58 @@ func layout(f view.Flow) map[string]*placed {
 			continue
 		}
 		kept = append(kept, e)
+		rk = append(rk, rankEdge{e.From, e.To, 1})
 	}
 
-	// Rank: longest path from a source. kept is acyclic, so len(out)
+	// A node nothing leads to (an internal-only context, a later scenario's
+	// actor) would otherwise pile into the top row. It joins the row of the
+	// node acting at the step before it first appears instead: a zero-weight
+	// ranking edge, skipped if it would close a cycle.
+	hasIn := map[string]bool{}
+	for _, e := range kept {
+		hasIn[e.To] = true
+	}
+	active := func(e view.FlowEdge) string {
+		if e.Style == view.StyleTrigger {
+			return e.To
+		}
+		return e.From
+	}
+	first := map[string]bool{}
+	var order []string // nodes by first appearance on any step
+	for i, e := range edges {
+		for _, id := range []string{e.From, e.To} {
+			if out[id] == nil || first[id] {
+				continue
+			}
+			first[id] = true
+			if !lookup[id] {
+				order = append(order, id)
+			}
+			if hasIn[id] || lookup[id] || i == 0 {
+				continue
+			}
+			if prev := active(edges[i-1]); prev != id && out[prev] != nil && !lookup[prev] && !reaches(id, prev) {
+				rk = append(rk, rankEdge{prev, id, 0})
+			}
+		}
+	}
+
+	// Rank: longest path from a source. rk is acyclic, so len(out)
 	// relaxation rounds settle it.
 	rank := map[string]int{}
 	for i := 0; i < len(out); i++ {
-		for _, e := range kept {
-			if rank[e.To] < rank[e.From]+1 {
-				rank[e.To] = rank[e.From] + 1
+		for _, e := range rk {
+			if rank[e.to] < rank[e.from]+e.w {
+				rank[e.to] = rank[e.from] + e.w
 			}
 		}
 	}
 
-	// Initial order: first appearance on a kept edge, then the rest by ID.
-	var order []string
-	seen := map[string]bool{}
-	for _, e := range kept {
-		for _, id := range []string{e.From, e.To} {
-			if !seen[id] {
-				seen[id] = true
-				order = append(order, id)
-			}
-		}
-	}
+	// Initial order: first appearance on a step, then the rest by ID.
 	var rest []string
 	for id := range out {
-		if !seen[id] && !lookup[id] {
+		if !first[id] && !lookup[id] {
 			rest = append(rest, id)
 		}
 	}
@@ -169,21 +217,47 @@ func layout(f view.Flow) map[string]*placed {
 			sort.SliceStable(rows[r], func(a, b int) bool { return key[rows[r][a]] < key[rows[r][b]] })
 		}
 	}
+	// Keep each row's members of one service side by side, at their mean
+	// place, so service boxes overlap less.
+	// ponytail: per row only; boxes spanning rows can still overlap.
+	for r := 0; r <= maxRank; r++ {
+		row := rows[r]
+		sum, n := map[string]float64{}, map[string]float64{}
+		for j, id := range row {
+			if s := out[id].Node.Service; s != "" {
+				sum[s] += float64(j)
+				n[s]++
+			}
+		}
+		key := map[string]float64{}
+		for j, id := range row {
+			key[id] = float64(j)
+			if s := out[id].Node.Service; s != "" {
+				key[id] = sum[s] / n[s]
+			}
+		}
+		sort.SliceStable(row, func(a, b int) bool { return key[row[a]] < key[row[b]] })
+	}
 
-	// Coordinates: rows stack top-down, each centred on x = 0.
+	// Coordinates: rows stack top-down, the icons of each centred on x = 0
+	// (an icon's name hangs to its right and takes its own room in the row).
 	y, right := 0.0, math.Inf(-1)
 	for r := 0; r <= maxRank; r++ {
-		h, w := 0.0, nodeGap*float64(len(rows[r])-1)
-		for _, id := range rows[r] {
+		row := rows[r]
+		if len(row) == 0 {
+			continue
+		}
+		h, w := 0.0, nodeGap*float64(len(row)-1)-out[row[len(row)-1]].LW
+		for _, id := range row {
 			h = max(h, out[id].H)
-			w += out[id].W
+			w += out[id].W + out[id].LW
 		}
 		x := -w / 2
-		for _, id := range rows[r] {
+		for _, id := range row {
 			p := out[id]
 			p.X, p.Y = x+p.W/2, y+rankGap*float64(r)+h/2
-			x += p.W + nodeGap
-			right = max(right, p.X+p.W/2)
+			x += p.W + p.LW + nodeGap
+			right = max(right, p.X+p.W/2+p.LW)
 		}
 		y += h
 	}
@@ -208,8 +282,9 @@ func layout(f view.Flow) map[string]*placed {
 		}
 	}
 	overlaps := func(p *placed) bool {
+		ax0, ay0, ax1, ay1 := p.bounds()
 		for _, o := range done {
-			if math.Abs(p.X-o.X) < (p.W+o.W)/2 && math.Abs(p.Y-o.Y) < (p.H+o.H)/2 {
+			if bx0, by0, bx1, by1 := o.bounds(); ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1 {
 				return true
 			}
 		}

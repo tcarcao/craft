@@ -71,7 +71,7 @@ func TestValidate_Board(t *testing.T) {
 }
 
 func TestRender_BoardNeedsOneUseCase(t *testing.T) {
-	doc := analyzeFile(t, "../../testdata/corpus/99_mixed/banking-system.craft")
+	doc := analyzeFile(t, "../../examples/banking-system.craft")
 	_, err := New(nil).Render(doc, Request{View: ViewFlow, Backend: Board, Format: FormatSVG})
 	if !errors.Is(err, ErrUnsupported) || !strings.Contains(err.Error(), "money-transfer") {
 		t.Fatalf("err = %v, want ErrUnsupported listing slugs", err)
@@ -157,7 +157,7 @@ use_case "Inside" {
 }
 
 func TestGolden_Board(t *testing.T) {
-	for _, path := range []string{"testdata/invoicing.craft", "../../testdata/corpus/99_mixed/banking-system.craft", "../../testdata/corpus/99_mixed/e-comerce.craft"} {
+	for _, path := range []string{"testdata/invoicing.craft", "../../examples/banking-system.craft", "../../testdata/corpus/99_mixed/e-comerce.craft"} {
 		model := strings.TrimSuffix(filepath.Base(path), ".craft")
 		doc := analyzeFile(t, path)
 		for _, uc := range doc.UseCases {
@@ -191,5 +191,21 @@ func TestGolden_Board(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestBoard_ExternalEventGetsNote(t *testing.T) {
+	doc := resolvedDoc(t, `domain d {
+  A
+}
+
+use_case "Hears" {
+  when A listens "ext.Thing"
+    A records it
+}
+`)
+	got := renderBoard(t, doc, Request{})
+	if !strings.Contains(got, "ext.Thing") {
+		t.Error("the external event's name is dropped")
 	}
 }

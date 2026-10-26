@@ -143,3 +143,12 @@ func TestRoute_ServiceBoxOnlyForTwoOrMore(t *testing.T) {
 		}
 	}
 }
+
+func TestRoute_ExternalTriggerIsEvent(t *testing.T) {
+	f := view.Flow{Contexts: ids("A"), Externals: []view.Node{{ID: interaction.External.Key, Kind: view.NodeExternal}},
+		Edges: []view.FlowEdge{{From: interaction.External.Key, To: "A", Number: 1, Style: view.StyleTrigger, Label: "ext.Thing"}}}
+	r := route(f, layout(f))
+	if len(r.Notes) != 1 || r.Notes[0].Kind != noteEvent || r.Notes[0].Label != "ext.Thing" || len(r.Badges) != 0 {
+		t.Errorf("got notes %v badges %v", r.Notes, r.Badges)
+	}
+}

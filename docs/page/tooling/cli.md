@@ -226,7 +226,7 @@ Language features for cites, links and journeys (2.25):
 | `POST /preview/mermaid/journey` | `{"files": {…}, "slug": "<slug>"}` | the Mermaid spine source, plain text in `data` |
 | `POST /preview/board/domain` | `{"dsl": "…", "useCase": "<name or slug>"}` (optional; default the first use case) | the board SVG, plain text in `data` |
 
-`/preview/board/domain` also accepts `diagramType: "domain"`, `domainMode: "detailed"` and `format: "svg"`. It answers 400 for an unknown use case (the message lists the slugs), another `diagramType` or `format`, architecture mode, or a model with no use case.
+`/preview/board/domain` also accepts `diagramType: "domain"`, `domainMode: "detailed"` and `format: "svg"`. It answers 400 for an unknown use case (the message lists the slugs), another `diagramType` or `format`, architecture mode, a model with no use case, or a use case whose name another use case shares (rename one to draw it).
 
 An empty or unknown slug answers 400.
 

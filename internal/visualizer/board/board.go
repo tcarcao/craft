@@ -10,6 +10,7 @@ import (
 
 const (
 	legendW   = 290.0 // legend panel plus gap
+	legendY   = 70.0
 	pad       = 28.0
 	titleBand = 76.0
 	minBoardW = 1000.0
@@ -28,22 +29,30 @@ func Flow(f view.Flow, title string) []byte {
 	}
 	sort.Strings(ids)
 
-	// Content bounds: nodes, notes and service boxes, plus the margin.
-	bw, bh := 0.0, 0.0
-	grow := func(x1, y1 float64) { bw, bh = math.Max(bw, x1+boardMargin), math.Max(bh, y1+boardMargin) }
+	// Content bounds: nodes, notes and service boxes. A note or box may
+	// reach past the nodes' top-left, so the content is shifted by (ox, oy)
+	// to start at the margin.
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	grow := func(a0, b0, a1, b1 float64) {
+		x0, y0, x1, y1 = math.Min(x0, a0), math.Min(y0, b0), math.Max(x1, a1), math.Max(y1, b1)
+	}
 	withStore, withStep := false, false
 	for _, id := range ids {
-		p := at[id]
-		grow(p.X+p.W/2, p.Y+p.H/2)
-		withStore = withStore || p.Shape == shapeStore
+		grow(at[id].bounds())
+		withStore = withStore || at[id].Shape == shapeStore
 	}
 	for _, n := range r.Notes {
-		grow(n.X+noteW/2, n.Y+noteH/2)
+		grow(n.X-noteW/2, n.Y-noteH/2-8, n.X+noteW/2, n.Y+noteH/2) // 8: the number badge
 		withStep = withStep || n.Kind == noteNeutral
 	}
 	for _, b := range r.Boxes {
-		grow(b.X1, b.Y1)
+		grow(b.X0, b.Y0, b.X1, b.Y1)
 	}
+	if len(ids) == 0 {
+		x0, y0, x1, y1 = 0, 0, 0, 0
+	}
+	ox, oy := boardMargin-x0, boardMargin-y0
+	bw, bh := x1+ox+boardMargin, y1+oy+boardMargin
 
 	titleH := 0.0
 	if title != "" {
@@ -52,6 +61,7 @@ func Flow(f view.Flow, title string) []byte {
 	boardW := math.Max(bw, minBoardW)
 	w := legendW + 2*pad + boardW
 	h := titleH + math.Max(bh, minBoardH) + pad
+	h = math.Max(h, legendY+legendHeight(withStore, withStep)+pad)
 
 	var s svg
 	s.open("svg", "xmlns", "http://www.w3.org/2000/svg", "width", num(w), "height", num(h),
@@ -75,9 +85,9 @@ func Flow(f view.Flow, title string) []byte {
 	}
 	s.el("rect", "x", num(panelX), "y", num(titleH), "width", num(w-panelX), "height", num(h-titleH),
 		"fill", "#fff", "stroke", "#bdbdbd")
-	s.drawLegend(point{14, 70}, withStore, withStep)
+	s.drawLegend(point{14, legendY}, withStore, withStep)
 
-	s.open("g", "transform", "translate("+num(legendW+2*pad+(boardW-bw)/2)+","+num(titleH+10)+")")
+	s.open("g", "transform", "translate("+num(legendW+2*pad+(boardW-bw)/2+ox)+","+num(titleH+10+oy)+")")
 	for _, b := range r.Boxes {
 		s.el("rect", "x", num(b.X0), "y", num(b.Y0), "width", num(b.X1-b.X0), "height", num(b.Y1-b.Y0),
 			"fill", "none", "stroke", "#8a8a8a", "stroke-width", "1.2", "stroke-dasharray", "4 4")
@@ -118,22 +128,9 @@ func Flow(f view.Flow, title string) []byte {
 	for _, n := range r.Notes {
 		s.drawNote(point{n.X, n.Y}, n.Kind, n.Number, n.Label, n.Inferred)
 	}
-	// Icon names go on the side away from the nearest note.
+	// Icon names go right of the icon, in the room layout kept for them.
 	for _, id := range ids {
-		p := at[id]
-		if p.Shape == shapeCloud {
-			continue
-		}
-		var near *note
-		best := math.Inf(1)
-		for i := range r.Notes {
-			if d := math.Hypot(r.Notes[i].X-p.X, r.Notes[i].Y-p.Y); d < best {
-				best, near = d, &r.Notes[i]
-			}
-		}
-		if near != nil && near.X > p.X {
-			s.text(p.X-p.W/2-8, p.Y, p.Node.Text(), 11, 400, "end", 99, "#1a1a1a")
-		} else {
+		if p := at[id]; p.Shape != shapeCloud {
 			s.text(p.X+p.W/2+8, p.Y, p.Node.Text(), 11, 400, "start", 99, "#1a1a1a")
 		}
 	}

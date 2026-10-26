@@ -150,6 +150,7 @@ Arrow dashing follows this table and the flow view's styles, not the POC
 | Store write / poll | as flow | neutral note |
 | Actor trigger (`StyleTrigger` from an actor) | solid | command |
 | Listen: queue/store → listener (`StyleTrigger`) | solid | none — only the step-number circle, on the arrow (the event's note is on the publish) |
+| Listen to an event with no producer in the model (`StyleTrigger` from External) | solid | event (yellow), carrying the event name — there is no publish to carry it |
 | Response (`StyleReply`) | dashed, back to the caller, curved to the other side so it never sits on the request's arrow | neutral note |
 | Internal action (`StyleSelf`) | none | neutral note pinned to the edge of the context's cloud, numbered |
 | Inferred edge | greyed arrow | note greyed, label ends "(inferred)" as in flow |
@@ -234,6 +235,24 @@ in code.
 - A store poll is event delivery (step badge only); a store write gets a
   neutral note.
 - Service boxes appear only for services with two or more drawn nodes.
+- Service boxes come from `Node.Service`, grouped in `route.go`, rather
+  than reusing `view.ServiceGroup` (the flow nodes already carry their
+  service; the architecture grouping would have to be re-keyed to flow IDs).
+- A node no step leads to (an internal-only context, a later scenario's
+  actor) joins the row of the node acting at the step before it first
+  appears, instead of piling into the top row. Within a row, members of one
+  service sit side by side.
+- Icon names always go right of the icon, and the layout keeps room for
+  them (in row spacing and in every overlap check), instead of "the side
+  away from the nearest note": the side has to be known before notes are
+  placed for notes to avoid it.
+- An arrow whose path would cross another node swings round it as a
+  sideways bracket, tried on both sides in growing steps; an arrow boxed in
+  on both sides keeps its straight path.
+- Notes are placed against the arrow as drawn: the first free spot among
+  candidates beside the curve (several points along it, both sides, growing
+  distance), preferring spots off every arrow; a note pinned to an icon sits
+  beside it, not over it. The canvas grows to fit the legend.
 
 ## Release
 

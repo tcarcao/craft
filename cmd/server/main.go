@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -364,6 +365,11 @@ func (s *Server) handlePreviewBoardDomain() http.HandlerFunc {
 		}
 		if name == "" {
 			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("no use case matches %q (available: %s)", req.UseCase, strings.Join(slugs, ", ")))
+			return
+		}
+		// The renderer selects by slug, so a shared slug cannot pick one.
+		if n := slices.Index(slugs, visualizer.Slugify(name)); slices.Index(slugs[n+1:], slugs[n]) >= 0 {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("more than one use case is named %q; rename one to draw it as a board", name))
 			return
 		}
 		out, ok := s.render(w, doc, visualizer.Request{
