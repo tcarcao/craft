@@ -5,7 +5,7 @@ flowchart LR
     Wallet["Wallet"]
     Wallet_events[("Wallet events")]
     Business_User -- "1. unschedules a VAS scheduling" --> VASScheduling
-    VASScheduling -- "2. to cancel the VAS reservation" --> Wallet
+    VASScheduling -- "2. cancel the VAS reservation" --> Wallet
     Wallet -- "3. cancels VAS reservation" --> Wallet
     Wallet -- "4. VAS Reservation Canceled" --> Wallet_events
     VASScheduling -- "5. cancels the VAS schedule" --> VASScheduling

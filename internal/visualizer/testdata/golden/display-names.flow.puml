@@ -39,11 +39,11 @@ queue "nMF, the money engine\nevents" as nmf_monetization_events
 
 ' Workflow flows
 CRON --> nmf_monetization : 1. fires the hourly refresh
-nmf_monetization ->> PriceProject : 2. to resolve the template prices
+nmf_monetization ->> PriceProject : 2. resolve the template prices
 nmf_monetization -> nmf_monetization : 3. writes the pricing
 nmf_monetization ->> nmf_monetization_events : 4. pricing.PricesChanged
 Seller --> portfoliovalue : 5. opens the portfolio page
-portfoliovalue ->> nmf_monetization : 6. for the price list
+portfoliovalue ->> nmf_monetization : 6. the price list
 nmf_monetization --> portfoliovalue : 7. returns the price list
 portfoliovalue -> portfoliovalue : 8. computes the value
 invoicearchive -> invoicearchive : 9. files the snapshot

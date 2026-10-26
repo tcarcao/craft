@@ -7,12 +7,12 @@ flowchart LR
     PaymentService_events[("PaymentService events")]
     User -- "1. submits payment request" --> PaymentService
     PaymentService -- "2. validates payment data" --> PaymentService
-    PaymentService -- "3. to process payment" --> BankGateway
+    PaymentService -- "3. process payment" --> BankGateway
     BankGateway -. "4. returns payment result" .-> PaymentService
     PaymentService -. "5. returns confirmation status" .-> User
     PaymentService -- "6. payment_processed" --> PaymentService_events
     User -- "7. submits registration form" --> UserService
     UserService -- "8. validates user data" --> UserService
-    UserService -- "9. to send verification" --> EmailService
+    UserService -- "9. send verification" --> EmailService
     EmailService -. "10. returns email status" .-> UserService
     UserService -. "11. returns registration result" .-> User

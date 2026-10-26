@@ -9,7 +9,7 @@ participant "re/billing" as re_billing
 == Renewal with typed refs and flexible prose ==
 
 [-> Subscriptions : vas.VasApplied
-Subscriptions -> re_billing : for a fresh charge attempt (1! & 2!) [POST /v1/charges]
+Subscriptions -> re_billing : a fresh charge attempt (1! & 2!) [POST /v1/charges]
 Subscriptions ->> Subscriptions : notifies "vas.VasFulfilled"
 
 @enduml

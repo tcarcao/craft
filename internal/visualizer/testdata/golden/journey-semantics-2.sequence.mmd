@@ -39,14 +39,14 @@ sequenceDiagram
     vasscheduler->>vasscheduler: starts every schedule that is due
     Note over Partner,ShaperAgent: Operator exports agency portfolio values
     Operator->>OperatorTool: runs the portfolio export
-    OperatorTool->>account: for the agency owner members [backofficeMembersList]
+    OperatorTool->>account: the agency owner members [backofficeMembersList]
     Note over Partner,ShaperAgent: The pipeline deploys the scheduler
     Pipeline->>vasscheduler: deploys a new vasscheduler build
     vasscheduler->>vasscheduler: warms its schedule cache
     Note over Partner,ShaperAgent: Seller asks the assistant a question
     Seller->>frontendplatform: asks the assistant a question
-    frontendplatform->>graphql: to stream the answer [assistantStream]
-    graphql->>AiAssistant: to stream the reply [POST /api/v1/assistant/chat_streaming]
+    frontendplatform->>graphql: stream the answer [assistantStream]
+    graphql->>AiAssistant: stream the reply [POST /api/v1/assistant/chat_streaming]
     loop stream
     AiAssistant-->>graphql: streams the reply as META, TOKEN and DONE events
     end
@@ -60,13 +60,13 @@ sequenceDiagram
     nmf_monetization-)nmf_monetization: notifies one of "nmfbus.FeatureEnabled", "nmfbus.FeatureDisabled", "nmfbus.CreateAutoSchedule" (+1 more)
     Note over Partner,ShaperAgent: Partner manages an API key and an advert
     Partner->>app_manager: opens the integration settings
-    app_manager->>AwsApiGateway: to create the key and bind it to the plan [CreateApiKey, CreateUsagePlanKey]
-    frontendplatform->>atlas: to save or delete the advert [postAdvert, putAdvert, deleteAdvert]
+    app_manager->>AwsApiGateway: create the key and bind it to the plan [CreateApiKey, CreateUsagePlanKey]
+    frontendplatform->>atlas: save or delete the advert [postAdvert, putAdvert, deleteAdvert]
     Note over Partner,ShaperAgent: obido analytics refreshes the market structure
     CRON->>obidoanalytics: cron 0 18 * * *
-    obidoanalytics->>front: for the city, region and developer graph [SQL investment flat city region developer]
-    obidoanalytics->>ObjectStore: to take the refreshed snapshot [ADDR SNAPSHOT_DESTINATION]
+    obidoanalytics->>front: the city, region and developer graph [SQL investment flat city region developer]
+    obidoanalytics->>ObjectStore: take the refreshed snapshot [ADDR SNAPSHOT_DESTINATION]
     Note over Partner,ShaperAgent: Seller resumes a selling draft
     Seller->>mobile: resumes a selling draft
-    mobile->>graphql: to open a selling chat session [agenticSellingStart]
-    graphql->>ShaperAgent: to initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)
+    mobile->>graphql: open a selling chat session [agenticSellingStart]
+    graphql->>ShaperAgent: initiate the chat [POST /api/v1/assistant/initiate_chat] (inferred)

@@ -22,26 +22,26 @@ boundary "Siren" as Siren
 
 group 1: when Seeker opens an advert
 Seeker -> frontendplatform : opens an advert
-frontendplatform -> graphql : for the advert [ad]
+frontendplatform -> graphql : the advert [ad]
 par field resolvers
-graphql -> atlas : for the SEO title [postSeoadvertsbatch]
+graphql -> atlas : the SEO title [postSeoadvertsbatch]
 else
-graphql -> atlas : for the targeting data [postAdverttargetingbatch]
+graphql -> atlas : the targeting data [postAdverttargetingbatch]
 else
 graphql -> atlas : where the advert came from [postAdsourcebatch]
 end
 loop for each image, until all are signed
-graphql -> media : to sign the image URL [signUrl]
+graphql -> media : sign the image URL [signUrl]
 end
 end
 group 2: when Seeker opens the advert statistics
 Seeker -> frontendplatform : opens the advert statistics
-frontendplatform -> graphql : for the advert [ad]
+frontendplatform -> graphql : the advert [ad]
 par the advert
-graphql -> adcore : for the advert [GET /ads]
-graphql -> atlas : for the owner [getAdsMappings]
+graphql -> adcore : the advert [GET /ads]
+graphql -> atlas : the owner [getAdsMappings]
 else the statistics
-graphql -> Dapi : for the page statistics [GET /projects/{site}_ad_statistics]
+graphql -> Dapi : the page statistics [GET /projects/{site}_ad_statistics]
 end
 end
 
@@ -49,15 +49,15 @@ end
 
 note over Seeker, Siren #FFE4E1 : Finding: nothing retries a failed callback; a lost callback leaves the invoice open
 Seller -> frontendplatform : pays an invoice
-frontendplatform -> graphql : to pay [payInvoice]
+frontendplatform -> graphql : pay [payInvoice]
 note over frontendplatform, graphql : the gateway forwards the seller's session, not a service token
-graphql -> paymentgateway : to start the payment [POST /payments]
+graphql -> paymentgateway : start the payment [POST /payments]
 note over graphql, paymentgateway #FFE4E1 : Finding: no idempotency key: a client retry starts a second payment
 
 == Adverts are swept for reindexing ==
 
 [-> graphql : a reindex sweep [reindexAdverts]
-graphql -> atlas : for every advert that needs reindexing [getAlladvertstoreindex]
+graphql -> atlas : every advert that needs reindexing [getAlladvertstoreindex]
 graphql -->] : returns the advert ids
 
 == Invoicing queues a payment reminder ==
@@ -70,6 +70,6 @@ invoicing -> sms_queue : inserted
 
 smsdispatch -> sms_queue : polls inserted (from invoicing), cron * 10 * * 1-5
 smsdispatch -> smsdispatch : claims the unsent rows
-smsdispatch -> Siren : to send the SMS [sendSmsNotificationEvent]
+smsdispatch -> Siren : send the SMS [sendSmsNotificationEvent]
 
 @enduml

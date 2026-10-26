@@ -54,18 +54,18 @@ VASFulfillment -> VASFulfillment : 10. records correlation for vasFulfillmentId
 VasApplication ->> VasApplication_events : 11. VasApplied
 VasApplication_events --> VASFulfillment : 12. VasApplied
 VASFulfillment -> VASFulfillment : 13. advances internal VAS lifecycle for succeeded delivery
-VASFulfillment ->> VasLifecycle : 14. to record fulfillment outcome on VAS aggregate
+VASFulfillment ->> VasLifecycle : 14. record fulfillment outcome on VAS aggregate
 VASFulfillment ->> VASFulfillment_events : 15. VasFulfilled
 VASFulfillment_events --> VasApplication : 16. RequestVasApplication
 VasApplication -> VasApplication : 17. delegates apply through provider translator
 VasApplication ->> VasApplication_events : 18. VasApplicationFailed
 VasApplication_events --> VASFulfillment : 19. VasApplicationFailed
 VASFulfillment -> VASFulfillment : 20. classifies failure and exhausts retry policy when applicable
-VASFulfillment ->> VasLifecycle : 21. to record terminal failure for the VAS attempt
+VASFulfillment ->> VasLifecycle : 21. record terminal failure for the VAS attempt
 VASFulfillment ->> VASFulfillment_events : 22. VasFulfillmentFailed
 FulfillmentTimer --> VASFulfillment : 23. fires fulfillment deadline sweep
 VASFulfillment -> VASFulfillment : 24. finds pending correlations past deadline
-VASFulfillment ->> VasLifecycle : 25. to record timeout outcome for the VAS attempt
+VASFulfillment ->> VasLifecycle : 25. record timeout outcome for the VAS attempt
 VASFulfillment ->> VASFulfillment_events : 26. VasFulfillmentTimedOut
 VASFulfillment ->> VASFulfillment_events : 27. RequestEndOfVasApplication
 VasLifecycleTimer --> VASFulfillment : 28. fires configured end_time for active time_based VAS

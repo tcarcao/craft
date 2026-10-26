@@ -35,7 +35,7 @@ queue "Subscriptions events" as Subscriptions_events
 
 ' Workflow flows
 External --> Subscriptions : 1. vas.VasApplied
-Subscriptions ->> re_billing : 2. for a fresh charge attempt (1! & 2!)
+Subscriptions ->> re_billing : 2. a fresh charge attempt (1! & 2!)
 Subscriptions ->> Subscriptions_events : 3. vas.VasFulfilled
 
 @enduml

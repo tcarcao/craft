@@ -4,5 +4,5 @@ flowchart LR
     Subscriptions_events[("Subscriptions events")]
     External{{"External"}}
     External -- "1. vas.VasApplied" --> Subscriptions
-    Subscriptions -- "2. for a fresh charge attempt (1! & 2!)" --> re_billing
+    Subscriptions -- "2. a fresh charge attempt (1! & 2!)" --> re_billing
     Subscriptions -- "3. vas.VasFulfilled" --> Subscriptions_events

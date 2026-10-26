@@ -43,30 +43,30 @@ queue "TransactionValidation events" as TransactionValidation_events
 
 ' Workflow flows
 Customer --> PaymentProcessing : 1. initiates transfer
-PaymentProcessing ->> AccountManagement : 2. to verify source account
-PaymentProcessing ->> TransactionValidation : 3. to check transfer limits
+PaymentProcessing ->> AccountManagement : 2. verify source account
+PaymentProcessing ->> TransactionValidation : 3. check transfer limits
 TransactionValidation -> TransactionValidation : 4. validates transaction rules
-PaymentProcessing ->> BalanceTracking : 5. to reserve funds
+PaymentProcessing ->> BalanceTracking : 5. reserve funds
 BalanceTracking ->> BalanceTracking_events : 6. Funds Reserved
 BalanceTracking_events --> PaymentProcessing : 7. Funds Reserved
-PaymentProcessing ->> AccountManagement : 8. to verify destination account
+PaymentProcessing ->> AccountManagement : 8. verify destination account
 PaymentProcessing -> PaymentProcessing : 9. executes fund transfer
 BalanceTracking -> BalanceTracking : 10. updates account balances
 PaymentProcessing ->> PaymentProcessing_events : 11. Transfer Completed
 PaymentProcessing_events --> CustomerNotification : 12. Transfer Completed
 CustomerNotification -> CustomerNotification : 13. sends confirmation to both accounts
 Customer --> AccountManagement : 14. checks balance
-AccountManagement ->> BalanceTracking : 15. to get current balance
+AccountManagement ->> BalanceTracking : 15. get current balance
 BalanceTracking -> BalanceTracking : 16. calculates available balance
 AccountManagement --> Customer : 17. returns balance information
-TransactionValidation ->> AccountManagement : 18. to freeze account
+TransactionValidation ->> AccountManagement : 18. freeze account
 AccountManagement -> AccountManagement : 19. applies security hold
 TransactionValidation ->> TransactionValidation_events : 20. Account Frozen
 TransactionValidation_events --> CustomerNotification : 21. Account Frozen
 CustomerNotification -> CustomerNotification : 22. sends security alert to customer
 CustomerNotification ->> CustomerNotification_events : 23. bank security team
 CRON --> PaymentProcessing : 24. triggers scheduled payments
-PaymentProcessing ->> AccountManagement : 25. to get scheduled payments
+PaymentProcessing ->> AccountManagement : 25. get scheduled payments
 PaymentProcessing -> PaymentProcessing : 26. processes each scheduled payment
 BalanceTracking -> BalanceTracking : 27. updates balances for processed payments
 PaymentProcessing ->> PaymentProcessing_events : 28. Scheduled Payments Processed

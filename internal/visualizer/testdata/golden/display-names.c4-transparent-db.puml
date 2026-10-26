@@ -36,7 +36,7 @@ System_Boundary(portfolio_boundary, "portfolio") {
 
 Rel(CRON, nmf_Application, "Triggers")
 Rel(Seller, portfolio_Application, "Triggers")
-Rel(portfolio_Application, nmf_Application, "for the price list", "Service API")
+Rel(portfolio_Application, nmf_Application, "the price list", "Service API")
 Rel(nmf_Application, nmf_pricing, "Reads/Writes data", "Database Protocol")
 Rel(nmf_Application, Event_Queue, "pricing.PricesChanged", "Event Publishing")
 Rel(Event_Queue, portfolio_Application, "pricing.PricesChanged", "Event Delivery")

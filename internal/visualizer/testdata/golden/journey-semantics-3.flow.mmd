@@ -7,15 +7,15 @@ flowchart LR
     graphql_events[("graphql events")]
     graphql_events -- "1. nmfbus.AddOnPurchased" --> nmf_monetization
     nmf_monetization -- "2. picks the mail resolver from the event type alone" --> nmf_monetization
-    nmf_monetization -- "3. to send the purchase mail" --> Siren
+    nmf_monetization -- "3. send the purchase mail" --> Siren
     Seller -- "4. buys an add-on" --> frontendplatform
-    frontendplatform -- "5. to buy the add-on" --> graphql
+    frontendplatform -- "5. buy the add-on" --> graphql
     graphql -- "6. nmfbus.AddOnPurchased" --> graphql_events
     Seller -- "7. opens the site" --> frontendplatform
-    frontendplatform -- "8. for the session" --> graphql
+    frontendplatform -- "8. the session" --> graphql
     Seller -- "9. asks the assistant a question" --> frontendplatform
-    frontendplatform -- "10. to stream the answer" --> graphql
+    frontendplatform -- "10. stream the answer" --> graphql
     Seller -- "11. promotes an advert" --> frontendplatform
-    frontendplatform -- "12. for the promotion offers" --> graphql
+    frontendplatform -- "12. the promotion offers" --> graphql
     Seller -- "13. pays at the checkout" --> frontendplatform
-    frontendplatform -- "14. to pay" --> graphql
+    frontendplatform -- "14. pay" --> graphql

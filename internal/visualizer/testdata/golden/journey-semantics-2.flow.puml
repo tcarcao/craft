@@ -72,12 +72,12 @@ adstatistics -> adstatistics : 10. rebuilds the day's advert facts
 Ticker --> vasscheduler : 11. fires the vasscheduler activation sweep
 vasscheduler -> vasscheduler : 12. starts every schedule that is due
 Operator --> OperatorTool : 13. runs the portfolio export
-OperatorTool ->> account : 14. for the agency owner members
+OperatorTool ->> account : 14. the agency owner members
 Pipeline --> vasscheduler : 15. deploys a new vasscheduler build
 vasscheduler -> vasscheduler : 16. warms its schedule cache
 Seller --> frontendplatform : 17. asks the assistant a question
-frontendplatform ->> graphql : 18. to stream the answer
-graphql ->> AiAssistant : 19. to stream the reply
+frontendplatform ->> graphql : 18. stream the answer
+graphql ->> AiAssistant : 19. stream the reply
 AiAssistant --> graphql : 20. streams the reply as META, TOKEN and DONE events
 graphql --> frontendplatform : 21. streams each event to the client
 frontendplatform -> frontendplatform : 22. appends every TOKEN delta to the message
@@ -88,13 +88,13 @@ nmf_monetization ->> nmf_monetization_events : 26. one of: nmfbus.FeatureDisable
 nmf_monetization ->> nmf_monetization_events : 27. one of: nmfbus.CreateAutoSchedule
 nmf_monetization ->> nmf_monetization_events : 28. one of: nmfbus.SubAccountBundleUpdated
 Partner --> app_manager : 29. opens the integration settings
-app_manager ->> AwsApiGateway : 30. to create the key and bind it to the plan
-frontendplatform ->> atlas : 31. to save or delete the advert
+app_manager ->> AwsApiGateway : 30. create the key and bind it to the plan
+frontendplatform ->> atlas : 31. save or delete the advert
 CRON --> obidoanalytics : 32. cron 0 18 * * *
-obidoanalytics ->> front : 33. for the city, region and developer graph
-obidoanalytics ->> ObjectStore : 34. to take the refreshed snapshot
+obidoanalytics ->> front : 33. the city, region and developer graph
+obidoanalytics ->> ObjectStore : 34. take the refreshed snapshot
 Seller --> mobile : 35. resumes a selling draft
-mobile ->> graphql : 36. to open a selling chat session
-graphql -[#999999]->> ShaperAgent : 37. to initiate the chat (inferred)
+mobile ->> graphql : 36. open a selling chat session
+graphql -[#999999]->> ShaperAgent : 37. initiate the chat (inferred)
 
 @enduml

@@ -7,9 +7,9 @@ flowchart LR
     Authentication_events[("Authentication events")]
     Business_User -- "1. creates Account" --> Authentication
     Authentication -- "2. validates email format" --> Authentication
-    Authentication -- "3. to check email uniqueness" --> Database
+    Authentication -- "3. check email uniqueness" --> Database
     Profile -- "4. creates user profile" --> Profile
     Authentication -- "5. User Registered" --> Authentication_events
     Authentication_events -- "6. User Registered" --> Profile
-    Profile -- "7. to store profile data" --> Database
-    Profile -- "8. to send welcome email" --> Notifier
+    Profile -- "7. store profile data" --> Database
+    Profile -- "8. send welcome email" --> Notifier

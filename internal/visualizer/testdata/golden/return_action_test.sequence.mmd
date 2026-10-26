@@ -7,13 +7,13 @@ sequenceDiagram
     Note over User,EmailService: Process Payment with Return Values
     User->>PaymentService: submits payment request
     PaymentService->>PaymentService: validates payment data
-    PaymentService->>BankGateway: to process payment
+    PaymentService->>BankGateway: process payment
     BankGateway-->>PaymentService: returns payment result
     PaymentService-->>User: returns confirmation status
     PaymentService-)PaymentService: notifies "payment_processed"
     Note over User,EmailService: User Registration with Validation
     User->>UserService: submits registration form
     UserService->>UserService: validates user data
-    UserService->>EmailService: to send verification
+    UserService->>EmailService: send verification
     EmailService-->>UserService: returns email status
     UserService-->>User: returns registration result

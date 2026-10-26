@@ -15,25 +15,25 @@ flowchart LR
     sms_queue[("sms_queue")]
     unobserved_caller{{"unobserved caller"}}
     Seeker -- "1. opens an advert" --> frontendplatform
-    frontendplatform -- "2. for the advert" --> graphql
-    graphql -- "3. [par: field resolvers] for the SEO title" --> atlas
-    graphql -- "4. [par: field resolvers] for the targeting data" --> atlas
+    frontendplatform -- "2. the advert" --> graphql
+    graphql -- "3. [par: field resolvers] the SEO title" --> atlas
+    graphql -- "4. [par: field resolvers] the targeting data" --> atlas
     graphql -- "5. [par: field resolvers] where the advert came from" --> atlas
-    graphql -- "6. [loop: for each image, until all are signed] to sign the image URL" --> media
+    graphql -- "6. [loop: for each image, until all are signed] sign the image URL" --> media
     Seeker -- "7. opens the advert statistics" --> frontendplatform
-    frontendplatform -- "8. for the advert" --> graphql
-    graphql -- "9. [par: the advert] for the advert" --> adcore
-    graphql -- "10. [par: the advert] for the owner" --> atlas
-    graphql -- "11. [par: the statistics] for the page statistics" --> Dapi
+    frontendplatform -- "8. the advert" --> graphql
+    graphql -- "9. [par: the advert] the advert" --> adcore
+    graphql -- "10. [par: the advert] the owner" --> atlas
+    graphql -- "11. [par: the statistics] the page statistics" --> Dapi
     Seller -- "12. pays an invoice" --> frontendplatform
-    frontendplatform -- "13. to pay" --> graphql
-    graphql -- "14. to start the payment" --> paymentgateway
+    frontendplatform -- "13. pay" --> graphql
+    graphql -- "14. start the payment" --> paymentgateway
     unobserved_caller -- "15. a reindex sweep" --> graphql
-    graphql -- "16. for every advert that needs reindexing" --> atlas
+    graphql -- "16. every advert that needs reindexing" --> atlas
     graphql -. "17. returns the advert ids" .-> unobserved_caller
     CRON -- "18. cron 0 9 * * 1-5" --> invoicing
     invoicing -- "19. finds the invoices due in three days" --> invoicing
     invoicing -- "20. inserted" --> sms_queue
     sms_queue -- "21. polls inserted" --> smsdispatch
     smsdispatch -- "22. claims the unsent rows" --> smsdispatch
-    smsdispatch -- "23. to send the SMS" --> Siren
+    smsdispatch -- "23. send the SMS" --> Siren

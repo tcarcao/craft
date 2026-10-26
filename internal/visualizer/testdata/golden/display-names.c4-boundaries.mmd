@@ -20,6 +20,6 @@ C4Container
     }
     Rel(CRON, nmf_monetization, "Triggers")
     Rel(Seller, portfoliovalue, "Triggers")
-    Rel(portfoliovalue, nmf_monetization, "for the price list", "Service API")
+    Rel(portfoliovalue, nmf_monetization, "the price list", "Service API")
     Rel(nmf_monetization, Event_Queue, "pricing.PricesChanged", "Event Publishing")
     Rel(Event_Queue, portfoliovalue, "pricing.PricesChanged", "Event Delivery")

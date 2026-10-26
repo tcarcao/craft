@@ -28,13 +28,13 @@ flowchart LR
     Payment_events[("Payment events")]
     Business_User -- "1. creates Account" --> Authentication
     Authentication -- "2. validates email format" --> Authentication
-    Authentication -- "3. to check email uniqueness" --> user_db
+    Authentication -- "3. check email uniqueness" --> user_db
     Profile -- "4. creates user profile" --> Profile
-    Profile -- "5. to store profile data" --> user_db
+    Profile -- "5. store profile data" --> user_db
     Authentication -- "6. UserRegistered" --> Authentication_events
     Authentication_events -- "7. UserRegistered" --> Profile
     Preferences -- "8. creates default preferences" --> Preferences
-    Preferences -- "9. to save preferences" --> user_db
+    Preferences -- "9. save preferences" --> user_db
     EmailNotifier -- "10. sends welcome email" --> EmailNotifier
     Business_User -- "11. views Product" --> Catalog
     Catalog -. "12. returns product details" .-> Business_User
@@ -42,55 +42,55 @@ flowchart LR
     Inventory -- "14. checks availability" --> Inventory
     Business_User -- "15. adds Product to Cart" --> OrderManagement
     OrderManagement -- "16. creates draft order" --> OrderManagement
-    OrderManagement -- "17. to save draft" --> order_db
+    OrderManagement -- "17. save draft" --> order_db
     Inventory -- "18. reserves stock" --> Inventory
     Pricing -- "19. applies discounts" --> Pricing
     OrderManagement -. "20. returns cart summary" .-> Business_User
     Business_User -- "21. confirms Purchase" --> OrderManagement
     OrderManagement -- "22. validates order" --> OrderManagement
     Payment -- "23. processes payment" --> Payment
-    Payment -- "24. to charge card" --> payment_gateway
+    Payment -- "24. charge card" --> payment_gateway
     Payment -- "25. PaymentCompleted" --> Payment_events
     Payment_events -- "26. PaymentCompleted" --> OrderManagement
     OrderManagement -- "27. marks order as paid" --> OrderManagement
     Inventory -- "28. confirms stock allocation" --> Inventory
     Shipping -- "29. creates shipment" --> Shipping
-    Shipping -- "30. to schedule pickup" --> shipping_provider
+    Shipping -- "30. schedule pickup" --> shipping_provider
     OrderManagement -- "31. OrderConfirmed" --> OrderManagement_events
     OrderManagement_events -- "32. OrderConfirmed" --> EmailNotifier
     EmailNotifier -- "33. sends order confirmation" --> EmailNotifier
     SMSNotifier -- "34. sends tracking notification" --> SMSNotifier
     CronScheduler -- "35. triggers #quot;DailyInventorySync#quot;" --> Inventory
     Inventory -- "36. fetches stock levels" --> Inventory
-    Inventory -- "37. to get current stock" --> inventory_system
+    Inventory -- "37. get current stock" --> inventory_system
     Inventory -- "38. StockLevelsUpdated" --> Inventory_events
     Inventory_events -- "39. StockLevelsUpdated" --> Catalog
     Catalog -- "40. updates product availability" --> Catalog
-    Catalog -- "41. to update stock status" --> product_db
+    Catalog -- "41. update stock status" --> product_db
     Catalog -- "42. CatalogUpdated" --> Catalog_events
     Catalog_events -- "43. CatalogUpdated" --> PushNotifier
     PushNotifier -- "44. sends restock notifications" --> PushNotifier
-    PushNotifier -- "45. to queue messages" --> notification_queue
+    PushNotifier -- "45. queue messages" --> notification_queue
     Customer_Support -- "46. views Order" --> OrderManagement
     OrderManagement -- "47. fetches order details" --> OrderManagement
-    OrderManagement -- "48. to retrieve order" --> order_db
+    OrderManagement -- "48. retrieve order" --> order_db
     Payment -- "49. retrieves payment history" --> Payment
     Shipping -- "50. retrieves shipment status" --> Shipping
     OrderManagement -. "51. returns complete order view" .-> Customer_Support
     Customer_Support -- "52. updates Order" --> OrderManagement
     OrderManagement -- "53. validates changes" --> OrderManagement
-    OrderManagement -- "54. to update order" --> order_db
+    OrderManagement -- "54. update order" --> order_db
     OrderManagement -- "55. OrderUpdated" --> OrderManagement_events
     OrderManagement_events -- "56. OrderUpdated" --> EmailNotifier
     EmailNotifier -- "57. sends update notification to customer" --> EmailNotifier
     Business_User -- "58. requests password reset" --> Authentication
     Authentication -- "59. validates email" --> Authentication
     Authentication -- "60. generates reset token" --> Authentication
-    Authentication -- "61. to store token" --> user_db
+    Authentication -- "61. store token" --> user_db
     EmailNotifier -- "62. sends reset email" --> EmailNotifier
     Business_User -- "63. submits new password" --> Authentication
     Authentication -- "64. validates reset token" --> Authentication
-    Authentication -- "65. to verify token" --> user_db
+    Authentication -- "65. verify token" --> user_db
     Authentication -- "66. updates password" --> Authentication
     Authentication -- "67. PasswordChanged" --> Authentication_events
     Authentication_events -- "68. PasswordChanged" --> EmailNotifier

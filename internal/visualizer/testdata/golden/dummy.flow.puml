@@ -37,7 +37,7 @@ queue "Wallet events" as Wallet_events
 
 ' Workflow flows
 Business_User --> VASScheduling : 1. unschedules a VAS scheduling
-VASScheduling ->> Wallet : 2. to cancel the VAS reservation
+VASScheduling ->> Wallet : 2. cancel the VAS reservation
 Wallet -> Wallet : 3. cancels VAS reservation
 Wallet ->> Wallet_events : 4. VAS Reservation Canceled
 VASScheduling -> VASScheduling : 5. cancels the VAS schedule

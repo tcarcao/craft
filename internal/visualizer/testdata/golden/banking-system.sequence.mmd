@@ -10,16 +10,16 @@ sequenceDiagram
     rect rgb(245, 245, 245)
     Note over Customer,CRON: 1: when Customer initiates transfer
     Customer->>PaymentProcessing: initiates transfer
-    PaymentProcessing->>AccountManagement: to verify source account
-    PaymentProcessing->>TransactionValidation: to check transfer limits
+    PaymentProcessing->>AccountManagement: verify source account
+    PaymentProcessing->>TransactionValidation: check transfer limits
     TransactionValidation->>TransactionValidation: validates transaction rules
-    PaymentProcessing->>BalanceTracking: to reserve funds
+    PaymentProcessing->>BalanceTracking: reserve funds
     BalanceTracking-)BalanceTracking: notifies "Funds Reserved"
     end
     rect rgb(245, 245, 245)
     Note over Customer,CRON: 2: when PaymentProcessing listens "Funds Reserved"
     BalanceTracking-)PaymentProcessing: Funds Reserved
-    PaymentProcessing->>AccountManagement: to verify destination account
+    PaymentProcessing->>AccountManagement: verify destination account
     PaymentProcessing->>PaymentProcessing: executes fund transfer
     BalanceTracking->>BalanceTracking: updates account balances
     PaymentProcessing-)PaymentProcessing: notifies "Transfer Completed"
@@ -31,14 +31,14 @@ sequenceDiagram
     end
     Note over Customer,CRON: Account Balance Check
     Customer->>AccountManagement: checks balance
-    AccountManagement->>BalanceTracking: to get current balance
+    AccountManagement->>BalanceTracking: get current balance
     BalanceTracking->>BalanceTracking: calculates available balance
     AccountManagement-->>Customer: returns balance information
     Note over Customer,CRON: Suspicious Activity Detection
     rect rgb(245, 245, 245)
     Note over Customer,CRON: 1: when TransactionValidation detects suspicious pattern
     Note over TransactionValidation: detects suspicious pattern
-    TransactionValidation->>AccountManagement: to freeze account
+    TransactionValidation->>AccountManagement: freeze account
     AccountManagement->>AccountManagement: applies security hold
     TransactionValidation-)TransactionValidation: notifies "Account Frozen"
     end
@@ -50,7 +50,7 @@ sequenceDiagram
     end
     Note over Customer,CRON: Scheduled Payment Processing
     CRON->>PaymentProcessing: triggers scheduled payments
-    PaymentProcessing->>AccountManagement: to get scheduled payments
+    PaymentProcessing->>AccountManagement: get scheduled payments
     PaymentProcessing->>PaymentProcessing: processes each scheduled payment
     BalanceTracking->>BalanceTracking: updates balances for processed payments
     PaymentProcessing-)PaymentProcessing: notifies "Scheduled Payments Processed"
