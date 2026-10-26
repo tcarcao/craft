@@ -98,8 +98,9 @@ All values are in the POC; this lists what matters.
   clouds; services, unresolved names, externals (External, unobserved
   caller) and queues are cogs; data stores get the store icon. `view.Node`
   does not carry the participant kind today; add it so the writer can choose.
-  Service boxes may contain cogs (Boomi in the POC), so the grouping must
-  include non-context members of a service.
+  Service boxes group a service's drawn nodes, including non-context
+  members; they appear only for services with two or more drawn nodes.
+  (Boomi in the POC is a `system` actor, a cog outside any service box.)
 - **Cog**: chunky black cog (body disc, 8 square
   teeth, white ring, black hub), 46px, name in 11px beside it on the side
   away from the nearest note.
@@ -213,8 +214,8 @@ in code.
 
 ## Testing
 
-- Golden SVGs for the POC's Invoicing scenario (Boomi modelled so it comes
-  out as a cog inside the Invoicing service box) (written as a `.craft` file)
+- Golden SVGs for the POC's Invoicing scenario (Boomi modelled as a `system`
+  actor, so it comes out as a cog outside any service box) (written as a `.craft` file)
   and at least two `examples/` models, compared byte for byte.
 - Unit tests for the verb classification in `internal/lang`.
 - Unit tests for the board rules that are easy to get wrong: lookup
