@@ -176,3 +176,37 @@ func TestSources_UnknownRefIsAnError(t *testing.T) {
 		t.Fatalf("got %d %+v", code, resp)
 	}
 }
+
+func TestSources_RenderBoardOneUseCase(t *testing.T) {
+	code, resp := post[SourceRenderResponse](t, sourceServer(t), "/sources/accounts/render", `{"view":"board","useCases":["Sign Up"],"format":"svg"}`)
+	svg, _ := base64.StdEncoding.DecodeString(resp.Data)
+	if code != http.StatusOK || !strings.HasPrefix(string(svg), "<svg") {
+		t.Fatalf("code=%d data=%.80s", code, svg)
+	}
+}
+
+func TestSources_RenderBoardRejects(t *testing.T) {
+	h := sourceServer(t)
+	cases := map[string]struct{ body, want string }{
+		"two use cases": {`{"view":"board","useCases":["Sign Up","Other"]}`, "a board draws one use case"},
+		"format":        {`{"view":"board","useCases":["Sign Up"],"format":"png"}`, "svg only"},
+		"unknown":       {`{"view":"board","useCases":["nope"]}`, "available:"},
+	}
+	for name, c := range cases {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/sources/accounts/render", strings.NewReader(c.body)))
+		if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), c.want) {
+			t.Errorf("%s: code=%d body=%s, want 400 containing %q", name, rr.Code, rr.Body.String(), c.want)
+		}
+	}
+}
+
+func TestSources_RenderBoardDraftDefaultsToDraftUseCase(t *testing.T) {
+	dsl := "use_case \"Draft Flow\" {\n  when Visitor submits form\n    Registration asks Profile to create profile\n}\n"
+	body, _ := json.Marshal(map[string]string{"view": "board", "dsl": dsl})
+	code, resp := post[SourceRenderResponse](t, sourceServer(t), "/sources/accounts/render", string(body))
+	svg, _ := base64.StdEncoding.DecodeString(resp.Data)
+	if code != http.StatusOK || !strings.Contains(string(svg), "Draft Flow") {
+		t.Fatalf("code=%d data=%.80s", code, svg)
+	}
+}
