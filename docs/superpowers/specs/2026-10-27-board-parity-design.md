@@ -99,4 +99,6 @@ Both clients already handle SVG: the Confluence macro renders and stores every d
 
 ## As built
 
-(Fill in after implementation.)
+- Server: `boardUseCase` in `cmd/server/main.go` is the one use-case chooser. `renderSourceBoard` in `cmd/server/sources.go` handles `view: "board"`.
+- Macro: a draft board saves `useCases: checked()` like every draft type, plus its own `useCase`, and its render request sends `useCases: [<chosen>]`. An inline or draft board whose editor has no `use_case` stops with the message `Add a use_case to the model to draw a board.` The use-case list matches only `use_case` lines, not ones inside comments. `docs/usage.md` gives the server versions it needs.
+- Extension: `craftText.ts` holds `mask`, `closingBrace`, `useCaseNames` and `useCaseAt`. `previewBoard.ts` has no unit test, because the vscode mock has no webview or QuickPick APIs.
