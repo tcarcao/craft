@@ -35,9 +35,9 @@ func (p *placed) bounds() (x0, y0, x1, y1 float64) {
 }
 
 const (
-	rankGap     = 90.0  // vertical space between rows
-	nodeGap     = 120.0 // horizontal space between boxes in a row
-	lookupDX    = 260.0 // lookup centre, right of the rightmost main node's edge
+	rankGap     = 120.0 // vertical space between rows
+	nodeGap     = 160.0 // horizontal space between boxes in a row
+	lookupDX    = 300.0 // lookup centre, right of the rightmost main node's edge
 	lookupDY    = 150.0 // vertical step between stacked lookups
 	boardMargin = 60.0
 )
@@ -239,6 +239,34 @@ func layout(f view.Flow) map[string]*placed {
 		sort.SliceStable(row, func(a, b int) bool { return key[row[a]] < key[row[b]] })
 	}
 
+	// Notes sit on their arrows, so the gap below a row holds every note
+	// between one of its nodes and one in the next row.
+	notes := map[[2]string]int{}
+	for _, e := range edges {
+		a, b := e.From, e.To
+		if out[a] == nil || out[b] == nil || a == b || lookup[a] || lookup[b] {
+			continue
+		}
+		if _, ok := noteOf(out, e); !ok {
+			continue
+		}
+		if rank[a] > rank[b] {
+			a, b = b, a
+		}
+		next := rank[a] + 1 // the next row that has nodes
+		for next < rank[b] && len(rows[next]) == 0 {
+			next++
+		}
+		if rank[a] < rank[b] && rank[b] == next {
+			notes[[2]string{a, b}]++
+		}
+	}
+	gap := map[int]float64{}
+	for k, n := range notes {
+		r := rank[k[0]]
+		gap[r] = max(gap[r], float64(n)*(noteH+16)+80)
+	}
+
 	// Coordinates: rows stack top-down, the icons of each centred on x = 0
 	// (an icon's name hangs to its right and takes its own room in the row).
 	y, right := 0.0, math.Inf(-1)
@@ -255,11 +283,11 @@ func layout(f view.Flow) map[string]*placed {
 		x := -w / 2
 		for _, id := range row {
 			p := out[id]
-			p.X, p.Y = x+p.W/2, y+rankGap*float64(r)+h/2
+			p.X, p.Y = x+p.W/2, y+h/2
 			x += p.W + p.LW + nodeGap
 			right = max(right, p.X+p.W/2+p.LW)
 		}
-		y += h
+		y += h + max(rankGap, gap[r])
 	}
 
 	// Lookups: right of the main flow, stacked around their caller.

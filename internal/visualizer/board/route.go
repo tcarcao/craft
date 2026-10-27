@@ -141,8 +141,9 @@ func hits(a arrow, x0, y0, x1, y1 float64) bool {
 	return false
 }
 
-// arrowClear is how far an arrow keeps from nodes it passes.
-const arrowClear = 10.0
+// arrowClear is how far an arrow keeps from nodes it passes: room for half
+// a note, so the notes on it do not crowd the nodes' own.
+const arrowClear = 10.0 + noteW/2
 
 // detourStep and detourLimit bound how far an arrow swings sideways round
 // the nodes in its way.
@@ -275,8 +276,8 @@ func route(f view.Flow, at map[string]*placed) routed {
 	var owners []pair // owners[i] is the edge ends of out.Notes[i]
 	// free reports whether a note centred at c overlaps no earlier note,
 	// badge or node (except skip, the node a pinned note belongs to), and,
-	// when strict, no arrow.
-	free := func(c point, skip string, strict bool) bool {
+	// when strict, no arrow but its own (own's).
+	free := func(c point, skip string, own pair, strict bool) bool {
 		for _, o := range out.Notes {
 			if math.Abs(c.X-o.X) < noteW+10 && math.Abs(c.Y-o.Y) < noteH+14 {
 				return false
@@ -298,6 +299,9 @@ func route(f view.Flow, at map[string]*placed) routed {
 		}
 		if strict {
 			for _, a := range out.Arrows {
+				if a.From == own.from && a.To == own.to {
+					continue
+				}
 				if hits(a, c.X-noteW/2-4, c.Y-noteH/2-4, c.X+noteW/2+4, c.Y+noteH/2+4) {
 					return false
 				}
@@ -307,13 +311,13 @@ func route(f view.Flow, at map[string]*placed) routed {
 	}
 	// place puts n at the first candidate spot that is free of arrows too,
 	// else the first free one, else walks on from the first candidate in
-	// (sx, sy) until free.
+	// (sx, sy) until free; with no step it stays on the first candidate.
 	// ponytail: greedy first fit in edge order, no global overlap solve.
 	place := func(n note, cands []point, sx, sy float64, skip string, p pair) {
 		found := false
 		for _, strict := range []bool{true, false} {
 			for _, c := range cands {
-				if free(c, skip, strict) {
+				if free(c, skip, p, strict) {
 					n.X, n.Y, found = c.X, c.Y, true
 					break
 				}
@@ -324,14 +328,13 @@ func route(f view.Flow, at map[string]*placed) routed {
 		}
 		if !found {
 			n.X, n.Y = cands[0].X, cands[0].Y
-			for i := 0; i < 200 && !free(point{n.X, n.Y}, skip, false); i++ {
+			for i := 0; i < 200 && (sx != 0 || sy != 0) && !free(point{n.X, n.Y}, skip, p, false); i++ {
 				n.X, n.Y = n.X+sx, n.Y+sy
 			}
 		}
 		out.Notes = append(out.Notes, n)
 		owners = append(owners, p)
 	}
-	extras := []float64{0, 14, 28, 42, 60, 84}
 
 	for _, p := range pairs {
 		es := groups[p]
@@ -357,48 +360,35 @@ func route(f view.Flow, at map[string]*placed) routed {
 			continue
 		}
 
+		// Notes sit on their arrow, Miro-style, the line running under them;
+		// a crowded one slides along it, never off it.
 		a := out.Arrows[arrowOf[p]]
-		flat := math.Abs(a.P3.X-a.P0.X) > math.Abs(a.P3.Y-a.P0.Y)
-		ts := []float64{0.72, 0.6, 0.84, 0.5, 0.38}
-		if flat {
-			ts = []float64{0.5, 0.36, 0.64, 0.25, 0.75}
-		}
-		i := 0
+		// Several notes spread evenly along the arrow in step order; a
+		// request and its reply keep to opposite halves. A note that does
+		// not fit at its spot takes the nearest free one along the arrow.
+		var noted []view.FlowEdge
 		for _, e := range es {
-			k, ok := noteOf(at, e)
-			if !ok {
-				continue
+			if _, ok := noteOf(at, e); ok {
+				noted = append(noted, e)
 			}
-			// Steep arrows alternate their notes right and left; flat ones
-			// put them below, or above when the arrow rises.
-			pref := 1.0
-			if flat && a.P3.Y < a.P0.Y-20 || !flat && i%2 == 1 {
-				pref = -1
+		}
+		span := 1.0
+		if len(groups[pair{p.to, p.from}]) > 0 {
+			span = 0.54
+		}
+		for i, e := range noted {
+			k, _ := noteOf(at, e)
+			start := span * float64(i+1) / float64(len(noted)+1)
+			var ts []float64
+			for t := 0.1; t <= 0.9; t += 0.02 {
+				ts = append(ts, t)
 			}
-			i++
+			sort.SliceStable(ts, func(i, j int) bool { return math.Abs(ts[i]-start) < math.Abs(ts[j]-start) })
 			var cands []point
-			for _, extra := range extras {
-				for _, t := range ts {
-					c, tg := bezier(a, t), tangent(a, t)
-					l := math.Hypot(tg.X, tg.Y)
-					if l == 0 {
-						continue
-					}
-					nx, ny := -tg.Y/l, tg.X/l
-					if flat && ny < 0 || !flat && nx < 0 {
-						nx, ny = -nx, -ny
-					}
-					dist := math.Abs(nx)*noteW/2 + math.Abs(ny)*noteH/2 + 14 + extra
-					for _, s := range []float64{pref, -pref} {
-						cands = append(cands, point{c.X + s*nx*dist, c.Y + s*ny*dist})
-					}
-				}
+			for _, t := range ts {
+				cands = append(cands, bezier(a, t))
 			}
-			sx, sy := pref*nudgeStep, 0.0
-			if flat {
-				sx, sy = 0, pref*nudgeStep
-			}
-			place(note{Kind: k, Number: e.Number, Label: e.Label, Inferred: e.Inferred}, cands, sx, sy, "", p)
+			place(note{Kind: k, Number: e.Number, Label: e.Label, Inferred: e.Inferred}, cands, 0, 0, "", p)
 		}
 	}
 
