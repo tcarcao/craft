@@ -334,6 +334,43 @@ func (s *Server) handlePreviewMermaidDomain() http.HandlerFunc {
 	}
 }
 
+// boardUseCase picks the one use case a board draws: want by name or slug,
+// else the first of preferred that the model has, else its first. The error
+// is a client error.
+func boardUseCase(doc *craft.CraftDoc, want string, preferred []string) (string, error) {
+	if len(doc.UseCases) == 0 {
+		return "", errors.New("the model has no use case to draw")
+	}
+	name, slugs := "", make([]string, 0, len(doc.UseCases))
+	for _, uc := range doc.UseCases {
+		slugs = append(slugs, visualizer.Slugify(uc.Name))
+	}
+	if want == "" {
+		name = doc.UseCases[0].Name
+		for _, p := range preferred {
+			if slices.ContainsFunc(doc.UseCases, func(uc craft.UseCase) bool { return uc.Name == p }) {
+				name = p
+				break
+			}
+		}
+	} else {
+		for i, uc := range doc.UseCases {
+			if uc.Name == want || slugs[i] == want {
+				name = uc.Name
+				break
+			}
+		}
+	}
+	if name == "" {
+		return "", fmt.Errorf("no use case matches %q (available: %s)", want, strings.Join(slugs, ", "))
+	}
+	// The renderer selects by slug, so a shared slug cannot pick one.
+	if n := slices.Index(slugs, visualizer.Slugify(name)); slices.Index(slugs[n+1:], slugs[n]) >= 0 {
+		return "", fmt.Errorf("more than one use case is named %q; rename one to draw it as a board", name)
+	}
+	return name, nil
+}
+
 // handlePreviewBoardDomain draws one use case of the domain flow as a
 // Miro-style board. Response.Data carries the SVG as plain text, NOT base64.
 func (s *Server) handlePreviewBoardDomain() http.HandlerFunc {
@@ -351,25 +388,9 @@ func (s *Server) handlePreviewBoardDomain() http.HandlerFunc {
 			return
 		}
 		doc, diags := parseDSL(req.DSL)
-		if len(doc.UseCases) == 0 {
-			respondWithError(w, http.StatusBadRequest, "the model has no use case to draw")
-			return
-		}
-		name, slugs := "", make([]string, 0, len(doc.UseCases))
-		for i, uc := range doc.UseCases {
-			slug := visualizer.Slugify(uc.Name)
-			slugs = append(slugs, slug)
-			if (req.UseCase == "" && i == 0) || (req.UseCase != "" && name == "" && (uc.Name == req.UseCase || slug == req.UseCase)) {
-				name = uc.Name
-			}
-		}
-		if name == "" {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("no use case matches %q (available: %s)", req.UseCase, strings.Join(slugs, ", ")))
-			return
-		}
-		// The renderer selects by slug, so a shared slug cannot pick one.
-		if n := slices.Index(slugs, visualizer.Slugify(name)); slices.Index(slugs[n+1:], slugs[n]) >= 0 {
-			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("more than one use case is named %q; rename one to draw it as a board", name))
+		name, err := boardUseCase(doc, req.UseCase, nil)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		out, ok := s.render(w, doc, visualizer.Request{

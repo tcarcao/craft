@@ -364,7 +364,7 @@ func (s *Server) handleCatalog() http.HandlerFunc {
 type SourceRenderRequest struct {
 	Refs     map[string]string `json:"refs,omitempty"`
 	DSL      string            `json:"dsl,omitempty"`
-	View     string            `json:"view"` // c4, c4-flat, architecture, flow, sequence, journey
+	View     string            `json:"view"` // c4, c4-flat, architecture, flow, sequence, journey, board
 	UseCases []string          `json:"useCases,omitempty"`
 	Path     string            `json:"path,omitempty"`
 	Journey  string            `json:"journey,omitempty"`
@@ -391,6 +391,10 @@ func (s *Server) handleSourceRender() http.HandlerFunc {
 		}
 		var req SourceRenderRequest
 		if !decode(w, r, &req) {
+			return
+		}
+		if req.View == "board" {
+			s.renderSourceBoard(w, src, req)
 			return
 		}
 		view, known := sourceViews[req.View]
@@ -435,6 +439,49 @@ func (s *Server) handleSourceRender() http.HandlerFunc {
 			Commits:         snap.commits,
 		})
 	}
+}
+
+// renderSourceBoard answers a "board" render: one use case of the flow View
+// as SVG, base64 like every source render.
+func (s *Server) renderSourceBoard(w http.ResponseWriter, src *source, req SourceRenderRequest) {
+	if req.Format != "" && req.Format != "svg" {
+		respondWithError(w, http.StatusBadRequest, "the board writes svg only")
+		return
+	}
+	if len(req.UseCases) > 1 {
+		respondWithError(w, http.StatusBadRequest, "a board draws one use case")
+		return
+	}
+	snap, err := src.load(req.Refs)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.DSL != "" {
+		snap.files[inlineFile] = req.DSL
+	}
+	doc, diags := parseFiles(snap.files)
+	want := ""
+	if len(req.UseCases) == 1 {
+		want = req.UseCases[0]
+	}
+	name, err := boardUseCase(doc, want, useCasesIn(doc, req.Path, req.DSL != ""))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	out, ok := s.render(w, doc, visualizer.Request{
+		View: visualizer.ViewFlow, Backend: visualizer.Board, Format: visualizer.FormatSVG, UseCases: []string{name},
+	})
+	if !ok {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(SourceRenderResponse{
+		PreviewResponse: PreviewResponse{Success: true, Data: base64.StdEncoding.EncodeToString(out.Data), Diagnostics: diags},
+		ContentID:       snap.contentID,
+		Commits:         snap.commits,
+	})
 }
 
 // useCasesIn names the use cases declared in file path, or in the inline
