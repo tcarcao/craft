@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.31.0] — 2026-10-27
+
+**Why a minor version (v2.31.0).** One new `view` value on an existing endpoint. `pkg/craft` is unchanged, and every existing request answers as before.
+
 ### Added
 - **`POST /sources/{name}/render` draws boards**: `view: "board"` with at most one `useCases` entry (default: the draft's or file's first use case, else the model's first); `data` is base64 SVG like every source render.
 
