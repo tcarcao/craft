@@ -1,6 +1,7 @@
 package board
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,6 +89,41 @@ func TestExamples_BoardsReadCleanly(t *testing.T) {
 				if x0, y0, x1, y1 := p.bounds(); hits(a, x0, y0, x1, y1) {
 					t.Errorf("%s: arrow %s -> %s crosses node %s", name, a.From, a.To, id)
 				}
+			}
+		}
+	}
+}
+
+// Every note of an arrow sits on that arrow, Miro-style, so it cannot be
+// read as another arrow's.
+func TestExamples_NotesSitOnTheirArrows(t *testing.T) {
+	for name, f := range exampleFlows(t) {
+		at := layout(f)
+		r := route(f, at)
+		for _, e := range f.Edges {
+			if e.From == e.To || at[e.From] == nil || at[e.To] == nil {
+				continue
+			}
+			var n *note
+			for i := range r.Notes {
+				if r.Notes[i].Number == e.Number {
+					n = &r.Notes[i]
+				}
+			}
+			if n == nil {
+				continue // a badge-only step
+			}
+			on := false
+			for _, a := range r.Arrows {
+				if a.From == e.From && a.To == e.To {
+					for i := 0; i <= arrowSamples*4; i++ {
+						c := bezier(a, float64(i)/(arrowSamples*4))
+						on = on || math.Hypot(c.X-n.X, c.Y-n.Y) < 6
+					}
+				}
+			}
+			if !on {
+				t.Errorf("%s: note %d is off its arrow %s -> %s", name, e.Number, e.From, e.To)
 			}
 		}
 	}

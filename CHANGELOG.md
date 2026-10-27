@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.30.0] — 2026-10-27
+
+**Why a minor version (v2.30.0).** Board diagrams lay out differently. `pkg/craft` is unchanged, and every endpoint and CLI flag answers as before.
+
+### Changed — diagrams
+- **Board notes sit on their arrows**, Miro-style, the line running under them, so each note reads as its arrow's. Several notes on one arrow spread along it in step order, a request and its reply keep to opposite halves, and rows open up to fit the notes between them.
+
 ## [2.29.0] — 2026-10-26
 
 **Why a minor version (v2.29.0).** A new diagram backend, a new CLI format and a new server endpoint. `pkg/craft` is unchanged, and every existing endpoint answers as before; call labels in every diagram lose their connector word.
