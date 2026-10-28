@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.32.0] — 2026-10-28
+
+**Why a minor version (v2.32.0).** Boards look different. `pkg/craft` is unchanged, and every endpoint and CLI flag answers as before.
+
+### Changed — diagrams
+- **Boards are drawn like a whiteboard**: the page and the Notation box are white, and the grey frame around the drawing is gone.
+
 ## [2.31.0] — 2026-10-27
 
 **Why a minor version (v2.31.0).** One new `view` value on an existing endpoint. `pkg/craft` is unchanged, and every existing request answers as before.
