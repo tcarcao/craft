@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [2.33.0] — 2026-10-28
+
+**Why a minor version (v2.33.0).** New server settings and a health endpoint. `pkg/craft` is unchanged; the server drops its web UI routes (`GET /`, `POST /`, `GET /diagram/{type}`, `GET /download/{type}`), which no client of the API calls.
+
+### Added — server
+- **`CRAFT_BASE_PATH`** serves every endpoint under a path prefix (`CRAFT_BASE_PATH=/craft` answers `POST /craft/preview/c4`), for a path-based ingress that does not strip the prefix, such as an AWS ALB. Unset, the server answers at the root as before.
+- **`GET /health`** answers `{"status":"ok"}` for liveness and readiness probes (under the base path when one is set).
+- **`PORT`** sets the listen port (default `8080`).
+
+### Removed — server
+- **The web UI is gone**: `GET /`, `POST /`, `GET /diagram/{type}` and `GET /download/{type}`. The server is an API; clients use `POST /preview/*`, `POST /download/{domain,c4}`, `POST /journeys` and `/sources`. The removed routes served the last C4 diagram anyone had rendered, so one caller could see another's diagram.
+
+### Changed — image
+- **The image runs as a non-root user** (`craft`, UID 10001).
+
 ## [2.32.0] — 2026-10-28
 
 **Why a minor version (v2.32.0).** Boards look different. `pkg/craft` is unchanged, and every endpoint and CLI flag answers as before.

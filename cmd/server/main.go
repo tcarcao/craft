@@ -2,12 +2,10 @@
 package main
 
 import (
-	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -20,34 +18,12 @@ import (
 	"github.com/tcarcao/craft/v2/pkg/craft"
 )
 
-//go:embed templates
-var content embed.FS
-
-type Response struct {
-	Success      bool
-	Error        string
-	Input        string
-	C4           string
-	Context      string
-	Sequence     string
-	WantC4       bool
-	WantContext  bool
-	WantSequence bool
-}
-
 type Server struct {
-	tmpl     *template.Template
 	renderer *visualizer.Renderer
-	lastC4   []byte
 	sources  map[string]*source
 }
 
 func NewServer() (*Server, error) {
-	tmpl, err := template.ParseFS(content, "templates/index.html")
-	if err != nil {
-		return nil, err
-	}
-
 	cacheDir := os.Getenv("CRAFT_CACHE")
 	if cacheDir == "" {
 		cacheDir = filepath.Join(os.TempDir(), "craft-sources")
@@ -58,103 +34,9 @@ func NewServer() (*Server, error) {
 	}
 
 	return &Server{
-		tmpl:     tmpl,
 		renderer: visualizer.New(visualizer.ExecPlantUML{}),
 		sources:  sources,
 	}, nil
-}
-
-func (s *Server) handleIndex() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		s.tmpl.Execute(w, nil)
-	}
-}
-
-func (s *Server) handleGenerate() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
-		input := r.FormValue("dsl")
-		generateC4 := r.FormValue("c4") == "on"
-		generateContext := r.FormValue("context") == "on"
-		generateSequence := r.FormValue("sequence") == "on"
-
-		resp := Response{
-			Success:      true,
-			Input:        input,
-			WantC4:       generateC4,
-			WantContext:  generateContext,
-			WantSequence: generateSequence,
-		}
-
-		doc, _ := parseDSL(input)
-
-		if generateC4 {
-			out, err := s.renderer.Render(doc, visualizer.Request{
-				View: visualizer.ViewC4, Backend: visualizer.PlantUML, Format: visualizer.FormatPNG,
-				C4: &visualizer.C4Options{Boundaries: true, ShowDatabases: true},
-			})
-			if err != nil {
-				log.Printf("Error generating C4 diagram: %v", err)
-			} else {
-				s.lastC4 = out.Data
-				resp.C4 = base64.StdEncoding.EncodeToString(out.Data)
-			}
-		}
-
-		s.tmpl.Execute(w, resp)
-	}
-}
-
-func (s *Server) handleViewDiagram() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		diagramType := vars["type"]
-
-		var diagram []byte
-		switch diagramType {
-		case "c4":
-			diagram = s.lastC4
-		default:
-			http.NotFound(w, r)
-			return
-		}
-
-		if len(diagram) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-
-		w.Header().Set("Content-Type", "image/png")
-		w.Write(diagram)
-	}
-}
-
-func (s *Server) handleDownloadDiagram() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		diagramType := vars["type"]
-
-		var diagram []byte
-		var filename string
-
-		switch diagramType {
-		case "c4":
-			diagram = s.lastC4
-			filename = "c4-diagram.png"
-		default:
-			http.NotFound(w, r)
-			return
-		}
-
-		if len(diagram) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-		w.Write(diagram)
-	}
 }
 
 // Domain-specific preview request
@@ -618,19 +500,34 @@ func (s *Server) handleDownloadC4Diagram() http.HandlerFunc {
 	}
 }
 
-func main() {
-	server, err := NewServer()
-	if err != nil {
-		log.Fatal(err)
+// handleHealth answers liveness and readiness probes.
+func (s *Server) handleHealth() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
+	}
+}
+
+// basePath normalises CRAFT_BASE_PATH: "" and "/" mean the root, anything
+// else gets one leading slash and no trailing one ("craft/" -> "/craft").
+func basePath(v string) string {
+	v = strings.Trim(v, "/")
+	if v == "" {
+		return ""
+	}
+	return "/" + v
+}
+
+// newHandler routes every endpoint under base, so the server can sit behind a
+// path-based ingress that does not strip the prefix (e.g. an AWS ALB).
+func newHandler(server *Server, base string) http.Handler {
+	root := mux.NewRouter()
+	r := root
+	if base != "" {
+		r = root.PathPrefix(base).Subrouter()
 	}
 
-	r := mux.NewRouter()
-
-	// Route handlers
-	r.HandleFunc("/", server.handleIndex()).Methods("GET")
-	r.HandleFunc("/", server.handleGenerate()).Methods("POST")
-	r.HandleFunc("/diagram/{type}", server.handleViewDiagram()).Methods("GET")
-	r.HandleFunc("/download/{type}", server.handleDownloadDiagram()).Methods("GET")
+	r.HandleFunc("/health", server.handleHealth()).Methods("GET")
 
 	r.HandleFunc("/preview/domain", server.handlePreviewDomain()).Methods("POST")
 	r.HandleFunc("/preview/mermaid/domain", server.handlePreviewMermaidDomain()).Methods("POST")
@@ -652,8 +549,23 @@ func main() {
 	// Add middleware for logging
 	r.Use(loggingMiddleware)
 
-	log.Printf("Server starting on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", cors(r)))
+	return cors(root)
+}
+
+func main() {
+	server, err := NewServer()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	base := basePath(os.Getenv("CRAFT_BASE_PATH"))
+
+	log.Printf("Server starting on http://localhost:%s%s", port, base)
+	log.Fatal(http.ListenAndServe(":"+port, newHandler(server, base)))
 }
 
 // cors wraps the whole router rather than being a mux middleware: mux only

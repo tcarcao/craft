@@ -189,3 +189,61 @@ func TestCORS_AnswersPreflightOnPostOnlyRoute(t *testing.T) {
 		t.Errorf("Allow-Private-Network = %q, want true", got)
 	}
 }
+
+func TestBasePath_Normalises(t *testing.T) {
+	for in, want := range map[string]string{"": "", "/": "", "craft": "/craft", "/craft/": "/craft", "/a/b": "/a/b"} {
+		if got := basePath(in); got != want {
+			t.Errorf("basePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Behind a path-based ingress that keeps the prefix, every route answers
+// under it and nothing answers at the root.
+func TestNewHandler_RoutesUnderBasePath(t *testing.T) {
+	server, err := NewServer()
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	h := newHandler(server, "/craft")
+
+	cases := []struct {
+		method, path string
+		want         int
+	}{
+		{http.MethodGet, "/craft/health", http.StatusOK},
+		{http.MethodPost, "/craft/preview/mermaid/domain", http.StatusOK},
+		{http.MethodGet, "/health", http.StatusNotFound},
+		{http.MethodPost, "/preview/mermaid/domain", http.StatusNotFound},
+		{http.MethodGet, "/craftx/health", http.StatusNotFound},
+	}
+	for _, c := range cases {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(c.method, c.path, strings.NewReader(`{"dsl": ""}`)))
+		if rr.Code != c.want {
+			t.Errorf("%s %s = %d, want %d", c.method, c.path, rr.Code, c.want)
+		}
+	}
+}
+
+// The server is an API: the HTML form and the shared last-render routes are gone.
+func TestNewHandler_NoWebUI(t *testing.T) {
+	server, err := NewServer()
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	h := newHandler(server, "")
+
+	for _, path := range []string{"/", "/diagram/c4", "/download/c4"} {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		if rr.Code == http.StatusOK {
+			t.Errorf("GET %s = 200, want no route", path)
+		}
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"ok"`) {
+		t.Errorf("GET /health = %d %q, want 200 ok", rr.Code, rr.Body.String())
+	}
+}
