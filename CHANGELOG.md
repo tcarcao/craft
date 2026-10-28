@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [2.34.0] — 2026-10-28
+
+**Why a minor version (v2.34.0).** Two new server settings and a different log format. `pkg/craft` is unchanged, and every endpoint answers as before.
+
+### Changed — server
+- **Structured access log**: one line per request with `method`, `path`, `status`, `duration_ms` and `bytes`, written with `log/slog`. A failed request carries its message in `error` on the same line instead of a second `[code] message` line. Unmatched routes and CORS preflights are logged too.
+- **Quieter probes**: `/health` logs at debug, so liveness, readiness and load-balancer checks no longer fill the log. 4xx responses log at warn and 5xx at error.
+
+### Added — server
+- **`CRAFT_LOG_FORMAT`**: `json` writes one JSON object per line for log collectors; the default is text.
+- **`CRAFT_LOG_LEVEL`**: `debug`, `info` (default), `warn` or `error`. `debug` shows the health checks.
+
 ## [2.33.0] — 2026-10-28
 
 **Why a minor version (v2.33.0).** New server settings and a health endpoint. `pkg/craft` is unchanged; the server drops its web UI routes (`GET /`, `POST /`, `GET /diagram/{type}`, `GET /download/{type}`), which no client of the API calls.
