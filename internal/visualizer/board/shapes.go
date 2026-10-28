@@ -228,7 +228,7 @@ func (s *svg) drawLegend(p point, withStore, withStep bool) {
 
 	height := legendHeight(withStore, withStep)
 	s.at(p)
-	s.el("rect", "width", "260", "height", num(height), "fill", "#e6e6e6", "stroke", "#9a9a9a", "stroke-width", "1.5")
+	s.el("rect", "width", "260", "height", num(height), "fill", "#fff", "stroke", "#9a9a9a", "stroke-width", "1.5")
 	s.text(130, 30, "Notation", 18, 700, "middle", 99, "#1a1a1a")
 	for i, r := range rows {
 		cy := 90 + float64(i)*legendRowH

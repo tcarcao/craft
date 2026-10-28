@@ -78,13 +78,11 @@ func Flow(f view.Flow, title string) []byte {
 	}
 	s.close("defs")
 
-	s.el("rect", "width", num(w), "height", num(h), "fill", "#e6e6e6")
+	s.el("rect", "width", num(w), "height", num(h), "fill", "#fff")
 	panelX := legendW + pad
 	if title != "" {
 		s.text(panelX+(w-panelX)/2, titleH/2+4, title, 30, 700, "middle", 1000, "#1a1a1a")
 	}
-	s.el("rect", "x", num(panelX), "y", num(titleH), "width", num(w-panelX), "height", num(h-titleH),
-		"fill", "#fff", "stroke", "#bdbdbd")
 	s.drawLegend(point{14, legendY}, withStore, withStep)
 
 	s.open("g", "transform", "translate("+num(legendW+2*pad+(boardW-bw)/2+ox)+","+num(titleH+10+oy)+")")
