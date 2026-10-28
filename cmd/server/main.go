@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/tcarcao/craft/v2/internal/visualizer"
@@ -428,8 +430,12 @@ func (s *Server) handlePreviewMermaidJourney() http.HandlerFunc {
 	}
 }
 
+// respondWithError writes the error response; the access log line carries the
+// message, so a failed request is logged once.
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	log.Printf("[%d] %s", code, message)
+	if rec, ok := w.(*accessRecorder); ok {
+		rec.err = message
+	}
 	response := PreviewResponse{
 		Success: false,
 		Error:   message,
@@ -546,16 +552,30 @@ func newHandler(server *Server, base string) http.Handler {
 	r.HandleFunc("/download/domain", server.handleDownloadDomainDiagram()).Methods("POST")
 	r.HandleFunc("/download/c4", server.handleDownloadC4Diagram()).Methods("POST")
 
-	// Add middleware for logging
-	r.Use(loggingMiddleware)
+	return accessLog(cors(root))
+}
 
-	return cors(root)
+// newLogger builds the server's logger: format "json" or text (the default),
+// level debug, info (the default), warn or error.
+func newLogger(out io.Writer, format, level string) *slog.Logger {
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(level)); err != nil {
+		lvl = slog.LevelInfo
+	}
+	opts := &slog.HandlerOptions{Level: lvl}
+	if strings.EqualFold(format, "json") {
+		return slog.New(slog.NewJSONHandler(out, opts))
+	}
+	return slog.New(slog.NewTextHandler(out, opts))
 }
 
 func main() {
+	slog.SetDefault(newLogger(os.Stderr, os.Getenv("CRAFT_LOG_FORMAT"), os.Getenv("CRAFT_LOG_LEVEL")))
+
 	server, err := NewServer()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("server cannot start", "error", err)
+		os.Exit(1)
 	}
 
 	port := os.Getenv("PORT")
@@ -564,8 +584,11 @@ func main() {
 	}
 	base := basePath(os.Getenv("CRAFT_BASE_PATH"))
 
-	log.Printf("Server starting on http://localhost:%s%s", port, base)
-	log.Fatal(http.ListenAndServe(":"+port, newHandler(server, base)))
+	slog.Info("server starting", "addr", ":"+port, "base_path", base)
+	if err := http.ListenAndServe(":"+port, newHandler(server, base)); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
+	}
 }
 
 // cors wraps the whole router rather than being a mux middleware: mux only
@@ -591,9 +614,61 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
+// accessRecorder captures what the access log reports about a response.
+type accessRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+	err    string
+}
+
+func (rec *accessRecorder) WriteHeader(code int) {
+	if rec.status == 0 {
+		rec.status = code
+	}
+	rec.ResponseWriter.WriteHeader(code)
+}
+
+func (rec *accessRecorder) Write(b []byte) (int, error) {
+	if rec.status == 0 {
+		rec.status = http.StatusOK
+	}
+	n, err := rec.ResponseWriter.Write(b)
+	rec.bytes += n
+	return n, err
+}
+
+// accessLog writes one line per request, outside the router so unmatched
+// routes and preflights are logged too. Health checks log at debug, since
+// probes call them every few seconds; 4xx logs at warn and 5xx at error.
+func accessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.Method, r.RequestURI)
-		next.ServeHTTP(w, r)
+		start := time.Now()
+		rec := &accessRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+		if rec.status == 0 {
+			rec.status = http.StatusOK
+		}
+
+		level := slog.LevelInfo
+		switch {
+		case rec.status >= 500:
+			level = slog.LevelError
+		case rec.status >= 400:
+			level = slog.LevelWarn
+		case strings.HasSuffix(r.URL.Path, "/health"):
+			level = slog.LevelDebug
+		}
+		attrs := []slog.Attr{
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.Int("status", rec.status),
+			slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+			slog.Int("bytes", rec.bytes),
+		}
+		if rec.err != "" {
+			attrs = append(attrs, slog.String("error", rec.err))
+		}
+		slog.LogAttrs(r.Context(), level, "request", attrs...)
 	})
 }

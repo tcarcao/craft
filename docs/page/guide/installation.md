@@ -63,6 +63,8 @@ The server will start on `http://localhost:8080`. It is an HTTP API with no web 
 |---|---|---|
 | `PORT` | `8080` | Port the server listens on |
 | `CRAFT_BASE_PATH` | none (root) | Path prefix for every endpoint, for an ingress that routes by path and keeps the prefix. With `/craft`, the server answers `POST /craft/preview/c4` and `GET /craft/health`; point the extension's `craft.server.url` at `https://<host>/craft` |
+| `CRAFT_LOG_FORMAT` | `text` | `json` writes one JSON object per line, for log collectors |
+| `CRAFT_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. Health checks log at `debug` only |
 | `CRAFT_SOURCES` | none | Git sources file, see below |
 | `CRAFT_CACHE` | a temporary folder | Where the server keeps its git source clones |
 
