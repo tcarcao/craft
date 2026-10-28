@@ -46,8 +46,13 @@ RUN plantuml -version && \
 # Copy the compiled application
 COPY --from=builder /server /usr/local/bin/
 
+# Run as a non-root user; a numeric UID lets Kubernetes check runAsNonRoot
+RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin craft
+
 # Set the working directory for the application
 WORKDIR /app
+
+USER 10001
 
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/server"]
