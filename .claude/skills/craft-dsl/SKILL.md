@@ -29,15 +29,17 @@ This is the complete grammar. All generated `.craft` files must conform to it.
                          | <use_case>)*
 
 // --- Actors: who interacts with the system ---
-<actor_def>          ::= "actor" <actor_type> <identifier>
-<actors_def>         ::= "actors" "{" (<actor_type> <identifier>)+ "}"
+<actor_def>          ::= "actor" <actor_type> <identifier> <string>?
+<actors_def>         ::= "actors" "{" (<actor_type> <identifier> <string>?)+ "}"
+                       // v2.27: the optional <string> is a display name, on the same line
 <actor_type>         ::= "user" | "system" | "service" | "scheduler" | "tool" | "infra"
                        // any other identifier parses (drawn as a person); prefer the six known kinds
 
 // --- Domains: business capabilities with contexts ---
 // Children (bounded contexts) are NEWLINE-separated, not comma-separated
-<domain_def>         ::= "domain" <identifier> "{" <identifier>+ "}"
-<domains_def>        ::= "domains" "{" (<identifier> "{" <identifier>+ "}")+ "}"
+<domain_def>         ::= "domain" <identifier> "{" <bc_decl>+ "}"
+<domains_def>        ::= "domains" "{" (<identifier> "{" <bc_decl>+ "}")+ "}"
+<bc_decl>            ::= <identifier> <string>?   // v2.27: optional display name, on the same line
 
 // --- Services: deployable units grouping bounded contexts ---
 <service_def>        ::= "service" <service_name> "{" <service_property>+ "}"
@@ -207,6 +209,23 @@ domains {
     }
 }
 ```
+
+**Display names (v2.27).** A bounded context or actor may carry a display name: a quoted string after its name, on the same line. Diagrams draw the display name and keep the id as the diagram identifier; use cases keep using the id. Need craft ≥ 2.27.
+
+```
+domains {
+    billing {
+        nmf_monetization  "nMF, the money engine"
+        invoicearchive
+    }
+}
+actor user Seller "the seller"
+```
+
+- The string must start on the name's line; on its own line it is `craft/syntax/unexpected-token`.
+- Declare display names in domain blocks and actor declarations only, not in a service's `contexts:` list.
+- Long display names wrap at about 24 characters, at spaces. Ids never wrap.
+- Lints (warnings): `craft/lint/duplicate-display-name` (two contexts or actors share one), `craft/lint/empty-display-name` (`""` declares none), `craft/lint/conflicting-display-name` (the same context or actor declared again with another display name; diagrams draw the first, in sorted file order).
 
 ### Services
 
@@ -622,7 +641,7 @@ This flows from "who and what exists" to "how it's built" to "what happens."
 After generating or editing a `.craft` file, the user can run `craft` to validate and inspect it:
 
 - `craft validate <file>` — parse and lint; reports errors and warnings, exits 1 on errors
-- `craft generate <file>` — produce diagram files (PlantUML by default; `--format mermaid` or `--format mermaid-md` for Mermaid output, `--split` for one file per use case, `--use-case` to filter, `--journey <slug>|all` for one spine sequence per journey)
+- `craft generate <file>` — produce diagram files (PlantUML by default; `--format mermaid` or `--format mermaid-md` for Mermaid output, `--type domain --format board` for a Miro-style SVG board per use case (v2.29), `--split` for one file per use case, `--use-case` to filter, `--journey <slug>|all` for one spine sequence per journey)
 - `craft inspect <file>` — dump the parsed model as structured text or JSON
 
 Glob patterns work for file arguments: `craft validate docs/**/*.craft`

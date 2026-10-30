@@ -67,18 +67,19 @@ Every diagnostic code, with its severity and meaning, is listed in [`docs/DIAGNO
 craft generate [files...] [flags]
 ```
 
-Parses the file(s) and writes diagram files. Default output is PlantUML (`.puml`); `--format` switches to Mermaid (`.mmd`) or markdown-wrapped Mermaid (`.md` with a fenced ` ```mermaid ` block, ready to commit alongside docs). Output goes to the same directory as the input file unless `--output` is set.
+Parses the file(s) and writes diagram files. Default output is PlantUML (`.puml`); `--format` switches to Mermaid (`.mmd`), markdown-wrapped Mermaid (`.md` with a fenced ` ```mermaid ` block, ready to commit alongside docs) or a board (`.svg`, flow view only). Any error diagnostic stops generation and prints every diagnostic; `--allow-errors` draws anyway. Output goes to the same directory as the input file unless `--output` is set.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--type` | `all` | Diagram type: `c4`, `domain`, `sequence`, `surface`, or `all`. `surface` writes `<base>-surface.md`, a Markdown table of each `surface` block's operations and the use cases that call them, whatever `--format` says; `all` includes it only when the model declares a surface |
 | `--mode` | `detailed` | Domain diagram detail: `detailed` or `architecture` |
 | `-o, --output` | (same dir as input) | Directory to write output files |
-| `--format` | `puml` | Output format: `puml`, `mermaid`, or `mermaid-md` |
+| `--format` | `puml` | Output format: `puml`, `mermaid`, `mermaid-md`, or `board` *(flow view only, v2.29)* |
 | `--use-case` | (none) | Comma-separated use case slugs or names to render *(detailed-domain and sequence only)* |
 | `--split` | false | Emit one file per use case *(detailed-domain and sequence only)* |
 | `--stdout` | false | Write to stdout instead of files (single diagram only; mutually exclusive with `--output`, `--split`, `--type all`) |
 | `--force` | false | Allow overwriting existing `.md` files (`--format=mermaid-md`, or `--type surface`) |
+| `--allow-errors` | false | Draw diagrams even when the model has error diagnostics *(v2.20)* |
 | `--journey` | (none) | Comma-separated journey slugs, or `all` (every journey with 2+ members): one spine sequence per slug, `<base>-journey-<slug>.<ext>`. Implies `--type sequence`; not with `--use-case` or `--split`; `--stdout` takes one slug *(v2.25)* |
 | `--boundaries` | `boundaries` | *(C4 only)* Boundaries rendering: `boundaries` or `transparent` |
 | `--no-databases` | false | *(C4 only)* Hide data-store containers from the C4 diagram |
@@ -93,6 +94,9 @@ Parses the file(s) and writes diagram files. Default output is PlantUML (`.puml`
 - `puml` — PlantUML source. Render with PlantUML server, `plantuml.jar`, or a CI image like `plantuml/plantuml-server:jetty`.
 - `mermaid` — raw Mermaid source. Renders in VS Code's Mermaid Preview, `mmdc`, and the Mermaid Live Editor.
 - `mermaid-md` — Mermaid wrapped in a fenced ` ```mermaid ` block with a `# title` heading above. Commit alongside docs and GitHub renders it inline. By default refuses to overwrite an existing `.md` (use `--force` to opt in).
+- `board` *(v2.29)* — a Miro-style SVG of the flow view, one board per use case (always split; `--split` is accepted). Needs `--type domain`; `--mode architecture` and `--journey` are errors. Files are `<base>-domain-<slug>.svg`; `--stdout` needs exactly one use case (`--use-case`). Bounded contexts and domains are clouds; services, externals, queues and non-user actors are cogs; user actors a person; data stores a store icon. Notes are coloured by operation verb: green query (`GET`, `HEAD`, `OPTIONS`, `QUERY`), blue command (`POST`, `PUT`, `PATCH`, `DELETE`, actor triggers), yellow event (`notifies`), white "Step" otherwise. Notes sit on their arrows; replies are dashed arrows back; step numbers match the flow view.
+
+**Call labels (v2.29).** In every view and backend, an `asks` label drops its connector: `Invoicing asks Payment to get transaction details` is drawn as `get transaction details`. Internal actions and replies are unchanged.
 
 **Examples:**
 ```bash
@@ -116,6 +120,10 @@ craft generate docs/payments.craft --type domain --split -o diagrams/
 craft generate docs/payments.craft --type all --format mermaid -o diagrams/
 craft generate docs/payments.craft --type sequence --format mermaid-md -o docs/
 craft generate docs/**/*.craft --type surface -o docs/   # one model → docs-surface.md
+
+# Miro-style boards (one SVG per use case):
+craft generate docs/payments.craft --type domain --format board -o boards/
+# → boards/payments-domain-purchase-item.svg, …
 
 # Journey spines:
 craft generate docs/topology.craft docs/actors.craft 'docs/journeys/*/*.craft' --journey seller-promotes-an-advert
