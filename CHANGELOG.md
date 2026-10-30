@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.34.1] — 2026-10-30
+
+**Why a patch version (v2.34.1).** Only the bundled `craft-dsl` agent skill changes. The CLI, server and `pkg/craft` are unchanged.
+
+### Changed — skill
+- **The `craft-dsl` skill catches up with 2.27–2.34**: display names for bounded contexts and actors (grammar, rules, lints), `--format board` with its notation and limits, connector-free call labels, and `--allow-errors` in the CLI reference.
+
 ## [2.34.0] — 2026-10-28
 
 **Why a minor version (v2.34.0).** Two new server settings and a different log format. `pkg/craft` is unchanged, and every endpoint answers as before.
