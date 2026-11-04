@@ -2314,6 +2314,23 @@ func TestFormat_Surface(t *testing.T) {
 	}
 }
 
+// A flow block (v2.35) formats like a surface: one property per line at one
+// indent, `key: value` with one space, one blank line kept, comments kept.
+func TestFormat_Flow(t *testing.T) {
+	in := "flow   lead-message   \"Lead generation\"{\npriority:P1\n      owner :  seeker-engagement // who\n  metric:   \"Leads\"\n\n\n   note \"x\"\n}\nflow b \"B\" {\n  priority: P2\n  owner: o\n}\n"
+	want := "flow lead-message \"Lead generation\" {\n    priority: P1\n    owner: seeker-engagement // who\n    metric: \"Leads\"\n\n    note \"x\"\n}\n\nflow b \"B\" {\n    priority: P2\n    owner: o\n}\n"
+	got, d := FormatDocumentChecked(in)
+	if d != nil {
+		t.Fatalf("refused: %+v", d)
+	}
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
 func TestFormat_RefusesOrphanAnd(t *testing.T) {
 	in := "use_case \"U\" {\n  when O does\n    x does it\n    and \"b\"\n      x does more\n}\n"
 	got, d := FormatDocumentChecked(in)

@@ -100,3 +100,19 @@ func resolveParticipants(doc *model.CraftDoc, ws sema.WorkspaceSymbols) {
 		}
 	}
 }
+
+// resolveFlows records on each flow the use cases whose `realises` tag names
+// it, in model order. A ref that names no flow is left as written
+// (craft/sema/unresolved-flow reports it).
+func resolveFlows(doc *model.CraftDoc) {
+	for i := range doc.Flows {
+		doc.Flows[i].RealisedBy = nil
+	}
+	for _, uc := range doc.UseCases {
+		for _, ref := range uc.Realises {
+			if f := doc.FlowByRef(ref); f != nil {
+				f.RealisedBy = append(f.RealisedBy, model.UseCaseRef{Name: uc.Name, SourceURI: uc.SourceURI})
+			}
+		}
+	}
+}

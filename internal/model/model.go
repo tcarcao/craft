@@ -23,6 +23,9 @@ type CraftDoc struct {
 	ContextMap    []Edge         `json:"contextMap,omitempty"`
 	Glossary      []TermRelation `json:"glossary,omitempty"`
 	Surfaces      []Surface      `json:"surfaces,omitempty"`
+	// Flows are the critical flows (v2.35), the first declaration of each
+	// ref in sorted file order.
+	Flows []Flow `json:"flows,omitempty"`
 }
 
 // Edge is one authored relationship edge from a context_map block, connecting
@@ -146,6 +149,11 @@ type UseCase struct {
 	Notes []Note `json:"notes,omitempty"`
 	// Sources are the `//@` cites written before the first scenario.
 	Sources []Source `json:"sources,omitempty"`
+	// Realises lists the refs of the flows the use case realises, from its
+	// `realises` tag (v2.35): as written, in order, each ref once. A ref
+	// may name no declared flow (craft/sema/unresolved-flow); look it up
+	// with CraftDoc.FlowByRef.
+	Realises []string `json:"realises,omitempty"`
 }
 
 // Scenario is one trigger and the steps it sets off, in source order.
@@ -208,6 +216,12 @@ const (
 	TagFormerlyTitled  = lang.TagFormerlyTitled
 	TagFormerlyJourney = lang.TagFormerlyJourney
 )
+
+// TagRealises is the tag that lists the flows a use case realises (v2.35).
+const TagRealises = lang.TagRealises
+
+// FlowPriorities lists the values a flow's priority may take, highest first.
+func FlowPriorities() []string { return lang.FlowPriorities() }
 
 // JourneyEdgeKind is what connects two members of a journey spine.
 type JourneyEdgeKind = lang.JourneyEdgeKind
@@ -328,6 +342,36 @@ type Surface struct {
 	Operations  []SurfaceOperation `json:"operations"`
 	SourceURI   string             `json:"sourceUri,omitempty"`
 	Line        int                `json:"line,omitempty"`
+}
+
+// Flow is a critical flow (`flow <ref> "<name>" { … }`, v2.35): a business
+// outcome, such as lead generation, that several use cases serve. Product owns
+// its definition; use cases point at it with the `realises` tag.
+type Flow struct {
+	Ref      string `json:"ref"`
+	Name     string `json:"name"`
+	Priority string `json:"priority,omitempty"` // P0 (highest) to P3, as written
+	Owner    string `json:"owner,omitempty"`    // as written, typically a product-domain slug
+	Metric   string `json:"metric,omitempty"`
+	Notes    []Note `json:"notes,omitempty"`
+	// RealisedBy lists the use cases whose `realises` tag names this flow,
+	// in model order (sorted file order, then source order).
+	RealisedBy []UseCaseRef `json:"realisedBy,omitempty"`
+	SourceURI  string       `json:"sourceUri,omitempty"`
+	Line       int          `json:"line,omitempty"`
+}
+
+// FlowByRef returns the flow declared with ref, or nil.
+func (d *CraftDoc) FlowByRef(ref string) *Flow {
+	if d == nil {
+		return nil
+	}
+	for i := range d.Flows {
+		if d.Flows[i].Ref == ref {
+			return &d.Flows[i]
+		}
+	}
+	return nil
 }
 
 // SurfaceBoundary returns the ID of the surface that covers requests to p:

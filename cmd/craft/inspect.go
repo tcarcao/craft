@@ -15,12 +15,24 @@ type inspectOutput struct {
 	Domains  []craft.Domain   `json:"domains,omitempty"`
 	Services []craft.Service  `json:"services,omitempty"`
 	UseCases []useCaseSummary `json:"use_cases,omitempty"`
+	Flows    []flowSummary    `json:"flows,omitempty"`
 }
 
 type useCaseSummary struct {
 	Name            string   `json:"name"`
 	EventsPublished []string `json:"events_published,omitempty"`
 	EventsConsumed  []string `json:"events_consumed,omitempty"`
+	Realises        []string `json:"realises,omitempty"`
+}
+
+// flowSummary is one critical flow (v2.35) and the use cases that realise it.
+type flowSummary struct {
+	Ref        string   `json:"ref"`
+	Name       string   `json:"name"`
+	Priority   string   `json:"priority,omitempty"`
+	Owner      string   `json:"owner,omitempty"`
+	Metric     string   `json:"metric,omitempty"`
+	RealisedBy []string `json:"realised_by,omitempty"`
 }
 
 func inspectCmd() *cobra.Command {
@@ -76,7 +88,7 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 	}
 
 	for _, uc := range doc.UseCases {
-		sum := useCaseSummary{Name: uc.Name}
+		sum := useCaseSummary{Name: uc.Name, Realises: uc.Realises}
 		pubSeen := map[string]bool{}
 		conSeen := map[string]bool{}
 		for _, sc := range uc.Scenarios {
@@ -105,6 +117,14 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 		out.UseCases = append(out.UseCases, sum)
 	}
 
+	for _, f := range doc.Flows {
+		fs := flowSummary{Ref: f.Ref, Name: f.Name, Priority: f.Priority, Owner: f.Owner, Metric: f.Metric}
+		for _, r := range f.RealisedBy {
+			fs.RealisedBy = append(fs.RealisedBy, r.Name)
+		}
+		out.Flows = append(out.Flows, fs)
+	}
+
 	return out
 }
 
@@ -130,6 +150,23 @@ func printInspectText(out inspectOutput) error {
 		}
 		if len(uc.EventsConsumed) > 0 {
 			fmt.Printf("    consumes: %v\n", uc.EventsConsumed)
+		}
+		if len(uc.Realises) > 0 {
+			fmt.Printf("    realises: %v\n", uc.Realises)
+		}
+	}
+	if len(out.Flows) > 0 {
+		fmt.Printf("Flows (%d):\n", len(out.Flows))
+		for _, f := range out.Flows {
+			fmt.Printf("  %s %q (%s, owner: %s)\n", f.Ref, f.Name, f.Priority, f.Owner)
+			if f.Metric != "" {
+				fmt.Printf("    metric: %s\n", f.Metric)
+			}
+			if len(f.RealisedBy) == 0 {
+				fmt.Printf("    realised by: none\n")
+			} else {
+				fmt.Printf("    realised by: %v\n", f.RealisedBy)
+			}
 		}
 	}
 	return nil

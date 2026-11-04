@@ -149,6 +149,12 @@ const (
 	SyntaxKindKwIncludes  // includes "<title>"
 	SyntaxKindKwContinues // continues "<title>"
 
+	// Critical-flow contextual keywords (v2.35.0).
+	SyntaxKindKwFlow     // top-level `flow <ref> "<name>" {`
+	SyntaxKindKwPriority // `priority:` in a flow
+	SyntaxKindKwOwner    // `owner:` in a flow
+	SyntaxKindKwMetric   // `metric:` in a flow
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -221,4 +227,11 @@ const (
 
 	// SyntaxKindLink is an includes/continues step.
 	SyntaxKindLink
+
+	// SyntaxKindFlowDecl is `flow <ref> "<name>" { … }` (v2.35.0).
+	SyntaxKindFlowDecl
+	// SyntaxKindFlowProperty wraps one `<key>: <value>` line of a flow body.
+	// The key is SyntaxKindKwPriority, KwOwner or KwMetric when recognised,
+	// SyntaxKindIdent otherwise (craft/syntax/unknown-flow-property).
+	SyntaxKindFlowProperty
 )

@@ -40,15 +40,16 @@ top_decl    = arch
             | domains_def
             | actors_def
             | actor_def
-            | surface_decl ;      (* 2.23, §8.2 *)
+            | surface_decl        (* 2.23, §8.2 *)
+            | flow_decl ;         (* 2.35, §8.3 *)
 ```
 
 Every top-level declaration is recoverable independently: a parse failure inside one block MUST NOT prevent the parser from recognising the next top-level keyword (island parsing — see `ARCHITECTURE.md`).
 
 **Top-level keywords (the re-sync anchor set for error recovery):**
-`arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`, and `surface` when a name and `{` follow on its line.
+`arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`, `surface` when a name and `{` follow on its line, and `flow` when a ref, a name or both and then `{` follow on its line.
 
-A use case, domain or surface whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration.
+A use case, domain, surface or flow whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `flow <ref> "<name>" {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration. A surface or flow body stops at such a declaration at any column; in a flow body a keyword followed by `:` (`domain: …`) is a property line, not a declaration.
 
 ---
 
@@ -332,6 +333,7 @@ A `tags { }` block holds free `key: value` pairs; most keys mean nothing to craf
 | `journey` | 2.25 | The spine the use case belongs to: one slug. `craft generate --journey <slug>` draws every use case with that slug, in spine order. Two or more values are `craft/lint/journey-list`; the first is used. |
 | `formerly_titled` | 2.25 | Earlier titles of the use case, `;`-separated. A link whose title matches one resolves to this use case (`craft/lint/link-to-former-title`). |
 | `formerly_journey` | 2.25 | Earlier journey slugs, `;`-separated. The spine reads it only to find the journey's namesake (a member in a file named after one of these slugs). |
+| `realises` | 2.35 | The critical flows the use case serves: a comma list of flow refs (§8.3), `realises: lead-message, lead-phone`. Each ref resolves over the whole workspace; one that names no flow is `craft/sema/unresolved-flow` (a warning: the flow may live in a file that was not loaded), and a ref repeated in the list is `craft/lint/duplicate-flow-in-list`. The model keeps the refs in `UseCase.Realises` (trimmed, each once, in order). |
 
 Every other key is free text.
 
@@ -358,6 +360,41 @@ surface concierge {
 ```
 
 A `query` has no side effect and a `command` changes state. The operation bracket is required (`craft/syntax/missing-operation`), and so is the phrase before it (`craft/syntax/missing-phrase`). `callers: unknown` says that no caller was observed. `spec:` is kept verbatim; Craft does not read it. Properties keep their source order. `craft generate --type surface` writes the surfaces as a Markdown table with a computed "used by" column.
+
+### 8.3 Critical flows (2.35)
+
+A critical flow is a named, prioritised, owned group of use cases: a business outcome, such as lead generation, that several use cases serve. One use case can serve several flows. Product owns the flow's definition; a use case points at the flows it serves with the `realises` tag (§8.1). See `docs/decisions/critical-flows.md`.
+
+```ebnf
+flow_decl  = 'flow' flow_ref STRING '{' NL* (flow_item NL+)* '}' ;
+flow_ref   = identifier ;                                  (* a slug such as lead-message; one token; `use_case` and `when` are not refs *)
+flow_item  = ('priority' | 'owner' | 'metric') ':' flow_value
+           | note_stmt ;
+flow_value = identifier | STRING ;                         (* one word, or a quoted string *)
+```
+
+```craft
+flow lead-message "Lead generation (phone and message)" {
+    priority: P1
+    owner: seeker-engagement
+    metric: "Leads"
+    note "counted once per seeker and advert"
+}
+
+use_case "Seeker sends a message" {
+    tags {
+        realises: lead-message
+    }
+
+    when Seeker sends a message
+        chat asks messaging to deliver the message
+}
+```
+
+- **Properties.** `priority:` is required and is one of `P0`, `P1`, `P2`, `P3` (`P0` is the highest; exact and case-sensitive). `owner:` is required and is a free value, usually a product-domain slug. `metric:` is optional. A property is one line; a value with spaces is quoted. `note`/`finding` lines are allowed, as in a surface. Properties keep their source order, and the formatter does not reorder them.
+- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`flow "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-flow-property` (a warning; the line is kept in the tree and left out of the model). No `priority:` or no `owner:`: `craft/sema/missing-flow-property`. A priority that is not `P0`–`P3`: `craft/sema/invalid-priority`. A property written twice: `craft/sema/duplicate-flow-property` (a warning; the last value wins, as for tags). A ref declared twice anywhere in the workspace, in one file or two: `craft/sema/duplicate-flow` (an error on every later declaration; the first in sorted file order is the flow).
+- **Model.** `CraftDoc.Flows` holds each `Flow{Ref, Name, Priority, Owner, Metric, Notes, RealisedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `RealisedBy` lists the use cases whose `realises` tag names the flow (`UseCaseRef`, in model order); `CraftDoc.FlowByRef(ref)` finds a flow. A use case's refs are in `UseCase.Realises`.
+- **Views.** No diagram draws a flow; `craft generate` ignores them. `craft inspect` lists them, and `craft check` writes them in the CraftDoc JSON (`flows`).
 
 ---
 
@@ -505,6 +542,15 @@ The 2.25 forms:
 
 `//@` changes the meaning of input that parsed before, with no known uses; a malformed `//@` line is only a warning and stays a comment, so no file that parsed starts to fail. The link words were a syntax error before (a STRING can never be a verb), so `includes ships the order` and `continues to run` stay actions.
 
+The 2.35 words:
+
+| Word | Is a keyword only when | Otherwise |
+|---|---|---|
+| `flow` | at top level (or at column 1 after an unclosed block), followed on the same line by `<ref> "<name>" {`, `<ref> {` or `"<name>" {` | an identifier (a context, a subject, a verb, a phrase word, a service) |
+| `priority`, `owner`, `metric` | in a flow body, followed by `:` | an identifier |
+
+None of these changes the meaning of input that parsed before: a top-level line that starts with `flow` was `craft/syntax/skipped-construct`, and anywhere else `flow` needs `{` on its line to be a keyword, which no action, trigger, list or context name has. `realises` is a tag key, not a keyword: every tag key was already free text.
+
 ### 11.2 Connector words (part of `phrase_word`)
 
 Connector words appear verbatim in sync-action and external-trigger phrases; they are both `connector_word` and `identifier`.
@@ -523,7 +569,7 @@ These are never allowed as an identifier or phrase word outside their structural
 
 | Position | Rule |
 |----------|------|
-| After top-level `NL*` | Peek one token. One of the nine top-level keywords (§2) enters its production; otherwise emit `craft/syntax/unexpected-token` and run island re-sync. |
+| After top-level `NL*` | Peek one token. One of the top-level keywords (§2), or a contextual `surface` or `flow` header, enters its production; otherwise emit `craft/syntax/unexpected-token` and run island re-sync. |
 | Inside service property | `contexts` / `data-stores` / `language` / `deployment` are keywords only when followed by `:` at the property position. Anywhere else in the same block body (e.g. as a context_ref name), they are identifiers. |
 | Inside exposure property | `to` / `contexts` / `through` are keywords only when followed by `:` at the property position. |
 | After `when` | See trigger-disambiguation rule in §8. `listens` is a keyword only when it appears as the second identifier of the trigger; elsewhere in the same trigger it is a plain identifier. |

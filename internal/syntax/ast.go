@@ -3273,3 +3273,145 @@ func (o SurfaceOpDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(
 
 // Node returns the underlying syntax node.
 func (o SurfaceOpDecl) Node() SyntaxNode { return o.node }
+
+// Flows returns all FlowDecl views, in document order (v2.35).
+func (f File) Flows() []FlowDecl {
+	if f.isZero() {
+		return nil
+	}
+	var result []FlowDecl
+	for _, n := range f.node.ChildNodes(SyntaxKindFlowDecl) {
+		result = append(result, FlowDecl{node: n})
+	}
+	return result
+}
+
+// FlowDecl is a typed view over a SyntaxKindFlowDecl node:
+// `flow <ref> "<name>" { … }`.
+type FlowDecl struct{ node SyntaxNode }
+
+// Keyword returns the `flow` keyword token.
+func (d FlowDecl) Keyword() *SyntaxToken { return d.node.ChildToken(SyntaxKindKwFlow) }
+
+// RefToken returns the ref token, or nil when it is missing.
+func (d FlowDecl) RefToken() *SyntaxToken { return d.node.ChildToken(SyntaxKindIdent) }
+
+// Ref returns the ref as written, or "".
+func (d FlowDecl) Ref() string {
+	if t := d.RefToken(); t != nil {
+		return t.Text()
+	}
+	return ""
+}
+
+// NameToken returns the quoted name token, or nil when it is missing.
+func (d FlowDecl) NameToken() *SyntaxToken { return d.node.ChildToken(SyntaxKindString) }
+
+// Name returns the unquoted name, or "".
+func (d FlowDecl) Name() string {
+	if t := d.NameToken(); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
+// Properties returns the `<key>: <value>` lines, in source order, unknown
+// keys included.
+func (d FlowDecl) Properties() []FlowPropertyDecl {
+	var out []FlowPropertyDecl
+	for _, n := range d.node.ChildNodes(SyntaxKindFlowProperty) {
+		out = append(out, FlowPropertyDecl{node: n})
+	}
+	return out
+}
+
+// Property returns the value of the last property named key that has a
+// value (the last one wins, as for tags), and whether there is one.
+func (d FlowDecl) Property(key string) (string, bool) {
+	val, ok := "", false
+	for _, p := range d.Properties() {
+		if p.Key() == key && p.ValueToken() != nil {
+			val, ok = p.Value(), true
+		}
+	}
+	return val, ok
+}
+
+// Notes returns the flow's note and finding lines, in source order.
+func (d FlowDecl) Notes() []NoteDecl {
+	var out []NoteDecl
+	for _, n := range d.node.ChildNodes(SyntaxKindNote) {
+		out = append(out, NoteDecl{node: n})
+	}
+	return out
+}
+
+// Line returns the 1-based line of the `flow` keyword using li.
+func (d FlowDecl) Line(li green.LineIndex) int {
+	if tok := d.Keyword(); tok != nil {
+		line, _ := li.LineCol(tok.Offset())
+		return line
+	}
+	return nodeFirstTokenLine(d.node, li)
+}
+
+// EndLine returns the 1-based line of the closing `}` using li.
+func (d FlowDecl) EndLine(li green.LineIndex) int { return nodeEndLine(d.node, li) }
+
+// Node returns the underlying syntax node.
+func (d FlowDecl) Node() SyntaxNode { return d.node }
+
+// FlowPropertyDecl is a typed view over a SyntaxKindFlowProperty node:
+// `<key>: <value>`.
+type FlowPropertyDecl struct{ node SyntaxNode }
+
+// KeyToken returns the key token: a KwPriority/KwOwner/KwMetric token, or an
+// Ident token for an unknown key.
+func (p FlowPropertyDecl) KeyToken() *SyntaxToken {
+	toks := p.node.Tokens()
+	if len(toks) == 0 {
+		return nil
+	}
+	return &toks[0]
+}
+
+// Key returns the key as written.
+func (p FlowPropertyDecl) Key() string {
+	if t := p.KeyToken(); t != nil {
+		return t.Text()
+	}
+	return ""
+}
+
+// Known reports whether the key is a recognised flow property.
+func (p FlowPropertyDecl) Known() bool {
+	t := p.KeyToken()
+	return t != nil && t.Kind() != SyntaxKindIdent
+}
+
+// ValueToken returns the value token (an identifier or a string), or nil
+// when the value is missing.
+func (p FlowPropertyDecl) ValueToken() *SyntaxToken {
+	toks := p.node.Tokens()
+	if len(toks) < 3 || toks[1].Kind() != SyntaxKindColon {
+		return nil
+	}
+	if k := toks[2].Kind(); k != SyntaxKindIdent && k != SyntaxKindString {
+		return nil
+	}
+	return &toks[2]
+}
+
+// Value returns the value, unquoted, or "".
+func (p FlowPropertyDecl) Value() string {
+	if t := p.ValueToken(); t != nil {
+		return stringAwareText(*t)
+	}
+	return ""
+}
+
+// Line returns the 1-based line of the key using li.
+func (p FlowPropertyDecl) Line(li green.LineIndex) int { return nodeFirstTokenLine(p.node, li) }
+
+// Node returns the underlying syntax node.
+func (p FlowPropertyDecl) Node() SyntaxNode { return p.node }

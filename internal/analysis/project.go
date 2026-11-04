@@ -114,6 +114,7 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 	}
 
 	doc.Surfaces = projectSurfaces(file, li, sourceURI)
+	doc.Flows = projectFlows(file, li, sourceURI)
 
 	for _, cm := range file.ContextMaps() {
 		for _, e := range cm.Edges() {
@@ -176,6 +177,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 				outUC.Tags = tags
 				outUC.TagValues = tagValues
 			}
+			outUC.Realises = realisedRefs(tagValues[lang.TagRealises])
 		}
 		// Use-case-level notes precede every scenario in source order, so they
 		// take their numbers first.
@@ -655,6 +657,45 @@ func projectSurfaces(file syntax.File, li green.LineIndex, sourceURI string) []m
 			})
 		}
 		out = append(out, ms)
+	}
+	return out
+}
+
+// realisedRefs is a `realises` tag's values, trimmed, empty ones dropped and
+// each ref once (craft/lint/duplicate-flow-in-list reports a repeat).
+func realisedRefs(values []string) []string {
+	var out []string
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// projectFlows projects the file's flows in source order. A flow without a
+// ref (craft/syntax/unexpected-token) is not one. Properties take the last
+// value written (craft/sema/duplicate-flow-property); unknown ones are left
+// out.
+func projectFlows(file syntax.File, li green.LineIndex, sourceURI string) []model.Flow {
+	var out []model.Flow
+	for _, f := range file.Flows() {
+		if f.Ref() == "" {
+			continue
+		}
+		mf := model.Flow{
+			Ref:       f.Ref(),
+			Name:      f.Name(),
+			SourceURI: sourceURI,
+			Line:      f.Line(li),
+		}
+		mf.Priority, _ = f.Property(lang.FlowPriority)
+		mf.Owner, _ = f.Property(lang.FlowOwner)
+		mf.Metric, _ = f.Property(lang.FlowMetric)
+		for _, n := range f.Notes() {
+			mf.Notes = append(mf.Notes, projectNote(n, "", li))
+		}
+		out = append(out, mf)
 	}
 	return out
 }

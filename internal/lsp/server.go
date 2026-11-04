@@ -382,6 +382,10 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	if locs, ok := s.spineDefinition(f, uri, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
 		return locs, nil
 	}
+	// A `realises` value goes to its flow.
+	if locs, ok := s.flowDefinition(f, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
+		return locs, nil
+	}
 	// A link title goes to its target's use_case title.
 	if locs, ok := s.linkDefinition(f, uri, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
 		return locs, nil
@@ -902,6 +906,9 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		})
 	}
 	for _, sym := range surfaceSymbols(file, f.LineIndex) {
+		syms = append(syms, sym)
+	}
+	for _, sym := range flowSymbols(file, f.LineIndex) {
 		syms = append(syms, sym)
 	}
 	return syms, nil
@@ -1435,6 +1442,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 		})
 	}
 	ranges = append(ranges, surfaceFoldingRanges(file, li)...)
+	ranges = append(ranges, flowFoldingRanges(file, li)...)
 
 	return ranges, nil
 }
@@ -1640,6 +1648,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		return plain(v), nil
 	}
 	if v, ok := s.linkHover(f, uri, offset); ok {
+		return plain(v), nil
+	}
+	if v, ok := s.flowHover(f, offset); ok {
 		return plain(v), nil
 	}
 	if v, ok := s.spineHover(f, offset); ok {
@@ -2337,11 +2348,17 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	// A surface is a boundary declaration like an exposure; `callers:` lists
 	// who reaches it, like an exposure's `to:`; `spec:` holds one value, like
 	// `language:`; `query`/`command` stand where an action's verb would.
+	// A flow (v2.35) is a declaration like a surface; its properties hold
+	// one value each, like `language:`.
 	syntax.SyntaxKindKwSurface:      "craft-exposure-keyword",
 	syntax.SyntaxKindKwCallers:      "craft-to-property",
 	syntax.SyntaxKindKwSpec:         "craft-language-property",
 	syntax.SyntaxKindKwQuery:        "craft-asks-verb",
 	syntax.SyntaxKindKwCommand:      "craft-asks-verb",
+	syntax.SyntaxKindKwFlow:         "craft-exposure-keyword",
+	syntax.SyntaxKindKwPriority:     "craft-language-property",
+	syntax.SyntaxKindKwOwner:        "craft-language-property",
+	syntax.SyntaxKindKwMetric:       "craft-language-property",
 	syntax.SyntaxKindKwUser:         "craft-actor-type",
 	syntax.SyntaxKindKwSystem:       "craft-actor-type",
 	syntax.SyntaxKindKwService:      "craft-actor-type",

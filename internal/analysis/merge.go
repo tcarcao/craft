@@ -50,7 +50,7 @@ func firstByName[T any](items []T, name func(T) string) []T {
 }
 
 // mergeDocs concatenates the per-file documents (already in sorted file order).
-// A service or domain declared in more than one file keeps its first
+// A service, domain or flow declared in more than one file keeps its first
 // declaration.
 func mergeDocs(docs []*model.CraftDoc) *model.CraftDoc {
 	merged := &model.CraftDoc{UseCases: []model.UseCase{}}
@@ -64,9 +64,13 @@ func mergeDocs(docs []*model.CraftDoc) *model.CraftDoc {
 		merged.ContextMap = append(merged.ContextMap, d.ContextMap...)
 		merged.Glossary = append(merged.Glossary, d.Glossary...)
 		merged.Surfaces = append(merged.Surfaces, d.Surfaces...)
+		merged.Flows = append(merged.Flows, d.Flows...)
 	}
 	merged.Services = firstByName(merged.Services, func(s model.Service) string { return s.Name })
 	merged.Domains = firstByName(merged.Domains, func(d model.Domain) string { return d.Name })
+	// A flow ref declared twice is craft/sema/duplicate-flow; the first
+	// declaration in sorted file order is the flow.
+	merged.Flows = firstByName(merged.Flows, func(f model.Flow) string { return f.Ref })
 	return merged
 }
 

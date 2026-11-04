@@ -1060,3 +1060,25 @@ func TestGenerate_BoardStdoutNeedsOneUseCase(t *testing.T) {
 		t.Errorf("want SVG on stdout, got %.80s", buf.String())
 	}
 }
+
+// Flows are not drawn: a model with flows generates as one without them.
+func TestGenerateCmd_IgnoresFlows(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "flows.craft")
+	if err := os.WriteFile(src, []byte(flowsCraft), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(tmp, "out")
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", src, "--type", "sequence", "--format", "mermaid", "--output", out})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "flows-sequence.mmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "lead-message") || !strings.Contains(string(data), "deliver the message") {
+		t.Errorf("sequence:\n%s", data)
+	}
+}

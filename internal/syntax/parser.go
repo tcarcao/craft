@@ -132,6 +132,11 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 			prevWasUseCase = false
 			continue
 		}
+		if p.atFlowDecl() {
+			diags = append(diags, p.parseFlowBlock()...)
+			prevWasUseCase = false
+			continue
+		}
 		tok := p.peek()
 		wasUseCase := tok.Type == lexer.TokenKwUseCase
 		switch tok.Type {
@@ -2345,12 +2350,12 @@ func tokenToActorType(tok lexer.Token) (string, bool) {
 // already reported their own diagnostic and ignore it.
 func (p *Parser) resyncToTopLevel() lexer.Token {
 	last := lexer.Token{Type: lexer.TokenEOF}
-	if p.atEOF() || isTopLevelKeyword(p.peek().Type) || p.atSurfaceDecl() {
+	if p.atEOF() || isTopLevelKeyword(p.peek().Type) || p.atContextualDecl() {
 		return last
 	}
 	p.builder.StartNode(SyntaxKindErrorNode)
 	for !p.atEOF() {
-		if isTopLevelKeyword(p.peek().Type) || p.atSurfaceDecl() {
+		if isTopLevelKeyword(p.peek().Type) || p.atContextualDecl() {
 			break
 		}
 		last = p.consume()
@@ -2403,7 +2408,7 @@ func isTopLevelKeyword(tt lexer.TokenType) bool {
 }
 
 // atColumnOneDecl reports whether the next token starts a top-level
-// declaration at column 1: a surface, or a top-level keyword. A block body
+// declaration at column 1: a surface, a flow, or a top-level keyword. A block body
 // that meets one before its `}` is unclosed, and the parse resumes there
 // instead of swallowing the declaration. A keyword that can also name a
 // bounded context (`service`, `domain`, …) counts only when a `{` follows on
@@ -2415,7 +2420,7 @@ func (p *Parser) atColumnOneDecl() bool {
 	if tok.Column != 1 || !p.peekAtLineStart() {
 		return false
 	}
-	if p.atSurfaceDecl() {
+	if p.atContextualDecl() {
 		return true
 	}
 	if !isTopLevelKeyword(tok.Type) {
@@ -3637,7 +3642,7 @@ func (p *Parser) parseSurfaceBlock() []model.Diagnostic {
 	kwTok := p.consumeAs(SyntaxKindKwSurface)
 	diags := p.parseNameSlot("a surface subject")
 	p.consumeAs(SyntaxKindLBrace) // atSurfaceDecl checked it
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !isTopLevelKeyword(p.peek().Type) && !p.atSurfaceDecl() {
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !isTopLevelKeyword(p.peek().Type) && !p.atContextualDecl() {
 		diags = append(diags, p.parseSurfaceItem()...)
 	}
 	if p.peek().Type != lexer.TokenRBrace {
@@ -3759,4 +3764,162 @@ func isSurfaceConnector(v string) bool {
 		return false
 	}
 	return isConnectorWord(v)
+}
+
+// atContextualDecl reports whether the next tokens open a top-level
+// declaration whose keyword is contextual: a surface or a flow.
+func (p *Parser) atContextualDecl() bool { return p.atSurfaceDecl() || p.atFlowDecl() }
+
+// --- flow parsing (v2.35) ---
+
+// atFlowDecl reports whether the next tokens open a flow: the contextual
+// keyword `flow`, then `<ref> "<name>" {`, all on one line. `flow <ref> {`
+// (no name) and `flow "<name>" {` (no ref) open one too, so the parser can
+// say what is missing. Anywhere else `flow` is an identifier.
+func (p *Parser) atFlowDecl() bool {
+	tok := p.peek()
+	if tok.Type != lexer.TokenIdent || tok.Value != "flow" {
+		return false
+	}
+	i := 1
+	if n := p.peekAt(i); n.Line == tok.Line && (n.Type == lexer.TokenIdent || isKeywordUsedAsIdent(n.Type)) {
+		i++
+	}
+	if n := p.peekAt(i); n.Line == tok.Line && n.Type == lexer.TokenString {
+		i++
+	}
+	brace := p.peekAt(i)
+	return i > 1 && brace.Type == lexer.TokenLBrace && brace.Line == tok.Line
+}
+
+// parseFlowBlock parses: flow <ref> "<name>" { flow_item* }. Like a surface,
+// the body ends at `}`; a top-level keyword or another contextual
+// declaration before it means the block is unclosed.
+func (p *Parser) parseFlowBlock() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindFlowDecl)
+	p.attachTrivia()
+	kwTok := p.consumeAs(SyntaxKindKwFlow)
+	if t := p.peek(); t.Type == lexer.TokenIdent || isKeywordUsedAsIdent(t.Type) {
+		p.consumeAs(SyntaxKindIdent)
+	} else {
+		diags = append(diags, p.diagUnexpected(t, "a flow ref, e.g. `flow lead-message \"Lead generation\" {`"))
+	}
+	if t := p.peek(); t.Type == lexer.TokenString {
+		nameTok := p.consumeAs(SyntaxKindString)
+		if strings.TrimSpace(nameTok.Value) == "" {
+			diags = append(diags, p.diagFlowName(nameTok))
+		}
+	} else {
+		diags = append(diags, p.diagFlowName(kwTok))
+	}
+	p.consumeAs(SyntaxKindLBrace) // atFlowDecl checked it
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atFlowBodyEnd() {
+		diags = append(diags, p.parseFlowItem()...)
+	}
+	if p.peek().Type != lexer.TokenRBrace {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed flow block (missing `}`)",
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// atFlowBodyEnd reports whether the next token ends an unclosed flow body: a
+// top-level keyword or a surface or flow header. A keyword followed by `:`
+// on its line is a property key (`domain: …` is an unknown property, not a
+// domain), so it does not end the body.
+func (p *Parser) atFlowBodyEnd() bool {
+	tok := p.peek()
+	if colon := p.peekAt(1); colon.Type == lexer.TokenColon && colon.Line == tok.Line {
+		return false
+	}
+	return isTopLevelKeyword(tok.Type) || p.atContextualDecl()
+}
+
+// diagFlowName reports a flow without its quoted name, at tok.
+func (p *Parser) diagFlowName(tok lexer.Token) model.Diagnostic {
+	return model.Diagnostic{
+		Code:     "craft/syntax/missing-label",
+		Message:  "a flow needs a quoted name after its ref, e.g. `flow lead-message \"Lead generation (phone and message)\" {`",
+		Severity: model.SeverityError,
+		Range:    tokenRange(tok),
+	}
+}
+
+// flowPropertyExample is an example line for a flow property key.
+func flowPropertyExample(key string) string {
+	switch key {
+	case lang.FlowOwner:
+		return "owner: seeker-engagement"
+	case lang.FlowMetric:
+		return `metric: "Leads"`
+	}
+	return "priority: P1"
+}
+
+// flowPropertyKinds maps each recognised flow property to its keyword kind.
+var flowPropertyKinds = map[string]SyntaxKind{
+	lang.FlowPriority: SyntaxKindKwPriority,
+	lang.FlowOwner:    SyntaxKindKwOwner,
+	lang.FlowMetric:   SyntaxKindKwMetric,
+}
+
+// parseFlowItem parses one line of a flow body: a `<key>: <value>` property,
+// or a note or finding. An unknown key is a warning and its line is kept; any
+// other line is reported and skipped.
+func (p *Parser) parseFlowItem() []model.Diagnostic {
+	tok := p.peek()
+	switch {
+	case p.atNoteLine():
+		return p.parseNote()
+	case (tok.Type == lexer.TokenIdent || isKeywordUsedAsIdent(tok.Type)) && p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == tok.Line:
+		var diags []model.Diagnostic
+		p.builder.StartNode(SyntaxKindFlowProperty)
+		kind, known := flowPropertyKinds[tok.Value]
+		if !known {
+			kind = SyntaxKindIdent
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unknown-flow-property",
+				Message:  fmt.Sprintf("unknown flow property %q; a flow has `priority:`, `owner:` and `metric:` (and `note` lines)", tok.Value),
+				Severity: model.SeverityWarning,
+				Range:    tokenRange(tok),
+			})
+		}
+		p.consumeAs(kind)
+		colonTok := p.consumeAs(SyntaxKindColon)
+		switch v := p.peek(); {
+		case v.Line != tok.Line || v.Type == lexer.TokenEOF || v.Type == lexer.TokenRBrace:
+			// Reported at the colon: the next token may be on another line.
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unexpected-token",
+				Message:  fmt.Sprintf("`%s:` needs a value on its line, e.g. `%s`", tok.Value, flowPropertyExample(tok.Value)),
+				Severity: model.SeverityError,
+				Range:    tokenRange(colonTok),
+			})
+			p.builder.FinishNode()
+			return diags
+		case v.Type == lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case v.Type == lexer.TokenIdent || isAnyKeywordAsIdent(v.Type) || isKeywordUsedAsIdent(v.Type):
+			p.consumeAs(SyntaxKindIdent)
+		default:
+			diags = append(diags, p.diagUnexpected(v, fmt.Sprintf("a value after `%s:`: one word, or a quoted string", tok.Value)))
+			diags = append(diags, p.skipRestOfLine(tok.Line)...)
+			p.builder.FinishNode()
+			return diags
+		}
+		diags = append(diags, p.sweepRestOfLine(tok.Line, "end of line: a value is one word or a quoted string, e.g. `metric: \"Leads per day\"`")...)
+		p.builder.FinishNode()
+		return diags
+	default:
+		return p.sweepRestOfLine(tok.Line, "`priority:`, `owner:`, `metric:`, `note`, `finding` or `}`")
+	}
 }

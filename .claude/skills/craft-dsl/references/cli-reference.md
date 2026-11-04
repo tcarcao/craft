@@ -158,11 +158,24 @@ Parses one or more files and emits a **merged** structured model (actors, domain
     {
       "name": "Purchase Item",
       "events_published": ["Payment Processed"],
-      "events_consumed": ["Item Added to Cart"]
+      "events_consumed": ["Item Added to Cart"],
+      "realises": ["checkout"]
+    }
+  ],
+  "flows": [
+    {
+      "ref": "checkout",
+      "name": "Buyers complete a purchase",
+      "priority": "P0",
+      "owner": "payments",
+      "metric": "Orders",
+      "realised_by": ["Purchase Item"]
     }
   ]
 }
 ```
+
+`realises` and `flows` (v2.35) appear only when the model declares flows or `realises` tags.
 
 **Examples:**
 ```bash

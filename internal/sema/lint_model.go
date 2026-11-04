@@ -28,6 +28,7 @@ func LintModel(doc *model.CraftDoc, perFileTrees map[string]syntax.SyntaxNode, l
 	diags = append(diags, lintDuplicateScenarioBodies(doc)...)
 	diags = append(diags, lintLinks(doc)...)
 	diags = append(diags, lintJourneys(doc, perFileTrees, lis)...)
+	diags = append(diags, lintRealises(doc, perFileTrees, lis)...)
 	return diags
 }
 

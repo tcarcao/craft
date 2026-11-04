@@ -91,6 +91,7 @@ func FuzzFormatBranches(f *testing.F) {
 		"04_use_cases/op_addr_quoted", "04_use_cases/returns_stream_to",
 		"04_use_cases/links", "04_use_cases/sources",
 		"09_surfaces/surface_basic", "09_surfaces/surface_notes_callers_unknown",
+		"10_flows/flows_basic", "10_flows/flow_word_as_name",
 	} {
 		raw, err := os.ReadFile(filepath.Join(repoRoot, "testdata", "corpus", filepath.FromSlash(name)+".craft"))
 		if err != nil {

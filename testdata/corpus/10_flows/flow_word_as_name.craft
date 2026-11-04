@@ -1,0 +1,8 @@
+domain flow {
+    flow
+}
+
+use_case "Flow word stays a name" {
+    when flow starts the flow
+        flow asks flow to flow the money
+}
