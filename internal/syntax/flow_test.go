@@ -145,3 +145,60 @@ func TestFlow_EndsUnclosedUseCase(t *testing.T) {
 		t.Fatalf("flows = %+v", fs)
 	}
 }
+
+// A key that is a top-level keyword (`domain:`, `service:`) is an unknown
+// property, not the start of the next declaration.
+func TestFlow_KeywordKeyIsAnUnknownProperty(t *testing.T) {
+	for _, key := range []string{"domain", "service", "actor", "use_case", "exposure"} {
+		src := "flow f \"F\" {\n    priority: P1\n    " + key + ": seeker\n    owner: o\n}\n"
+		g, _, diags := syntax.Parse(src)
+		if flowCodes(diags) != "craft/syntax/unknown-flow-property" {
+			t.Errorf("%s: diags = %v", key, diags)
+			continue
+		}
+		fs := syntax.AsFile(syntax.Root(g)).Flows()
+		if v, ok := fs[0].Property(lang.FlowOwner); len(fs) != 1 || !ok || v != "o" {
+			t.Errorf("%s: flows = %+v", key, fs)
+		}
+	}
+}
+
+// A property without a value is reported at its colon, with an example for
+// that key.
+func TestFlow_MissingValueAtColon(t *testing.T) {
+	_, _, diags := syntax.Parse("flow f \"F\" {\n    owner:\n    priority: P1\n}\n")
+	if flowCodes(diags) != "craft/syntax/unexpected-token" {
+		t.Fatalf("diags = %v", diags)
+	}
+	if r := diags[0].Range; r.Start.Line != 1 || r.Start.Character != 9 {
+		t.Errorf("range = %+v, want the colon at 1:9", r)
+	}
+	if !strings.Contains(diags[0].Message, "owner: seeker-engagement") {
+		t.Errorf("message = %q", diags[0].Message)
+	}
+}
+
+func TestFlow_Shapes(t *testing.T) {
+	cases := []struct{ name, src, ref, owner string }{
+		{"one line", "flow f \"F\" { priority: P1 }\n", "f", ""},
+		{"CRLF", "flow f \"F\" {\r\n    priority: P1\r\n    owner: o\r\n}\r\n", "f", "o"},
+		{"keyword ref", "flow service \"F\" {\n    priority: P1\n    owner: o\n}\n", "service", "o"},
+		{"comments", "// the lead flows\nflow f \"F\" { // trailing\n    // a comment line\n    priority: P1 // why\n    owner: \"o\"\n}\n", "f", "o"},
+		{"empty body", "flow f \"F\" {\n}\n", "f", ""},
+	}
+	for _, c := range cases {
+		g, _, diags := syntax.Parse(c.src)
+		if len(diags) != 0 {
+			t.Errorf("%s: diags = %v", c.name, diags)
+			continue
+		}
+		fs := syntax.AsFile(syntax.Root(g)).Flows()
+		if len(fs) != 1 || fs[0].Ref() != c.ref || fs[0].Name() != "F" {
+			t.Errorf("%s: flows = %+v", c.name, fs)
+			continue
+		}
+		if v, _ := fs[0].Property(lang.FlowOwner); v != c.owner {
+			t.Errorf("%s: owner = %q, want %q", c.name, v, c.owner)
+		}
+	}
+}

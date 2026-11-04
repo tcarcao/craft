@@ -3814,7 +3814,7 @@ func (p *Parser) parseFlowBlock() []model.Diagnostic {
 		diags = append(diags, p.diagFlowName(kwTok))
 	}
 	p.consumeAs(SyntaxKindLBrace) // atFlowDecl checked it
-	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !isTopLevelKeyword(p.peek().Type) && !p.atContextualDecl() {
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atFlowBodyEnd() {
 		diags = append(diags, p.parseFlowItem()...)
 	}
 	if p.peek().Type != lexer.TokenRBrace {
@@ -3832,6 +3832,18 @@ func (p *Parser) parseFlowBlock() []model.Diagnostic {
 	return diags
 }
 
+// atFlowBodyEnd reports whether the next token ends an unclosed flow body: a
+// top-level keyword or a surface or flow header. A keyword followed by `:`
+// on its line is a property key (`domain: …` is an unknown property, not a
+// domain), so it does not end the body.
+func (p *Parser) atFlowBodyEnd() bool {
+	tok := p.peek()
+	if colon := p.peekAt(1); colon.Type == lexer.TokenColon && colon.Line == tok.Line {
+		return false
+	}
+	return isTopLevelKeyword(tok.Type) || p.atContextualDecl()
+}
+
 // diagFlowName reports a flow without its quoted name, at tok.
 func (p *Parser) diagFlowName(tok lexer.Token) model.Diagnostic {
 	return model.Diagnostic{
@@ -3840,6 +3852,17 @@ func (p *Parser) diagFlowName(tok lexer.Token) model.Diagnostic {
 		Severity: model.SeverityError,
 		Range:    tokenRange(tok),
 	}
+}
+
+// flowPropertyExample is an example line for a flow property key.
+func flowPropertyExample(key string) string {
+	switch key {
+	case lang.FlowOwner:
+		return "owner: seeker-engagement"
+	case lang.FlowMetric:
+		return `metric: "Leads"`
+	}
+	return "priority: P1"
 }
 
 // flowPropertyKinds maps each recognised flow property to its keyword kind.
@@ -3871,10 +3894,16 @@ func (p *Parser) parseFlowItem() []model.Diagnostic {
 			})
 		}
 		p.consumeAs(kind)
-		p.consumeAs(SyntaxKindColon)
+		colonTok := p.consumeAs(SyntaxKindColon)
 		switch v := p.peek(); {
 		case v.Line != tok.Line || v.Type == lexer.TokenEOF || v.Type == lexer.TokenRBrace:
-			diags = append(diags, p.diagUnexpected(v, fmt.Sprintf("a value after `%s:`, e.g. `priority: P1`", tok.Value)))
+			// Reported at the colon: the next token may be on another line.
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unexpected-token",
+				Message:  fmt.Sprintf("`%s:` needs a value on its line, e.g. `%s`", tok.Value, flowPropertyExample(tok.Value)),
+				Severity: model.SeverityError,
+				Range:    tokenRange(colonTok),
+			})
 			p.builder.FinishNode()
 			return diags
 		case v.Type == lexer.TokenString:

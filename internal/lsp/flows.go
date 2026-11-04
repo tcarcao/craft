@@ -26,11 +26,12 @@ type realisesValue struct {
 	rng green.TextRange
 }
 
-// realisesValues lists every `realises` value of file, in source order.
+// realisesValues lists every `realises` value of file, in source order,
+// from each use case's first tags block: the one the model reads.
 func realisesValues(file syntax.File) []realisesValue {
 	var out []realisesValue
 	for _, uc := range file.UseCases() {
-		for _, tb := range uc.TagsBlocks() {
+		if tb := uc.TagsBlock(); tb != nil {
 			for _, tag := range tb.Tags() {
 				k := tag.Key()
 				vals, rngs := tag.Values(), tag.ValueRanges()
@@ -74,6 +75,12 @@ func flowHeaderAt(file syntax.File, offset green.TextSize) (syntax.FlowDecl, boo
 func (s *Server) flowHover(f *workspace.File, offset green.TextSize) (string, bool) {
 	file := syntax.AsFile(syntax.Root(f.Green))
 	if d, ok := flowHeaderAt(file, offset); ok {
+		// A later declaration of a ref is a duplicate-flow error: the model
+		// keeps the first, so describe that one and say so.
+		if fl := s.ws.Doc().FlowByRef(d.Ref()); fl != nil && (fl.SourceURI != f.URI || fl.Line != d.Line(f.LineIndex)) {
+			return fmt.Sprintf("flow %s is declared again here; the flow is the one at %s:%d\n%s",
+				d.Ref(), s.displayPath(fl.SourceURI), fl.Line, s.flowSummary(fl.Ref, fl.Name, fl.Priority, fl.Owner, fl.Metric)), true
+		}
 		name := d.Name()
 		priority, _ := d.Property(lang.FlowPriority)
 		owner, _ := d.Property(lang.FlowOwner)
@@ -211,7 +218,7 @@ func flowFoldingRanges(file syntax.File, li green.LineIndex) []protocol.FoldingR
 // realisesValueRe matches a `realises` tag typed up to a value, and
 // flowPriorityRe a flow's `priority:` typed up to its value.
 var (
-	realisesValueRe = regexp.MustCompile(`^\s*realises:\s*(\S+,\s*)*$`)
+	realisesValueRe = regexp.MustCompile(`^\s*realises:\s*(\S+,\s*)*[^\s,]*$`)
 	flowPriorityRe  = regexp.MustCompile(`^\s*priority:\s*$`)
 )
 

@@ -141,3 +141,16 @@ func TestFlows_OutlineAndFolding(t *testing.T) {
 		t.Errorf("folds = %+v, want 0-4", folds)
 	}
 }
+
+// A second declaration of a ref says which declaration the model keeps.
+func TestFlows_HoverOnDuplicate(t *testing.T) {
+	dup := "flow lead-message \"Again\" {\n    priority: P3\n    owner: other\n}\n"
+	c := newWorkspaceClient(t, flowsRoot, "", wsFile{"file:///ws/zz.craft", dup}, wsFile{flowsDeclURI, flowsDeclSrc})
+	var h struct {
+		Contents struct{ Value string } `json:"contents"`
+	}
+	json.Unmarshal(c.atURI("textDocument/hover", "file:///ws/zz.craft", 0, 8, nil), &h) //nolint:errcheck
+	if !strings.HasPrefix(h.Contents.Value, "flow lead-message is declared again here; the flow is the one at flows.craft:1\nflow lead-message: Lead generation") {
+		t.Errorf("hover = %q", h.Contents.Value)
+	}
+}

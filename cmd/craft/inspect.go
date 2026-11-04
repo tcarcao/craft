@@ -162,7 +162,11 @@ func printInspectText(out inspectOutput) error {
 			if f.Metric != "" {
 				fmt.Printf("    metric: %s\n", f.Metric)
 			}
-			fmt.Printf("    realised by: %v\n", f.RealisedBy)
+			if len(f.RealisedBy) == 0 {
+				fmt.Printf("    realised by: none\n")
+			} else {
+				fmt.Printf("    realised by: %v\n", f.RealisedBy)
+			}
 		}
 	}
 	return nil

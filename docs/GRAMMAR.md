@@ -49,7 +49,7 @@ Every top-level declaration is recoverable independently: a parse failure inside
 **Top-level keywords (the re-sync anchor set for error recovery):**
 `arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`, `surface` when a name and `{` follow on its line, and `flow` when a ref, a name or both and then `{` follow on its line.
 
-A use case, domain, surface or flow whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `flow <ref> "<name>" {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration.
+A use case, domain, surface or flow whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `flow <ref> "<name>" {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration. A surface or flow body stops at such a declaration at any column; in a flow body a keyword followed by `:` (`domain: …`) is a property line, not a declaration.
 
 ---
 
@@ -367,7 +367,7 @@ A critical flow is a named, prioritised, owned group of use cases: a business ou
 
 ```ebnf
 flow_decl  = 'flow' flow_ref STRING '{' NL* (flow_item NL+)* '}' ;
-flow_ref   = identifier ;                                  (* a slug such as lead-message; one token *)
+flow_ref   = identifier ;                                  (* a slug such as lead-message; one token; `use_case` and `when` are not refs *)
 flow_item  = ('priority' | 'owner' | 'metric') ':' flow_value
            | note_stmt ;
 flow_value = identifier | STRING ;                         (* one word, or a quoted string *)
@@ -392,7 +392,7 @@ use_case "Seeker sends a message" {
 ```
 
 - **Properties.** `priority:` is required and is one of `P0`, `P1`, `P2`, `P3` (`P0` is the highest; exact and case-sensitive). `owner:` is required and is a free value, usually a product-domain slug. `metric:` is optional. A property is one line; a value with spaces is quoted. `note`/`finding` lines are allowed, as in a surface. Properties keep their source order, and the formatter does not reorder them.
-- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`flow "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. Any other key: `craft/syntax/unknown-flow-property` (a warning; the line is kept in the tree and left out of the model). No `priority:` or no `owner:`: `craft/sema/missing-flow-property`. A priority that is not `P0`–`P3`: `craft/sema/invalid-priority`. A property written twice: `craft/sema/duplicate-flow-property` (a warning; the last value wins, as for tags). A ref declared twice anywhere in the workspace, in one file or two: `craft/sema/duplicate-flow` (an error on every later declaration; the first in sorted file order is the flow).
+- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`flow "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-flow-property` (a warning; the line is kept in the tree and left out of the model). No `priority:` or no `owner:`: `craft/sema/missing-flow-property`. A priority that is not `P0`–`P3`: `craft/sema/invalid-priority`. A property written twice: `craft/sema/duplicate-flow-property` (a warning; the last value wins, as for tags). A ref declared twice anywhere in the workspace, in one file or two: `craft/sema/duplicate-flow` (an error on every later declaration; the first in sorted file order is the flow).
 - **Model.** `CraftDoc.Flows` holds each `Flow{Ref, Name, Priority, Owner, Metric, Notes, RealisedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `RealisedBy` lists the use cases whose `realises` tag names the flow (`UseCaseRef`, in model order); `CraftDoc.FlowByRef(ref)` finds a flow. A use case's refs are in `UseCase.Realises`.
 - **Views.** No diagram draws a flow; `craft generate` ignores them. `craft inspect` lists them, and `craft check` writes them in the CraftDoc JSON (`flows`).
 
