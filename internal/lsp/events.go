@@ -477,6 +477,8 @@ func tagKeyCompletions() *protocol.CompletionList {
 			InsertText: "sites: ${1:site}", InsertTextFormat: snip},
 		{Label: lang.TagEnvs, Kind: protocol.CompletionItemKindField, Detail: "the environments this use case runs in; printed in the sequence title",
 			InsertText: "envs: ${1:env}", InsertTextFormat: snip},
+		{Label: lang.TagRealises, Kind: protocol.CompletionItemKindField, Detail: "the critical flows this use case serves, by ref",
+			InsertText: "realises: ${1:flow}", InsertTextFormat: snip},
 	}}
 }
 

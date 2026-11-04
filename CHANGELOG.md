@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.35.0] — 2026-11-04
+
+**Why a minor version (v2.35.0).** New optional syntax, additive `pkg/craft` types and fields, and new diagnostics. `flow` is a keyword only when `<ref> "<name>" {` follows on its line, and a top-level line that starts with `flow` was a syntax error before, so no file that parsed changes meaning. A model without flows or `realises` tags gives the same CraftDoc JSON as in 2.34.1 (every corpus golden is unchanged).
+
+### Added
+- **Critical flows.** `flow <ref> "<name>" { … }` declares a business outcome, such as lead generation, that several use cases serve: `priority:` (`P0`–`P3`, required), `owner:` (required, usually a product-domain slug), `metric:` (optional) and `note` lines. Product owns the flow; a use case names the flows it serves with the recognised tag `realises: lead-message, lead-phone`. Refs resolve over the whole workspace. See `docs/GRAMMAR.md` §8.3 and `docs/decisions/critical-flows.md`.
+- **`pkg/craft`**: `Flow{Ref, Name, Priority, Owner, Metric, Notes, RealisedBy, SourceURI, Line}`, `CraftDoc.Flows` (the first declaration of each ref in sorted file order), `CraftDoc.FlowByRef(ref)`, `UseCase.Realises` (the refs of the `realises` tag, each once), `TagRealises` and `FlowPriorities()`. `RealisedBy` lists the use cases whose `realises` tag names the flow. All are optional JSON keys (`flows`, `realisedBy`, `realises`).
+- **CLI.** `craft inspect` lists each flow (`flows`: `ref`, `name`, `priority`, `owner`, `metric`, `realised_by`) and each use case's `realises`; `craft check` writes `flows` in the CraftDoc JSON. `craft generate` does not draw flows. `craft fmt` formats flow blocks (one property per line, one indent).
+- **Diagnostics.** `craft/syntax/unknown-flow-property` (warning), `craft/sema/missing-flow-property`, `craft/sema/invalid-priority` and `craft/sema/duplicate-flow` (errors), `craft/sema/duplicate-flow-property`, `craft/sema/unresolved-flow` and `craft/lint/duplicate-flow-in-list` (warnings); a flow without its name is `craft/syntax/missing-label`. See `docs/DIAGNOSTICS.md`.
+- **Language server.** Hover on a flow header or a `realises` value shows the flow's name, priority, owner, metric and the use cases that realise it; hover on `realises`, `priority`, `owner` and `metric` explains the key. Definition goes from a `realises` value to its flow. Completion offers flow refs after `realises:`, `realises` among the tag keys, the flow body keys, `P0`–`P3` after `priority:`, and a `flow` snippet at top level. Flows appear in the outline and fold.
+
 ## [2.34.1] — 2026-10-30
 
 **Why a patch version (v2.34.1).** Only the bundled `craft-dsl` agent skill changes. The CLI, server and `pkg/craft` are unchanged.

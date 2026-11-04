@@ -1,0 +1,180 @@
+{
+  "useCases": [
+    {
+      "name": "Seeker sends a message",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seeker",
+            "verb": "sends",
+            "connector": "a",
+            "phrase": "message",
+            "description": "when Seeker sends a message",
+            "subject": {
+              "kind": "actor",
+              "id": "Seeker"
+            },
+            "line": 25,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "chat",
+                "targetContext": "telephony",
+                "ref": "telephony",
+                "connector": "to",
+                "phrase": "forward the message",
+                "description": "chat asks telephony to forward the message",
+                "line": 26,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "engagement/chat"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "engagement/telephony"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 20,
+      "tags": {
+        "realises": "lead-message"
+      },
+      "tagValues": {
+        "realises": [
+          "lead-message"
+        ]
+      },
+      "realises": [
+        "lead-message"
+      ]
+    },
+    {
+      "name": "Seeker calls the seller",
+      "scenarios": [
+        {
+          "id": "scenario_3",
+          "trigger": {
+            "type": "external",
+            "actor": "Seeker",
+            "verb": "calls",
+            "connector": "the",
+            "phrase": "seller",
+            "description": "when Seeker calls the seller",
+            "subject": {
+              "kind": "actor",
+              "id": "Seeker"
+            },
+            "line": 35,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_4",
+                "type": "sync_action",
+                "context": "chat",
+                "targetContext": "telephony",
+                "ref": "telephony",
+                "connector": "to",
+                "phrase": "connect the call",
+                "description": "chat asks telephony to connect the call",
+                "line": 36,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "engagement/chat"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "engagement/telephony"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 29,
+      "tags": {
+        "journey": "contact",
+        "realises": "lead-phone, lead-message"
+      },
+      "tagValues": {
+        "journey": [
+          "contact"
+        ],
+        "realises": [
+          "lead-phone",
+          "lead-message"
+        ]
+      },
+      "realises": [
+        "lead-phone",
+        "lead-message"
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "name": "engagement",
+      "boundedContexts": [
+        "chat",
+        "telephony"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seeker",
+      "type": "user",
+      "line": 1
+    }
+  ],
+  "flows": [
+    {
+      "ref": "lead-message",
+      "name": "Lead generation (phone and message)",
+      "priority": "P1",
+      "owner": "seeker-engagement",
+      "metric": "Leads",
+      "notes": [
+        {
+          "kind": "note",
+          "text": "counted once per seeker and advert",
+          "line": 12,
+          "column": 5
+        }
+      ],
+      "realisedBy": [
+        {
+          "name": "Seeker sends a message"
+        },
+        {
+          "name": "Seeker calls the seller"
+        }
+      ],
+      "line": 8
+    },
+    {
+      "ref": "lead-phone",
+      "name": "Lead by phone",
+      "priority": "P2",
+      "owner": "seeker engagement",
+      "realisedBy": [
+        {
+          "name": "Seeker calls the seller"
+        }
+      ],
+      "line": 15
+    }
+  ]
+}

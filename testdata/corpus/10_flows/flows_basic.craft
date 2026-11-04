@@ -1,0 +1,37 @@
+actor user Seeker
+
+domain engagement {
+    chat
+    telephony
+}
+
+flow lead-message "Lead generation (phone and message)" {
+    priority: P1
+    owner: seeker-engagement
+    metric: "Leads"
+    note "counted once per seeker and advert"
+}
+
+flow lead-phone "Lead by phone" {
+    priority: P2
+    owner: "seeker engagement"
+}
+
+use_case "Seeker sends a message" {
+    tags {
+        realises: lead-message
+    }
+
+    when Seeker sends a message
+        chat asks telephony to forward the message
+}
+
+use_case "Seeker calls the seller" {
+    tags {
+        realises: lead-phone, lead-message
+        journey: contact
+    }
+
+    when Seeker calls the seller
+        chat asks telephony to connect the call
+}

@@ -77,3 +77,56 @@ func TestInspectCmd_EventListsReportEveryItem(t *testing.T) {
 		t.Errorf("events_published = %v, want %v", uc.EventsPublished, want)
 	}
 }
+
+const flowsCraft = `flow lead-message "Lead generation (phone and message)" {
+    priority: P1
+    owner: seeker-engagement
+    metric: "Leads"
+}
+
+use_case "Seeker sends a message" {
+    tags {
+        realises: lead-message
+    }
+    when Seeker sends a message
+        chat asks messaging to deliver the message
+}
+`
+
+// Flows and the use cases that realise them are part of the inspect model
+// (v2.35).
+func TestInspectCmd_Flows(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "a.craft")
+	if err := os.WriteFile(f, []byte(flowsCraft), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := runInspect(t, "--format", "json", f)
+	var got struct {
+		UseCases []struct {
+			Name     string   `json:"name"`
+			Realises []string `json:"realises"`
+		} `json:"use_cases"`
+		Flows []struct {
+			Ref        string   `json:"ref"`
+			Name       string   `json:"name"`
+			Priority   string   `json:"priority"`
+			Owner      string   `json:"owner"`
+			Metric     string   `json:"metric"`
+			RealisedBy []string `json:"realised_by"`
+		} `json:"flows"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("bad json: %v\n%s", err, out)
+	}
+	if len(got.UseCases) != 1 || !slices.Equal(got.UseCases[0].Realises, []string{"lead-message"}) {
+		t.Errorf("use_cases = %+v", got.UseCases)
+	}
+	if len(got.Flows) != 1 {
+		t.Fatalf("flows = %+v\n%s", got.Flows, out)
+	}
+	fl := got.Flows[0]
+	if fl.Ref != "lead-message" || fl.Name != "Lead generation (phone and message)" || fl.Priority != "P1" ||
+		fl.Owner != "seeker-engagement" || fl.Metric != "Leads" || !slices.Equal(fl.RealisedBy, []string{"Seeker sends a message"}) {
+		t.Errorf("flow = %+v", fl)
+	}
+}

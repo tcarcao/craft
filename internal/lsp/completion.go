@@ -37,6 +37,9 @@ const (
 	ctxTagKey            // a blank line of a tags block
 	ctxTagValue          // cursor after `sites: ` or `envs: `
 	ctxLinkTitle         // cursor inside the quotes after `includes` / `continues`
+	ctxRealisesValue     // cursor after `realises: `: a flow ref
+	ctxFlowBody          // a line of a flow body
+	ctxFlowPriority      // cursor after `priority: ` in a flow
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -88,6 +91,11 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 			// a cursor past the `{` is in the body.
 			if lb := node.ChildToken(syntax.SyntaxKindLBrace); lb != nil && offset >= lb.TextRange().End {
 				return "surface"
+			}
+			return ""
+		case syntax.SyntaxKindFlowDecl:
+			if lb := node.ChildToken(syntax.SyntaxKindLBrace); lb != nil && offset >= lb.TextRange().End {
+				return "flow"
 			}
 			return ""
 		case syntax.SyntaxKindFile:
@@ -237,6 +245,9 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 	case "actors":
 		return ctxActorsBlock
 	case "tags":
+		if realisesValueRe.MatchString(linePrefix) {
+			return ctxRealisesValue
+		}
 		if tagValueRe.MatchString(linePrefix) {
 			return ctxTagValue
 		}
@@ -249,9 +260,21 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 			return ctxSurfaceBody
 		}
 		return ctxUnknown
+	case "flow":
+		if flowPriorityRe.MatchString(linePrefix) {
+			return ctxFlowPriority
+		}
+		if strings.TrimSpace(linePrefix) == "" || !strings.ContainsAny(strings.TrimSpace(linePrefix), " \t:") {
+			return ctxFlowBody
+		}
+		return ctxUnknown
 	case "use_case":
 		if storeNameRe.MatchString(linePrefix) {
 			return ctxStoreName
+		}
+		if realisesValueRe.MatchString(linePrefix) {
+			// `realises: ` with no value yet may not parse into the tags block.
+			return ctxRealisesValue
 		}
 		if tagValueRe.MatchString(linePrefix) {
 			// `sites: ` with no value yet may not parse into the tags block.
@@ -477,6 +500,14 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return linkTitleCompletions(ws, f.LineIndex.Src()[lineStart:cursorOffset], cursorLine)
 	case ctxSurfaceBody:
 		return surfaceBodyCompletions()
+	case ctxRealisesValue:
+		lineStart := f.LineIndex.OffsetFromUTF16(cursorLine+1, 0)
+		cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine+1, cursorCol)
+		return realisesCompletions(ws, f.LineIndex.Src()[lineStart:cursorOffset])
+	case ctxFlowBody:
+		return flowBodyCompletions()
+	case ctxFlowPriority:
+		return flowPriorityCompletions()
 	case ctxUseCaseAction:
 		return allSymbolCompletions(ws)
 	case ctxExposeField:
@@ -551,6 +582,13 @@ func topLevelKeywordCompletions() *protocol.CompletionList {
 			Kind:             protocol.CompletionItemKindKeyword,
 			Detail:           "declare the operations a boundary offers",
 			InsertText:       "surface ${1:boundary} {\n    callers: ${2:unknown}\n    query ${3:what it answers}  [${4:operation}]\n}",
+			InsertTextFormat: snip,
+		},
+		{
+			Label:            "flow",
+			Kind:             protocol.CompletionItemKindKeyword,
+			Detail:           "declare a critical flow: a prioritised, owned business outcome that use cases realise",
+			InsertText:       "flow ${1:ref} \"${2:Name}\" {\n    priority: ${3|P0,P1,P2,P3|}\n    owner: ${4:product-domain}\n}",
 			InsertTextFormat: snip,
 		},
 		{

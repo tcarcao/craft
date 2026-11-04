@@ -244,6 +244,31 @@ surface concierge {
 
 ---
 
+## Critical flows (2.35)
+
+A `flow` is a business outcome that several use cases serve, with a priority and an owner. Product owns the flow; each use case says which flows it realises:
+
+```craft
+flow lead-message "Lead generation (phone and message)" {
+    priority: P1
+    owner: seeker-engagement
+    metric: "Leads"
+}
+
+use_case "Seeker sends a message" {
+    tags {
+        realises: lead-message
+    }
+
+    when Seeker sends a message
+        chat asks messaging to deliver the message
+}
+```
+
+`priority:` (`P0`–`P3`) and `owner:` are required, `metric:` is optional. `craft inspect` lists each flow with the use cases that realise it, and `pkg/craft` exposes `CraftDoc.Flows` (`Flow.RealisedBy`), `UseCase.Realises` and `CraftDoc.FlowByRef`. Diagrams do not draw flows. `craft validate` warns when a `realises` ref names no loaded flow (`craft/sema/unresolved-flow`).
+
+---
+
 ## VS Code Extension
 
 The [Craft VS Code extension](https://github.com/tcarcao/craft-vscode-extension) adds syntax highlighting, domain/services tree views, and live diagram previews. Install from [GitHub releases](https://github.com/tcarcao/craft-vscode-extension/releases).

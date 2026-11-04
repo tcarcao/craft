@@ -21,6 +21,11 @@
 // Since v2.27.0 a bounded context or an actor may declare a display name:
 // Domain.DisplayNames, Actor.DisplayName, Participant.DisplayName and
 // CraftDoc.DisplayNames(). All are optional JSON keys.
+//
+// Since v2.35.0 a model holds critical flows: CraftDoc.Flows (each Flow lists
+// the use cases that realise it in RealisedBy), UseCase.Realises (the flow
+// refs of its `realises` tag) and CraftDoc.FlowByRef. All are optional JSON
+// keys (flows, realises).
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"
@@ -67,6 +72,7 @@ type (
 	LinkKind           = model.LinkKind
 	UseCaseRef         = model.UseCaseRef
 	JourneyEdgeKind    = model.JourneyEdgeKind
+	Flow               = model.Flow
 )
 
 const (
@@ -143,6 +149,8 @@ const (
 	TagFormerlyTitled  = model.TagFormerlyTitled
 	TagFormerlyJourney = model.TagFormerlyJourney
 
+	TagRealises = model.TagRealises
+
 	JourneyEdgeEvent     = model.JourneyEdgeEvent
 	JourneyEdgeStore     = model.JourneyEdgeStore
 	JourneyEdgeContinues = model.JourneyEdgeContinues
@@ -153,3 +161,7 @@ const (
 // KnownActorTypes lists the actor kinds Craft recognises, in presentation
 // order. Any other kind is legal and is drawn as a person.
 func KnownActorTypes() []string { return model.KnownActorTypes() }
+
+// FlowPriorities lists the values a flow's priority may take, highest first:
+// P0, P1, P2, P3.
+func FlowPriorities() []string { return model.FlowPriorities() }

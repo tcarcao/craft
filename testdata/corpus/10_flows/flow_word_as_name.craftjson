@@ -1,0 +1,59 @@
+{
+  "useCases": [
+    {
+      "name": "Flow word stays a name",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "flow",
+            "verb": "starts",
+            "connector": "the",
+            "phrase": "flow",
+            "description": "when flow starts the flow",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "flow/flow"
+            },
+            "line": 6,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "flow",
+                "targetContext": "flow",
+                "ref": "flow",
+                "connector": "to",
+                "phrase": "flow the money",
+                "description": "flow asks flow to flow the money",
+                "line": 7,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "flow/flow"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "flow/flow"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 5
+    }
+  ],
+  "domains": [
+    {
+      "name": "flow",
+      "boundedContexts": [
+        "flow"
+      ]
+    }
+  ]
+}

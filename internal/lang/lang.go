@@ -165,3 +165,19 @@ const (
 	// JourneyEdgeIncludes: an includes link to another member.
 	JourneyEdgeIncludes JourneyEdgeKind = "includes"
 )
+
+// Critical flows (v2.35): a named, prioritised, owned group of use cases.
+// A use case points at the flows it serves with the `realises` tag.
+const (
+	// TagRealises lists the refs of the flows a use case realises,
+	// comma-separated like any multi-value tag.
+	TagRealises = "realises"
+
+	// The properties of a flow block.
+	FlowPriority = "priority" // required: one of FlowPriorities
+	FlowOwner    = "owner"    // required: free value, typically a product-domain slug
+	FlowMetric   = "metric"   // optional: the business metric the flow moves
+)
+
+// FlowPriorities lists the values a flow's priority may take, highest first.
+func FlowPriorities() []string { return []string{"P0", "P1", "P2", "P3"} }

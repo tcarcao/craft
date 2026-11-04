@@ -76,6 +76,10 @@ _Avoid_: reference, link (a link names another use case), evidence comment
 A step that names another use case by its title: `includes "…"` (the target runs here, then this body goes on) or `continues "…"` (the flow goes on in the target and this body ends). For a hand-off without an event; an event hand-off is a `notifies`/`listens` pair and needs no link.
 _Avoid_: call, jump, reference
 
+**Critical flow**:
+A named, prioritised, owned business outcome that several use cases serve (`flow <ref> "<name>" { priority: … owner: … }`). Product owns its definition; a use case names the flows it serves in its `realises` tag. It has no steps and is not drawn.
+_Avoid_: flow (alone, in prose: the flow view is a diagram), epic, journey (a journey orders use cases by hand-offs)
+
 **Journey (spine)**:
 The use cases that share a `journey` tag value, ordered by their hand-offs (event and store pairs, and `continues` links) into one sequence diagram with a section per use case (`craft generate --journey <slug>`).
 _Avoid_: flow (the flow view is something else), epic, process
