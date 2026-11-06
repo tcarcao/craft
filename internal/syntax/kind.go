@@ -155,6 +155,12 @@ const (
 	SyntaxKindKwOwner    // `owner:` in a flow
 	SyntaxKindKwMetric   // `metric:` in a flow
 
+	// Page contextual keywords (v2.36.0).
+	SyntaxKindKwPage          // top-level `page <ref> "<name>" {`
+	SyntaxKindKwURL           // `url:` in a page
+	SyntaxKindKwPlatform      // `platform:` in a page
+	SyntaxKindKwProductDomain // `product_domain:` in a page
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -234,4 +240,11 @@ const (
 	// The key is SyntaxKindKwPriority, KwOwner or KwMetric when recognised,
 	// SyntaxKindIdent otherwise (craft/syntax/unknown-flow-property).
 	SyntaxKindFlowProperty
+
+	// SyntaxKindPageDecl is `page <ref> "<name>" { … }` (v2.36.0).
+	SyntaxKindPageDecl
+	// SyntaxKindPageProperty wraps one `<key>: <value>` line of a page body.
+	// The key is SyntaxKindKwURL, KwPlatform or KwProductDomain when
+	// recognised, SyntaxKindIdent otherwise (craft/syntax/unknown-page-property).
+	SyntaxKindPageProperty
 )

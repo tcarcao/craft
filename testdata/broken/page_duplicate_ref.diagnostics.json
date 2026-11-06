@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/duplicate-page",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 4,
+        "character": 5
+      },
+      "end": {
+        "line": 4,
+        "character": 20
+      }
+    }
+  }
+]

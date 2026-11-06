@@ -1,0 +1,59 @@
+{
+  "useCases": [
+    {
+      "name": "Page word stays a name",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "page",
+            "verb": "opens",
+            "connector": "the",
+            "phrase": "page",
+            "description": "when page opens the page",
+            "subject": {
+              "kind": "bounded_context",
+              "id": "page/page"
+            },
+            "line": 6,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "page",
+                "targetContext": "page",
+                "ref": "page",
+                "connector": "to",
+                "phrase": "page the seller",
+                "description": "page asks page to page the seller",
+                "line": 7,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "page/page"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "page/page"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 5
+    }
+  ],
+  "domains": [
+    {
+      "name": "page",
+      "boundedContexts": [
+        "page"
+      ]
+    }
+  ]
+}

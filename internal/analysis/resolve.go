@@ -116,3 +116,19 @@ func resolveFlows(doc *model.CraftDoc) {
 		}
 	}
 }
+
+// resolvePages records on each page the use cases whose `entry` tag names
+// it, in model order. A ref that names no page is left as written
+// (craft/sema/unresolved-page reports it when the workspace has pages).
+func resolvePages(doc *model.CraftDoc) {
+	for i := range doc.Pages {
+		doc.Pages[i].UsedBy = nil
+	}
+	for _, uc := range doc.UseCases {
+		for _, ref := range uc.Entries {
+			if pg := doc.PageByRef(ref); pg != nil {
+				pg.UsedBy = append(pg.UsedBy, model.UseCaseRef{Name: uc.Name, SourceURI: uc.SourceURI})
+			}
+		}
+	}
+}

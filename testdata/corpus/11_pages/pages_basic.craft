@@ -1,0 +1,40 @@
+actor user Seller
+
+actor user Visitor
+
+domain promotions {
+    promotion
+    billing
+    ads
+}
+
+page account-adverts "My Account: My Ads" {
+    url: "https://www.otodom.pl/wiadomosci/moje-ogloszenia"
+    url: "https://www.storia.ro/ro/contul-meu/anunturile-mele"
+    platform: frontoffice
+    product_domain: ad-inventory
+    note "the old Atlas page is still served for agencies"
+}
+
+page ad-detail "Ad detail" {
+    url: "https://www.otodom.pl/pl/oferta"
+    product_domain: "seeker experience"
+}
+
+use_case "Seller promotes an ad" {
+    tags {
+        entry: account-adverts
+    }
+
+    when Seller promotes an ad
+        promotion asks billing to charge the seller
+}
+
+use_case "Visitor sees a special offer" {
+    tags {
+        entry: ad-detail, account-adverts
+    }
+
+    when Visitor opens an ad
+        promotion asks ads to show the offer
+}

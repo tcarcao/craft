@@ -16,6 +16,7 @@ type inspectOutput struct {
 	Services []craft.Service  `json:"services,omitempty"`
 	UseCases []useCaseSummary `json:"use_cases,omitempty"`
 	Flows    []flowSummary    `json:"flows,omitempty"`
+	Pages    []pageSummary    `json:"pages,omitempty"`
 }
 
 type useCaseSummary struct {
@@ -33,6 +34,16 @@ type flowSummary struct {
 	Owner      string   `json:"owner,omitempty"`
 	Metric     string   `json:"metric,omitempty"`
 	RealisedBy []string `json:"realised_by,omitempty"`
+}
+
+// pageSummary is one page (v2.36) and the use cases that start on it.
+type pageSummary struct {
+	Ref           string   `json:"ref"`
+	Name          string   `json:"name"`
+	URLs          []string `json:"urls,omitempty"`
+	Platform      string   `json:"platform,omitempty"`
+	ProductDomain string   `json:"product_domain,omitempty"`
+	UsedBy        []string `json:"used_by,omitempty"`
 }
 
 func inspectCmd() *cobra.Command {
@@ -125,6 +136,14 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 		out.Flows = append(out.Flows, fs)
 	}
 
+	for _, pg := range doc.Pages {
+		ps := pageSummary{Ref: pg.Ref, Name: pg.Name, URLs: pg.URLs, Platform: pg.Platform, ProductDomain: pg.ProductDomain}
+		for _, r := range pg.UsedBy {
+			ps.UsedBy = append(ps.UsedBy, r.Name)
+		}
+		out.Pages = append(out.Pages, ps)
+	}
+
 	return out
 }
 
@@ -166,6 +185,23 @@ func printInspectText(out inspectOutput) error {
 				fmt.Printf("    realised by: none\n")
 			} else {
 				fmt.Printf("    realised by: %v\n", f.RealisedBy)
+			}
+		}
+	}
+	if len(out.Pages) > 0 {
+		fmt.Printf("Pages (%d):\n", len(out.Pages))
+		for _, pg := range out.Pages {
+			fmt.Printf("  %s %q (product domain: %s)\n", pg.Ref, pg.Name, pg.ProductDomain)
+			if pg.Platform != "" {
+				fmt.Printf("    platform: %s\n", pg.Platform)
+			}
+			for _, u := range pg.URLs {
+				fmt.Printf("    url: %s\n", u)
+			}
+			if len(pg.UsedBy) == 0 {
+				fmt.Printf("    used by: none\n")
+			} else {
+				fmt.Printf("    used by: %v\n", pg.UsedBy)
 			}
 		}
 	}

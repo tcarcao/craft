@@ -1,0 +1,8 @@
+domain page {
+    page
+}
+
+use_case "Page word stays a name" {
+    when page opens the page
+        page asks page to page the seller
+}

@@ -2331,6 +2331,23 @@ func TestFormat_Flow(t *testing.T) {
 	}
 }
 
+// A page block (v2.36) formats like a flow: one property per line at one
+// indent, `key: value` with one space.
+func TestFormat_Page(t *testing.T) {
+	in := "page   account-adverts   \"My Account: My Ads\"{\nurl:\"https://a\"\n      platform :  frontoffice // web\n  product_domain:   ad-inventory\n\n\n   note \"x\"\n}\n"
+	want := "page account-adverts \"My Account: My Ads\" {\n    url: \"https://a\"\n    platform: frontoffice // web\n    product_domain: ad-inventory\n\n    note \"x\"\n}\n"
+	got, d := FormatDocumentChecked(in)
+	if d != nil {
+		t.Fatalf("refused: %+v", d)
+	}
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
 func TestFormat_RefusesOrphanAnd(t *testing.T) {
 	in := "use_case \"U\" {\n  when O does\n    x does it\n    and \"b\"\n      x does more\n}\n"
 	got, d := FormatDocumentChecked(in)

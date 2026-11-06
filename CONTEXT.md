@@ -80,6 +80,10 @@ _Avoid_: call, jump, reference
 A named, prioritised, owned business outcome that several use cases serve (`flow <ref> "<name>" { priority: … owner: … }`). Product owns its definition; a use case names the flows it serves in its `realises` tag. It has no steps and is not drawn.
 _Avoid_: flow (alone, in prose: the flow view is a diagram), epic, journey (a journey orders use cases by hand-offs)
 
+**Page**:
+A surface users see, such as "My Account: My Ads" (`page <ref> "<name>" { url: … platform: … product_domain: … }`). Its owner is the landlord of its product domain; a use case names the pages it starts on in its `entry` tag. It has no steps and is not drawn.
+_Avoid_: screen, view (a view is a diagram), surface (a `surface` is an API boundary)
+
 **Journey (spine)**:
 The use cases that share a `journey` tag value, ordered by their hand-offs (event and store pairs, and `continues` links) into one sequence diagram with a section per use case (`craft generate --journey <slug>`).
 _Avoid_: flow (the flow view is something else), epic, process

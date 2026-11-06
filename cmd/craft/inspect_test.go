@@ -130,3 +130,49 @@ func TestInspectCmd_Flows(t *testing.T) {
 		t.Errorf("flow = %+v", fl)
 	}
 }
+
+const pagesCraft = `page account-adverts "My Account: My Ads" {
+    url: "https://www.otodom.pl/wiadomosci/moje-ogloszenia"
+    platform: frontoffice
+    product_domain: ad-inventory
+}
+
+use_case "Seller promotes an ad" {
+    tags {
+        entry: account-adverts
+    }
+    when Seller promotes an ad
+        promotion asks billing to charge the seller
+}
+`
+
+// Pages and the use cases that start on them are part of the inspect model
+// (v2.36).
+func TestInspectCmd_Pages(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "a.craft")
+	if err := os.WriteFile(f, []byte(pagesCraft), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := runInspect(t, "--format", "json", f)
+	var got struct {
+		Pages []struct {
+			Ref           string   `json:"ref"`
+			Name          string   `json:"name"`
+			URLs          []string `json:"urls"`
+			Platform      string   `json:"platform"`
+			ProductDomain string   `json:"product_domain"`
+			UsedBy        []string `json:"used_by"`
+		} `json:"pages"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("bad json: %v\n%s", err, out)
+	}
+	if len(got.Pages) != 1 {
+		t.Fatalf("pages = %+v\n%s", got.Pages, out)
+	}
+	pg := got.Pages[0]
+	if pg.Ref != "account-adverts" || pg.Name != "My Account: My Ads" || pg.Platform != "frontoffice" || pg.ProductDomain != "ad-inventory" ||
+		!slices.Equal(pg.URLs, []string{"https://www.otodom.pl/wiadomosci/moje-ogloszenia"}) || !slices.Equal(pg.UsedBy, []string{"Seller promotes an ad"}) {
+		t.Errorf("page = %+v", pg)
+	}
+}

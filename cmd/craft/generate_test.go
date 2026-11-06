@@ -1082,3 +1082,25 @@ func TestGenerateCmd_IgnoresFlows(t *testing.T) {
 		t.Errorf("sequence:\n%s", data)
 	}
 }
+
+// Pages are not drawn: a model with pages generates as one without them.
+func TestGenerateCmd_IgnoresPages(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "pages.craft")
+	if err := os.WriteFile(src, []byte(pagesCraft), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(tmp, "out")
+	root := newRootCmd()
+	root.SetArgs([]string{"generate", src, "--type", "sequence", "--format", "mermaid", "--output", out})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "pages-sequence.mmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "account-adverts") || !strings.Contains(string(data), "charge the seller") {
+		t.Errorf("sequence:\n%s", data)
+	}
+}

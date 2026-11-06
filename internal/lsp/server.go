@@ -386,6 +386,10 @@ func (s *Server) Definition(_ context.Context, params *protocol.DefinitionParams
 	if locs, ok := s.flowDefinition(f, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
 		return locs, nil
 	}
+	// An `entry` value goes to its page.
+	if locs, ok := s.pageDefinition(f, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
+		return locs, nil
+	}
 	// A link title goes to its target's use_case title.
 	if locs, ok := s.linkDefinition(f, uri, f.LineIndex.OffsetFromUTF16(cursorLine, int(params.Position.Character))); ok {
 		return locs, nil
@@ -909,6 +913,9 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		syms = append(syms, sym)
 	}
 	for _, sym := range flowSymbols(file, f.LineIndex) {
+		syms = append(syms, sym)
+	}
+	for _, sym := range pageSymbols(file, f.LineIndex) {
 		syms = append(syms, sym)
 	}
 	return syms, nil
@@ -1443,6 +1450,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 	}
 	ranges = append(ranges, surfaceFoldingRanges(file, li)...)
 	ranges = append(ranges, flowFoldingRanges(file, li)...)
+	ranges = append(ranges, pageFoldingRanges(file, li)...)
 
 	return ranges, nil
 }
@@ -1651,6 +1659,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 		return plain(v), nil
 	}
 	if v, ok := s.flowHover(f, offset); ok {
+		return plain(v), nil
+	}
+	if v, ok := s.pageHover(f, offset); ok {
 		return plain(v), nil
 	}
 	if v, ok := s.spineHover(f, offset); ok {
@@ -2350,45 +2361,49 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	// `language:`; `query`/`command` stand where an action's verb would.
 	// A flow (v2.35) is a declaration like a surface; its properties hold
 	// one value each, like `language:`.
-	syntax.SyntaxKindKwSurface:      "craft-exposure-keyword",
-	syntax.SyntaxKindKwCallers:      "craft-to-property",
-	syntax.SyntaxKindKwSpec:         "craft-language-property",
-	syntax.SyntaxKindKwQuery:        "craft-asks-verb",
-	syntax.SyntaxKindKwCommand:      "craft-asks-verb",
-	syntax.SyntaxKindKwFlow:         "craft-exposure-keyword",
-	syntax.SyntaxKindKwPriority:     "craft-language-property",
-	syntax.SyntaxKindKwOwner:        "craft-language-property",
-	syntax.SyntaxKindKwMetric:       "craft-language-property",
-	syntax.SyntaxKindKwUser:         "craft-actor-type",
-	syntax.SyntaxKindKwSystem:       "craft-actor-type",
-	syntax.SyntaxKindKwService:      "craft-actor-type",
-	syntax.SyntaxKindKwAsks:         "craft-asks-verb",
-	syntax.SyntaxKindKwNotifies:     "craft-notifies-verb",
-	syntax.SyntaxKindKwListens:      "craft-listens-verb",
-	syntax.SyntaxKindKwReturns:      "craft-returns-verb",
-	syntax.SyntaxKindKwTo:           "craft-connector-word",
-	syntax.SyntaxKindKwThrough:      "craft-through-property",
-	syntax.SyntaxKindKwContexts:     "craft-contexts-property",
-	syntax.SyntaxKindKwLanguage:     "craft-language-property",
-	syntax.SyntaxKindKwDataStores:   "craft-data-stores-property",
-	syntax.SyntaxKindKwDeployment:   "craft-deployment-property",
-	syntax.SyntaxKindKwPresentation: "craft-presentation-section",
-	syntax.SyntaxKindKwGateway:      "craft-gateway-section",
-	syntax.SyntaxKindKwTrue:         "craft-boolean",
-	syntax.SyntaxKindKwFalse:        "craft-boolean",
-	syntax.SyntaxKindString:         "craft-regular-string",
-	syntax.SyntaxKindLineComment:    "craft-comment",
-	syntax.SyntaxKindBlockComment:   "craft-comment",
-	syntax.SyntaxKindLBrace:         "craft-braces",
-	syntax.SyntaxKindRBrace:         "craft-braces",
-	syntax.SyntaxKindLBracket:       "craft-braces",
-	syntax.SyntaxKindRBracket:       "craft-braces",
-	syntax.SyntaxKindGT:             "craft-braces",
-	syntax.SyntaxKindLParen:         "craft-parenthesis",
-	syntax.SyntaxKindRParen:         "craft-parenthesis",
-	syntax.SyntaxKindComma:          "craft-comma",
-	syntax.SyntaxKindArrow:          "craft-deployment-arrow",
-	syntax.SyntaxKindPercentage:     "craft-percentage",
+	syntax.SyntaxKindKwSurface:       "craft-exposure-keyword",
+	syntax.SyntaxKindKwCallers:       "craft-to-property",
+	syntax.SyntaxKindKwSpec:          "craft-language-property",
+	syntax.SyntaxKindKwQuery:         "craft-asks-verb",
+	syntax.SyntaxKindKwCommand:       "craft-asks-verb",
+	syntax.SyntaxKindKwFlow:          "craft-exposure-keyword",
+	syntax.SyntaxKindKwPriority:      "craft-language-property",
+	syntax.SyntaxKindKwOwner:         "craft-language-property",
+	syntax.SyntaxKindKwMetric:        "craft-language-property",
+	syntax.SyntaxKindKwPage:          "craft-exposure-keyword",
+	syntax.SyntaxKindKwURL:           "craft-language-property",
+	syntax.SyntaxKindKwPlatform:      "craft-language-property",
+	syntax.SyntaxKindKwProductDomain: "craft-language-property",
+	syntax.SyntaxKindKwUser:          "craft-actor-type",
+	syntax.SyntaxKindKwSystem:        "craft-actor-type",
+	syntax.SyntaxKindKwService:       "craft-actor-type",
+	syntax.SyntaxKindKwAsks:          "craft-asks-verb",
+	syntax.SyntaxKindKwNotifies:      "craft-notifies-verb",
+	syntax.SyntaxKindKwListens:       "craft-listens-verb",
+	syntax.SyntaxKindKwReturns:       "craft-returns-verb",
+	syntax.SyntaxKindKwTo:            "craft-connector-word",
+	syntax.SyntaxKindKwThrough:       "craft-through-property",
+	syntax.SyntaxKindKwContexts:      "craft-contexts-property",
+	syntax.SyntaxKindKwLanguage:      "craft-language-property",
+	syntax.SyntaxKindKwDataStores:    "craft-data-stores-property",
+	syntax.SyntaxKindKwDeployment:    "craft-deployment-property",
+	syntax.SyntaxKindKwPresentation:  "craft-presentation-section",
+	syntax.SyntaxKindKwGateway:       "craft-gateway-section",
+	syntax.SyntaxKindKwTrue:          "craft-boolean",
+	syntax.SyntaxKindKwFalse:         "craft-boolean",
+	syntax.SyntaxKindString:          "craft-regular-string",
+	syntax.SyntaxKindLineComment:     "craft-comment",
+	syntax.SyntaxKindBlockComment:    "craft-comment",
+	syntax.SyntaxKindLBrace:          "craft-braces",
+	syntax.SyntaxKindRBrace:          "craft-braces",
+	syntax.SyntaxKindLBracket:        "craft-braces",
+	syntax.SyntaxKindRBracket:        "craft-braces",
+	syntax.SyntaxKindGT:              "craft-braces",
+	syntax.SyntaxKindLParen:          "craft-parenthesis",
+	syntax.SyntaxKindRParen:          "craft-parenthesis",
+	syntax.SyntaxKindComma:           "craft-comma",
+	syntax.SyntaxKindArrow:           "craft-deployment-arrow",
+	syntax.SyntaxKindPercentage:      "craft-percentage",
 	// SyntaxKindOpVerb only ever occurs at the head of an operation annotation,
 	// so it needs no parent-context check here (unlike the opaque payload
 	// idents, which classifyActionIdents handles in Pass 2).

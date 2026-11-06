@@ -26,13 +26,19 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 ```bnf
 <dsl>                ::= (<actor_def> | <actors_def> | <domain_def> | <domains_def>
                          | <service_def> | <services_def> | <context_map> | <glossary> | <arch> | <exposure>
-                         | <use_case> | <flow>)*
+                         | <use_case> | <flow> | <page>)*
 
 // --- Critical flows (v2.35): a prioritised, owned business outcome ---
 <flow>               ::= "flow" <identifier> <string> "{" <flow_item>* "}"
 <flow_item>          ::= ("priority" | "owner" | "metric") ":" (<identifier> | <string>)
                        | "note" <string>
                        // priority: P0|P1|P2|P3 and owner: are required; one item per line
+
+// --- Pages (v2.36): a surface users see, owned through its product domain ---
+<page>               ::= "page" <identifier> <string> "{" <page_item>* "}"
+<page_item>          ::= ("url" | "platform" | "product_domain") ":" (<identifier> | <string>)
+                       | "note" <string>
+                       // product_domain: is required; url: may repeat (one per site); platform: frontoffice|backoffice|app
 
 // --- Actors: who interacts with the system ---
 <actor_def>          ::= "actor" <actor_type> <identifier> <string>?
@@ -473,6 +479,8 @@ Formatting changes whitespace and nothing else. Since v2.17.0 this is structural
 | `craft/lint/journey-list` / `journey-unconnected` | warning / hint | (v2.25) a `journey` tag with two values / a journey member no hand-off connects |
 | `craft/sema/missing-flow-property` / `invalid-priority` / `duplicate-flow` | error | (v2.35) a flow without `priority:` or `owner:` / a priority other than P0–P3 / a flow ref declared twice |
 | `craft/sema/unresolved-flow` / `craft/lint/duplicate-flow-in-list` | warning | (v2.35) a `realises` ref names no loaded flow / the same ref twice in one `realises` |
+| `craft/sema/missing-page-property` / `invalid-platform` / `duplicate-page` | error | (v2.36) a page without `product_domain:` / a platform other than frontoffice, backoffice, app / a page ref declared twice |
+| `craft/sema/unresolved-page` / `duplicate-page-property` | warning | (v2.36) an `entry` ref names no loaded page (only when some page is declared) / `platform:` or `product_domain:` twice |
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at exactly four sites: the `sync_action` subject and target, the `async_action` subject, or the `domain_listen` trigger context. Qualify it as `<domain>/<name>`. Does **not** fire for an internal action's subject or a `returns` subject/target |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (empty segment, or more than two segments) in any of: any action's subject, the `asks` target, the `returns` target, or the trigger context |
 
@@ -556,6 +564,7 @@ use_case "Seller promotes an advert" {
 - **`//@ [repo] path[:lines] [-- text]`** under a step cites the code that proves it. Put it on the line after the step it proves (it attaches to the nearest step line above it; plain comments in between do not matter). Several cites on one line: `//@ a.go:5-9, b.go:12`; `:<lines>` alone reuses the previous path. Free text goes after ` -- `. The repo is optional (resolved from the step's service). Use `//@` instead of `// see path:line` prose; keep file-header cites as plain `//` comments (a `//@` outside a use case is `craft/lint/detached-source`). A `//@` line that does not parse is `craft/syntax/malformed-source` (it stays a comment). Never invent paths or line numbers: cite only what you have read.
 - **`includes "<title>"`** — another use case runs here (a shared preamble or sub-flow), then this body goes on. **`continues "<title>"`** — the flow goes on in another use case and this body ends; nothing may follow it in the same body (`continues-not-last`). Both are steps that may sit in any branch. Use a link only for a hand-off with no event (a navigation, a redirect, a web view): an event hand-off is a `notifies`/`listens` pair and needs no link. The title must match a use case's title exactly (or one of its `formerly_titled: A; B` values, which gives `link-to-former-title`). An unknown title is `craft/sema/unresolved-use-case` (a warning: validate every file together); a title shared by two use cases is `craft/sema/ambiguous-use-case`.
 - **`realises: <flow-ref>, …`** (v2.35) names the critical flows the use case serves. A flow is declared once, usually in a file product owns: `flow lead-message "Lead generation" { priority: P1  owner: seeker-engagement  metric: "Leads" }` (one property per line; `priority` and `owner` required). Point use cases at flows; never list use cases in the flow. An unknown ref is `craft/sema/unresolved-flow` (a warning: validate every file together); a flow ref declared twice is `craft/sema/duplicate-flow`. Flows are not drawn.
+- **`entry: <page-ref>, …`** (v2.36) names the pages the use case starts on. A page is declared once: `page account-adverts "My Account: My Ads" { url: "https://…"  platform: frontoffice  product_domain: ad-inventory }` (one property per line; `product_domain` required, `url` once per site). Once any page is declared, an unknown ref is `craft/sema/unresolved-page` (a warning). Pages are not drawn.
 - **`journey: <slug>`** puts the use case in a journey (one slug; a list is `journey-list`). `craft generate <files…> --journey <slug>` draws every member as one sequence (the spine), ordered by hand-offs: event and store pairs, `continues`/`includes` links, and calls from one member to another member's `when <context> receives … [<op>]`; a chain stays together, the use case named after the slug leads among equals, unconnected members come last. A member with no hand-off to the others gets a `craft/lint/journey-unconnected` hint: add the `notifies`/`listens` pair, a `continues`/`includes` link, or write the callee side as `receives` with the caller's operation, or move it to its own journey.
 
 ### Deprecated: Quoted Event Strings
