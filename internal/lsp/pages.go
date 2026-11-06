@@ -3,6 +3,7 @@ package lsp
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"go.lsp.dev/protocol"
@@ -74,7 +75,7 @@ func (s *Server) pageHover(f *workspace.File, offset green.TextSize) (string, bo
 			return fmt.Sprintf("page %s is declared again here; the page is the one at %s:%d\n%s",
 				d.Ref(), s.displayPath(pg.SourceURI), pg.Line, s.pageSummary(*pg)), true
 		}
-		pg := model.Page{Ref: d.Ref(), Name: d.Name(), URLs: d.PropertyValues(lang.PageURL)}
+		pg := model.Page{Ref: d.Ref(), Name: d.Name(), URLs: uniqueValues(d.PropertyValues(lang.PageURL))}
 		pg.Platform, _ = d.Property(lang.PagePlatform)
 		pg.ProductDomain, _ = d.Property(lang.PageProductDomain)
 		return s.pageSummary(pg), true
@@ -262,4 +263,15 @@ func entryCompletions(ws *workspace.Workspace, linePrefix string) *protocol.Comp
 		})
 	}
 	return list
+}
+
+// uniqueValues keeps the first of each value, in order: the model's URLs.
+func uniqueValues(values []string) []string {
+	var out []string
+	for _, v := range values {
+		if !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
 }

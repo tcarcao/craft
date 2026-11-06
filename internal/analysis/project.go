@@ -664,7 +664,8 @@ func projectSurfaces(file syntax.File, li green.LineIndex, sourceURI string) []m
 }
 
 // realisedRefs is a `realises` (or `entry`) tag's values, trimmed, empty ones dropped and
-// each ref once (craft/lint/duplicate-flow-in-list reports a repeat).
+// each ref once (craft/lint/duplicate-flow-in-list reports a repeat in
+// `realises`; a repeat in `entry` or `url:` is dropped silently).
 func realisedRefs(values []string) []string {
 	var out []string
 	for _, v := range values {
