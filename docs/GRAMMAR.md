@@ -41,15 +41,16 @@ top_decl    = arch
             | actors_def
             | actor_def
             | surface_decl        (* 2.23, §8.2 *)
-            | flow_decl ;         (* 2.35, §8.3 *)
+            | flow_decl           (* 2.35, §8.3 *)
+            | page_decl ;         (* 2.36, §8.4 *)
 ```
 
 Every top-level declaration is recoverable independently: a parse failure inside one block MUST NOT prevent the parser from recognising the next top-level keyword (island parsing — see `ARCHITECTURE.md`).
 
 **Top-level keywords (the re-sync anchor set for error recovery):**
-`arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`, `surface` when a name and `{` follow on its line, and `flow` when a ref, a name or both and then `{` follow on its line.
+`arch`, `services`, `service`, `exposure`, `use_case`, `domain`, `domains`, `actors`, `actor`, `surface` when a name and `{` follow on its line, `flow` when a ref, a name or both and then `{` follow on its line, and `page` likewise (2.36).
 
-A use case, domain, surface or flow whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `flow <ref> "<name>" {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration. A surface or flow body stops at such a declaration at any column; in a flow body a keyword followed by `:` (`domain: …`) is a property line, not a declaration.
+A use case, domain, surface, flow or page whose `}` is missing also stops at a declaration that starts at column 1 (`surface <name> {`, `flow <ref> "<name>" {`, `page <ref> "<name>" {`, `actor <kind> <name>`, a block keyword followed by `{`, or another top-level keyword), so it does not swallow the next declaration (`craft/syntax/unclosed-block`). An indented line is never a declaration. A surface, flow or page body stops at such a declaration at any column; in a flow or page body a keyword followed by `:` (`domain: …`) is a property line, not a declaration.
 
 ---
 
@@ -334,6 +335,7 @@ A `tags { }` block holds free `key: value` pairs; most keys mean nothing to craf
 | `formerly_titled` | 2.25 | Earlier titles of the use case, `;`-separated. A link whose title matches one resolves to this use case (`craft/lint/link-to-former-title`). |
 | `formerly_journey` | 2.25 | Earlier journey slugs, `;`-separated. The spine reads it only to find the journey's namesake (a member in a file named after one of these slugs). |
 | `realises` | 2.35 | The critical flows the use case serves: a comma list of flow refs (§8.3), `realises: lead-message, lead-phone`. Each ref resolves over the whole workspace; one that names no flow is `craft/sema/unresolved-flow` (a warning: the flow may live in a file that was not loaded), and a ref repeated in the list is `craft/lint/duplicate-flow-in-list`. The model keeps the refs in `UseCase.Realises` (trimmed, each once, in order). |
+| `entry` | 2.36 | The pages the use case starts on: a comma list of page refs (§8.4), `entry: ad-detail, search-results`. The model keeps the refs in `UseCase.Entries` (trimmed, each once, in order). When the workspace declares at least one page, a ref that names no page is `craft/sema/unresolved-page` (a warning); a workspace without pages keeps `entry` as free text, with no diagnostic. |
 
 Every other key is free text.
 
@@ -395,6 +397,41 @@ use_case "Seeker sends a message" {
 - **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`flow "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-flow-property` (a warning; the line is kept in the tree and left out of the model). No `priority:` or no `owner:`: `craft/sema/missing-flow-property`. A priority that is not `P0`–`P3`: `craft/sema/invalid-priority`. A property written twice: `craft/sema/duplicate-flow-property` (a warning; the last value wins, as for tags). A ref declared twice anywhere in the workspace, in one file or two: `craft/sema/duplicate-flow` (an error on every later declaration; the first in sorted file order is the flow).
 - **Model.** `CraftDoc.Flows` holds each `Flow{Ref, Name, Priority, Owner, Metric, Notes, RealisedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `RealisedBy` lists the use cases whose `realises` tag names the flow (`UseCaseRef`, in model order); `CraftDoc.FlowByRef(ref)` finds a flow. A use case's refs are in `UseCase.Realises`.
 - **Views.** No diagram draws a flow; `craft generate` ignores them. `craft inspect` lists them, and `craft check` writes them in the CraftDoc JSON (`flows`).
+
+### 8.4 Pages (2.36)
+
+A page is an owned surface that users see, such as "My Account: My Ads": the unit a seller or seeker opens, on one or more sites. Its owner is the landlord of its product domain. A use case names the pages it starts on with the `entry` tag (§8.1), so the page's ref is the value use cases already write there. See `docs/decisions/pages.md`.
+
+```ebnf
+page_decl  = 'page' page_ref STRING '{' NL* (page_item NL+)* '}' ;
+page_ref   = identifier ;                                  (* a slug such as account-adverts; one token *)
+page_item  = ('url' | 'platform' | 'product_domain') ':' page_value
+           | note_stmt ;
+page_value = identifier | STRING ;                         (* one word, or a quoted string; a URL is quoted *)
+```
+
+```craft
+page account-adverts "My Account: My Ads" {
+    url: "https://www.otodom.pl/wiadomosci/moje-ogloszenia"
+    platform: frontoffice
+    product_domain: ad-inventory
+    note "the old Atlas page is still served for agencies"
+}
+
+use_case "Seller promotes an ad" {
+    tags {
+        entry: account-adverts
+    }
+
+    when Seller promotes an ad
+        promotion asks billing to charge the seller
+}
+```
+
+- **Properties.** `product_domain:` is required: an identifier or a string, as written. `url:` is optional and may be written more than once, one per site; the model keeps the URLs in source order, each once. `platform:` is optional and is one of `frontoffice`, `backoffice`, `app` (exact, case-sensitive). `note`/`finding` lines are allowed. Properties keep their source order, and the formatter does not reorder them.
+- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`page "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-page-property` (a warning; the line is kept in the tree and left out of the model). No `product_domain:`: `craft/sema/missing-page-property`. Another platform: `craft/sema/invalid-platform`. `platform:` or `product_domain:` written twice: `craft/sema/duplicate-page-property` (a warning; the last value wins). A ref declared twice anywhere in the workspace: `craft/sema/duplicate-page` (an error on every later declaration; the first in sorted file order is the page). An `entry` value that names no page, when the workspace declares at least one page: `craft/sema/unresolved-page` (a warning).
+- **Model.** `CraftDoc.Pages` holds each `Page{Ref, Name, URLs, Platform, ProductDomain, Notes, UsedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `UsedBy` lists the use cases whose `entry` tag names the page (`UseCaseRef`, in model order); `CraftDoc.PageByRef(ref)` finds a page. A use case's refs are in `UseCase.Entries`.
+- **Views.** No diagram draws a page; `craft generate` ignores them. `craft inspect` lists them (`pages`: `ref`, `name`, `urls`, `platform`, `product_domain`, `used_by`), and `craft check` writes them in the CraftDoc JSON (`pages`, and `entries` on use cases).
 
 ---
 
@@ -551,6 +588,15 @@ The 2.35 words:
 
 None of these changes the meaning of input that parsed before: a top-level line that starts with `flow` was `craft/syntax/skipped-construct`, and anywhere else `flow` needs `{` on its line to be a keyword, which no action, trigger, list or context name has. `realises` is a tag key, not a keyword: every tag key was already free text.
 
+The 2.36 words:
+
+| Word | Is a keyword only when | Otherwise |
+|---|---|---|
+| `page` | at top level (or at column 1 after an unclosed block), followed on the same line by `<ref> "<name>" {`, `<ref> {` or `"<name>" {` | an identifier (a context, a subject, a verb, a phrase word) |
+| `url`, `platform`, `product_domain` | in a page body, followed by `:` | an identifier |
+
+As for `flow`, none of these changes the meaning of input that parsed before. `entry` is a tag key, not a keyword.
+
 ### 11.2 Connector words (part of `phrase_word`)
 
 Connector words appear verbatim in sync-action and external-trigger phrases; they are both `connector_word` and `identifier`.
@@ -569,7 +615,7 @@ These are never allowed as an identifier or phrase word outside their structural
 
 | Position | Rule |
 |----------|------|
-| After top-level `NL*` | Peek one token. One of the top-level keywords (§2), or a contextual `surface` or `flow` header, enters its production; otherwise emit `craft/syntax/unexpected-token` and run island re-sync. |
+| After top-level `NL*` | Peek one token. One of the top-level keywords (§2), or a contextual `surface`, `flow` or `page` header, enters its production; otherwise emit `craft/syntax/unexpected-token` and run island re-sync. |
 | Inside service property | `contexts` / `data-stores` / `language` / `deployment` are keywords only when followed by `:` at the property position. Anywhere else in the same block body (e.g. as a context_ref name), they are identifiers. |
 | Inside exposure property | `to` / `contexts` / `through` are keywords only when followed by `:` at the property position. |
 | After `when` | See trigger-disambiguation rule in §8. `listens` is a keyword only when it appears as the second identifier of the trigger; elsewhere in the same trigger it is a plain identifier. |

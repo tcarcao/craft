@@ -137,6 +137,11 @@ func (p *Parser) parseFile() (*green.GreenNode, []model.Diagnostic) {
 			prevWasUseCase = false
 			continue
 		}
+		if p.atPageDecl() {
+			diags = append(diags, p.parsePageBlock()...)
+			prevWasUseCase = false
+			continue
+		}
 		tok := p.peek()
 		wasUseCase := tok.Type == lexer.TokenKwUseCase
 		switch tok.Type {
@@ -3767,8 +3772,10 @@ func isSurfaceConnector(v string) bool {
 }
 
 // atContextualDecl reports whether the next tokens open a top-level
-// declaration whose keyword is contextual: a surface or a flow.
-func (p *Parser) atContextualDecl() bool { return p.atSurfaceDecl() || p.atFlowDecl() }
+// declaration whose keyword is contextual: a surface, a flow or a page.
+func (p *Parser) atContextualDecl() bool {
+	return p.atSurfaceDecl() || p.atFlowDecl() || p.atPageDecl()
+}
 
 // --- flow parsing (v2.35) ---
 
@@ -3776,9 +3783,14 @@ func (p *Parser) atContextualDecl() bool { return p.atSurfaceDecl() || p.atFlowD
 // keyword `flow`, then `<ref> "<name>" {`, all on one line. `flow <ref> {`
 // (no name) and `flow "<name>" {` (no ref) open one too, so the parser can
 // say what is missing. Anywhere else `flow` is an identifier.
-func (p *Parser) atFlowDecl() bool {
+func (p *Parser) atFlowDecl() bool { return p.atRefNameDecl("flow") }
+
+// atRefNameDecl reports whether the next tokens open a `<keyword> <ref>
+// "<name>" {` declaration (a flow or a page), all on one line; the ref or the
+// name may be missing.
+func (p *Parser) atRefNameDecl(keyword string) bool {
 	tok := p.peek()
-	if tok.Type != lexer.TokenIdent || tok.Value != "flow" {
+	if tok.Type != lexer.TokenIdent || tok.Value != keyword {
 		return false
 	}
 	i := 1
@@ -3832,7 +3844,7 @@ func (p *Parser) parseFlowBlock() []model.Diagnostic {
 	return diags
 }
 
-// atFlowBodyEnd reports whether the next token ends an unclosed flow body: a
+// atFlowBodyEnd reports whether the next token ends an unclosed flow or page body: a
 // top-level keyword or a surface or flow header. A keyword followed by `:`
 // on its line is a property key (`domain: …` is an unknown property, not a
 // domain), so it does not end the body.
@@ -3921,5 +3933,132 @@ func (p *Parser) parseFlowItem() []model.Diagnostic {
 		return diags
 	default:
 		return p.sweepRestOfLine(tok.Line, "`priority:`, `owner:`, `metric:`, `note`, `finding` or `}`")
+	}
+}
+
+// --- page parsing (v2.36) ---
+
+// atPageDecl reports whether the next tokens open a page: the contextual
+// keyword `page`, then `<ref> "<name>" {`, all on one line (the ref or the
+// name may be missing, so the parser can say which). Anywhere else `page` is
+// an identifier.
+func (p *Parser) atPageDecl() bool { return p.atRefNameDecl("page") }
+
+// parsePageBlock parses: page <ref> "<name>" { page_item* }. Like a flow,
+// the body ends at `}`; a top-level keyword or another contextual
+// declaration before it means the block is unclosed.
+func (p *Parser) parsePageBlock() []model.Diagnostic {
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindPageDecl)
+	p.attachTrivia()
+	kwTok := p.consumeAs(SyntaxKindKwPage)
+	if t := p.peek(); t.Type == lexer.TokenIdent || isKeywordUsedAsIdent(t.Type) {
+		p.consumeAs(SyntaxKindIdent)
+	} else {
+		diags = append(diags, p.diagUnexpected(t, "a page ref, e.g. `page account-adverts \"My Account: My Ads\" {`"))
+	}
+	if t := p.peek(); t.Type == lexer.TokenString {
+		nameTok := p.consumeAs(SyntaxKindString)
+		if strings.TrimSpace(nameTok.Value) == "" {
+			diags = append(diags, p.diagPageName(nameTok))
+		}
+	} else {
+		diags = append(diags, p.diagPageName(kwTok))
+	}
+	p.consumeAs(SyntaxKindLBrace) // atPageDecl checked it
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atFlowBodyEnd() {
+		diags = append(diags, p.parsePageItem()...)
+	}
+	if p.peek().Type != lexer.TokenRBrace {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  "unclosed page block (missing `}`)",
+			Severity: model.SeverityError,
+			Range:    tokenRange(kwTok),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// diagPageName reports a page without its quoted name, at tok.
+func (p *Parser) diagPageName(tok lexer.Token) model.Diagnostic {
+	return model.Diagnostic{
+		Code:     "craft/syntax/missing-label",
+		Message:  "a page needs a quoted name after its ref, e.g. `page account-adverts \"My Account: My Ads\" {`",
+		Severity: model.SeverityError,
+		Range:    tokenRange(tok),
+	}
+}
+
+// pagePropertyExample is an example line for a page property key.
+func pagePropertyExample(key string) string {
+	switch key {
+	case lang.PageURL:
+		return `url: "https://www.example.com/my-ads"`
+	case lang.PagePlatform:
+		return "platform: frontoffice"
+	}
+	return "product_domain: ad-inventory"
+}
+
+// pagePropertyKinds maps each recognised page property to its keyword kind.
+var pagePropertyKinds = map[string]SyntaxKind{
+	lang.PageURL:           SyntaxKindKwURL,
+	lang.PagePlatform:      SyntaxKindKwPlatform,
+	lang.PageProductDomain: SyntaxKindKwProductDomain,
+}
+
+// parsePageItem parses one line of a page body: a `<key>: <value>` property,
+// or a note or finding. An unknown key is a warning and its line is kept; any
+// other line is reported and skipped.
+func (p *Parser) parsePageItem() []model.Diagnostic {
+	tok := p.peek()
+	switch {
+	case p.atNoteLine():
+		return p.parseNote()
+	case (tok.Type == lexer.TokenIdent || isKeywordUsedAsIdent(tok.Type)) && p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == tok.Line:
+		var diags []model.Diagnostic
+		p.builder.StartNode(SyntaxKindPageProperty)
+		kind, known := pagePropertyKinds[tok.Value]
+		if !known {
+			kind = SyntaxKindIdent
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unknown-page-property",
+				Message:  fmt.Sprintf("unknown page property %q; a page has `url:`, `platform:` and `product_domain:` (and `note` lines)", tok.Value),
+				Severity: model.SeverityWarning,
+				Range:    tokenRange(tok),
+			})
+		}
+		p.consumeAs(kind)
+		colonTok := p.consumeAs(SyntaxKindColon)
+		switch v := p.peek(); {
+		case v.Line != tok.Line || v.Type == lexer.TokenEOF || v.Type == lexer.TokenRBrace:
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unexpected-token",
+				Message:  fmt.Sprintf("`%s:` needs a value on its line, e.g. `%s`", tok.Value, pagePropertyExample(tok.Value)),
+				Severity: model.SeverityError,
+				Range:    tokenRange(colonTok),
+			})
+			p.builder.FinishNode()
+			return diags
+		case v.Type == lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case v.Type == lexer.TokenIdent || isAnyKeywordAsIdent(v.Type) || isKeywordUsedAsIdent(v.Type):
+			p.consumeAs(SyntaxKindIdent)
+		default:
+			diags = append(diags, p.diagUnexpected(v, fmt.Sprintf("a value after `%s:`: one word, or a quoted string", tok.Value)))
+			diags = append(diags, p.skipRestOfLine(tok.Line)...)
+			p.builder.FinishNode()
+			return diags
+		}
+		diags = append(diags, p.sweepRestOfLine(tok.Line, "end of line: a value is one word or a quoted string, e.g. `url: \"https://www.example.com/my-ads\"`")...)
+		p.builder.FinishNode()
+		return diags
+	default:
+		return p.sweepRestOfLine(tok.Line, "`url:`, `platform:`, `product_domain:`, `note`, `finding` or `}`")
 	}
 }

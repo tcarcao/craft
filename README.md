@@ -267,6 +267,29 @@ use_case "Seeker sends a message" {
 
 `priority:` (`P0`–`P3`) and `owner:` are required, `metric:` is optional. `craft inspect` lists each flow with the use cases that realise it, and `pkg/craft` exposes `CraftDoc.Flows` (`Flow.RealisedBy`), `UseCase.Realises` and `CraftDoc.FlowByRef`. Diagrams do not draw flows. `craft validate` warns when a `realises` ref names no loaded flow (`craft/sema/unresolved-flow`).
 
+## Pages (2.36)
+
+A `page` is a surface users see, owned through its product domain. Use cases name the pages they start on with the `entry` tag:
+
+```craft
+page account-adverts "My Account: My Ads" {
+    url: "https://www.otodom.pl/wiadomosci/moje-ogloszenia"
+    platform: frontoffice
+    product_domain: ad-inventory
+}
+
+use_case "Seller promotes an ad" {
+    tags {
+        entry: account-adverts
+    }
+
+    when Seller promotes an ad
+        promotion asks billing to charge the seller
+}
+```
+
+`product_domain:` is required; `url:` (once per site) and `platform:` (`frontoffice`, `backoffice` or `app`) are optional. `craft inspect` lists each page with the use cases that start on it, and `pkg/craft` exposes `CraftDoc.Pages` (`Page.UsedBy`), `UseCase.Entries` and `CraftDoc.PageByRef`. Diagrams do not draw pages. Once the loaded files declare a page, `craft validate` warns when an `entry` ref names no loaded page (`craft/sema/unresolved-page`).
+
 ---
 
 ## VS Code Extension

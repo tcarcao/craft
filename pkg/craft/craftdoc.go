@@ -26,6 +26,11 @@
 // the use cases that realise it in RealisedBy), UseCase.Realises (the flow
 // refs of its `realises` tag) and CraftDoc.FlowByRef. All are optional JSON
 // keys (flows, realises).
+//
+// Since v2.36.0 a model holds pages: CraftDoc.Pages (each Page lists the use
+// cases that start on it in UsedBy), UseCase.Entries (the page refs of its
+// `entry` tag) and CraftDoc.PageByRef. All are optional JSON keys (pages,
+// entries).
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"
@@ -73,6 +78,7 @@ type (
 	UseCaseRef         = model.UseCaseRef
 	JourneyEdgeKind    = model.JourneyEdgeKind
 	Flow               = model.Flow
+	Page               = model.Page
 )
 
 const (
@@ -150,6 +156,7 @@ const (
 	TagFormerlyJourney = model.TagFormerlyJourney
 
 	TagRealises = model.TagRealises
+	TagEntry    = model.TagEntry
 
 	JourneyEdgeEvent     = model.JourneyEdgeEvent
 	JourneyEdgeStore     = model.JourneyEdgeStore
@@ -165,3 +172,7 @@ func KnownActorTypes() []string { return model.KnownActorTypes() }
 // FlowPriorities lists the values a flow's priority may take, highest first:
 // P0, P1, P2, P3.
 func FlowPriorities() []string { return model.FlowPriorities() }
+
+// PagePlatforms lists the values a page's platform may take: frontoffice,
+// backoffice, app.
+func PagePlatforms() []string { return model.PagePlatforms() }

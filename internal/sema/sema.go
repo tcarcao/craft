@@ -170,6 +170,8 @@ type Symbols struct {
 	Surfaces []SurfaceSymbol
 	// Flows holds the file's critical-flow declarations (v2.35).
 	Flows []FlowSymbol
+	// Pages holds the file's page declarations (v2.36).
+	Pages []PageSymbol
 	// UseCaseRefs collects all name references from within use-case bodies
 	// so AnalyzeWorkspace can resolve them cross-file.
 	UseCaseRefs []UseCaseRef
@@ -210,6 +212,8 @@ type WorkspaceSymbols struct {
 	ContextOwners map[string]string
 	// Flows maps a flow ref → its first declaration in sorted file order.
 	Flows map[string]FlowSymbol
+	// Pages maps a page ref → its first declaration in sorted file order.
+	Pages map[string]PageSymbol
 }
 
 // RefSite records a single reference site used in ResolutionMap.
@@ -645,6 +649,9 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	syms.Flows = collectFlows(uri, file, lineIdx, hasLI)
 	diags = append(diags, validateFlows(uri, file, lineIdx, hasLI)...)
 
+	syms.Pages = collectPages(uri, file, lineIdx, hasLI)
+	diags = append(diags, validatePages(uri, file, lineIdx, hasLI)...)
+
 	return syms, diags
 }
 
@@ -674,6 +681,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 		DataStores:      make(map[string]string),
 		ContextOwners:   make(map[string]string),
 		Flows:           make(map[string]FlowSymbol),
+		Pages:           make(map[string]PageSymbol),
 	}
 	uris := make([]string, 0, len(perFile))
 	for uri := range perFile {
@@ -754,6 +762,7 @@ func MergeWorkspaceSymbols(perFile map[string]Symbols) (WorkspaceSymbols, []mode
 	// contexts entry to its canonical bounded context.
 	diags = append(diags, indexServiceMembers(&ws, perFile, uris)...)
 	diags = append(diags, mergeFlows(&ws, perFile, uris)...)
+	diags = append(diags, mergePages(&ws, perFile, uris)...)
 	return ws, diags
 }
 

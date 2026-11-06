@@ -1,0 +1,187 @@
+{
+  "useCases": [
+    {
+      "name": "Seller promotes an ad",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "promotes",
+            "connector": "an",
+            "phrase": "ad",
+            "description": "when Seller promotes an ad",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 29,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "promotion",
+                "targetContext": "billing",
+                "ref": "billing",
+                "connector": "to",
+                "phrase": "charge the seller",
+                "description": "promotion asks billing to charge the seller",
+                "line": 30,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "promotions/promotion"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "promotions/billing"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 24,
+      "tags": {
+        "entry": "account-adverts"
+      },
+      "tagValues": {
+        "entry": [
+          "account-adverts"
+        ]
+      },
+      "entries": [
+        "account-adverts"
+      ]
+    },
+    {
+      "name": "Visitor sees a special offer",
+      "scenarios": [
+        {
+          "id": "scenario_3",
+          "trigger": {
+            "type": "external",
+            "actor": "Visitor",
+            "verb": "opens",
+            "connector": "an",
+            "phrase": "ad",
+            "description": "when Visitor opens an ad",
+            "subject": {
+              "kind": "actor",
+              "id": "Visitor"
+            },
+            "line": 38,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_4",
+                "type": "sync_action",
+                "context": "promotion",
+                "targetContext": "ads",
+                "ref": "ads",
+                "connector": "to",
+                "phrase": "show the offer",
+                "description": "promotion asks ads to show the offer",
+                "line": 39,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "promotions/promotion"
+                },
+                "to": {
+                  "kind": "bounded_context",
+                  "id": "promotions/ads"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 33,
+      "tags": {
+        "entry": "ad-detail, account-adverts"
+      },
+      "tagValues": {
+        "entry": [
+          "ad-detail",
+          "account-adverts"
+        ]
+      },
+      "entries": [
+        "ad-detail",
+        "account-adverts"
+      ]
+    }
+  ],
+  "domains": [
+    {
+      "name": "promotions",
+      "boundedContexts": [
+        "promotion",
+        "billing",
+        "ads"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 1
+    },
+    {
+      "name": "Visitor",
+      "type": "user",
+      "line": 3
+    }
+  ],
+  "pages": [
+    {
+      "ref": "account-adverts",
+      "name": "My Account: My Ads",
+      "urls": [
+        "https://www.otodom.pl/wiadomosci/moje-ogloszenia",
+        "https://www.storia.ro/ro/contul-meu/anunturile-mele"
+      ],
+      "platform": "frontoffice",
+      "productDomain": "ad-inventory",
+      "notes": [
+        {
+          "kind": "note",
+          "text": "the old Atlas page is still served for agencies",
+          "line": 16,
+          "column": 5
+        }
+      ],
+      "usedBy": [
+        {
+          "name": "Seller promotes an ad"
+        },
+        {
+          "name": "Visitor sees a special offer"
+        }
+      ],
+      "line": 11
+    },
+    {
+      "ref": "ad-detail",
+      "name": "Ad detail",
+      "urls": [
+        "https://www.otodom.pl/pl/oferta"
+      ],
+      "productDomain": "seeker experience",
+      "usedBy": [
+        {
+          "name": "Visitor sees a special offer"
+        }
+      ],
+      "line": 19
+    }
+  ]
+}

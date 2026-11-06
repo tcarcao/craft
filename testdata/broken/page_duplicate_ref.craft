@@ -1,0 +1,7 @@
+page account-adverts "My Account: My Ads" {
+    product_domain: ad-inventory
+}
+
+page account-adverts "Again" {
+    product_domain: ad-inventory
+}

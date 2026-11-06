@@ -26,6 +26,9 @@ type CraftDoc struct {
 	// Flows are the critical flows (v2.35), the first declaration of each
 	// ref in sorted file order.
 	Flows []Flow `json:"flows,omitempty"`
+	// Pages are the pages users see (v2.36), the first declaration of each
+	// ref in sorted file order.
+	Pages []Page `json:"pages,omitempty"`
 }
 
 // Edge is one authored relationship edge from a context_map block, connecting
@@ -154,6 +157,11 @@ type UseCase struct {
 	// may name no declared flow (craft/sema/unresolved-flow); look it up
 	// with CraftDoc.FlowByRef.
 	Realises []string `json:"realises,omitempty"`
+	// Entries lists the refs of the pages the use case starts on, from its
+	// `entry` tag (v2.36): trimmed, in order, each ref once. A ref may name
+	// no declared page (craft/sema/unresolved-page); look it up with
+	// CraftDoc.PageByRef.
+	Entries []string `json:"entries,omitempty"`
 }
 
 // Scenario is one trigger and the steps it sets off, in source order.
@@ -222,6 +230,12 @@ const TagRealises = lang.TagRealises
 
 // FlowPriorities lists the values a flow's priority may take, highest first.
 func FlowPriorities() []string { return lang.FlowPriorities() }
+
+// TagEntry is the tag that lists the pages a use case starts on (v2.36).
+const TagEntry = lang.TagEntry
+
+// PagePlatforms lists the values a page's platform may take.
+func PagePlatforms() []string { return lang.PagePlatforms() }
 
 // JourneyEdgeKind is what connects two members of a journey spine.
 type JourneyEdgeKind = lang.JourneyEdgeKind
@@ -369,6 +383,36 @@ func (d *CraftDoc) FlowByRef(ref string) *Flow {
 	for i := range d.Flows {
 		if d.Flows[i].Ref == ref {
 			return &d.Flows[i]
+		}
+	}
+	return nil
+}
+
+// Page is a page users see (`page <ref> "<name>" { … }`, v2.36), such as
+// "My Account: My Ads". Its owner is the landlord of its product domain; use
+// cases point at it with the `entry` tag.
+type Page struct {
+	Ref           string   `json:"ref"`
+	Name          string   `json:"name"`
+	URLs          []string `json:"urls,omitempty"`          // one per site, in source order, each once
+	Platform      string   `json:"platform,omitempty"`      // frontoffice, backoffice or app
+	ProductDomain string   `json:"productDomain,omitempty"` // as written
+	Notes         []Note   `json:"notes,omitempty"`
+	// UsedBy lists the use cases whose `entry` tag names this page, in
+	// model order (sorted file order, then source order).
+	UsedBy    []UseCaseRef `json:"usedBy,omitempty"`
+	SourceURI string       `json:"sourceUri,omitempty"`
+	Line      int          `json:"line,omitempty"`
+}
+
+// PageByRef returns the page declared with ref, or nil.
+func (d *CraftDoc) PageByRef(ref string) *Page {
+	if d == nil {
+		return nil
+	}
+	for i := range d.Pages {
+		if d.Pages[i].Ref == ref {
+			return &d.Pages[i]
 		}
 	}
 	return nil

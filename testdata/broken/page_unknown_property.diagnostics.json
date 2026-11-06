@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/unknown-page-property",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 4
+      },
+      "end": {
+        "line": 2,
+        "character": 9
+      }
+    }
+  }
+]

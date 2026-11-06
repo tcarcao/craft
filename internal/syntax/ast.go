@@ -3383,7 +3383,7 @@ func (p FlowPropertyDecl) Key() string {
 	return ""
 }
 
-// Known reports whether the key is a recognised flow property.
+// Known reports whether the key is a recognised flow (or page) property.
 func (p FlowPropertyDecl) Known() bool {
 	t := p.KeyToken()
 	return t != nil && t.Kind() != SyntaxKindIdent
@@ -3415,3 +3415,107 @@ func (p FlowPropertyDecl) Line(li green.LineIndex) int { return nodeFirstTokenLi
 
 // Node returns the underlying syntax node.
 func (p FlowPropertyDecl) Node() SyntaxNode { return p.node }
+
+// Pages returns all PageDecl views, in document order (v2.36).
+func (f File) Pages() []PageDecl {
+	if f.isZero() {
+		return nil
+	}
+	var result []PageDecl
+	for _, n := range f.node.ChildNodes(SyntaxKindPageDecl) {
+		result = append(result, PageDecl{node: n})
+	}
+	return result
+}
+
+// PageDecl is a typed view over a SyntaxKindPageDecl node:
+// `page <ref> "<name>" { … }`.
+type PageDecl struct{ node SyntaxNode }
+
+// PagePropertyDecl is one `<key>: <value>` line of a page body: the same
+// view as a flow property, over a SyntaxKindPageProperty node. Its key is a
+// KwURL/KwPlatform/KwProductDomain token, or an Ident for an unknown key.
+type PagePropertyDecl = FlowPropertyDecl
+
+// Keyword returns the `page` keyword token.
+func (d PageDecl) Keyword() *SyntaxToken { return d.node.ChildToken(SyntaxKindKwPage) }
+
+// RefToken returns the ref token, or nil when it is missing.
+func (d PageDecl) RefToken() *SyntaxToken { return d.node.ChildToken(SyntaxKindIdent) }
+
+// Ref returns the ref as written, or "".
+func (d PageDecl) Ref() string {
+	if t := d.RefToken(); t != nil {
+		return t.Text()
+	}
+	return ""
+}
+
+// NameToken returns the quoted name token, or nil when it is missing.
+func (d PageDecl) NameToken() *SyntaxToken { return d.node.ChildToken(SyntaxKindString) }
+
+// Name returns the unquoted name, or "".
+func (d PageDecl) Name() string {
+	if t := d.NameToken(); t != nil {
+		return unquoteStringText(t.Text())
+	}
+	return ""
+}
+
+// Properties returns the `<key>: <value>` lines, in source order, unknown
+// keys included.
+func (d PageDecl) Properties() []PagePropertyDecl {
+	var out []PagePropertyDecl
+	for _, n := range d.node.ChildNodes(SyntaxKindPageProperty) {
+		out = append(out, PagePropertyDecl{node: n})
+	}
+	return out
+}
+
+// Property returns the value of the last property named key that has a
+// value (the last one wins), and whether there is one.
+func (d PageDecl) Property(key string) (string, bool) {
+	val, ok := "", false
+	for _, p := range d.Properties() {
+		if p.Key() == key && p.ValueToken() != nil {
+			val, ok = p.Value(), true
+		}
+	}
+	return val, ok
+}
+
+// PropertyValues returns every value of the properties named key, in source
+// order, as written (a repeatable property such as `url:`).
+func (d PageDecl) PropertyValues(key string) []string {
+	var out []string
+	for _, p := range d.Properties() {
+		if p.Key() == key && p.ValueToken() != nil {
+			out = append(out, p.Value())
+		}
+	}
+	return out
+}
+
+// Notes returns the page's note and finding lines, in source order.
+func (d PageDecl) Notes() []NoteDecl {
+	var out []NoteDecl
+	for _, n := range d.node.ChildNodes(SyntaxKindNote) {
+		out = append(out, NoteDecl{node: n})
+	}
+	return out
+}
+
+// Line returns the 1-based line of the `page` keyword using li.
+func (d PageDecl) Line(li green.LineIndex) int {
+	if tok := d.Keyword(); tok != nil {
+		line, _ := li.LineCol(tok.Offset())
+		return line
+	}
+	return nodeFirstTokenLine(d.node, li)
+}
+
+// EndLine returns the 1-based line of the closing `}` using li.
+func (d PageDecl) EndLine(li green.LineIndex) int { return nodeEndLine(d.node, li) }
+
+// Node returns the underlying syntax node.
+func (d PageDecl) Node() SyntaxNode { return d.node }

@@ -115,6 +115,7 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 
 	doc.Surfaces = projectSurfaces(file, li, sourceURI)
 	doc.Flows = projectFlows(file, li, sourceURI)
+	doc.Pages = projectPages(file, li, sourceURI)
 
 	for _, cm := range file.ContextMaps() {
 		for _, e := range cm.Edges() {
@@ -178,6 +179,7 @@ func projectUseCases(file syntax.File, li green.LineIndex, sourceURI string) []m
 				outUC.TagValues = tagValues
 			}
 			outUC.Realises = realisedRefs(tagValues[lang.TagRealises])
+			outUC.Entries = realisedRefs(tagValues[lang.TagEntry])
 		}
 		// Use-case-level notes precede every scenario in source order, so they
 		// take their numbers first.
@@ -661,8 +663,9 @@ func projectSurfaces(file syntax.File, li green.LineIndex, sourceURI string) []m
 	return out
 }
 
-// realisedRefs is a `realises` tag's values, trimmed, empty ones dropped and
-// each ref once (craft/lint/duplicate-flow-in-list reports a repeat).
+// realisedRefs is a `realises` (or `entry`) tag's values, trimmed, empty ones dropped and
+// each ref once (craft/lint/duplicate-flow-in-list reports a repeat in
+// `realises`; a repeat in `entry` or `url:` is dropped silently).
 func realisedRefs(values []string) []string {
 	var out []string
 	for _, v := range values {
@@ -696,6 +699,33 @@ func projectFlows(file syntax.File, li green.LineIndex, sourceURI string) []mode
 			mf.Notes = append(mf.Notes, projectNote(n, "", li))
 		}
 		out = append(out, mf)
+	}
+	return out
+}
+
+// projectPages projects the file's pages in source order. A page without a
+// ref is not one. `url:` keeps every value (in order, each once); the other
+// properties take the last value written (craft/sema/duplicate-page-property);
+// unknown ones are left out.
+func projectPages(file syntax.File, li green.LineIndex, sourceURI string) []model.Page {
+	var out []model.Page
+	for _, pg := range file.Pages() {
+		if pg.Ref() == "" {
+			continue
+		}
+		mp := model.Page{
+			Ref:       pg.Ref(),
+			Name:      pg.Name(),
+			URLs:      realisedRefs(pg.PropertyValues(lang.PageURL)),
+			SourceURI: sourceURI,
+			Line:      pg.Line(li),
+		}
+		mp.Platform, _ = pg.Property(lang.PagePlatform)
+		mp.ProductDomain, _ = pg.Property(lang.PageProductDomain)
+		for _, n := range pg.Notes() {
+			mp.Notes = append(mp.Notes, projectNote(n, "", li))
+		}
+		out = append(out, mp)
 	}
 	return out
 }

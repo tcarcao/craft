@@ -175,7 +175,7 @@ Parses one or more files and emits a **merged** structured model (actors, domain
 }
 ```
 
-`realises` and `flows` (v2.35) appear only when the model declares flows or `realises` tags.
+`realises` and `flows` (v2.35) appear only when the model declares flows or `realises` tags. `pages` (v2.36: `ref`, `name`, `urls`, `platform`, `product_domain`, `used_by`) appears only when the model declares pages.
 
 **Examples:**
 ```bash

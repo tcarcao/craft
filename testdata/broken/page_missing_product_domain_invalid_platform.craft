@@ -1,0 +1,3 @@
+page account-adverts "My Account: My Ads" {
+    platform: web
+}

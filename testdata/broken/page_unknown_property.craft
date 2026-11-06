@@ -1,0 +1,4 @@
+page account-adverts "My Account: My Ads" {
+    product_domain: ad-inventory
+    owner: someone
+}

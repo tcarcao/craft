@@ -110,6 +110,7 @@ func Workspace(files []FileResult) Result {
 		res.Symbols, res.Resolution = ws, rm
 		resolveParticipants(res.Doc, ws)
 		resolveFlows(res.Doc)
+		resolvePages(res.Doc)
 		// A stream records the request it answers (model.Action.Answers),
 		// from the same call-stack walk the interactions use.
 		for a, id := range interaction.AnsweredRequests(res.Doc) {

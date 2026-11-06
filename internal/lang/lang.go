@@ -181,3 +181,19 @@ const (
 
 // FlowPriorities lists the values a flow's priority may take, highest first.
 func FlowPriorities() []string { return []string{"P0", "P1", "P2", "P3"} }
+
+// Pages (v2.36): an owned surface that users see, such as "My Account: My
+// Ads". A use case names the pages it starts on with the `entry` tag.
+const (
+	// TagEntry lists the refs of the pages a use case starts on,
+	// comma-separated like any multi-value tag.
+	TagEntry = "entry"
+
+	// The properties of a page block.
+	PageURL           = "url"            // optional, repeatable: one per site
+	PagePlatform      = "platform"       // optional: one of PagePlatforms
+	PageProductDomain = "product_domain" // required: the product domain that owns the page
+)
+
+// PagePlatforms lists the values a page's platform may take.
+func PagePlatforms() []string { return []string{"frontoffice", "backoffice", "app"} }

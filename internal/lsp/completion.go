@@ -40,6 +40,9 @@ const (
 	ctxRealisesValue     // cursor after `realises: `: a flow ref
 	ctxFlowBody          // a line of a flow body
 	ctxFlowPriority      // cursor after `priority: ` in a flow
+	ctxEntryValue        // cursor after `entry: `: a page ref
+	ctxPageBody          // a line of a page body
+	ctxPagePlatform      // cursor after `platform: ` in a page
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -96,6 +99,11 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 		case syntax.SyntaxKindFlowDecl:
 			if lb := node.ChildToken(syntax.SyntaxKindLBrace); lb != nil && offset >= lb.TextRange().End {
 				return "flow"
+			}
+			return ""
+		case syntax.SyntaxKindPageDecl:
+			if lb := node.ChildToken(syntax.SyntaxKindLBrace); lb != nil && offset >= lb.TextRange().End {
+				return "page"
 			}
 			return ""
 		case syntax.SyntaxKindFile:
@@ -248,6 +256,9 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 		if realisesValueRe.MatchString(linePrefix) {
 			return ctxRealisesValue
 		}
+		if entryValueRe.MatchString(linePrefix) {
+			return ctxEntryValue
+		}
 		if tagValueRe.MatchString(linePrefix) {
 			return ctxTagValue
 		}
@@ -268,6 +279,14 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 			return ctxFlowBody
 		}
 		return ctxUnknown
+	case "page":
+		if pagePlatformRe.MatchString(linePrefix) {
+			return ctxPagePlatform
+		}
+		if strings.TrimSpace(linePrefix) == "" || !strings.ContainsAny(strings.TrimSpace(linePrefix), " \t:") {
+			return ctxPageBody
+		}
+		return ctxUnknown
 	case "use_case":
 		if storeNameRe.MatchString(linePrefix) {
 			return ctxStoreName
@@ -275,6 +294,10 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 		if realisesValueRe.MatchString(linePrefix) {
 			// `realises: ` with no value yet may not parse into the tags block.
 			return ctxRealisesValue
+		}
+		if entryValueRe.MatchString(linePrefix) {
+			// `entry: ` with no value yet may not parse into the tags block.
+			return ctxEntryValue
 		}
 		if tagValueRe.MatchString(linePrefix) {
 			// `sites: ` with no value yet may not parse into the tags block.
@@ -508,6 +531,14 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return flowBodyCompletions()
 	case ctxFlowPriority:
 		return flowPriorityCompletions()
+	case ctxEntryValue:
+		lineStart := f.LineIndex.OffsetFromUTF16(cursorLine+1, 0)
+		cursorOffset := f.LineIndex.OffsetFromUTF16(cursorLine+1, cursorCol)
+		return entryCompletions(ws, f.LineIndex.Src()[lineStart:cursorOffset])
+	case ctxPageBody:
+		return pageBodyCompletions()
+	case ctxPagePlatform:
+		return pagePlatformCompletions()
 	case ctxUseCaseAction:
 		return allSymbolCompletions(ws)
 	case ctxExposeField:
@@ -589,6 +620,13 @@ func topLevelKeywordCompletions() *protocol.CompletionList {
 			Kind:             protocol.CompletionItemKindKeyword,
 			Detail:           "declare a critical flow: a prioritised, owned business outcome that use cases realise",
 			InsertText:       "flow ${1:ref} \"${2:Name}\" {\n    priority: ${3|P0,P1,P2,P3|}\n    owner: ${4:product-domain}\n}",
+			InsertTextFormat: snip,
+		},
+		{
+			Label:            "page",
+			Kind:             protocol.CompletionItemKindKeyword,
+			Detail:           "declare a page users see: its urls, platform and owning product domain; use cases point at it with `entry:`",
+			InsertText:       "page ${1:ref} \"${2:Name}\" {\n    url: \"${3:https://}\"\n    platform: ${4|frontoffice,backoffice,app|}\n    product_domain: ${5:product-domain}\n}",
 			InsertTextFormat: snip,
 		},
 		{

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.36.0] — 2026-11-06
+
+**Why a minor version (v2.36.0).** New optional syntax, additive `pkg/craft` types and fields, and new diagnostics. `page` is a keyword only when `<ref> "<name>" {` follows on its line, as for `flow`, so no file that parsed changes meaning. `entry` becomes a recognised tag key: its refs are now also in `UseCase.Entries` (`entries` in the CraftDoc JSON). `craft/sema/unresolved-page` runs only when the loaded files declare a page, so `craft validate`, `craft inspect` and `craft fmt --check` give the same output as 2.35.0 for a model without pages.
+
+### Added
+- **Pages.** `page <ref> "<name>" { … }` declares a page users see, such as "My Account: My Ads": `url:` (optional, once per site), `platform:` (optional: `frontoffice`, `backoffice` or `app`), `product_domain:` (required; the landlord of that product domain owns the page) and `note` lines. A use case names the pages it starts on with the recognised tag `entry: ad-detail, search-results`. See `docs/GRAMMAR.md` §8.4 and `docs/decisions/pages.md`.
+- **`pkg/craft`**: `Page{Ref, Name, URLs, Platform, ProductDomain, Notes, UsedBy, SourceURI, Line}`, `CraftDoc.Pages` (the first declaration of each ref in sorted file order), `CraftDoc.PageByRef(ref)`, `UseCase.Entries` (the refs of the `entry` tag, trimmed, each once), `TagEntry` and `PagePlatforms()`. `UsedBy` lists the use cases whose `entry` tag names the page. All are optional JSON keys (`pages`, `urls`, `productDomain`, `usedBy`, `entries`).
+- **CLI.** `craft inspect` lists each page (`pages`: `ref`, `name`, `urls`, `platform`, `product_domain`, `used_by`); `craft check` writes `pages` and each use case's `entries` in the CraftDoc JSON. `craft generate` does not draw pages. `craft fmt` formats page blocks like flow blocks.
+- **Diagnostics.** `craft/syntax/unknown-page-property` (warning), `craft/sema/missing-page-property`, `craft/sema/invalid-platform` and `craft/sema/duplicate-page` (errors), `craft/sema/duplicate-page-property` and `craft/sema/unresolved-page` (warnings); a page without its name is `craft/syntax/missing-label`. See `docs/DIAGNOSTICS.md`.
+- **Language server.** Hover on a page header or an `entry` value shows the page's name, URLs, platform, product domain and the use cases that start on it; hover on `entry`, `url`, `platform` and `product_domain` explains the key. Definition goes from an `entry` value to its page. Completion offers page refs after `entry:`, `entry` among the tag keys, the page body keys, the platforms after `platform:`, and a `page` snippet at top level. Pages appear in the outline and fold.
+
 ## [2.35.0] — 2026-11-04
 
 **Why a minor version (v2.35.0).** New optional syntax, additive `pkg/craft` types and fields, and new diagnostics. `flow` is a keyword only when `<ref> "<name>" {` follows on its line, and a top-level line that starts with `flow` was a syntax error before, so no file that parsed changes meaning. A model without flows or `realises` tags gives the same CraftDoc JSON as in 2.34.1 (every corpus golden is unchanged).

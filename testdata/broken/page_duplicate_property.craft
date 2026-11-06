@@ -1,0 +1,14 @@
+page account-adverts "My Account: My Ads" {
+    product_domain: ad-inventory
+    platform: app
+    platform: backoffice
+}
+
+use_case "Seller promotes an ad" {
+    tags {
+        entry: account-adverts, ghost
+    }
+
+    when Seller promotes an ad
+        promotion asks billing to charge the seller
+}

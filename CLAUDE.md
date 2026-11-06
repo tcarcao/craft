@@ -68,6 +68,7 @@ examples/       Example .craft files
 | `context_map` | Strategic view classifying BC-to-BC relationships with DDD patterns (`customer_supplier`, `conformist`, `anticorruption_layer`, `open_host_service`, `published_language`, `partnership`, `shared_kernel`, `separate_ways`) |
 | `glossary`    | Ubiquitous-language view relating terms across bounded contexts with three symmetric verbs (`same_as`, `contrasts`, `distinct_from`) |
 | `flow`        | Critical flow (2.35): a named, prioritised (`P0`–`P3`), owned business outcome; use cases point at it with a `realises: <ref>, …` tag |
+| `page`        | Page (2.36): a surface users see, with `url:` (per site), `platform:` and a required `product_domain:`; use cases point at it with an `entry: <ref>, …` tag |
 
 ### Key DSL Example
 

@@ -15,6 +15,7 @@ Each `.craft` source file has a paired `.craftjson` file containing the expected
 | `05_architecture/` | Architecture blocks with presentation and gateway components |
 | `06_exposures/` | Exposure definitions |
 | `10_flows/` | Critical flows and the `realises` tag (2.35) |
+| `11_pages/` | Pages and the `entry` tag (2.36) |
 | `99_mixed/` | Cross-kind integration files (raw `.craft` files forked from `examples/`; no goldens) |
 
 Directories `01_actors/` through `06_exposures/` are indexed by block kind. Files in each directory exercise the grammar features introduced in the corresponding S1–S8 slices.
