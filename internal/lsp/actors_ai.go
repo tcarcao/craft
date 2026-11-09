@@ -95,8 +95,9 @@ func actorFoldingRanges(file syntax.File, li green.LineIndex) []protocol.Folding
 	return out
 }
 
-// actorAIRe matches an actor's `ai:` typed up to its value.
-var actorAIRe = regexp.MustCompile(`^\s*ai:\s*\w*$`)
+// actorAIRe matches an actor's `ai:` typed up to its value, on its own line
+// or right after a one-line body's `{`.
+var actorAIRe = regexp.MustCompile(`(^|\{)\s*ai:\s*\w*$`)
 
 // actorBodyCompletions are the lines of an actor body.
 func actorBodyCompletions() *protocol.CompletionList {

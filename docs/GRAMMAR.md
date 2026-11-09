@@ -65,9 +65,9 @@ actor_type       = identifier ;       (* known kinds: user, system, service, sch
 actor_name       = identifier ;
 display_name     = STRING ;           (* 2.27; on the name's line *)
 actor_body       = '{' NL* (actor_item NL+)* '}'   (* 2.37; `{` on the name's line *)
-                 | '{' actor_item '}' ;            (* one item may share the braces' line *)
-actor_item       = ('ai' | 'owner') ':' actor_value
-                 | note_stmt ;
+                 | '{' actor_property '}' ;        (* one property may share the braces' line *)
+actor_item       = actor_property | note_stmt ;    (* each on its own line *)
+actor_property   = ('ai' | 'owner') ':' actor_value ;
 actor_value      = identifier | STRING ;           (* one word, or a quoted string *)
 ```
 
@@ -88,8 +88,8 @@ actors {
 actor system Dapi "OLX data API" { ai: ml }
 ```
 
-- **Properties.** `ai:` is optional and is one of `ml` (a trained model), `genai` (a generative model) or `agentic` (an agent that acts), exact and case-sensitive. `owner:` is optional and is a free value, an identifier or a quoted string: who runs the system ("OLX Data", "Toqan"). `note`/`finding` lines are allowed. A property is one line; one property per line. A body that holds one item may sit on the name's line (`{ ai: ml }`); `craft fmt` opens it onto its own lines. An actor without a body is unchanged.
-- **Diagnostics.** Any other key: `craft/syntax/unknown-actor-property` (a warning; the line is kept in the tree and left out of the model). A key with no value on its line, or a second word or property after the value: `craft/syntax/unexpected-token`. An `ai:` that is not one of the three kinds: `craft/sema/invalid-ai-kind` (an error; the kind is left out of the model). A property written twice: `craft/sema/duplicate-actor-property` (a warning; the last value wins). An actor declared again, in any file, with another `ai:` (or with one, after a declaration without): `craft/lint/conflicting-ai-kind` (a warning; the first declaration in sorted file order is the actor's, as for display names). A body without its `}`: `craft/syntax/unclosed-block`; in `actors { }` the body ends at the first line that is neither a property nor a note, so the next actor still parses. A `{` on a later line than the name is not a body (`craft/syntax/unexpected-token`, as before 2.37).
+- **Properties.** `ai:` is optional and is one of `ml` (a trained model), `genai` (a generative model) or `agentic` (an agent that acts), exact and case-sensitive. `owner:` is optional and is a free value, an identifier or a quoted string: who runs the system ("OLX Data", "Toqan"). `note`/`finding` lines are allowed. A property is one line; one property per line. A body that holds one property may sit on the name's line (`{ ai: ml }`); a note starts its own line, as in a flow. `craft fmt` opens a one-line body onto its own lines. An actor without a body is unchanged.
+- **Diagnostics.** Any other key: `craft/syntax/unknown-actor-property` (a warning; the line is kept in the tree and left out of the model). A key with no value on its line, or a second word or property after the value: `craft/syntax/unexpected-token`. An `ai:` that is not one of the three kinds: `craft/sema/invalid-ai-kind` (an error; the kind is left out of the model). A property written twice: `craft/sema/duplicate-actor-property` (a warning; the last value wins). An actor declared again, in any file, with another `ai:` (or with one, after a declaration without): `craft/lint/conflicting-ai-kind` (a warning; the first declaration in sorted file order is the actor's, as for display names). A body without its `}`: `craft/syntax/unclosed-block`; in `actors { }` the body also ends at the first line that is neither a property nor a note and starts at or left of the actor's column (the next actor), so the rest of the block still parses; a deeper-indented stray line is `craft/syntax/unexpected-token` and is skipped. A `{` on a later line than the name is not a body and is an error, as before 2.37.
 - **Model.** `Actor.AI` (one of `AIKinds()`, or empty), `Actor.Owner` and `Actor.Notes`; JSON keys `ai`, `owner` and `notes`, omitted when empty. `CraftDoc.ActorByName(name)` finds the actor the model keeps (the first declaration). No diagram draws the body; `craft inspect` shows `ai` and `owner`.
 
 The actor-type slot accepts any identifier (grammar ruling Q5: tooling decides the known set). Six kinds are known (2.24 added the last three):

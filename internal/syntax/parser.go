@@ -240,7 +240,7 @@ func (p *Parser) parseActorStatement() []model.Diagnostic {
 	}
 	p.consumeAs(SyntaxKindIdent)
 	p.consumeDisplayName(nameTok)
-	diags = append(diags, p.parseActorBody(nameTok, false)...)
+	diags = append(diags, p.parseActorBody(nameTok, 0)...)
 
 	p.builder.FinishNode()
 	return diags
@@ -332,7 +332,7 @@ func (p *Parser) parseActorsBlock() []model.Diagnostic {
 		}
 		p.consumeAs(SyntaxKindIdent)
 		p.consumeDisplayName(nameTok)
-		diags = append(diags, p.parseActorBody(nameTok, true)...)
+		diags = append(diags, p.parseActorBody(nameTok, tok.Column)...)
 		p.builder.FinishNode()
 	}
 
@@ -4087,11 +4087,12 @@ func actorPropertyExample(key string) string {
 // close on its line (`{ ai: ml }`). Without a `{` on the name's line the
 // actor has no body and nothing is consumed.
 //
-// inBlock is set inside `actors { }`: there a line that is neither a
-// property nor a note (the next actor, say) ends an unclosed body, so the
-// rest of the block still parses. Elsewhere such a line is reported and
-// skipped, as in a flow body.
-func (p *Parser) parseActorBody(nameTok lexer.Token, inBlock bool) []model.Diagnostic {
+// blockCol is the column of the actor's kind inside `actors { }`, 0
+// elsewhere. In a block, a line that is neither a property nor a note and
+// starts at or left of that column (the next actor, say) ends an unclosed
+// body, so the rest of the block still parses. A deeper-indented stray line
+// is reported and skipped, as in a flow body.
+func (p *Parser) parseActorBody(nameTok lexer.Token, blockCol int) []model.Diagnostic {
 	lb := p.peek()
 	if lb.Type != lexer.TokenLBrace || lb.Line != nameTok.Line {
 		return nil
@@ -4100,7 +4101,7 @@ func (p *Parser) parseActorBody(nameTok lexer.Token, inBlock bool) []model.Diagn
 	p.builder.StartNode(SyntaxKindActorBody)
 	p.consumeAs(SyntaxKindLBrace)
 	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atFlowBodyEnd() {
-		if inBlock && !p.atNoteLine() && !p.atPropertyLine() {
+		if t := p.peek(); blockCol > 0 && t.Column <= blockCol && !p.atNoteLine() && !p.atPropertyLine() {
 			break
 		}
 		diags = append(diags, p.parseActorItem()...)

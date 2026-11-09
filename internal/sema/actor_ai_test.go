@@ -59,3 +59,24 @@ func TestLint_ConflictingAIKind(t *testing.T) {
 		}
 	}
 }
+
+// An invalid first kind is dropped from the model, so a later valid kind is
+// reported as following a declaration without `ai:`.
+func TestLint_ConflictingAIKind_InvalidFirst(t *testing.T) {
+	diags := lintFiles(t, map[string]string{
+		"file:///a.craft": "actor system Gen {\n    ai: foo\n}\n",
+		"file:///b.craft": "actor system Gen {\n    ai: ml\n}\n",
+	})
+	got := byCode(diags, "craft/lint/conflicting-ai-kind")
+	if len(got) != 1 || got[0].Message != "actor Gen is first declared without `ai:` (file:///a.craft), so the model keeps it unclassified; move `ai: ml` there or remove this one" {
+		t.Fatalf("conflicting-ai-kind = %v", got)
+	}
+}
+
+// A key with no value is the parser's error, not a first setting.
+func TestActorAI_ValuelessKeyIsNotDuplicate(t *testing.T) {
+	diags := analyzeFiles(t, map[string]string{"a.craft": "actor system G {\n    ai:\n    ai: ml\n}\n"})
+	if dup := withCode(diags, "craft/sema/duplicate-actor-property"); len(dup) != 0 {
+		t.Errorf("duplicate-actor-property = %+v", dup)
+	}
+}

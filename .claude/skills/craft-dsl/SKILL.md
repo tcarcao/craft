@@ -43,7 +43,7 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 // --- Actors: who interacts with the system ---
 <actor_def>          ::= "actor" <actor_type> <identifier> <string>? <actor_body>?
 <actors_def>         ::= "actors" "{" (<actor_type> <identifier> <string>? <actor_body>?)+ "}"
-<actor_body>         ::= "{" (("ai" | "owner") ":" (<identifier> | <string>) | "note" <string>)* "}"
+<actor_body>         ::= "{" (("ai" | "owner") ":" (<identifier> | <string>) | ("note" | "finding") <string>)* "}"
                        // v2.37, `{` on the name's line; ai: ml|genai|agentic; owner: who runs it; one item per line
                        // v2.27: the optional <string> is a display name, on the same line
 <actor_type>         ::= "user" | "system" | "service" | "scheduler" | "tool" | "infra"

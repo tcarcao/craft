@@ -98,3 +98,10 @@ func TestActorAI_OutlineAndFolding(t *testing.T) {
 		t.Errorf("folds = %+v, want 1-4", folds)
 	}
 }
+
+func TestActorAI_OneLineBodyCompletion(t *testing.T) {
+	c := newWorkspaceClient(t, flowsRoot, "", wsFile{actorsAIURI, "actor system G { ai:  }\n"})
+	if got, want := completionLabelsAt(t, c, actorsAIURI, 0, 21), []string{"ml", "genai", "agentic"}; !slices.Equal(got, want) {
+		t.Errorf("ai completion = %v, want %v", got, want)
+	}
+}

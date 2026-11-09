@@ -35,7 +35,9 @@ func validateActorBodies(uri string, file syntax.File, li green.LineIndex, hasLI
 				add("craft/sema/duplicate-actor-property", model.SeverityWarning, tokenDiagRange(p.KeyToken(), li, hasLI),
 					fmt.Sprintf("actor %s: `%s:` is already set; the last value wins", nameTok.Text(), key))
 			}
-			seen[key] = true
+			if p.ValueToken() != nil {
+				seen[key] = true // a key without a value is the parser's error
+			}
 			if key == lang.ActorAI && p.ValueToken() != nil && !slices.Contains(lang.AIKinds(), p.Value()) {
 				add("craft/sema/invalid-ai-kind", model.SeverityError, tokenDiagRange(p.ValueToken(), li, hasLI),
 					fmt.Sprintf("actor %s: AI kind %q is not one of %s (ml: a trained model; genai: a generative model; agentic: an agent that acts)",
@@ -63,14 +65,19 @@ func lintAIKinds(perFileTrees map[string]syntax.SyntaxNode, lis map[string]green
 				continue
 			}
 			name := nameTok.Text()
+			// Compare the kinds the model keeps: an invalid one is dropped
+			// (craft/sema/invalid-ai-kind), so it counts as none.
 			ai, _ := a.Property(lang.ActorAI)
+			if !slices.Contains(lang.AIKinds(), ai) {
+				ai = ""
+			}
 			prev, again := declared[name]
 			if !again {
 				declared[name] = decl{ai, uri}
 				continue
 			}
 			p, ok := a.PropertyDecl(lang.ActorAI)
-			if !ok || prev.ai == ai {
+			if !ok || ai == "" || prev.ai == ai {
 				continue
 			}
 			msg := fmt.Sprintf("actor %s is first declared with `ai: %s` (%s), which the model keeps; use the same kind here or remove this one",

@@ -130,3 +130,20 @@ func TestActorBody_LastWins(t *testing.T) {
 		t.Error("unknown key read as a property")
 	}
 }
+
+// A stray line indented deeper than the actor, inside a closed body in a
+// block, is reported and skipped; it does not end the body or become an
+// actor (review finding).
+func TestActorBody_StrayLineInBlock(t *testing.T) {
+	g, _, diags := syntax.Parse("actors {\n    user Seller\n    system Gen {\n        ai ml\n    }\n    system Other\n}\n")
+	if len(diags) != 1 || diags[0].Code != "craft/syntax/unexpected-token" || diags[0].Range.Start.Line != 3 {
+		t.Fatalf("diags = %v", diags)
+	}
+	var names []string
+	for _, a := range syntax.AsFile(syntax.Root(g)).Actors() {
+		names = append(names, a.Name().Text())
+	}
+	if len(names) != 3 || names[2] != "Other" {
+		t.Errorf("actors = %v", names)
+	}
+}
