@@ -1,0 +1,15 @@
+actors {
+    user ai
+    system owner "the owner system" {
+        owner: owner
+    }
+}
+
+domain Listing {
+    ads
+}
+
+use_case "ai asks owner" {
+    when ai sends a request
+        ads asks owner to answer
+}

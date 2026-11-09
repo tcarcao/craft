@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/syntax/unknown-actor-property",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 3,
+        "character": 8
+      },
+      "end": {
+        "line": 3,
+        "character": 14
+      }
+    }
+  }
+]

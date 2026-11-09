@@ -66,6 +66,7 @@ func LintWorkspace(perFileTrees map[string]syntax.SyntaxNode, ws WorkspaceSymbol
 	diags = append(diags, lintEgressOnInternalStep(perFileTrees, lis)...)
 	diags = append(diags, lintUnquotedAddress(perFileTrees, lis)...)
 	diags = append(diags, lintDisplayNames(perFileTrees, lis)...)
+	diags = append(diags, lintAIKinds(perFileTrees, lis)...)
 	return diags
 }
 

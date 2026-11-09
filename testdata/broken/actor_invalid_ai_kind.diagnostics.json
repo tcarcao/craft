@@ -1,0 +1,16 @@
+[
+  {
+    "code": "craft/sema/invalid-ai-kind",
+    "severity": "error",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 12
+      },
+      "end": {
+        "line": 2,
+        "character": 15
+      }
+    }
+  }
+]

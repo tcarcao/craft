@@ -197,3 +197,15 @@ const (
 
 // PagePlatforms lists the values a page's platform may take.
 func PagePlatforms() []string { return []string{"frontoffice", "backoffice", "app"} }
+
+// AI systems (v2.37): an actor may carry a property body that classifies the
+// external system it stands for, so the use cases that call it can be counted.
+const (
+	// The properties of an actor body.
+	ActorAI    = "ai"    // optional: one of AIKinds
+	ActorOwner = "owner" // optional: who runs the system, as written
+)
+
+// AIKinds lists the values an actor's `ai:` may take, in ascending order of
+// advancement: a trained model, a generative model, an agent that acts.
+func AIKinds() []string { return []string{"ml", "genai", "agentic"} }

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.37.0] — 2026-11-09
+
+**Why a minor version (v2.37.0).** New optional syntax, additive `pkg/craft` fields and functions, and new diagnostics. An actor body opens with `{` on the actor's name line, which was `craft/syntax/unexpected-token` before, and `ai`/`owner` are keywords only inside that body, so no file that parsed changes meaning. An actor without a body gives the same CraftDoc JSON as in 2.36.0 (every corpus golden is unchanged), and `craft validate`, `craft inspect` and `craft fmt --check` give the same output for a model without actor bodies.
+
+### Added
+- **AI systems.** An actor may carry an optional body on its declaration, in `actors { }` and after `actor <kind> <name>`: `system DescriptionGenerator "description generator" { … }` with `ai:` (optional: `ml`, `genai` or `agentic`), `owner:` (optional, free value: who runs the system) and `note` lines, one per line. A body of one property may sit on one line (`{ ai: ml }`). The use cases that call a classified actor are its AI use cases. See `docs/GRAMMAR.md` §3 and `docs/decisions/ai-systems.md`.
+- **`pkg/craft`**: `Actor.AI` (one of `AIKinds()`, empty when undeclared or invalid), `Actor.Owner`, `Actor.Notes`, `CraftDoc.ActorByName(name)` (the first declaration in sorted file order) and `AIKinds()` (`ml`, `genai`, `agentic`, in ascending order of advancement). All are optional JSON keys (`ai`, `owner`, `notes`).
+- **CLI.** `craft inspect` shows `ai` and `owner` on actors (JSON keys; text: `DescriptionGenerator (system, ai: genai, owner: OLX Data)`); `craft check` writes them in the CraftDoc JSON. `craft fmt` formats an actor body like a flow body (one property per line, one indent) and leaves actors without a body unchanged. `craft generate` is unchanged.
+- **Diagnostics.** `craft/sema/invalid-ai-kind` (error), `craft/syntax/unknown-actor-property`, `craft/sema/duplicate-actor-property` and `craft/lint/conflicting-ai-kind` (warnings); an actor body without its `}` is `craft/syntax/unclosed-block`. See `docs/DIAGNOSTICS.md`.
+- **Language server.** Hover on an actor, at its declaration or where a use case names it, shows its AI kind and owner; hover on `ai` and `owner` explains the key. Completion offers `ai:`, `owner:` and `note` in an actor body and the three kinds after `ai:`. An actor body folds, and the outline shows the AI kind and spans the body.
+
 ## [2.36.0] — 2026-11-06
 
 **Why a minor version (v2.36.0).** New optional syntax, additive `pkg/craft` types and fields, and new diagnostics. `page` is a keyword only when `<ref> "<name>" {` follows on its line, as for `flow`, so no file that parsed changes meaning. `entry` becomes a recognised tag key: its refs are now also in `UseCase.Entries` (`entries` in the CraftDoc JSON). `craft/sema/unresolved-page` runs only when the loaded files declare a page, so `craft validate`, `craft inspect` and `craft fmt --check` give the same output as 2.35.0 for a model without pages.

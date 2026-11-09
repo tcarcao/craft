@@ -240,6 +240,7 @@ func (p *Parser) parseActorStatement() []model.Diagnostic {
 	}
 	p.consumeAs(SyntaxKindIdent)
 	p.consumeDisplayName(nameTok)
+	diags = append(diags, p.parseActorBody(nameTok, 0)...)
 
 	p.builder.FinishNode()
 	return diags
@@ -331,6 +332,7 @@ func (p *Parser) parseActorsBlock() []model.Diagnostic {
 		}
 		p.consumeAs(SyntaxKindIdent)
 		p.consumeDisplayName(nameTok)
+		diags = append(diags, p.parseActorBody(nameTok, tok.Column)...)
 		p.builder.FinishNode()
 	}
 
@@ -4060,5 +4062,119 @@ func (p *Parser) parsePageItem() []model.Diagnostic {
 		return diags
 	default:
 		return p.sweepRestOfLine(tok.Line, "`url:`, `platform:`, `product_domain:`, `note`, `finding` or `}`")
+	}
+}
+
+// --- actor bodies (v2.37) ---
+
+// actorPropertyKinds maps each recognised actor property to its keyword kind.
+var actorPropertyKinds = map[string]SyntaxKind{
+	lang.ActorAI:    SyntaxKindKwAI,
+	lang.ActorOwner: SyntaxKindKwOwner,
+}
+
+// actorPropertyExample is an example line for an actor property key.
+func actorPropertyExample(key string) string {
+	if key == lang.ActorOwner {
+		return `owner: "OLX Data"`
+	}
+	return "ai: genai"
+}
+
+// parseActorBody parses the optional body of an actor declaration:
+// `{ actor_item* }`, opened on the name's line. Like a flow body it holds
+// `<key>: <value>` lines and notes, one per line; a body of one item may
+// close on its line (`{ ai: ml }`). Without a `{` on the name's line the
+// actor has no body and nothing is consumed.
+//
+// blockCol is the column of the actor's kind inside `actors { }`, 0
+// elsewhere. In a block, a line that is neither a property nor a note and
+// starts at or left of that column (the next actor, say) ends an unclosed
+// body, so the rest of the block still parses. A deeper-indented stray line
+// is reported and skipped, as in a flow body.
+func (p *Parser) parseActorBody(nameTok lexer.Token, blockCol int) []model.Diagnostic {
+	lb := p.peek()
+	if lb.Type != lexer.TokenLBrace || lb.Line != nameTok.Line {
+		return nil
+	}
+	var diags []model.Diagnostic
+	p.builder.StartNode(SyntaxKindActorBody)
+	p.consumeAs(SyntaxKindLBrace)
+	for !p.atEOF() && p.peek().Type != lexer.TokenRBrace && !p.atFlowBodyEnd() {
+		if t := p.peek(); blockCol > 0 && t.Column <= blockCol && !p.atNoteLine() && !p.atPropertyLine() {
+			break
+		}
+		diags = append(diags, p.parseActorItem()...)
+	}
+	if p.peek().Type != lexer.TokenRBrace {
+		diags = append(diags, model.Diagnostic{
+			Code:     "craft/syntax/unclosed-block",
+			Message:  fmt.Sprintf("unclosed body of actor %s (missing `}`)", nameTok.Value),
+			Severity: model.SeverityError,
+			Range:    tokenRange(lb),
+		})
+		p.builder.FinishNode()
+		return diags
+	}
+	p.consumeAs(SyntaxKindRBrace)
+	p.builder.FinishNode()
+	return diags
+}
+
+// atPropertyLine reports whether the next tokens are `<key>:` on one line.
+func (p *Parser) atPropertyLine() bool {
+	tok := p.peek()
+	return (tok.Type == lexer.TokenIdent || isKeywordUsedAsIdent(tok.Type)) &&
+		p.peekAt(1).Type == lexer.TokenColon && p.peekAt(1).Line == tok.Line
+}
+
+// parseActorItem parses one line of an actor body: a `<key>: <value>`
+// property, or a note or finding. An unknown key is a warning and its line
+// is kept; any other line is reported and skipped.
+func (p *Parser) parseActorItem() []model.Diagnostic {
+	tok := p.peek()
+	switch {
+	case p.atNoteLine():
+		return p.parseNote()
+	case p.atPropertyLine():
+		var diags []model.Diagnostic
+		p.builder.StartNode(SyntaxKindActorProperty)
+		kind, known := actorPropertyKinds[tok.Value]
+		if !known {
+			kind = SyntaxKindIdent
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unknown-actor-property",
+				Message:  fmt.Sprintf("unknown actor property %q; an actor body has `ai:` and `owner:` (and `note` lines)", tok.Value),
+				Severity: model.SeverityWarning,
+				Range:    tokenRange(tok),
+			})
+		}
+		p.consumeAs(kind)
+		colonTok := p.consumeAs(SyntaxKindColon)
+		switch v := p.peek(); {
+		case v.Line != tok.Line || v.Type == lexer.TokenEOF || v.Type == lexer.TokenRBrace:
+			diags = append(diags, model.Diagnostic{
+				Code:     "craft/syntax/unexpected-token",
+				Message:  fmt.Sprintf("`%s:` needs a value on its line, e.g. `%s`", tok.Value, actorPropertyExample(tok.Value)),
+				Severity: model.SeverityError,
+				Range:    tokenRange(colonTok),
+			})
+			p.builder.FinishNode()
+			return diags
+		case v.Type == lexer.TokenString:
+			p.consumeAs(SyntaxKindString)
+		case v.Type == lexer.TokenIdent || isAnyKeywordAsIdent(v.Type) || isKeywordUsedAsIdent(v.Type):
+			p.consumeAs(SyntaxKindIdent)
+		default:
+			diags = append(diags, p.diagUnexpected(v, fmt.Sprintf("a value after `%s:`: one word, or a quoted string", tok.Value)))
+			diags = append(diags, p.skipRestOfLine(tok.Line)...)
+			p.builder.FinishNode()
+			return diags
+		}
+		diags = append(diags, p.sweepRestOfLine(tok.Line, "end of line: one property per line, and a value is one word or a quoted string, e.g. `owner: \"OLX Data\"`")...)
+		p.builder.FinishNode()
+		return diags
+	default:
+		return p.sweepRestOfLine(tok.Line, "`ai:`, `owner:`, `note`, `finding` or `}`")
 	}
 }

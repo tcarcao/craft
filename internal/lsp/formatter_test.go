@@ -2473,3 +2473,21 @@ func TestFormat_SourceCiteTextIsVerbatim(t *testing.T) {
 		t.Errorf("cite text rewritten or misplaced:\n%q", got)
 	}
 }
+
+// An actor body (v2.37) formats like a flow body: one property per line at
+// one indent, `key: value` with one space. A one-line body opens up; an actor
+// without a body is unchanged.
+func TestFormat_ActorBody(t *testing.T) {
+	in := "actors {\n  system   Gen \"the generator\"{\nai:genai\n      owner :  \"OLX Data\" // vendor\n\n\n   note \"x\"\n}\n  system Siren \"Siren\"\n}\n\nactor system Dapi { ai: ml }\nactor   user Seller\n"
+	want := "actors {\n    system Gen \"the generator\" {\n        ai: genai\n        owner: \"OLX Data\" // vendor\n\n        note \"x\"\n    }\n    system Siren \"Siren\"\n}\n\nactor system Dapi {\n    ai: ml\n}\n\nactor user Seller\n"
+	got, d := FormatDocumentChecked(in)
+	if d != nil {
+		t.Fatalf("refused: %+v", d)
+	}
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}

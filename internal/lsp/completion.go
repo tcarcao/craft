@@ -43,6 +43,8 @@ const (
 	ctxEntryValue        // cursor after `entry: `: a page ref
 	ctxPageBody          // a line of a page body
 	ctxPagePlatform      // cursor after `platform: ` in a page
+	ctxActorBody         // a line of an actor body
+	ctxActorAI           // cursor after `ai: ` in an actor body
 	ctxExposeField
 	ctxExposeTo
 	ctxExposeThrough
@@ -79,6 +81,13 @@ func treeEnclosingBlock(root syntax.SyntaxNode, li green.LineIndex, cursorLine, 
 			return "domain"
 		case syntax.SyntaxKindDomainsBlock:
 			return "domains"
+		case syntax.SyntaxKindActorBody:
+			// Only between the body's braces (v2.37).
+			lb := node.ChildToken(syntax.SyntaxKindLBrace)
+			rb := node.ChildToken(syntax.SyntaxKindRBrace)
+			if lb != nil && offset >= lb.TextRange().End && (rb == nil || offset <= rb.TextRange().Start) {
+				return "actor"
+			}
 		case syntax.SyntaxKindActorsBlock:
 			return "actors"
 		case syntax.SyntaxKindTagsBlock:
@@ -252,6 +261,14 @@ func detectContext(root syntax.SyntaxNode, li green.LineIndex, cursorLine, curso
 		return ctxDomainBody
 	case "actors":
 		return ctxActorsBlock
+	case "actor":
+		if actorAIRe.MatchString(linePrefix) {
+			return ctxActorAI
+		}
+		if strings.TrimSpace(linePrefix) == "" || !strings.ContainsAny(strings.TrimSpace(linePrefix), " \t:") {
+			return ctxActorBody
+		}
+		return ctxUnknown
 	case "tags":
 		if realisesValueRe.MatchString(linePrefix) {
 			return ctxRealisesValue
@@ -539,6 +556,10 @@ func buildCompletions(ws *workspace.Workspace, uri string, params *protocol.Comp
 		return pageBodyCompletions()
 	case ctxPagePlatform:
 		return pagePlatformCompletions()
+	case ctxActorBody:
+		return actorBodyCompletions()
+	case ctxActorAI:
+		return aiKindCompletions()
 	case ctxUseCaseAction:
 		return allSymbolCompletions(ws)
 	case ctxExposeField:

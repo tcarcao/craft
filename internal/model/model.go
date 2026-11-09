@@ -237,6 +237,10 @@ const TagEntry = lang.TagEntry
 // PagePlatforms lists the values a page's platform may take.
 func PagePlatforms() []string { return lang.PagePlatforms() }
 
+// AIKinds lists the values an actor's `ai:` may take, in ascending order of
+// advancement: ml, genai, agentic (v2.37).
+func AIKinds() []string { return lang.AIKinds() }
+
 // JourneyEdgeKind is what connects two members of a journey spine.
 type JourneyEdgeKind = lang.JourneyEdgeKind
 
@@ -752,6 +756,32 @@ type Actor struct {
 	// DisplayName is the actor's declared display name (2.27); empty when
 	// it declares none.
 	DisplayName string `json:"displayName,omitempty"`
+	// AI classifies the external system the actor stands for (v2.37), from
+	// the `ai:` of its body: one of AIKinds ("ml", "genai", "agentic"), or
+	// empty when it declares none or an invalid one
+	// (craft/sema/invalid-ai-kind).
+	AI string `json:"ai,omitempty"`
+	// Owner is who runs the system, from the `owner:` of its body (v2.37),
+	// as written; empty when it declares none.
+	Owner string `json:"owner,omitempty"`
+	// Notes are the note and finding lines of its body (v2.37).
+	Notes []Note `json:"notes,omitempty"`
+}
+
+// ActorByName returns the first actor declared as name (in sorted file
+// order, then source order), or nil. An actor declared in several places is
+// the first declaration, as for display names; craft/lint/conflicting-ai-kind
+// reports a later declaration with another `ai:`.
+func (d *CraftDoc) ActorByName(name string) *Actor {
+	if d == nil {
+		return nil
+	}
+	for i := range d.Actors {
+		if d.Actors[i].Name == name {
+			return &d.Actors[i]
+		}
+	}
+	return nil
 }
 
 // DisplayNames maps participant IDs to declared display names: a bounded

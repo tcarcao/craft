@@ -1,0 +1,5 @@
+actors {
+    system Gen {
+        ai: genai
+    system Siren
+}

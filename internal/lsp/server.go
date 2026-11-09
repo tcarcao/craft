@@ -831,12 +831,16 @@ func (s *Server) DocumentSymbol(_ context.Context, params *protocol.DocumentSymb
 		}
 		actorLine := a.Line(f.LineIndex)
 		line := lspLine(actorLine)
+		detail := "actor: " + a.ActorTypeValue()
+		if ai, ok := a.Property(lang.ActorAI); ok {
+			detail += ", ai: " + ai
+		}
 		syms = append(syms, protocol.DocumentSymbol{
 			Name:           nameTok.Text(),
 			Kind:           protocol.SymbolKindObject,
-			Detail:         "actor: " + a.ActorTypeValue(),
+			Detail:         detail,
 			SelectionRange: protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
-			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: line}},
+			Range:          protocol.Range{Start: protocol.Position{Line: line}, End: protocol.Position{Line: lspLine(max(a.EndLine(f.LineIndex), actorLine))}},
 		})
 	}
 	for _, d := range file.Domains() {
@@ -1451,6 +1455,7 @@ func (s *Server) FoldingRanges(_ context.Context, params *protocol.FoldingRangeP
 	ranges = append(ranges, surfaceFoldingRanges(file, li)...)
 	ranges = append(ranges, flowFoldingRanges(file, li)...)
 	ranges = append(ranges, pageFoldingRanges(file, li)...)
+	ranges = append(ranges, actorFoldingRanges(file, li)...)
 
 	return ranges, nil
 }
@@ -1664,6 +1669,9 @@ func (s *Server) Hover(ctx context.Context, params *protocol.HoverParams) (*prot
 	if v, ok := s.pageHover(f, offset); ok {
 		return plain(v), nil
 	}
+	if v, ok := actorKeyHover(syntax.AsFile(syntax.Root(f.Green)), offset); ok {
+		return plain(v), nil
+	}
 	if v, ok := s.spineHover(f, offset); ok {
 		return plain(v), nil
 	}
@@ -1729,7 +1737,7 @@ func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*pr
 			return &protocol.Hover{
 				Contents: protocol.MarkupContent{
 					Kind:  protocol.PlainText,
-					Value: withDisplayName("actor: "+nameTok.Text()+" ("+a.ActorTypeValue()+")", actorDisplayName(a)),
+					Value: actorBodyHover(withDisplayName("actor: "+nameTok.Text()+" ("+a.ActorTypeValue()+")", actorDisplayName(a)), a),
 				},
 			}, nil
 		}
@@ -1850,7 +1858,7 @@ func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*pr
 					name = trigger.ContextName()
 				}
 				if name != "" {
-					if val := hoverForUseCaseRef(rm, uri, name, triggerLine); val != "" {
+					if val := hoverForUseCaseRef(s.ws.Doc(), rm, uri, name, triggerLine); val != "" {
 						return &protocol.Hover{
 							Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 						}, nil
@@ -1864,7 +1872,7 @@ func (s *Server) hoverBase(_ context.Context, params *protocol.HoverParams) (*pr
 					continue
 				}
 				// Show hover for the "from" domain first.
-				if val := hoverForUseCaseRef(rm, uri, action.SubjectName(), actionLine); val != "" {
+				if val := hoverForUseCaseRef(s.ws.Doc(), rm, uri, action.SubjectName(), actionLine); val != "" {
 					return &protocol.Hover{
 						Contents: protocol.MarkupContent{Kind: protocol.PlainText, Value: val},
 					}, nil
@@ -1891,7 +1899,7 @@ func actorDisplayName(a syntax.ActorDecl) string {
 }
 
 // hoverForUseCaseRef resolves a use-case body reference and returns a hover string.
-func hoverForUseCaseRef(rm sema.ResolutionMap, uri, name string, line int) string {
+func hoverForUseCaseRef(doc *craft.CraftDoc, rm sema.ResolutionMap, uri, name string, line int) string {
 	if name == "" {
 		return ""
 	}
@@ -1901,7 +1909,7 @@ func hoverForUseCaseRef(rm sema.ResolutionMap, uri, name string, line int) strin
 	}
 	switch target.Kind {
 	case lang.ParticipantActor:
-		return withDisplayName("actor: "+target.Actor.Name+" ("+string(target.Actor.Type)+")", target.Actor.DisplayName)
+		return modelActorHover(withDisplayName("actor: "+target.Actor.Name+" ("+string(target.Actor.Type)+")", target.Actor.DisplayName), doc, target.Actor.Name)
 	case lang.ParticipantDomain:
 		return "domain: " + target.Domain.Name
 	case lang.ParticipantBoundedContext:
@@ -2374,6 +2382,7 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwURL:           "craft-language-property",
 	syntax.SyntaxKindKwPlatform:      "craft-language-property",
 	syntax.SyntaxKindKwProductDomain: "craft-language-property",
+	syntax.SyntaxKindKwAI:            "craft-language-property",
 	syntax.SyntaxKindKwUser:          "craft-actor-type",
 	syntax.SyntaxKindKwSystem:        "craft-actor-type",
 	syntax.SyntaxKindKwService:       "craft-actor-type",

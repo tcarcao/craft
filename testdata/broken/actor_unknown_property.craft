@@ -1,0 +1,6 @@
+actors {
+    system Gen {
+        ai: genai
+        vendor: "Toqan"
+    }
+}
