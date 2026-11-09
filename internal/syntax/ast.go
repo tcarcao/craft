@@ -3519,3 +3519,87 @@ func (d PageDecl) EndLine(li green.LineIndex) int { return nodeEndLine(d.node, l
 
 // Node returns the underlying syntax node.
 func (d PageDecl) Node() SyntaxNode { return d.node }
+
+// ActorPropertyDecl is one `<key>: <value>` line of an actor body (v2.37):
+// the same view as a flow property, over a SyntaxKindActorProperty node. Its
+// key is a KwAI/KwOwner token, or an Ident for an unknown key.
+type ActorPropertyDecl = FlowPropertyDecl
+
+// Body returns the actor's `{ … }` body node, or false when it has none.
+func (a ActorDecl) Body() (SyntaxNode, bool) {
+	bodies := a.node.ChildNodes(SyntaxKindActorBody)
+	if len(bodies) == 0 {
+		return SyntaxNode{}, false
+	}
+	return bodies[0], true
+}
+
+// HasBody reports whether the actor declaration has a `{ … }` body.
+func (a ActorDecl) HasBody() bool {
+	_, ok := a.Body()
+	return ok
+}
+
+// Properties returns the `<key>: <value>` lines of the actor's body, in
+// source order, unknown keys included.
+func (a ActorDecl) Properties() []ActorPropertyDecl {
+	body, ok := a.Body()
+	if !ok {
+		return nil
+	}
+	var out []ActorPropertyDecl
+	for _, n := range body.ChildNodes(SyntaxKindActorProperty) {
+		out = append(out, ActorPropertyDecl{node: n})
+	}
+	return out
+}
+
+// Property returns the value of the last property named key that has a
+// value (the last one wins), and whether there is one.
+func (a ActorDecl) Property(key string) (string, bool) {
+	val, ok := "", false
+	for _, p := range a.Properties() {
+		if p.Key() == key && p.Known() && p.ValueToken() != nil {
+			val, ok = p.Value(), true
+		}
+	}
+	return val, ok
+}
+
+// PropertyDecl returns the last property line named key that has a value.
+func (a ActorDecl) PropertyDecl(key string) (ActorPropertyDecl, bool) {
+	var out ActorPropertyDecl
+	ok := false
+	for _, p := range a.Properties() {
+		if p.Key() == key && p.Known() && p.ValueToken() != nil {
+			out, ok = p, true
+		}
+	}
+	return out, ok
+}
+
+// Notes returns the note and finding lines of the actor's body, in source
+// order.
+func (a ActorDecl) Notes() []NoteDecl {
+	body, ok := a.Body()
+	if !ok {
+		return nil
+	}
+	var out []NoteDecl
+	for _, n := range body.ChildNodes(SyntaxKindNote) {
+		out = append(out, NoteDecl{node: n})
+	}
+	return out
+}
+
+// EndLine returns the 1-based line of the body's closing `}` using li, or
+// the actor's own line when it has no body.
+func (a ActorDecl) EndLine(li green.LineIndex) int {
+	if body, ok := a.Body(); ok {
+		return nodeEndLine(body, li)
+	}
+	return a.Line(li)
+}
+
+// Node returns the underlying syntax node.
+func (a ActorDecl) Node() SyntaxNode { return a.node }

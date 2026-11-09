@@ -652,6 +652,8 @@ func AnalyzeFile(uri string, tree syntax.SyntaxNode, li ...green.LineIndex) (sym
 	syms.Pages = collectPages(uri, file, lineIdx, hasLI)
 	diags = append(diags, validatePages(uri, file, lineIdx, hasLI)...)
 
+	diags = append(diags, validateActorBodies(uri, file, lineIdx, hasLI)...)
+
 	return syms, diags
 }
 

@@ -31,6 +31,12 @@
 // cases that start on it in UsedBy), UseCase.Entries (the page refs of its
 // `entry` tag) and CraftDoc.PageByRef. All are optional JSON keys (pages,
 // entries).
+//
+// Since v2.37.0 an actor may classify the external system it stands for:
+// Actor.AI (one of AIKinds(): ml, genai, agentic), Actor.Owner (who runs it)
+// and Actor.Notes, from the actor's optional `{ … }` body, and
+// CraftDoc.ActorByName finds an actor. All are optional JSON keys (ai,
+// owner, notes).
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"
@@ -176,3 +182,7 @@ func FlowPriorities() []string { return model.FlowPriorities() }
 // PagePlatforms lists the values a page's platform may take: frontoffice,
 // backoffice, app.
 func PagePlatforms() []string { return model.PagePlatforms() }
+
+// AIKinds lists the values an actor's `ai:` may take, in ascending order of
+// advancement: ml, genai, agentic.
+func AIKinds() []string { return model.AIKinds() }

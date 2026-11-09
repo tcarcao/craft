@@ -1,0 +1,74 @@
+{
+  "useCases": [
+    {
+      "name": "ai asks owner",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "ai",
+            "verb": "sends",
+            "connector": "a",
+            "phrase": "request",
+            "description": "when ai sends a request",
+            "subject": {
+              "kind": "actor",
+              "id": "ai"
+            },
+            "line": 13,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "ads",
+                "targetContext": "owner",
+                "ref": "owner",
+                "connector": "to",
+                "phrase": "answer",
+                "description": "ads asks owner to answer",
+                "line": 14,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Listing/ads"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "owner",
+                  "displayName": "the owner system"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 12
+    }
+  ],
+  "domains": [
+    {
+      "name": "Listing",
+      "boundedContexts": [
+        "ads"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "ai",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "owner",
+      "type": "system",
+      "line": 3,
+      "displayName": "the owner system",
+      "owner": "owner"
+    }
+  ]
+}

@@ -161,6 +161,9 @@ const (
 	SyntaxKindKwPlatform      // `platform:` in a page
 	SyntaxKindKwProductDomain // `product_domain:` in a page
 
+	// Actor-body contextual keyword (v2.37.0). `owner:` reuses KwOwner.
+	SyntaxKindKwAI // `ai:` in an actor body
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -247,4 +250,12 @@ const (
 	// The key is SyntaxKindKwURL, KwPlatform or KwProductDomain when
 	// recognised, SyntaxKindIdent otherwise (craft/syntax/unknown-page-property).
 	SyntaxKindPageProperty
+
+	// SyntaxKindActorBody is the optional `{ … }` after an actor's name and
+	// display name (v2.37.0): its braces, properties and notes.
+	SyntaxKindActorBody
+	// SyntaxKindActorProperty wraps one `<key>: <value>` line of an actor
+	// body. The key is SyntaxKindKwAI or KwOwner when recognised,
+	// SyntaxKindIdent otherwise (craft/syntax/unknown-actor-property).
+	SyntaxKindActorProperty
 )

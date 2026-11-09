@@ -22,7 +22,11 @@ A persistent store owned by a service.
 _Avoid_: database (as a participant name)
 
 **Actor**:
-A person or external system that starts a use case. Its kind is one of `user`, `system`, `service`, `scheduler` (a clock), `tool` (a CLI or client a person runs) or `infra` (platform machinery); any other kind is drawn as a person.
+A person or external system that starts a use case. Its kind is one of `user`, `system`, `service`, `scheduler` (a clock), `tool` (a CLI or client a person runs) or `infra` (platform machinery); any other kind is drawn as a person. An actor's optional body (2.37) says whether the system is an AI system (`ai: ml | genai | agentic`) and who runs it (`owner:`).
+
+**AI system**:
+An actor whose body declares `ai:`: `ml` (a trained model), `genai` (a generative model) or `agentic` (an agent that acts). The classification belongs to the system, not to the use cases that call it; a use case that calls one is an AI use case.
+_Avoid_: AI service (one service can serve several models; declare one actor per model)
 
 **Use case**:
 A business scenario: a trigger followed by an ordered list of actions.

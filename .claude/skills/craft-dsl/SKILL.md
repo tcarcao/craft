@@ -41,8 +41,10 @@ This is the complete grammar. All generated `.craft` files must conform to it.
                        // product_domain: is required; url: may repeat (one per site); platform: frontoffice|backoffice|app
 
 // --- Actors: who interacts with the system ---
-<actor_def>          ::= "actor" <actor_type> <identifier> <string>?
-<actors_def>         ::= "actors" "{" (<actor_type> <identifier> <string>?)+ "}"
+<actor_def>          ::= "actor" <actor_type> <identifier> <string>? <actor_body>?
+<actors_def>         ::= "actors" "{" (<actor_type> <identifier> <string>? <actor_body>?)+ "}"
+<actor_body>         ::= "{" (("ai" | "owner") ":" (<identifier> | <string>) | "note" <string>)* "}"
+                       // v2.37, `{` on the name's line; ai: ml|genai|agentic; owner: who runs it; one item per line
                        // v2.27: the optional <string> is a display name, on the same line
 <actor_type>         ::= "user" | "system" | "service" | "scheduler" | "tool" | "infra"
                        // any other identifier parses (drawn as a person); prefer the six known kinds
@@ -238,6 +240,21 @@ actor user Seller "the seller"
 - Declare display names in domain blocks and actor declarations only, not in a service's `contexts:` list.
 - Long display names wrap at about 24 characters, at spaces. Ids never wrap.
 - Lints (warnings): `craft/lint/duplicate-display-name` (two contexts or actors share one), `craft/lint/empty-display-name` (`""` declares none), `craft/lint/conflicting-display-name` (the same context or actor declared again with another display name; diagrams draw the first, in sorted file order).
+
+**AI systems (v2.37).** An actor that stands for an AI system says so in an optional body, opened with `{` on the name's line. Classify the system, not the use cases: every use case that calls it is an AI use case. Need craft ≥ 2.37.
+
+```
+actors {
+    system DescriptionGenerator "description generator" {
+        ai: genai
+        owner: "OLX Data"
+    }
+}
+```
+
+- `ai:` is `ml` (a trained model), `genai` (a generative model) or `agentic` (an agent that acts); `owner:` is who runs it. Both optional; one per line.
+- One service that serves several models (a data API, say) is several actors, one per model, each with its own `ai:`. One actor per service over-counts.
+- Declare `ai:` on the first declaration of the actor in sorted file order: a later one with another kind is `craft/lint/conflicting-ai-kind`.
 
 ### Services
 
@@ -481,6 +498,8 @@ Formatting changes whitespace and nothing else. Since v2.17.0 this is structural
 | `craft/sema/unresolved-flow` / `craft/lint/duplicate-flow-in-list` | warning | (v2.35) a `realises` ref names no loaded flow / the same ref twice in one `realises` |
 | `craft/sema/missing-page-property` / `invalid-platform` / `duplicate-page` | error | (v2.36) a page without `product_domain:` / a platform other than frontoffice, backoffice, app / a page ref declared twice |
 | `craft/sema/unresolved-page` / `duplicate-page-property` | warning | (v2.36) an `entry` ref names no loaded page (only when some page is declared) / `platform:` or `product_domain:` twice |
+| `craft/sema/invalid-ai-kind` | error | (v2.37) an actor's `ai:` is not `ml`, `genai` or `agentic` |
+| `craft/syntax/unknown-actor-property` / `craft/sema/duplicate-actor-property` / `craft/lint/conflicting-ai-kind` | warning | (v2.37) an actor body key other than `ai`/`owner` / a key twice / the same actor declared again with another `ai:` |
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at exactly four sites: the `sync_action` subject and target, the `async_action` subject, or the `domain_listen` trigger context. Qualify it as `<domain>/<name>`. Does **not** fire for an internal action's subject or a `returns` subject/target |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (empty segment, or more than two segments) in any of: any action's subject, the `asks` target, the `returns` target, or the trigger context |
 

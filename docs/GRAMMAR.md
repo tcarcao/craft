@@ -57,16 +57,40 @@ A use case, domain, surface, flow or page whose `}` is missing also stops at a d
 ## 3. Actors
 
 ```ebnf
-actor_def        = 'actor' actor_type actor_name display_name? NL* ;
+actor_def        = 'actor' actor_type actor_name display_name? actor_body? NL* ;
 actors_def       = 'actors' '{' NL* actor_definition_list '}' NL* ;
 actor_definition_list = actor_definition (NL+ actor_definition)* NL* ;
-actor_definition = actor_type actor_name display_name? ;
+actor_definition = actor_type actor_name display_name? actor_body? ;
 actor_type       = identifier ;       (* known kinds: user, system, service, scheduler, tool, infra *)
 actor_name       = identifier ;
 display_name     = STRING ;           (* 2.27; on the name's line *)
+actor_body       = '{' NL* (actor_item NL+)* '}'   (* 2.37; `{` on the name's line *)
+                 | '{' actor_item '}' ;            (* one item may share the braces' line *)
+actor_item       = ('ai' | 'owner') ':' actor_value
+                 | note_stmt ;
+actor_value      = identifier | STRING ;           (* one word, or a quoted string *)
 ```
 
 **Display names (2.27).** An actor or a bounded context may carry a quoted display name after its name, on the same line: `user Seller "the seller"`, `nmf_monetization "nMF, the money engine"`. Diagrams, hovers and the surface table show it in place of the id; the id stays the identity everywhere else. A string on a later line is still `craft/syntax/unexpected-token`. `""` is ignored with a `craft/lint/empty-display-name` warning, two declarations with the same display name get `craft/lint/duplicate-display-name`, and one context or actor declared again with another display name gets `craft/lint/conflicting-display-name` (the first declaration, in sorted file order, is drawn).
+
+**Actor bodies (2.37).** An actor may classify the external system it stands for in an optional body, opened with `{` on the name's line (after the display name, if any), in `actors { }` and after a single `actor <kind> <name>`. Use cases that call the actor are then counted as AI use cases (see `docs/decisions/ai-systems.md`).
+
+```craft
+actors {
+    system DescriptionGenerator "description generator" {
+        ai: genai
+        owner: "OLX Data"
+        note "drafts the description from the photos"
+    }
+    system Siren "Siren"
+}
+
+actor system Dapi "OLX data API" { ai: ml }
+```
+
+- **Properties.** `ai:` is optional and is one of `ml` (a trained model), `genai` (a generative model) or `agentic` (an agent that acts), exact and case-sensitive. `owner:` is optional and is a free value, an identifier or a quoted string: who runs the system ("OLX Data", "Toqan"). `note`/`finding` lines are allowed. A property is one line; one property per line. A body that holds one item may sit on the name's line (`{ ai: ml }`); `craft fmt` opens it onto its own lines. An actor without a body is unchanged.
+- **Diagnostics.** Any other key: `craft/syntax/unknown-actor-property` (a warning; the line is kept in the tree and left out of the model). A key with no value on its line, or a second word or property after the value: `craft/syntax/unexpected-token`. An `ai:` that is not one of the three kinds: `craft/sema/invalid-ai-kind` (an error; the kind is left out of the model). A property written twice: `craft/sema/duplicate-actor-property` (a warning; the last value wins). An actor declared again, in any file, with another `ai:` (or with one, after a declaration without): `craft/lint/conflicting-ai-kind` (a warning; the first declaration in sorted file order is the actor's, as for display names). A body without its `}`: `craft/syntax/unclosed-block`; in `actors { }` the body ends at the first line that is neither a property nor a note, so the next actor still parses. A `{` on a later line than the name is not a body (`craft/syntax/unexpected-token`, as before 2.37).
+- **Model.** `Actor.AI` (one of `AIKinds()`, or empty), `Actor.Owner` and `Actor.Notes`; JSON keys `ai`, `owner` and `notes`, omitted when empty. `CraftDoc.ActorByName(name)` finds the actor the model keeps (the first declaration). No diagram draws the body; `craft inspect` shows `ai` and `owner`.
 
 The actor-type slot accepts any identifier (grammar ruling Q5: tooling decides the known set). Six kinds are known (2.24 added the last three):
 
@@ -596,6 +620,15 @@ The 2.36 words:
 | `url`, `platform`, `product_domain` | in a page body, followed by `:` | an identifier |
 
 As for `flow`, none of these changes the meaning of input that parsed before. `entry` is a tag key, not a keyword.
+
+The 2.37 words:
+
+| Word | Is a keyword only when | Otherwise |
+|---|---|---|
+| `{` after an actor | on the line of the actor's name, after its display name if any | (was an error) |
+| `ai`, `owner` | in an actor body, followed by `:` | an identifier |
+
+None of these changes the meaning of input that parsed before: a `{` after an actor's name was `craft/syntax/unexpected-token`.
 
 ### 11.2 Connector words (part of `phrase_word`)
 

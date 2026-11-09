@@ -176,3 +176,27 @@ func TestInspectCmd_Pages(t *testing.T) {
 		t.Errorf("page = %+v", pg)
 	}
 }
+
+// An actor's AI kind and owner are part of the inspect model (v2.37); an
+// actor without a body prints as before.
+func TestInspectCmd_ActorAI(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "a.craft")
+	src := "actors {\n    system Gen \"generator\" {\n        ai: genai\n        owner: \"OLX Data\"\n    }\n    system Siren\n}\n"
+	if err := os.WriteFile(f, []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+	out := runInspect(t, "--format", "json", f)
+	var got struct {
+		Actors []struct {
+			Name  string `json:"name"`
+			AI    string `json:"ai"`
+			Owner string `json:"owner"`
+		} `json:"actors"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("bad json: %v\n%s", err, out)
+	}
+	if len(got.Actors) != 2 || got.Actors[0].AI != "genai" || got.Actors[0].Owner != "OLX Data" || got.Actors[1].AI != "" {
+		t.Errorf("actors = %+v", got.Actors)
+	}
+}

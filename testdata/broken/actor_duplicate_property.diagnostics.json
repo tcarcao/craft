@@ -1,0 +1,30 @@
+[
+  {
+    "code": "craft/sema/duplicate-actor-property",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 2,
+        "character": 4
+      },
+      "end": {
+        "line": 2,
+        "character": 6
+      }
+    }
+  },
+  {
+    "code": "craft/sema/duplicate-actor-property",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 4,
+        "character": 4
+      },
+      "end": {
+        "line": 4,
+        "character": 9
+      }
+    }
+  }
+]

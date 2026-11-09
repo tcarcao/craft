@@ -35,12 +35,23 @@ func project(root syntax.SyntaxNode, li green.LineIndex, sourceURI string) *mode
 		}
 		actorLine, _ := li.LineCol(nameTok.Offset())
 		dn, _ := a.DisplayName()
-		doc.Actors = append(doc.Actors, model.Actor{
+		ma := model.Actor{
 			Name:        nameTok.Text(),
 			Type:        model.ActorType(typeVal),
 			Line:        actorLine,
 			DisplayName: dn,
-		})
+		}
+		// The body (v2.37): the last value of each property wins
+		// (craft/sema/duplicate-actor-property); an AI kind that is not one
+		// of lang.AIKinds is left out (craft/sema/invalid-ai-kind).
+		if ai, ok := a.Property(lang.ActorAI); ok && slices.Contains(lang.AIKinds(), ai) {
+			ma.AI = ai
+		}
+		ma.Owner, _ = a.Property(lang.ActorOwner)
+		for _, n := range a.Notes() {
+			ma.Notes = append(ma.Notes, projectNote(n, "", li))
+		}
+		doc.Actors = append(doc.Actors, ma)
 	}
 
 	for _, d := range file.Domains() {

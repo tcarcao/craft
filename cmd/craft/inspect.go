@@ -151,7 +151,16 @@ func printInspectText(out inspectOutput) error {
 	fmt.Printf("Files: %v\n", out.Files)
 	fmt.Printf("Actors (%d):\n", len(out.Actors))
 	for _, a := range out.Actors {
-		fmt.Printf("  %s (%s)\n", a.Name, a.Type)
+		// An actor's body (v2.37) adds its AI kind and owner; one without
+		// a body prints as before.
+		detail := string(a.Type)
+		if a.AI != "" {
+			detail += ", ai: " + a.AI
+		}
+		if a.Owner != "" {
+			detail += ", owner: " + a.Owner
+		}
+		fmt.Printf("  %s (%s)\n", a.Name, detail)
 	}
 	fmt.Printf("Domains (%d):\n", len(out.Domains))
 	for _, d := range out.Domains {

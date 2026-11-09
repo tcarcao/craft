@@ -1,0 +1,6 @@
+actor system Gen {
+    ai: ml
+    ai: genai
+    owner: a
+    owner: b
+}

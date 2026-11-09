@@ -1,0 +1,149 @@
+{
+  "useCases": [
+    {
+      "name": "Seller writes an ad",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "writes",
+            "connector": "an",
+            "phrase": "ad",
+            "description": "when Seller writes an ad",
+            "subject": {
+              "kind": "actor",
+              "id": "Seller"
+            },
+            "line": 25,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "sync_action",
+                "context": "ads",
+                "targetContext": "DescriptionGenerator",
+                "ref": "DescriptionGenerator",
+                "connector": "to",
+                "phrase": "draft the description",
+                "description": "ads asks DescriptionGenerator to draft the description",
+                "line": 26,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Listing/ads"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "DescriptionGenerator",
+                  "displayName": "description generator"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_3",
+                "type": "sync_action",
+                "context": "ads",
+                "targetContext": "PriceModel",
+                "ref": "PriceModel",
+                "connector": "to",
+                "phrase": "estimate the price",
+                "description": "ads asks PriceModel to estimate the price",
+                "line": 27,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Listing/ads"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "PriceModel",
+                  "displayName": "price estimate"
+                }
+              }
+            },
+            {
+              "action": {
+                "id": "action_4",
+                "type": "sync_action",
+                "context": "ads",
+                "targetContext": "Siren",
+                "ref": "Siren",
+                "connector": "to",
+                "phrase": "check the text",
+                "description": "ads asks Siren to check the text",
+                "line": 28,
+                "column": 9,
+                "from": {
+                  "kind": "bounded_context",
+                  "id": "Listing/ads"
+                },
+                "to": {
+                  "kind": "actor",
+                  "id": "Siren",
+                  "displayName": "Siren"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "line": 24
+    }
+  ],
+  "domains": [
+    {
+      "name": "Listing",
+      "boundedContexts": [
+        "ads"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "name": "Seller",
+      "type": "user",
+      "line": 2
+    },
+    {
+      "name": "DescriptionGenerator",
+      "type": "system",
+      "line": 3,
+      "displayName": "description generator",
+      "ai": "genai",
+      "owner": "OLX Data",
+      "notes": [
+        {
+          "kind": "note",
+          "text": "drafts the description from the photos and the form",
+          "line": 6,
+          "column": 9
+        }
+      ]
+    },
+    {
+      "name": "Siren",
+      "type": "system",
+      "line": 8,
+      "displayName": "Siren"
+    },
+    {
+      "name": "PriceModel",
+      "type": "system",
+      "line": 11,
+      "displayName": "price estimate",
+      "ai": "ml"
+    },
+    {
+      "name": "ListingAgent",
+      "type": "system",
+      "line": 15,
+      "ai": "agentic",
+      "owner": "Toqan"
+    }
+  ]
+}

@@ -290,6 +290,22 @@ use_case "Seller promotes an ad" {
 
 `product_domain:` is required; `url:` (once per site) and `platform:` (`frontoffice`, `backoffice` or `app`) are optional. `craft inspect` lists each page with the use cases that start on it, and `pkg/craft` exposes `CraftDoc.Pages` (`Page.UsedBy`), `UseCase.Entries` and `CraftDoc.PageByRef`. Diagrams do not draw pages. Once the loaded files declare a page, `craft validate` warns when an `entry` ref names no loaded page (`craft/sema/unresolved-page`).
 
+## AI systems (2.37)
+
+An actor may classify the external system it stands for in an optional body. Classify the system once; the use cases that call it are the AI use cases:
+
+```craft
+actors {
+    system DescriptionGenerator "description generator" {
+        ai: genai
+        owner: "OLX Data"
+    }
+    system Siren "Siren"
+}
+```
+
+`ai:` is `ml`, `genai` or `agentic`; `owner:` is who runs the system. Both are optional. `craft inspect` shows them on each actor, and `pkg/craft` exposes `Actor.AI`, `Actor.Owner`, `CraftDoc.ActorByName` and `AIKinds()`. Diagrams do not change. See `docs/decisions/ai-systems.md`.
+
 ---
 
 ## VS Code Extension

@@ -1,0 +1,29 @@
+actors {
+    user Seller
+    system DescriptionGenerator "description generator" {
+        ai: genai
+        owner: "OLX Data"
+        note "drafts the description from the photos and the form"
+    }
+    system Siren "Siren"
+}
+
+actor system PriceModel "price estimate" {
+    ai: ml
+}
+
+actor system ListingAgent {
+    ai: agentic
+    owner: Toqan
+}
+
+domain Listing {
+    ads
+}
+
+use_case "Seller writes an ad" {
+    when Seller writes an ad
+        ads asks DescriptionGenerator to draft the description
+        ads asks PriceModel to estimate the price
+        ads asks Siren to check the text
+}
