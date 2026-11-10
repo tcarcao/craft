@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tcarcao/craft/v2/pkg/craft"
@@ -33,6 +34,7 @@ type flowSummary struct {
 	Priority   string   `json:"priority,omitempty"`
 	Owner      string   `json:"owner,omitempty"`
 	Metric     string   `json:"metric,omitempty"`
+	Aliases    []string `json:"aliases,omitempty"`
 	RealisedBy []string `json:"realised_by,omitempty"`
 }
 
@@ -43,6 +45,7 @@ type pageSummary struct {
 	URLs          []string `json:"urls,omitempty"`
 	Platform      string   `json:"platform,omitempty"`
 	ProductDomain string   `json:"product_domain,omitempty"`
+	Aliases       []string `json:"aliases,omitempty"`
 	UsedBy        []string `json:"used_by,omitempty"`
 }
 
@@ -129,7 +132,7 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 	}
 
 	for _, f := range doc.Flows {
-		fs := flowSummary{Ref: f.Ref, Name: f.Name, Priority: f.Priority, Owner: f.Owner, Metric: f.Metric}
+		fs := flowSummary{Ref: f.Ref, Name: f.Name, Priority: f.Priority, Owner: f.Owner, Metric: f.Metric, Aliases: f.Aliases}
 		for _, r := range f.RealisedBy {
 			fs.RealisedBy = append(fs.RealisedBy, r.Name)
 		}
@@ -137,7 +140,7 @@ func buildInspectOutput(files []string, doc *craft.CraftDoc) inspectOutput {
 	}
 
 	for _, pg := range doc.Pages {
-		ps := pageSummary{Ref: pg.Ref, Name: pg.Name, URLs: pg.URLs, Platform: pg.Platform, ProductDomain: pg.ProductDomain}
+		ps := pageSummary{Ref: pg.Ref, Name: pg.Name, URLs: pg.URLs, Platform: pg.Platform, ProductDomain: pg.ProductDomain, Aliases: pg.Aliases}
 		for _, r := range pg.UsedBy {
 			ps.UsedBy = append(ps.UsedBy, r.Name)
 		}
@@ -190,6 +193,9 @@ func printInspectText(out inspectOutput) error {
 			if f.Metric != "" {
 				fmt.Printf("    metric: %s\n", f.Metric)
 			}
+			if len(f.Aliases) > 0 {
+				fmt.Printf("    aliases: %s\n", strings.Join(f.Aliases, ", "))
+			}
 			if len(f.RealisedBy) == 0 {
 				fmt.Printf("    realised by: none\n")
 			} else {
@@ -206,6 +212,9 @@ func printInspectText(out inspectOutput) error {
 			}
 			for _, u := range pg.URLs {
 				fmt.Printf("    url: %s\n", u)
+			}
+			if len(pg.Aliases) > 0 {
+				fmt.Printf("    aliases: %s\n", strings.Join(pg.Aliases, ", "))
 			}
 			if len(pg.UsedBy) == 0 {
 				fmt.Printf("    used by: none\n")

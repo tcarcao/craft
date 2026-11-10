@@ -1,0 +1,28 @@
+// Aliases (2.38): other names for a page or a flow, one `alias:` line each.
+
+flow vas-activation "VAS activation" {
+    priority: P2
+    owner: "VAS Excellence"
+    metric: "Total revenue"
+    alias: promotion
+    alias: "promoted ad"
+}
+
+page account-statistics "Ad Statistics" {
+    platform: frontoffice
+    product_domain: seller-analytics
+    alias: performance
+    alias: "ad performance"
+    alias: "estatísticas do anúncio"
+}
+
+use_case "Seller checks ad statistics" {
+    tags {
+        entry: account-statistics
+        realises: vas-activation
+        alias: stats, "podbicie ogłoszenia"
+    }
+
+    when Seller opens the statistics
+        analytics returns the ad statistics
+}

@@ -175,7 +175,7 @@ Parses one or more files and emits a **merged** structured model (actors, domain
 }
 ```
 
-`realises` and `flows` (v2.35) appear only when the model declares flows or `realises` tags. `pages` (v2.36: `ref`, `name`, `urls`, `platform`, `product_domain`, `used_by`) appears only when the model declares pages. An actor carries `ai` and `owner` (v2.37) only when its body declares them; the text format prints them after the kind (`DescriptionGenerator (system, ai: genai, owner: OLX Data)`).
+`realises` and `flows` (v2.35) appear only when the model declares flows or `realises` tags. `pages` (v2.36: `ref`, `name`, `urls`, `platform`, `product_domain`, `used_by`) appears only when the model declares pages. A page or flow carries `aliases` (v2.38) only when it has `alias:` lines. An actor carries `ai` and `owner` (v2.37) only when its body declares them; the text format prints them after the kind (`DescriptionGenerator (system, ai: genai, owner: OLX Data)`).
 
 **Examples:**
 ```bash

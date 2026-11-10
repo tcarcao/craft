@@ -1,0 +1,44 @@
+[
+  {
+    "code": "craft/sema/duplicate-alias",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 11,
+        "character": 11
+      },
+      "end": {
+        "line": 11,
+        "character": 25
+      }
+    }
+  },
+  {
+    "code": "craft/sema/empty-alias",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 3,
+        "character": 11
+      },
+      "end": {
+        "line": 3,
+        "character": 13
+      }
+    }
+  },
+  {
+    "code": "craft/sema/duplicate-alias",
+    "severity": "warning",
+    "range": {
+      "start": {
+        "line": 4,
+        "character": 11
+      },
+      "end": {
+        "line": 4,
+        "character": 22
+      }
+    }
+  }
+]

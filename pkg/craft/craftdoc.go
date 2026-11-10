@@ -37,6 +37,10 @@
 // and Actor.Notes, from the actor's optional `{ … }` body, and
 // CraftDoc.ActorByName finds an actor. All are optional JSON keys (ai,
 // owner, notes).
+//
+// Since v2.38.0 a page or a flow may list other names people use for it:
+// Page.Aliases and Flow.Aliases, from its repeatable `alias:` lines, in
+// source order, each once. It is an optional JSON key (aliases).
 package craft
 
 import "github.com/tcarcao/craft/v2/internal/model"

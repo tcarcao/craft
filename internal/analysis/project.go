@@ -676,7 +676,8 @@ func projectSurfaces(file syntax.File, li green.LineIndex, sourceURI string) []m
 
 // realisedRefs is a `realises` (or `entry`) tag's values, trimmed, empty ones dropped and
 // each ref once (craft/lint/duplicate-flow-in-list reports a repeat in
-// `realises`; a repeat in `entry` or `url:` is dropped silently).
+// `realises`, craft/sema/duplicate-alias one in `alias:`; a repeat in
+// `entry` or `url:` is dropped silently). It also dedupes `alias:` values.
 func realisedRefs(values []string) []string {
 	var out []string
 	for _, v := range values {
@@ -688,9 +689,9 @@ func realisedRefs(values []string) []string {
 }
 
 // projectFlows projects the file's flows in source order. A flow without a
-// ref (craft/syntax/unexpected-token) is not one. Properties take the last
-// value written (craft/sema/duplicate-flow-property); unknown ones are left
-// out.
+// ref (craft/syntax/unexpected-token) is not one. `alias:` keeps every value
+// (in order, each once); the other properties take the last value written
+// (craft/sema/duplicate-flow-property); unknown ones are left out.
 func projectFlows(file syntax.File, li green.LineIndex, sourceURI string) []model.Flow {
 	var out []model.Flow
 	for _, f := range file.Flows() {
@@ -706,6 +707,7 @@ func projectFlows(file syntax.File, li green.LineIndex, sourceURI string) []mode
 		mf.Priority, _ = f.Property(lang.FlowPriority)
 		mf.Owner, _ = f.Property(lang.FlowOwner)
 		mf.Metric, _ = f.Property(lang.FlowMetric)
+		mf.Aliases = realisedRefs(f.PropertyValues(lang.FlowAlias))
 		for _, n := range f.Notes() {
 			mf.Notes = append(mf.Notes, projectNote(n, "", li))
 		}
@@ -715,9 +717,9 @@ func projectFlows(file syntax.File, li green.LineIndex, sourceURI string) []mode
 }
 
 // projectPages projects the file's pages in source order. A page without a
-// ref is not one. `url:` keeps every value (in order, each once); the other
-// properties take the last value written (craft/sema/duplicate-page-property);
-// unknown ones are left out.
+// ref is not one. `url:` and `alias:` keep every value (in order, each
+// once); the other properties take the last value written
+// (craft/sema/duplicate-page-property); unknown ones are left out.
 func projectPages(file syntax.File, li green.LineIndex, sourceURI string) []model.Page {
 	var out []model.Page
 	for _, pg := range file.Pages() {
@@ -733,6 +735,7 @@ func projectPages(file syntax.File, li green.LineIndex, sourceURI string) []mode
 		}
 		mp.Platform, _ = pg.Property(lang.PagePlatform)
 		mp.ProductDomain, _ = pg.Property(lang.PageProductDomain)
+		mp.Aliases = realisedRefs(pg.PropertyValues(lang.PageAlias))
 		for _, n := range pg.Notes() {
 			mp.Notes = append(mp.Notes, projectNote(n, "", li))
 		}

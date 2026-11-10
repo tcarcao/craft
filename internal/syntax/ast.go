@@ -3337,6 +3337,18 @@ func (d FlowDecl) Property(key string) (string, bool) {
 	return val, ok
 }
 
+// PropertyValues returns every value of the properties named key, in source
+// order, as written (a repeatable property such as `alias:`).
+func (d FlowDecl) PropertyValues(key string) []string {
+	var out []string
+	for _, p := range d.Properties() {
+		if p.Key() == key && p.ValueToken() != nil {
+			out = append(out, p.Value())
+		}
+	}
+	return out
+}
+
 // Notes returns the flow's note and finding lines, in source order.
 func (d FlowDecl) Notes() []NoteDecl {
 	var out []NoteDecl
@@ -3365,7 +3377,7 @@ func (d FlowDecl) Node() SyntaxNode { return d.node }
 // `<key>: <value>`.
 type FlowPropertyDecl struct{ node SyntaxNode }
 
-// KeyToken returns the key token: a KwPriority/KwOwner/KwMetric token, or an
+// KeyToken returns the key token: a KwPriority/KwOwner/KwMetric/KwAlias token, or an
 // Ident token for an unknown key.
 func (p FlowPropertyDecl) KeyToken() *SyntaxToken {
 	toks := p.node.Tokens()
@@ -3434,7 +3446,7 @@ type PageDecl struct{ node SyntaxNode }
 
 // PagePropertyDecl is one `<key>: <value>` line of a page body: the same
 // view as a flow property, over a SyntaxKindPageProperty node. Its key is a
-// KwURL/KwPlatform/KwProductDomain token, or an Ident for an unknown key.
+// KwURL/KwPlatform/KwProductDomain/KwAlias token, or an Ident for an unknown key.
 type PagePropertyDecl = FlowPropertyDecl
 
 // Keyword returns the `page` keyword token.

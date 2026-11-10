@@ -394,7 +394,7 @@ A critical flow is a named, prioritised, owned group of use cases: a business ou
 ```ebnf
 flow_decl  = 'flow' flow_ref STRING '{' NL* (flow_item NL+)* '}' ;
 flow_ref   = identifier ;                                  (* a slug such as lead-message; one token; `use_case` and `when` are not refs *)
-flow_item  = ('priority' | 'owner' | 'metric') ':' flow_value
+flow_item  = ('priority' | 'owner' | 'metric' | 'alias') ':' flow_value
            | note_stmt ;
 flow_value = identifier | STRING ;                         (* one word, or a quoted string *)
 ```
@@ -404,6 +404,7 @@ flow lead-message "Lead generation (phone and message)" {
     priority: P1
     owner: seeker-engagement
     metric: "Leads"
+    alias: "lead gen"
     note "counted once per seeker and advert"
 }
 
@@ -417,9 +418,9 @@ use_case "Seeker sends a message" {
 }
 ```
 
-- **Properties.** `priority:` is required and is one of `P0`, `P1`, `P2`, `P3` (`P0` is the highest; exact and case-sensitive). `owner:` is required and is a free value, usually a product-domain slug. `metric:` is optional. A property is one line; a value with spaces is quoted. `note`/`finding` lines are allowed, as in a surface. Properties keep their source order, and the formatter does not reorder them.
-- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`flow "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-flow-property` (a warning; the line is kept in the tree and left out of the model). No `priority:` or no `owner:`: `craft/sema/missing-flow-property`. A priority that is not `P0`–`P3`: `craft/sema/invalid-priority`. A property written twice: `craft/sema/duplicate-flow-property` (a warning; the last value wins, as for tags). A ref declared twice anywhere in the workspace, in one file or two: `craft/sema/duplicate-flow` (an error on every later declaration; the first in sorted file order is the flow).
-- **Model.** `CraftDoc.Flows` holds each `Flow{Ref, Name, Priority, Owner, Metric, Notes, RealisedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `RealisedBy` lists the use cases whose `realises` tag names the flow (`UseCaseRef`, in model order); `CraftDoc.FlowByRef(ref)` finds a flow. A use case's refs are in `UseCase.Realises`.
+- **Properties.** `priority:` is required and is one of `P0`, `P1`, `P2`, `P3` (`P0` is the highest; exact and case-sensitive). `owner:` is required and is a free value, usually a product-domain slug. `metric:` is optional. `alias:` (2.38) is optional and may be written more than once, one alias per line: another name people use for the flow, in any language or jargon; the model keeps the aliases in source order, trimmed, each once. A property is one line; a value with spaces is quoted. `note`/`finding` lines are allowed, as in a surface. Properties keep their source order, and the formatter does not reorder them.
+- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`flow "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-flow-property` (a warning; the line is kept in the tree and left out of the model). No `priority:` or no `owner:`: `craft/sema/missing-flow-property`. A priority that is not `P0`–`P3`: `craft/sema/invalid-priority`. A property other than `alias:` written twice: `craft/sema/duplicate-flow-property` (a warning; the last value wins, as for tags). An `alias:` that is `""` or blank: `craft/sema/empty-alias`; the same alias on an earlier line of the block: `craft/sema/duplicate-alias` (both warnings; the model leaves the value out, or keeps it once). A comma list on an `alias:` line: `craft/syntax/unexpected-token` (write one `alias:` line per alias). A ref declared twice anywhere in the workspace, in one file or two: `craft/sema/duplicate-flow` (an error on every later declaration; the first in sorted file order is the flow).
+- **Model.** `CraftDoc.Flows` holds each `Flow{Ref, Name, Priority, Owner, Metric, Aliases, Notes, RealisedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `RealisedBy` lists the use cases whose `realises` tag names the flow (`UseCaseRef`, in model order); `CraftDoc.FlowByRef(ref)` finds a flow. A use case's refs are in `UseCase.Realises`.
 - **Views.** No diagram draws a flow; `craft generate` ignores them. `craft inspect` lists them, and `craft check` writes them in the CraftDoc JSON (`flows`).
 
 ### 8.4 Pages (2.36)
@@ -429,7 +430,7 @@ A page is an owned surface that users see, such as "My Account: My Ads": the uni
 ```ebnf
 page_decl  = 'page' page_ref STRING '{' NL* (page_item NL+)* '}' ;
 page_ref   = identifier ;                                  (* a slug such as account-adverts; one token *)
-page_item  = ('url' | 'platform' | 'product_domain') ':' page_value
+page_item  = ('url' | 'platform' | 'product_domain' | 'alias') ':' page_value
            | note_stmt ;
 page_value = identifier | STRING ;                         (* one word, or a quoted string; a URL is quoted *)
 ```
@@ -439,6 +440,8 @@ page account-adverts "My Account: My Ads" {
     url: "https://www.otodom.pl/wiadomosci/moje-ogloszenia"
     platform: frontoffice
     product_domain: ad-inventory
+    alias: "my ads"
+    alias: "moje ogłoszenia"
     note "the old Atlas page is still served for agencies"
 }
 
@@ -452,10 +455,10 @@ use_case "Seller promotes an ad" {
 }
 ```
 
-- **Properties.** `product_domain:` is required: an identifier or a string, as written. `url:` is optional and may be written more than once, one per site; the model keeps the URLs in source order, each once. `platform:` is optional and is one of `frontoffice`, `backoffice`, `app` (exact, case-sensitive). `note`/`finding` lines are allowed. Properties keep their source order, and the formatter does not reorder them.
-- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`page "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-page-property` (a warning; the line is kept in the tree and left out of the model). No `product_domain:`: `craft/sema/missing-page-property`. Another platform: `craft/sema/invalid-platform`. `platform:` or `product_domain:` written twice: `craft/sema/duplicate-page-property` (a warning; the last value wins). A ref declared twice anywhere in the workspace: `craft/sema/duplicate-page` (an error on every later declaration; the first in sorted file order is the page). An `entry` value that names no page, when the workspace declares at least one page: `craft/sema/unresolved-page` (a warning).
-- **Model.** `CraftDoc.Pages` holds each `Page{Ref, Name, URLs, Platform, ProductDomain, Notes, UsedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `UsedBy` lists the use cases whose `entry` tag names the page (`UseCaseRef`, in model order); `CraftDoc.PageByRef(ref)` finds a page. A use case's refs are in `UseCase.Entries`.
-- **Views.** No diagram draws a page; `craft generate` ignores them. `craft inspect` lists them (`pages`: `ref`, `name`, `urls`, `platform`, `product_domain`, `used_by`), and `craft check` writes them in the CraftDoc JSON (`pages`, and `entries` on use cases).
+- **Properties.** `product_domain:` is required: an identifier or a string, as written. `url:` is optional and may be written more than once, one per site; the model keeps the URLs in source order, each once. `platform:` is optional and is one of `frontoffice`, `backoffice`, `app` (exact, case-sensitive). `alias:` (2.38) is optional and repeatable, one alias per line, as in a flow (§8.3). `note`/`finding` lines are allowed. Properties keep their source order, and the formatter does not reorder them.
+- **Diagnostics.** No name, or `""`: `craft/syntax/missing-label`. No ref (`page "Name" {`): `craft/syntax/unexpected-token`, and the block is not in the model. A key with no value on its line, or a second word after the value: `craft/syntax/unexpected-token`. Any other key: `craft/syntax/unknown-page-property` (a warning; the line is kept in the tree and left out of the model). No `product_domain:`: `craft/sema/missing-page-property`. Another platform: `craft/sema/invalid-platform`. `platform:` or `product_domain:` written twice: `craft/sema/duplicate-page-property` (a warning; the last value wins). An empty or repeated `alias:`: `craft/sema/empty-alias` or `craft/sema/duplicate-alias` (warnings), as in a flow. A ref declared twice anywhere in the workspace: `craft/sema/duplicate-page` (an error on every later declaration; the first in sorted file order is the page). An `entry` value that names no page, when the workspace declares at least one page: `craft/sema/unresolved-page` (a warning).
+- **Model.** `CraftDoc.Pages` holds each `Page{Ref, Name, URLs, Platform, ProductDomain, Aliases, Notes, UsedBy, SourceURI, Line}`, the first declaration of each ref in sorted file order. `UsedBy` lists the use cases whose `entry` tag names the page (`UseCaseRef`, in model order); `CraftDoc.PageByRef(ref)` finds a page. A use case's refs are in `UseCase.Entries`.
+- **Views.** No diagram draws a page; `craft generate` ignores them. `craft inspect` lists them (`pages`: `ref`, `name`, `urls`, `platform`, `product_domain`, `aliases`, `used_by`), and `craft check` writes them in the CraftDoc JSON (`pages`, and `entries` on use cases).
 
 ---
 
@@ -629,6 +632,14 @@ The 2.37 words:
 | `ai`, `owner` | in an actor body, followed by `:` | an identifier |
 
 None of these changes the meaning of input that parsed before: a `{` after an actor's name was `craft/syntax/unexpected-token`.
+
+The 2.38 words:
+
+| Word | Is a keyword only when | Otherwise |
+|---|---|---|
+| `alias` | in a page or flow body, followed by `:` | an identifier |
+
+An `alias:` line in a page or flow body was `craft/syntax/unknown-page-property` or `unknown-flow-property` (a warning) and was left out of the model; it is now in `Page.Aliases` or `Flow.Aliases`. `alias` stays a free tag key in a use case's `tags { }` (`alias: pushup, bump`, a comma list in `TagValues`).
 
 ### 11.2 Connector words (part of `phrase_word`)
 

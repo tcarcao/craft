@@ -65,7 +65,7 @@ func pageHeaderAt(file syntax.File, offset green.TextSize) (syntax.PageDecl, boo
 }
 
 // pageHover is the hover of a page header, of an `entry` value, and of the
-// keys `entry`, `url`, `platform` and `product_domain`.
+// keys `entry`, `url`, `platform`, `product_domain` and `alias`.
 func (s *Server) pageHover(f *workspace.File, offset green.TextSize) (string, bool) {
 	file := syntax.AsFile(syntax.Root(f.Green))
 	if d, ok := pageHeaderAt(file, offset); ok {
@@ -75,7 +75,8 @@ func (s *Server) pageHover(f *workspace.File, offset green.TextSize) (string, bo
 			return fmt.Sprintf("page %s is declared again here; the page is the one at %s:%d\n%s",
 				d.Ref(), s.displayPath(pg.SourceURI), pg.Line, s.pageSummary(*pg)), true
 		}
-		pg := model.Page{Ref: d.Ref(), Name: d.Name(), URLs: uniqueValues(d.PropertyValues(lang.PageURL))}
+		pg := model.Page{Ref: d.Ref(), Name: d.Name(), URLs: uniqueValues(d.PropertyValues(lang.PageURL)),
+			Aliases: uniqueValues(d.PropertyValues(lang.PageAlias))}
 		pg.Platform, _ = d.Property(lang.PagePlatform)
 		pg.ProductDomain, _ = d.Property(lang.PageProductDomain)
 		return s.pageSummary(pg), true
@@ -90,7 +91,7 @@ func (s *Server) pageHover(f *workspace.File, offset green.TextSize) (string, bo
 	return pageKeyHover(file, offset)
 }
 
-// pageSummary describes a page: its name, urls, platform and product domain,
+// pageSummary describes a page: its name, urls, platform, product domain and aliases,
 // then the use cases that start on it, each with its file.
 func (s *Server) pageSummary(pg model.Page) string {
 	lines := []string{fmt.Sprintf("page %s: %s", pg.Ref, pg.Name)}
@@ -102,6 +103,9 @@ func (s *Server) pageSummary(pg model.Page) string {
 	}
 	if pg.ProductDomain != "" {
 		lines = append(lines, "product domain: "+pg.ProductDomain)
+	}
+	if len(pg.Aliases) > 0 {
+		lines = append(lines, "aliases: "+strings.Join(pg.Aliases, ", "))
 	}
 	var usedBy []model.UseCaseRef
 	if p := s.ws.Doc().PageByRef(pg.Ref); p != nil {
@@ -141,6 +145,8 @@ func pageKeyHover(file syntax.File, offset green.TextSize) (string, bool) {
 				return "platform: " + strings.Join(lang.PagePlatforms(), ", ") + ". Optional", true
 			case lang.PageProductDomain:
 				return "product_domain: the product domain that owns the page; its landlord owns the page. Required", true
+			case lang.PageAlias:
+				return "alias: another name people use for the page, in any language or jargon; one `alias:` line per name. Optional", true
 			}
 			return "", false
 		}
@@ -227,6 +233,7 @@ func pageBodyCompletions() *protocol.CompletionList {
 		field("url:", "optional, one per site: where users open the page", `url: "${1:https://}"`),
 		field("platform:", "optional: frontoffice, backoffice or app", "platform: ${1|frontoffice,backoffice,app|}"),
 		field("product_domain:", "required: the product domain that owns the page", "product_domain: ${1:product-domain}"),
+		field("alias:", "optional, one per line: another name people use for the page", `alias: "${1:alias}"`),
 		{Label: "note", Kind: protocol.CompletionItemKindKeyword, Detail: "a remark about the page",
 			InsertText: `note "${1:text}"`, InsertTextFormat: snip},
 	}}
@@ -265,11 +272,12 @@ func entryCompletions(ws *workspace.Workspace, linePrefix string) *protocol.Comp
 	return list
 }
 
-// uniqueValues keeps the first of each value, in order: the model's URLs.
+// uniqueValues keeps the first of each value, trimmed and in order, empty
+// ones left out: the model's URLs and aliases.
 func uniqueValues(values []string) []string {
 	var out []string
 	for _, v := range values {
-		if !slices.Contains(out, v) {
+		if v = strings.TrimSpace(v); v != "" && !slices.Contains(out, v) {
 			out = append(out, v)
 		}
 	}

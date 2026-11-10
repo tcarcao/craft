@@ -177,6 +177,7 @@ const (
 	FlowPriority = "priority" // required: one of FlowPriorities
 	FlowOwner    = "owner"    // required: free value, typically a product-domain slug
 	FlowMetric   = "metric"   // optional: the business metric the flow moves
+	FlowAlias    = "alias"    // optional, repeatable (v2.38): another name for the flow
 )
 
 // FlowPriorities lists the values a flow's priority may take, highest first.
@@ -193,6 +194,7 @@ const (
 	PageURL           = "url"            // optional, repeatable: one per site
 	PagePlatform      = "platform"       // optional: one of PagePlatforms
 	PageProductDomain = "product_domain" // required: the product domain that owns the page
+	PageAlias         = "alias"          // optional, repeatable (v2.38): another name for the page
 )
 
 // PagePlatforms lists the values a page's platform may take.

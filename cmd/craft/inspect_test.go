@@ -177,6 +177,33 @@ func TestInspectCmd_Pages(t *testing.T) {
 	}
 }
 
+// Page and flow aliases are part of the inspect model (v2.38), in JSON and
+// in text.
+func TestInspectCmd_Aliases(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "a.craft")
+	src := "page p \"P\" {\n    product_domain: x\n    alias: performance\n    alias: \"ad performance\"\n}\n" +
+		"flow fl \"F\" {\n    priority: P1\n    owner: o\n    alias: promotion\n}\n"
+	if err := os.WriteFile(f, []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Pages []struct {
+			Aliases []string `json:"aliases"`
+		} `json:"pages"`
+		Flows []struct {
+			Aliases []string `json:"aliases"`
+		} `json:"flows"`
+	}
+	out := runInspect(t, "--format", "json", f)
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("bad json: %v\n%s", err, out)
+	}
+	if len(got.Pages) != 1 || !slices.Equal(got.Pages[0].Aliases, []string{"performance", "ad performance"}) ||
+		len(got.Flows) != 1 || !slices.Equal(got.Flows[0].Aliases, []string{"promotion"}) {
+		t.Errorf("inspect = %s", out)
+	}
+}
+
 // An actor's AI kind and owner are part of the inspect model (v2.37); an
 // actor without a body prints as before.
 func TestInspectCmd_ActorAI(t *testing.T) {

@@ -88,6 +88,10 @@ _Avoid_: flow (alone, in prose: the flow view is a diagram), epic, journey (a jo
 A surface users see, such as "My Account: My Ads" (`page <ref> "<name>" { url: … platform: … product_domain: … }`). Its owner is the landlord of its product domain; a use case names the pages it starts on in its `entry` tag. It has no steps and is not drawn.
 _Avoid_: screen, view (a view is a diagram), surface (a `surface` is an API boundary)
 
+**Alias**:
+Another name people use for **this** page, critical flow or use case, in a language or jargon (`alias: "podbicie ogłoszenia"`). A page or flow lists one per `alias:` line (2.38); a use case lists them in an `alias` tag. Something nearby, such as a feature that is not modelled, is not an alias.
+_Avoid_: synonym, keyword, tag (an alias is a name, not a classifier)
+
 **Journey (spine)**:
 The use cases that share a `journey` tag value, ordered by their hand-offs (event and store pairs, and `continues` links) into one sequence diagram with a section per use case (`craft generate --journey <slug>`).
 _Avoid_: flow (the flow view is something else), epic, process

@@ -2348,6 +2348,23 @@ func TestFormat_Page(t *testing.T) {
 	}
 }
 
+// `alias:` lines (v2.38) format like any page or flow property and keep
+// their order.
+func TestFormat_Aliases(t *testing.T) {
+	in := "page p \"P\" {\nproduct_domain: x\n   alias:b\n      alias :  \"a c\" // second\n}\nflow f \"F\" {\n  priority: P1\n  owner: o\nalias:   z\n  alias: \"y\"\n}\n"
+	want := "page p \"P\" {\n    product_domain: x\n    alias: b\n    alias: \"a c\" // second\n}\n\nflow f \"F\" {\n    priority: P1\n    owner: o\n    alias: z\n    alias: \"y\"\n}\n"
+	got, d := FormatDocumentChecked(in)
+	if d != nil {
+		t.Fatalf("refused: %+v", d)
+	}
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if again := FormatDocument(got); again != got {
+		t.Errorf("not idempotent:\n%s", again)
+	}
+}
+
 func TestFormat_RefusesOrphanAnd(t *testing.T) {
 	in := "use_case \"U\" {\n  when O does\n    x does it\n    and \"b\"\n      x does more\n}\n"
 	got, d := FormatDocumentChecked(in)
