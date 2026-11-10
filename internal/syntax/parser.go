@@ -3875,6 +3875,8 @@ func flowPropertyExample(key string) string {
 		return "owner: seeker-engagement"
 	case lang.FlowMetric:
 		return `metric: "Leads"`
+	case lang.FlowAlias:
+		return `alias: "promoted ad"`
 	}
 	return "priority: P1"
 }
@@ -3884,6 +3886,7 @@ var flowPropertyKinds = map[string]SyntaxKind{
 	lang.FlowPriority: SyntaxKindKwPriority,
 	lang.FlowOwner:    SyntaxKindKwOwner,
 	lang.FlowMetric:   SyntaxKindKwMetric,
+	lang.FlowAlias:    SyntaxKindKwAlias,
 }
 
 // parseFlowItem parses one line of a flow body: a `<key>: <value>` property,
@@ -3902,7 +3905,7 @@ func (p *Parser) parseFlowItem() []model.Diagnostic {
 			kind = SyntaxKindIdent
 			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/unknown-flow-property",
-				Message:  fmt.Sprintf("unknown flow property %q; a flow has `priority:`, `owner:` and `metric:` (and `note` lines)", tok.Value),
+				Message:  fmt.Sprintf("unknown flow property %q; a flow has `priority:`, `owner:`, `metric:` and `alias:` (and `note` lines)", tok.Value),
 				Severity: model.SeverityWarning,
 				Range:    tokenRange(tok),
 			})
@@ -3930,12 +3933,22 @@ func (p *Parser) parseFlowItem() []model.Diagnostic {
 			p.builder.FinishNode()
 			return diags
 		}
-		diags = append(diags, p.sweepRestOfLine(tok.Line, "end of line: a value is one word or a quoted string, e.g. `metric: \"Leads per day\"`")...)
+		diags = append(diags, p.sweepRestOfLine(tok.Line, propertyLineEnd(tok.Value, "`metric: \"Leads per day\"`"))...)
 		p.builder.FinishNode()
 		return diags
 	default:
-		return p.sweepRestOfLine(tok.Line, "`priority:`, `owner:`, `metric:`, `note`, `finding` or `}`")
+		return p.sweepRestOfLine(tok.Line, "`priority:`, `owner:`, `metric:`, `alias:`, `note`, `finding` or `}`")
 	}
+}
+
+// propertyLineEnd is what a flow or page property line expects after its
+// value. An `alias:` line holds one alias, so a comma list is told to use one
+// line per alias.
+func propertyLineEnd(key, example string) string {
+	if key == lang.FlowAlias { // == lang.PageAlias
+		return "end of line: one alias per line; write another `alias:` line for the next one"
+	}
+	return "end of line: a value is one word or a quoted string, e.g. " + example
 }
 
 // --- page parsing (v2.36) ---
@@ -4003,6 +4016,8 @@ func pagePropertyExample(key string) string {
 		return `url: "https://www.example.com/my-ads"`
 	case lang.PagePlatform:
 		return "platform: frontoffice"
+	case lang.PageAlias:
+		return `alias: "ad performance"`
 	}
 	return "product_domain: ad-inventory"
 }
@@ -4012,6 +4027,7 @@ var pagePropertyKinds = map[string]SyntaxKind{
 	lang.PageURL:           SyntaxKindKwURL,
 	lang.PagePlatform:      SyntaxKindKwPlatform,
 	lang.PageProductDomain: SyntaxKindKwProductDomain,
+	lang.PageAlias:         SyntaxKindKwAlias,
 }
 
 // parsePageItem parses one line of a page body: a `<key>: <value>` property,
@@ -4030,7 +4046,7 @@ func (p *Parser) parsePageItem() []model.Diagnostic {
 			kind = SyntaxKindIdent
 			diags = append(diags, model.Diagnostic{
 				Code:     "craft/syntax/unknown-page-property",
-				Message:  fmt.Sprintf("unknown page property %q; a page has `url:`, `platform:` and `product_domain:` (and `note` lines)", tok.Value),
+				Message:  fmt.Sprintf("unknown page property %q; a page has `url:`, `platform:`, `product_domain:` and `alias:` (and `note` lines)", tok.Value),
 				Severity: model.SeverityWarning,
 				Range:    tokenRange(tok),
 			})
@@ -4057,11 +4073,11 @@ func (p *Parser) parsePageItem() []model.Diagnostic {
 			p.builder.FinishNode()
 			return diags
 		}
-		diags = append(diags, p.sweepRestOfLine(tok.Line, "end of line: a value is one word or a quoted string, e.g. `url: \"https://www.example.com/my-ads\"`")...)
+		diags = append(diags, p.sweepRestOfLine(tok.Line, propertyLineEnd(tok.Value, "`url: \"https://www.example.com/my-ads\"`"))...)
 		p.builder.FinishNode()
 		return diags
 	default:
-		return p.sweepRestOfLine(tok.Line, "`url:`, `platform:`, `product_domain:`, `note`, `finding` or `}`")
+		return p.sweepRestOfLine(tok.Line, "`url:`, `platform:`, `product_domain:`, `alias:`, `note`, `finding` or `}`")
 	}
 }
 

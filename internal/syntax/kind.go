@@ -164,6 +164,9 @@ const (
 	// Actor-body contextual keyword (v2.37.0). `owner:` reuses KwOwner.
 	SyntaxKindKwAI // `ai:` in an actor body
 
+	// Alias contextual keyword (v2.38.0): `alias:` in a page or a flow.
+	SyntaxKindKwAlias
+
 	// syntaxKindTokenSentinel marks the end of token kinds.
 	// It must remain < 1000 to preserve the node/token boundary invariant.
 	syntaxKindTokenSentinel
@@ -240,14 +243,14 @@ const (
 	// SyntaxKindFlowDecl is `flow <ref> "<name>" { … }` (v2.35.0).
 	SyntaxKindFlowDecl
 	// SyntaxKindFlowProperty wraps one `<key>: <value>` line of a flow body.
-	// The key is SyntaxKindKwPriority, KwOwner or KwMetric when recognised,
+	// The key is SyntaxKindKwPriority, KwOwner, KwMetric or KwAlias when recognised,
 	// SyntaxKindIdent otherwise (craft/syntax/unknown-flow-property).
 	SyntaxKindFlowProperty
 
 	// SyntaxKindPageDecl is `page <ref> "<name>" { … }` (v2.36.0).
 	SyntaxKindPageDecl
 	// SyntaxKindPageProperty wraps one `<key>: <value>` line of a page body.
-	// The key is SyntaxKindKwURL, KwPlatform or KwProductDomain when
+	// The key is SyntaxKindKwURL, KwPlatform, KwProductDomain or KwAlias when
 	// recognised, SyntaxKindIdent otherwise (craft/syntax/unknown-page-property).
 	SyntaxKindPageProperty
 

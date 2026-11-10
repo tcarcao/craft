@@ -276,6 +276,8 @@ page account-adverts "My Account: My Ads" {
     url: "https://www.otodom.pl/wiadomosci/moje-ogloszenia"
     platform: frontoffice
     product_domain: ad-inventory
+    alias: "my ads"
+    alias: "moje ogłoszenia"
 }
 
 use_case "Seller promotes an ad" {
@@ -288,7 +290,7 @@ use_case "Seller promotes an ad" {
 }
 ```
 
-`product_domain:` is required; `url:` (once per site) and `platform:` (`frontoffice`, `backoffice` or `app`) are optional. `craft inspect` lists each page with the use cases that start on it, and `pkg/craft` exposes `CraftDoc.Pages` (`Page.UsedBy`), `UseCase.Entries` and `CraftDoc.PageByRef`. Diagrams do not draw pages. Once the loaded files declare a page, `craft validate` warns when an `entry` ref names no loaded page (`craft/sema/unresolved-page`).
+`product_domain:` is required; `url:` (once per site), `platform:` (`frontoffice`, `backoffice` or `app`) and `alias:` (2.38: another name people use for the page, one per line) are optional. A flow takes `alias:` lines too. `craft inspect` lists each page with the use cases that start on it, and `pkg/craft` exposes `CraftDoc.Pages` (`Page.UsedBy`, `Page.Aliases`), `UseCase.Entries`, `CraftDoc.PageByRef` and `Flow.Aliases`. Diagrams do not draw pages. Once the loaded files declare a page, `craft validate` warns when an `entry` ref names no loaded page (`craft/sema/unresolved-page`).
 
 ## AI systems (2.37)
 

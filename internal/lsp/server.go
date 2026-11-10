@@ -2383,6 +2383,7 @@ var syntaxKindToCraftToken = map[syntax.SyntaxKind]string{
 	syntax.SyntaxKindKwPlatform:      "craft-language-property",
 	syntax.SyntaxKindKwProductDomain: "craft-language-property",
 	syntax.SyntaxKindKwAI:            "craft-language-property",
+	syntax.SyntaxKindKwAlias:         "craft-language-property",
 	syntax.SyntaxKindKwUser:          "craft-actor-type",
 	syntax.SyntaxKindKwSystem:        "craft-actor-type",
 	syntax.SyntaxKindKwService:       "craft-actor-type",

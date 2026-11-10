@@ -48,9 +48,10 @@ func tokenDiagRange(tok *syntax.SyntaxToken, li green.LineIndex, hasLI bool) mod
 
 // validateFlows checks each flow of one file: `priority:` and `owner:` are
 // required (craft/sema/missing-flow-property), the priority is one of
-// P0–P3 (craft/sema/invalid-priority), and a property is written once
-// (craft/sema/duplicate-flow-property; the last value wins). A flow without
-// a ref is the parser's error and is not checked.
+// P0–P3 (craft/sema/invalid-priority), and a property other than `alias:` is
+// written once (craft/sema/duplicate-flow-property; the last value wins).
+// `alias:` may repeat, one per alias (see checkAliases). A flow without a ref
+// is the parser's error and is not checked.
 func validateFlows(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
 	var diags []model.Diagnostic
 	add := func(code string, sev model.Severity, r model.Range, msg string) {
@@ -67,7 +68,7 @@ func validateFlows(uri string, file syntax.File, li green.LineIndex, hasLI bool)
 				continue // craft/syntax/unknown-flow-property
 			}
 			key := p.Key()
-			if seen[key] {
+			if seen[key] && key != lang.FlowAlias {
 				add("craft/sema/duplicate-flow-property", model.SeverityWarning, tokenDiagRange(p.KeyToken(), li, hasLI),
 					fmt.Sprintf("flow %q: `%s:` is already set; the last value wins", f.Ref(), key))
 			}
@@ -77,6 +78,7 @@ func validateFlows(uri string, file syntax.File, li green.LineIndex, hasLI bool)
 					fmt.Sprintf("flow priority %q is not one of %s; P0 is the highest", p.Value(), strings.Join(lang.FlowPriorities(), ", ")))
 			}
 		}
+		diags = append(diags, checkAliases(uri, "flow", f.Ref(), f.Properties(), li, hasLI)...)
 		for _, key := range []string{lang.FlowPriority, lang.FlowOwner} {
 			if seen[key] {
 				continue

@@ -1,0 +1,13 @@
+page account-statistics "Ad Statistics" {
+    product_domain: seller-analytics
+    alias: performance
+    alias: ""
+    alias: performance
+}
+
+flow vas-activation "VAS activation" {
+    priority: P2
+    owner: "VAS Excellence"
+    alias: "promoted ad"
+    alias: "promoted ad "
+}

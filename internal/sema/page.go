@@ -40,9 +40,10 @@ func collectPages(uri string, file syntax.File, li green.LineIndex, hasLI bool) 
 // validatePages checks each page of one file: `product_domain:` is required
 // (craft/sema/missing-page-property), the platform is one of frontoffice,
 // backoffice or app (craft/sema/invalid-platform), and a property other
-// than `url:` is written once (craft/sema/duplicate-page-property; the last
-// value wins). `url:` may repeat, one per site. A page without a ref is the
-// parser's error and is not checked.
+// than `url:` and `alias:` is written once (craft/sema/duplicate-page-property;
+// the last value wins). `url:` may repeat, one per site; `alias:` may repeat,
+// one per alias (see checkAliases). A page without a ref is the parser's
+// error and is not checked.
 func validatePages(uri string, file syntax.File, li green.LineIndex, hasLI bool) []model.Diagnostic {
 	var diags []model.Diagnostic
 	add := func(code string, sev model.Severity, r model.Range, msg string) {
@@ -59,7 +60,7 @@ func validatePages(uri string, file syntax.File, li green.LineIndex, hasLI bool)
 				continue // craft/syntax/unknown-page-property
 			}
 			key := p.Key()
-			if seen[key] && key != lang.PageURL {
+			if seen[key] && key != lang.PageURL && key != lang.PageAlias {
 				add("craft/sema/duplicate-page-property", model.SeverityWarning, tokenDiagRange(p.KeyToken(), li, hasLI),
 					fmt.Sprintf("page %q: `%s:` is already set; the last value wins", pg.Ref(), key))
 			}
@@ -69,10 +70,47 @@ func validatePages(uri string, file syntax.File, li green.LineIndex, hasLI bool)
 					fmt.Sprintf("page platform %q is not one of %s", p.Value(), strings.Join(lang.PagePlatforms(), ", ")))
 			}
 		}
+		diags = append(diags, checkAliases(uri, "page", pg.Ref(), pg.Properties(), li, hasLI)...)
 		if !seen[lang.PageProductDomain] {
 			add("craft/sema/missing-page-property", model.SeverityError, tokenDiagRange(refTok, li, hasLI),
 				fmt.Sprintf("page %q has no `product_domain:`; every page names the product domain that owns it, e.g. `product_domain: ad-inventory`", pg.Ref()))
 		}
+	}
+	return diags
+}
+
+// checkAliases checks the `alias:` lines of one page or flow (v2.38): a value
+// that is empty or blank is craft/sema/empty-alias, and a value already
+// written on an earlier line of the same block (compared trimmed) is
+// craft/sema/duplicate-alias. Both are warnings; the model leaves the value
+// out, or keeps it once. kind is "page" or "flow".
+func checkAliases(uri, kind, ref string, props []syntax.FlowPropertyDecl, li green.LineIndex, hasLI bool) []model.Diagnostic {
+	var diags []model.Diagnostic
+	seen := map[string]bool{}
+	for _, p := range props {
+		if p.Key() != lang.PageAlias || !p.Known() || p.ValueToken() == nil {
+			continue // lang.PageAlias == lang.FlowAlias; a missing value is the parser's error
+		}
+		v := strings.TrimSpace(p.Value())
+		switch {
+		case v == "":
+			diags = append(diags, model.Diagnostic{
+				Code:      "craft/sema/empty-alias",
+				Message:   fmt.Sprintf("%s %q: an alias is empty; write another name for the %s, e.g. `alias: \"promoted ad\"`, or remove the line", kind, ref, kind),
+				Severity:  model.SeverityWarning,
+				SourceURI: uri,
+				Range:     tokenDiagRange(p.ValueToken(), li, hasLI),
+			})
+		case seen[v]:
+			diags = append(diags, model.Diagnostic{
+				Code:      "craft/sema/duplicate-alias",
+				Message:   fmt.Sprintf("%s %q: alias %q is already listed; remove this line", kind, ref, v),
+				Severity:  model.SeverityWarning,
+				SourceURI: uri,
+				Range:     tokenDiagRange(p.ValueToken(), li, hasLI),
+			})
+		}
+		seen[v] = true
 	}
 	return diags
 }

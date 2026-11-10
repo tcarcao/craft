@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.38.0] — 2026-11-10
+
+**Why a minor version (v2.38.0).** New optional syntax, additive `pkg/craft` fields and new diagnostics. `alias` is a keyword only in a page or flow body, followed by `:`. An `alias:` line there was `craft/syntax/unknown-page-property` or `unknown-flow-property` (a warning) and was left out of the model; it is now read. A model without `alias:` lines gives the same CraftDoc JSON as in 2.37.0 (every corpus golden is unchanged), and `craft validate`, `craft inspect` and `craft fmt --check` give the same output.
+
+### Added
+- **Aliases on pages and flows.** `alias:` is an optional, repeatable property of a `page` and of a `flow`: another name people use for it, in any language or jargon, one alias per line (`alias: performance`, `alias: "estatísticas do anúncio"`). The model keeps the aliases in source order, trimmed, each once. A use case keeps listing its aliases in a free `alias` tag (`alias: pushup, bump`), unchanged. See `docs/GRAMMAR.md` §8.3, §8.4 and `docs/decisions/aliases.md`.
+- **`pkg/craft`**: `Page.Aliases` and `Flow.Aliases` (optional JSON key `aliases`).
+- **CLI.** `craft inspect` shows `aliases` on pages and flows (JSON key; text: `aliases: a, b`); `craft check` writes them in the CraftDoc JSON. `craft fmt` formats `alias:` lines like any page or flow property and keeps their order.
+- **Diagnostics.** `craft/sema/empty-alias` and `craft/sema/duplicate-alias` (warnings). A comma list on one `alias:` line is `craft/syntax/unexpected-token`, with a message that says to write one line per alias. `alias:` is exempt from `duplicate-page-property` and `duplicate-flow-property`, and the unknown-property messages list it. See `docs/DIAGNOSTICS.md`.
+- **Language server.** Hover on a page or flow lists its aliases; hover on `alias` explains the key. Completion offers `alias:` in page and flow bodies.
+
 ## [2.37.0] — 2026-11-09
 
 **Why a minor version (v2.37.0).** New optional syntax, additive `pkg/craft` fields and functions, and new diagnostics. An actor body opens with `{` on the actor's name line, which was `craft/syntax/unexpected-token` before, and `ai`/`owner` are keywords only inside that body, so no file that parsed changes meaning. An actor without a body gives the same CraftDoc JSON as in 2.36.0 (every corpus golden is unchanged), and `craft validate`, `craft inspect` and `craft fmt --check` give the same output for a model without actor bodies.

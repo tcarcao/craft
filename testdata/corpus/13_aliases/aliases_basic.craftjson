@@ -1,0 +1,98 @@
+{
+  "useCases": [
+    {
+      "name": "Seller checks ad statistics",
+      "scenarios": [
+        {
+          "id": "scenario_1",
+          "trigger": {
+            "type": "external",
+            "actor": "Seller",
+            "verb": "opens",
+            "connector": "the",
+            "phrase": "statistics",
+            "description": "when Seller opens the statistics",
+            "line": 26,
+            "column": 10
+          },
+          "steps": [
+            {
+              "action": {
+                "id": "action_2",
+                "type": "return_action",
+                "context": "analytics",
+                "connector": "the",
+                "phrase": "ad statistics",
+                "description": "analytics returns ad statistics",
+                "line": 27,
+                "column": 9
+              }
+            }
+          ]
+        }
+      ],
+      "line": 19,
+      "tags": {
+        "alias": "stats, podbicie ogłoszenia",
+        "entry": "account-statistics",
+        "realises": "vas-activation"
+      },
+      "tagValues": {
+        "alias": [
+          "stats",
+          "podbicie ogłoszenia"
+        ],
+        "entry": [
+          "account-statistics"
+        ],
+        "realises": [
+          "vas-activation"
+        ]
+      },
+      "realises": [
+        "vas-activation"
+      ],
+      "entries": [
+        "account-statistics"
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "ref": "vas-activation",
+      "name": "VAS activation",
+      "priority": "P2",
+      "owner": "VAS Excellence",
+      "metric": "Total revenue",
+      "aliases": [
+        "promotion",
+        "promoted ad"
+      ],
+      "realisedBy": [
+        {
+          "name": "Seller checks ad statistics"
+        }
+      ],
+      "line": 3
+    }
+  ],
+  "pages": [
+    {
+      "ref": "account-statistics",
+      "name": "Ad Statistics",
+      "platform": "frontoffice",
+      "productDomain": "seller-analytics",
+      "aliases": [
+        "performance",
+        "ad performance",
+        "estatísticas do anúncio"
+      ],
+      "usedBy": [
+        {
+          "name": "Seller checks ad statistics"
+        }
+      ],
+      "line": 11
+    }
+  ]
+}

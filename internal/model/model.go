@@ -371,7 +371,10 @@ type Flow struct {
 	Priority string `json:"priority,omitempty"` // P0 (highest) to P3, as written
 	Owner    string `json:"owner,omitempty"`    // as written, typically a product-domain slug
 	Metric   string `json:"metric,omitempty"`
-	Notes    []Note `json:"notes,omitempty"`
+	// Aliases are other names for the flow (`alias:` lines, v2.38), in
+	// source order, each once, empty values left out.
+	Aliases []string `json:"aliases,omitempty"`
+	Notes   []Note   `json:"notes,omitempty"`
 	// RealisedBy lists the use cases whose `realises` tag names this flow,
 	// in model order (sorted file order, then source order).
 	RealisedBy []UseCaseRef `json:"realisedBy,omitempty"`
@@ -401,7 +404,10 @@ type Page struct {
 	URLs          []string `json:"urls,omitempty"`          // one per site, in source order, each once
 	Platform      string   `json:"platform,omitempty"`      // frontoffice, backoffice or app
 	ProductDomain string   `json:"productDomain,omitempty"` // as written
-	Notes         []Note   `json:"notes,omitempty"`
+	// Aliases are other names for the page (`alias:` lines, v2.38), in
+	// source order, each once, empty values left out.
+	Aliases []string `json:"aliases,omitempty"`
+	Notes   []Note   `json:"notes,omitempty"`
 	// UsedBy lists the use cases whose `entry` tag names this page, in
 	// model order (sorted file order, then source order).
 	UsedBy    []UseCaseRef `json:"usedBy,omitempty"`

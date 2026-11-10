@@ -30,15 +30,16 @@ This is the complete grammar. All generated `.craft` files must conform to it.
 
 // --- Critical flows (v2.35): a prioritised, owned business outcome ---
 <flow>               ::= "flow" <identifier> <string> "{" <flow_item>* "}"
-<flow_item>          ::= ("priority" | "owner" | "metric") ":" (<identifier> | <string>)
+<flow_item>          ::= ("priority" | "owner" | "metric" | "alias") ":" (<identifier> | <string>)
                        | "note" <string>
-                       // priority: P0|P1|P2|P3 and owner: are required; one item per line
+                       // priority: P0|P1|P2|P3 and owner: are required; one item per line; alias: (v2.38) may repeat, one alias per line
 
 // --- Pages (v2.36): a surface users see, owned through its product domain ---
 <page>               ::= "page" <identifier> <string> "{" <page_item>* "}"
-<page_item>          ::= ("url" | "platform" | "product_domain") ":" (<identifier> | <string>)
+<page_item>          ::= ("url" | "platform" | "product_domain" | "alias") ":" (<identifier> | <string>)
                        | "note" <string>
                        // product_domain: is required; url: may repeat (one per site); platform: frontoffice|backoffice|app
+                       // alias: (v2.38) may repeat, one alias per line (another name for the page; quote multi-word values)
 
 // --- Actors: who interacts with the system ---
 <actor_def>          ::= "actor" <actor_type> <identifier> <string>? <actor_body>?
@@ -499,6 +500,7 @@ Formatting changes whitespace and nothing else. Since v2.17.0 this is structural
 | `craft/sema/missing-page-property` / `invalid-platform` / `duplicate-page` | error | (v2.36) a page without `product_domain:` / a platform other than frontoffice, backoffice, app / a page ref declared twice |
 | `craft/sema/unresolved-page` / `duplicate-page-property` | warning | (v2.36) an `entry` ref names no loaded page (only when some page is declared) / `platform:` or `product_domain:` twice |
 | `craft/sema/invalid-ai-kind` | error | (v2.37) an actor's `ai:` is not `ml`, `genai` or `agentic` |
+| `craft/sema/empty-alias` / `duplicate-alias` | warning | (v2.38) a page or flow `alias:` that is `""` / the same alias twice on one page or flow; a comma list on one `alias:` line is `craft/syntax/unexpected-token` |
 | `craft/syntax/unknown-actor-property` / `craft/sema/duplicate-actor-property` / `craft/lint/conflicting-ai-kind` | warning | (v2.37) an actor body key other than `ai`/`owner` / a key twice / the same actor declared again with another `ai:` |
 | `craft/sema/ambiguous-bc` | error | a bare bounded-context name is declared in two or more domains, at exactly four sites: the `sync_action` subject and target, the `async_action` subject, or the `domain_listen` trigger context. Qualify it as `<domain>/<name>`. Does **not** fire for an internal action's subject or a `returns` subject/target |
 | `craft/sema/malformed-slug` | error | a qualified `<domain>/<name>` reference has the wrong shape (empty segment, or more than two segments) in any of: any action's subject, the `asks` target, the `returns` target, or the trigger context |

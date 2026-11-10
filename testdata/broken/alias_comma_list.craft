@@ -1,0 +1,4 @@
+page account-statistics "Ad Statistics" {
+    product_domain: seller-analytics
+    alias: performance, stats
+}

@@ -71,7 +71,7 @@ func flowHeaderAt(file syntax.File, offset green.TextSize) (syntax.FlowDecl, boo
 }
 
 // flowHover is the hover of a flow header, of a `realises` value, and of
-// the keys `realises`, `priority`, `owner` and `metric`.
+// the keys `realises`, `priority`, `owner`, `metric` and `alias`.
 func (s *Server) flowHover(f *workspace.File, offset green.TextSize) (string, bool) {
 	file := syntax.AsFile(syntax.Root(f.Green))
 	if d, ok := flowHeaderAt(file, offset); ok {
@@ -79,36 +79,38 @@ func (s *Server) flowHover(f *workspace.File, offset green.TextSize) (string, bo
 		// keeps the first, so describe that one and say so.
 		if fl := s.ws.Doc().FlowByRef(d.Ref()); fl != nil && (fl.SourceURI != f.URI || fl.Line != d.Line(f.LineIndex)) {
 			return fmt.Sprintf("flow %s is declared again here; the flow is the one at %s:%d\n%s",
-				d.Ref(), s.displayPath(fl.SourceURI), fl.Line, s.flowSummary(fl.Ref, fl.Name, fl.Priority, fl.Owner, fl.Metric)), true
+				d.Ref(), s.displayPath(fl.SourceURI), fl.Line, s.flowSummary(*fl)), true
 		}
-		name := d.Name()
-		priority, _ := d.Property(lang.FlowPriority)
-		owner, _ := d.Property(lang.FlowOwner)
-		metric, _ := d.Property(lang.FlowMetric)
-		return s.flowSummary(d.Ref(), name, priority, owner, metric), true
+		fl := model.Flow{Ref: d.Ref(), Name: d.Name(), Aliases: uniqueValues(d.PropertyValues(lang.FlowAlias))}
+		fl.Priority, _ = d.Property(lang.FlowPriority)
+		fl.Owner, _ = d.Property(lang.FlowOwner)
+		fl.Metric, _ = d.Property(lang.FlowMetric)
+		return s.flowSummary(fl), true
 	}
 	if v, ok := realisesValueAt(file, offset); ok {
 		fl := s.ws.Doc().FlowByRef(v.ref)
 		if fl == nil {
 			return fmt.Sprintf("flow %q: no flow has this ref in the open workspace", v.ref), true
 		}
-		return s.flowSummary(fl.Ref, fl.Name, fl.Priority, fl.Owner, fl.Metric), true
+		return s.flowSummary(*fl), true
 	}
 	return flowKeyHover(file, offset)
 }
 
-// flowSummary describes a flow: its name, priority, owner and metric, then
-// the use cases that realise it, each with its file.
-func (s *Server) flowSummary(ref, name, priority, owner, metric string) string {
-	lines := []string{fmt.Sprintf("flow %s: %s", ref, name)}
+// flowSummary describes a flow: its name, priority, owner, metric and
+// aliases, then the use cases that realise it, each with its file.
+func (s *Server) flowSummary(fl model.Flow) string {
+	ref := fl.Ref
+	lines := []string{fmt.Sprintf("flow %s: %s", ref, fl.Name)}
 	add := func(label, v string) {
 		if v != "" {
 			lines = append(lines, label+": "+v)
 		}
 	}
-	add("priority", priority)
-	add("owner", owner)
-	add("metric", metric)
+	add("priority", fl.Priority)
+	add("owner", fl.Owner)
+	add("metric", fl.Metric)
+	add("aliases", strings.Join(fl.Aliases, ", "))
 	var realisedBy []model.UseCaseRef
 	if fl := s.ws.Doc().FlowByRef(ref); fl != nil {
 		realisedBy = fl.RealisedBy
@@ -147,6 +149,8 @@ func flowKeyHover(file syntax.File, offset green.TextSize) (string, bool) {
 				return "owner: who owns the flow's definition, such as a product domain. Required", true
 			case lang.FlowMetric:
 				return "metric: the business metric the flow moves. Optional", true
+			case lang.FlowAlias:
+				return "alias: another name people use for the flow, in any language or jargon; one `alias:` line per name. Optional", true
 			}
 			return "", false
 		}
@@ -233,6 +237,7 @@ func flowBodyCompletions() *protocol.CompletionList {
 		field("priority:", "required: P0 (highest) to P3", "priority: ${1|P0,P1,P2,P3|}"),
 		field("owner:", "required: who owns the flow's definition", "owner: ${1:product-domain}"),
 		field("metric:", "optional: the business metric the flow moves", `metric: "${1:metric}"`),
+		field("alias:", "optional, one per line: another name people use for the flow", `alias: "${1:alias}"`),
 		{Label: "note", Kind: protocol.CompletionItemKindKeyword, Detail: "a remark about the flow",
 			InsertText: `note "${1:text}"`, InsertTextFormat: snip},
 	}}
